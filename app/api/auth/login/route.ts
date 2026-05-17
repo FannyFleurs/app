@@ -16,6 +16,20 @@ const MAX_ATTEMPTS = 8;
 const LOCK_MINUTES = 15;
 
 export async function POST(req: Request) {
+  try {
+    return await handleLogin(req);
+  } catch (err) {
+    // Logue la stack côté serveur pour qu'un 500 ne soit jamais silencieux.
+    // eslint-disable-next-line no-console
+    console.error('[auth.login] uncaught error:', err);
+    return NextResponse.json(
+      { error: 'INTERNAL_ERROR', message: (err as Error).message },
+      { status: 500 },
+    );
+  }
+}
+
+async function handleLogin(req: Request) {
   const parsed = await parseJson(req, schema);
   if ('response' in parsed) return parsed.response;
   const { email, password } = parsed.data;
