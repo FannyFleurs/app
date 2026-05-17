@@ -1,0 +1,54 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html, body { height: 100%; }
+
+button, [role="button"] {
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+/* Composants utilitaires */
+@layer components {
+  .card {
+    @apply rounded-2xl bg-surface shadow-card border border-border;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl
+           px-4 py-2.5 font-medium transition-colors disabled:opacity-50
+           disabled:cursor-not-allowed select-none;
+  }
+  .btn-primary {
+    @apply btn bg-sage text-white hover:bg-sage-deep;
+  }
+  .btn-soft {
+    @apply btn bg-sage-soft text-sage-deep hover:bg-beige;
+  }
+  .btn-ghost {
+    @apply btn text-ink hover:bg-sage-soft;
+  }
+  .btn-danger {
+    @apply btn bg-danger/10 text-danger hover:bg-danger/20;
+  }
+  .input {
+    @apply w-full rounded-xl border border-border bg-white px-3 py-2.5
+           text-ink placeholder:text-ink-soft/60
+           focus:outline-none focus:ring-2 focus:ring-sage/40 focus:border-sage;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-full bg-sage-soft
+           px-2.5 py-0.5 text-xs font-medium text-sage-deep;
+  }
+  .nav-link {
+    @apply flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium
+           text-ink-soft hover:bg-sage-soft hover:text-sage-deep;
+  }
+  .nav-link-active {
+    @apply bg-sage-soft text-sage-deep;
+  }
+}

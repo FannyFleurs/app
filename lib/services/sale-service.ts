@@ -1,0 +1,373 @@
+import { withTransaction } from '@/lib/db/client';
+import { FiscalCore } from '@/lib/fiscal/core';
+import {
+  computeLine,
+  computeTotals,
+  type LineComputed,
+} from './money';
+import type { PoolClient } from 'pg';
+
+export interface SaleLineInput {
+  product_id?: string | null;
+  variant_id?: string | null;
+  label: string;
+  unit_price_ttc: number;
+  quantity: number;
+  discount_amount?: number;
+  tax_rate: number;
+  tax_rate_code: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface SalePaymentInput {
+  method:
+    | 'cash'
+    | 'card'
+    | 'check'
+    | 'transfer'
+    | 'gift_card'
+    | 'credit_note'
+    | 'deferred'
+    | 'other';
+  amount: number;
+  given_amount?: number;
+  reference?: string;
+}
+
+export interface CreateDraftArgs {
+  organizationId: string;
+  storeId: string;
+  registerId: string;
+  userId: string;
+  customerId?: string | null;
+}
+
+export class SaleService {
+  /** Crée un panier brouillon. Une vente est rattachée à la session caisse ouverte. */
+  static async createDraft(args: CreateDraftArgs): Promise<{ id: string }> {
+    return withTransaction(async (client) => {
+      const session = await client.query<{ id: string }>(
+        `SELECT id FROM cash_sessions
+          WHERE register_id = $1 AND status = 'open'
+          ORDER BY opened_at DESC LIMIT 1`,
+        [args.registerId],
+      );
+      if (session.rowCount === 0) {
+        const err = new Error('NO_OPEN_CASH_SESSION');
+        (err as Error & { status?: number }).status = 400;
+        throw err;
+      }
+
+      const res = await client.query<{ id: string }>(
+        `INSERT INTO sales
+           (organization_id, store_id, register_id, cash_session_id, user_id, customer_id, status)
+         VALUES ($1,$2,$3,$4,$5,$6,'draft')
+         RETURNING id`,
+        [
+          args.organizationId,
+          args.storeId,
+          args.registerId,
+          session.rows[0]!.id,
+          args.userId,
+          args.customerId ?? null,
+        ],
+      );
+      return { id: res.rows[0]!.id };
+    });
+  }
+
+  /** Remplace les lignes du panier (recalcule les totaux). */
+  static async setLines(
+    saleId: string,
+    organizationId: string,
+    lines: SaleLineInput[],
+  ): Promise<{ totals: ReturnType<typeof computeTotals> }> {
+    return withTransaction(async (client) => {
+      const saleRes = await client.query<{ status: string }>(
+        `SELECT status FROM sales WHERE id = $1 AND organization_id = $2 FOR UPDATE`,
+        [saleId, organizationId],
+      );
+      if (saleRes.rowCount === 0) throw new Error('SALE_NOT_FOUND');
+      if (saleRes.rows[0]!.status !== 'draft' && saleRes.rows[0]!.status !== 'on_hold') {
+        throw new Error('SALE_NOT_EDITABLE');
+      }
+
+      const computed: LineComputed[] = lines.map((l) =>
+        computeLine({
+          unitPriceTtc: l.unit_price_ttc,
+          quantity: l.quantity,
+          discountAmount: l.discount_amount,
+          taxRate: l.tax_rate,
+        }),
+      );
+      const totals = computeTotals(computed);
+
+      await client.query(`DELETE FROM sale_lines WHERE sale_id = $1`, [saleId]);
+      for (let i = 0; i < lines.length; i++) {
+        const l = lines[i]!;
+        const c = computed[i]!;
+        await client.query(
+          `INSERT INTO sale_lines
+            (organization_id, sale_id, line_index, product_id, variant_id,
+             label, unit_price_ttc, quantity, discount_amount,
+             tax_rate, tax_rate_code, line_ht, line_tva, line_ttc, metadata)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+          [
+            organizationId,
+            saleId,
+            i,
+            l.product_id ?? null,
+            l.variant_id ?? null,
+            l.label,
+            c.unit_price_ttc,
+            c.quantity,
+            c.discount_amount,
+            c.tax_rate,
+            l.tax_rate_code,
+            c.line_ht,
+            c.line_tva,
+            c.line_ttc,
+            JSON.stringify(l.metadata ?? {}),
+          ],
+        );
+      }
+
+      await client.query(
+        `UPDATE sales SET
+           total_ht = $2, total_tva = $3, total_ttc = $4,
+           total_discount = $5, tva_breakdown = $6, updated_at = now()
+         WHERE id = $1`,
+        [
+          saleId,
+          totals.total_ht,
+          totals.total_tva,
+          totals.total_ttc,
+          totals.total_discount,
+          JSON.stringify(totals.tva_breakdown),
+        ],
+      );
+
+      return { totals };
+    });
+  }
+
+  /** Met le panier en attente avec un libellé. */
+  static async hold(saleId: string, organizationId: string, label: string) {
+    return withTransaction(async (client) => {
+      await client.query(
+        `UPDATE sales SET status = 'on_hold', held_label = $3, updated_at = now()
+         WHERE id = $1 AND organization_id = $2 AND status IN ('draft','on_hold')`,
+        [saleId, organizationId, label],
+      );
+    });
+  }
+
+  /**
+   * Encaisse une vente :
+   *   1. lock + validations
+   *   2. insertion paiements (vérification somme = total_ttc)
+   *   3. réservation du numéro de ticket
+   *   4. FiscalCore.recordEvent (hash chain, grand total)
+   *   5. snapshot ticket dans receipts
+   *   6. passage status = validated
+   */
+  static async validate(args: {
+    saleId: string;
+    organizationId: string;
+    userId: string;
+    payments: SalePaymentInput[];
+  }): Promise<{
+    saleId: string;
+    receiptNumber: string;
+    fiscalHash: string;
+    fiscalEventId: string;
+    receiptId: string;
+    snapshot: Record<string, unknown>;
+  }> {
+    return withTransaction(async (client) => {
+      // 1. Lock vente + sanity checks
+      const saleRes = await client.query<{
+        id: string;
+        organization_id: string;
+        store_id: string;
+        register_id: string;
+        cash_session_id: string;
+        customer_id: string | null;
+        status: string;
+        total_ttc: string;
+        total_ht: string;
+        total_tva: string;
+        total_discount: string;
+        tva_breakdown: unknown;
+      }>(
+        `SELECT * FROM sales WHERE id = $1 AND organization_id = $2 FOR UPDATE`,
+        [args.saleId, args.organizationId],
+      );
+      if (saleRes.rowCount === 0) throw new Error('SALE_NOT_FOUND');
+      const sale = saleRes.rows[0]!;
+      if (sale.status === 'validated') {
+        throw new Error('SALE_ALREADY_VALIDATED');
+      }
+      if (sale.status !== 'draft' && sale.status !== 'on_hold') {
+        throw new Error('SALE_NOT_VALIDATABLE');
+      }
+      const totalTtc = Number(sale.total_ttc);
+      if (totalTtc <= 0) throw new Error('SALE_EMPTY');
+
+      // Vérifie la somme des paiements
+      const sumPayments = args.payments.reduce((s, p) => s + Number(p.amount), 0);
+      if (Math.abs(sumPayments - totalTtc) > 0.005) {
+        throw new Error('PAYMENTS_MISMATCH');
+      }
+
+      const linesRes = await client.query(
+        `SELECT line_index, product_id, variant_id, label,
+                unit_price_ttc, quantity, discount_amount, tax_rate, tax_rate_code,
+                line_ht, line_tva, line_ttc, metadata
+           FROM sale_lines WHERE sale_id = $1 ORDER BY line_index`,
+        [sale.id],
+      );
+
+      // 2. Paiements
+      for (const p of args.payments) {
+        const change = p.given_amount != null ? Number((p.given_amount - p.amount).toFixed(2)) : null;
+        await client.query(
+          `INSERT INTO payments
+             (organization_id, sale_id, method, amount, given_amount, change_amount, reference, user_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [
+            args.organizationId,
+            sale.id,
+            p.method,
+            p.amount,
+            p.given_amount ?? null,
+            change,
+            p.reference ?? null,
+            args.userId,
+          ],
+        );
+      }
+
+      // 3. Réservation du numéro de ticket
+      const fiscal = new FiscalCore(client);
+      const year = new Date().getUTCFullYear();
+      const { value: seqValue, formatted: receiptNumber } =
+        await fiscal.nextDocumentNumber({
+          organizationId: args.organizationId,
+          kind: 'receipt',
+          year,
+          prefix: 'T',
+        });
+
+      // 4. Snapshot ticket + fiscal event
+      const validatedAt = new Date().toISOString();
+      const snapshot = {
+        receipt_number: receiptNumber,
+        validated_at: validatedAt,
+        organization_id: sale.organization_id,
+        store_id: sale.store_id,
+        register_id: sale.register_id,
+        customer_id: sale.customer_id,
+        user_id: args.userId,
+        totals: {
+          total_ht: Number(sale.total_ht),
+          total_tva: Number(sale.total_tva),
+          total_ttc: Number(sale.total_ttc),
+          total_discount: Number(sale.total_discount),
+        },
+        tva_breakdown: sale.tva_breakdown,
+        lines: linesRes.rows.map((r) => ({
+          line_index: r.line_index,
+          product_id: r.product_id,
+          variant_id: r.variant_id,
+          label: r.label,
+          unit_price_ttc: Number(r.unit_price_ttc),
+          quantity: Number(r.quantity),
+          discount_amount: Number(r.discount_amount),
+          tax_rate: Number(r.tax_rate),
+          tax_rate_code: r.tax_rate_code,
+          line_ht: Number(r.line_ht),
+          line_tva: Number(r.line_tva),
+          line_ttc: Number(r.line_ttc),
+          metadata: r.metadata,
+        })),
+        payments: args.payments.map((p) => ({
+          method: p.method,
+          amount: p.amount,
+          reference: p.reference ?? null,
+        })),
+      };
+
+      const event = await fiscal.recordEvent({
+        organizationId: args.organizationId,
+        storeId: sale.store_id,
+        registerId: sale.register_id,
+        userId: args.userId,
+        eventType: 'SALE_VALIDATED',
+        entityType: 'sale',
+        entityId: sale.id,
+        payload: snapshot,
+        amountTtcDelta: totalTtc,
+      });
+
+      // 5. Insertion receipts (snapshot immuable)
+      const receiptRes = await client.query<{ id: string }>(
+        `INSERT INTO receipts
+           (organization_id, sale_id, number, sequence_value, snapshot, fiscal_hash)
+         VALUES ($1,$2,$3,$4,$5,$6)
+         RETURNING id`,
+        [
+          args.organizationId,
+          sale.id,
+          receiptNumber,
+          seqValue.toString(),
+          JSON.stringify(snapshot),
+          event.currentHash,
+        ],
+      );
+
+      // 6. Maj vente -> validated
+      await client.query(
+        `UPDATE sales SET
+           status = 'validated',
+           receipt_number = $2,
+           receipt_sequence = $3,
+           validated_at = $4,
+           fiscal_event_id = $5,
+           fiscal_hash = $6,
+           updated_at = now()
+         WHERE id = $1`,
+        [
+          sale.id,
+          receiptNumber,
+          seqValue.toString(),
+          validatedAt,
+          event.id,
+          event.currentHash,
+        ],
+      );
+
+      return {
+        saleId: sale.id,
+        receiptNumber,
+        fiscalHash: event.currentHash,
+        fiscalEventId: event.id,
+        receiptId: receiptRes.rows[0]!.id,
+        snapshot,
+      };
+    });
+  }
+
+  static async listHeld(organizationId: string, registerId: string) {
+    const { rows } = await withTransaction(async (client: PoolClient) =>
+      client.query(
+        `SELECT id, held_label, total_ttc, created_at
+           FROM sales
+          WHERE organization_id = $1 AND register_id = $2 AND status = 'on_hold'
+          ORDER BY created_at DESC`,
+        [organizationId, registerId],
+      ),
+    );
+    return rows;
+  }
+}

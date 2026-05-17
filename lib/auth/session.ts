@@ -1,0 +1,154 @@
+import { SignJWT, jwtVerify } from 'jose';
+import { createHash, randomBytes } from 'node:crypto';
+import { cookies } from 'next/headers';
+import { query } from '@/lib/db/client';
+import type { Role } from './rbac';
+
+const COOKIE_NAME = 'florea_session';
+
+function secretKey(): Uint8Array {
+  const k = process.env.SESSION_SECRET;
+  if (!k || k.includes('change-me')) {
+    throw new Error('SESSION_SECRET non configuré');
+  }
+  return Buffer.from(k, 'hex');
+}
+
+function ttlMinutes(): number {
+  const v = Number(process.env.SESSION_TTL_MINUTES ?? '480');
+  return Number.isFinite(v) && v > 0 ? v : 480;
+}
+
+export interface AuthUser {
+  id: string;
+  organizationId: string;
+  email: string;
+  fullName: string;
+  role: Role;
+}
+
+interface SessionClaims {
+  sub: string;            // user id
+  org: string;            // organization id
+  jti: string;            // session id
+  tkh: string;            // token hash (sha256 of raw token)
+  role: Role;
+}
+
+export async function createSession(args: {
+  userId: string;
+  organizationId: string;
+  role: Role;
+  ip?: string | null;
+  userAgent?: string | null;
+}): Promise<string> {
+  const sessionId = crypto.randomUUID();
+  const raw = randomBytes(32).toString('hex');
+  const tokenHash = createHash('sha256').update(raw).digest('hex');
+  const expiresAt = new Date(Date.now() + ttlMinutes() * 60 * 1000);
+
+  await query(
+    `INSERT INTO sessions (id, user_id, token_hash, ip, user_agent, expires_at)
+     VALUES ($1,$2,$3,$4,$5,$6)`,
+    [
+      sessionId,
+      args.userId,
+      tokenHash,
+      args.ip ?? null,
+      args.userAgent ?? null,
+      expiresAt.toISOString(),
+    ],
+  );
+
+  const jwt = await new SignJWT({
+    org: args.organizationId,
+    jti: sessionId,
+    tkh: tokenHash,
+    role: args.role,
+  } satisfies Omit<SessionClaims, 'sub'>)
+    .setProtectedHeader({ alg: 'HS256' })
+    .setSubject(args.userId)
+    .setIssuedAt()
+    .setExpirationTime(Math.floor(expiresAt.getTime() / 1000))
+    .sign(secretKey());
+
+  return jwt;
+}
+
+export function sessionCookieOptions() {
+  return {
+    name: COOKIE_NAME,
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax' as const,
+    path: '/',
+    maxAge: ttlMinutes() * 60,
+  };
+}
+
+export async function readSessionFromCookie(): Promise<AuthUser | null> {
+  const store = cookies();
+  const cookie = store.get(COOKIE_NAME);
+  if (!cookie) return null;
+  return readSessionFromToken(cookie.value);
+}
+
+export async function readSessionFromToken(token: string): Promise<AuthUser | null> {
+  try {
+    const { payload } = await jwtVerify(token, secretKey(), {
+      algorithms: ['HS256'],
+    });
+    const claims = payload as unknown as SessionClaims;
+
+    const res = await query<{
+      id: string;
+      user_id: string;
+      revoked_at: string | null;
+      expires_at: string;
+      role: Role;
+      email: string;
+      full_name: string;
+      organization_id: string;
+      is_active: boolean;
+    }>(
+      `SELECT s.id, s.user_id, s.revoked_at, s.expires_at,
+              u.role, u.email, u.full_name, u.organization_id, u.is_active
+         FROM sessions s
+         JOIN users u ON u.id = s.user_id
+        WHERE s.id = $1 AND s.token_hash = $2`,
+      [claims.jti, claims.tkh],
+    );
+    if (res.rowCount === 0) return null;
+    const row = res.rows[0]!;
+    if (row.revoked_at) return null;
+    if (new Date(row.expires_at).getTime() < Date.now()) return null;
+    if (!row.is_active) return null;
+
+    return {
+      id: row.user_id,
+      organizationId: row.organization_id,
+      email: row.email,
+      fullName: row.full_name,
+      role: row.role,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function revokeSession(token: string): Promise<void> {
+  try {
+    const { payload } = await jwtVerify(token, secretKey(), {
+      algorithms: ['HS256'],
+    });
+    const claims = payload as unknown as SessionClaims;
+    await query(
+      `UPDATE sessions SET revoked_at = now() WHERE id = $1`,
+      [claims.jti],
+    );
+  } catch {
+    /* silencieux */
+  }
+}
+
+export const SESSION_COOKIE = COOKIE_NAME;
