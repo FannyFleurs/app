@@ -11,8 +11,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="min-h-screen grid grid-cols-[260px_1fr]">
-      <aside className="border-r border-border bg-surface/60 backdrop-blur-sm">
-        <div className="px-4 py-5">
+      <aside className="relative border-r border-border bg-surface/60 backdrop-blur-sm overflow-y-auto">
+        <div className="px-4 py-5 sticky top-0 bg-surface/80 backdrop-blur-sm z-10 border-b border-border/60">
           <Link href="/dashboard" className="flex items-center gap-3">
             <div className="grid h-9 w-9 place-items-center rounded-xl bg-sage text-white font-semibold">F</div>
             <div>
@@ -22,7 +22,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </Link>
         </div>
         <Sidebar role={user.role} />
-        <div className="absolute bottom-0 left-0 w-[260px] border-t border-border bg-surface/80 px-4 py-3">
+        <div className="absolute bottom-0 left-0 w-[260px] border-t border-border bg-surface/95 backdrop-blur-sm px-4 py-3">
           <div className="text-sm font-medium truncate">{user.fullName}</div>
           <div className="text-xs text-ink-soft">{ROLE_LABELS[user.role]}</div>
           <LogoutButton />
