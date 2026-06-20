@@ -3,6 +3,11 @@ import { query } from '@/lib/db/client';
 import CashRegister from './CashRegister';
 import { hasPermission } from '@/lib/auth/rbac';
 import Link from 'next/link';
+import {
+  mergeWithDefaults,
+  POS_UI_KEY,
+  type PosUiSettings,
+} from '@/lib/settings/pos-ui';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,6 +45,12 @@ export default async function CaissePage() {
     [user.organizationId],
   );
 
+  const posSettingsRows = await query<{ value: Partial<PosUiSettings> }>(
+    `SELECT value FROM settings WHERE organization_id = $1 AND key = $2`,
+    [user.organizationId, POS_UI_KEY],
+  );
+  const posSettings = mergeWithDefaults(posSettingsRows.rows[0]?.value ?? null);
+
   if (stores.rows.length === 0 || registers.rows.length === 0) {
     return (
       <div className="p-8">
@@ -61,6 +72,7 @@ export default async function CaissePage() {
       registers={registers.rows}
       taxRates={taxRates.rows.map((t) => ({ ...t, rate: Number(t.rate) }))}
       currentUser={{ id: user.id, name: user.fullName, role: user.role }}
+      posUi={posSettings}
     />
   );
 }

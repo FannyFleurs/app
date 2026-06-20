@@ -7,6 +7,7 @@ import ReceiptPreviewModal from './ReceiptPreviewModal';
 import HoldListModal from './HoldListModal';
 import OpenSessionModal from './OpenSessionModal';
 import FreePriceModal from './FreePriceModal';
+import { tileMetrics, type PosUiSettings } from '@/lib/settings/pos-ui';
 
 export interface PosProduct {
   id: string;
@@ -53,11 +54,13 @@ interface Props {
   registers: { id: string; store_id: string; code: string; name: string }[];
   taxRates: TaxRate[];
   currentUser: { id: string; name: string; role: string };
+  posUi: PosUiSettings;
 }
 
 const FREE_PRICE_TAX_CODE_DEFAULT = 'TVA20';
 
-export default function CashRegister({ stores, registers, taxRates, currentUser }: Props) {
+export default function CashRegister({ stores, registers, taxRates, currentUser, posUi }: Props) {
+  const metrics = useMemo(() => tileMetrics(posUi.tile_size), [posUi.tile_size]);
   const [storeId, setStoreId] = useState<string>(stores[0]!.id);
   const registersForStore = useMemo(
     () => registers.filter((r) => r.store_id === storeId),
@@ -396,22 +399,33 @@ export default function CashRegister({ stores, registers, taxRates, currentUser 
               Aucun produit. Ajoutez-en dans <a className="underline" href="/products">Produits</a>.
             </div>
           ) : (
-            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
+            <div className={`grid ${metrics.grid} ${metrics.gap}`}>
               {visibleProducts.map((p) => (
                 <button
                   key={p.id}
                   onClick={() => addProduct(p)}
-                  className="card p-4 text-left hover:shadow-md hover:border-sage/40 transition-all active:scale-[0.98]"
+                  className={`card ${metrics.padding} text-left hover:shadow-md hover:border-sage/40 transition-all active:scale-[0.98]`}
                 >
-                  <div className="text-sm font-medium line-clamp-2 min-h-[2.5rem]">{p.name}</div>
-                  <div className="mt-2 flex items-center justify-between">
-                    <span className="text-lg font-semibold">
-                      {p.price_is_free ? 'libre' : formatEUR(p.sale_price_ttc)}
-                    </span>
-                    <span className="chip">{p.tax_rate}%</span>
+                  {posUi.show_product_image && (
+                    <div className="mb-2 h-14 w-full rounded-lg bg-sage-soft grid place-items-center text-sage-deep overflow-hidden">
+                      {p.image_url
+                        ? <img src={p.image_url} alt="" className="h-full w-full object-cover" />
+                        : <span>✿</span>}
+                    </div>
+                  )}
+                  <div className={`${metrics.titleFontSize} ${metrics.titleMinHeight} font-medium line-clamp-2 leading-tight`}>
+                    {p.name}
                   </div>
-                  {p.category_name && (
-                    <div className="mt-1 text-[11px] text-ink-soft">{p.category_name}</div>
+                  <div className="mt-2 flex items-center justify-between gap-1">
+                    {posUi.show_price && (
+                      <span className={`${metrics.priceFontSize} font-semibold`}>
+                        {p.price_is_free ? 'libre' : formatEUR(p.sale_price_ttc)}
+                      </span>
+                    )}
+                    {posUi.show_tax_badge && <span className="chip">{p.tax_rate}%</span>}
+                  </div>
+                  {posUi.show_category_badge && p.category_name && (
+                    <div className="mt-1 text-[11px] text-ink-soft truncate">{p.category_name}</div>
                   )}
                 </button>
               ))}

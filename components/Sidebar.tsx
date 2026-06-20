@@ -14,10 +14,11 @@ interface Item {
 }
 
 const ITEMS: Item[] = [
-  { href: '/dashboard',  label: 'Tableau de bord',      icon: '◐', group: 'Pilotage' },
-  { href: '/caisse',     label: 'Caisse',               icon: '◆', group: 'Vente',    perm: 'pos.use' },
-  { href: '/orders',     label: 'Commandes',            icon: '✿', group: 'Vente' },
-  { href: '/invoices',   label: 'Factures',             icon: '◼', group: 'Vente' },
+  { href: '/dashboard',    label: 'Tableau de bord',      icon: '◐', group: 'Pilotage' },
+  { href: '/caisse',       label: 'Caisse',               icon: '◆', group: 'Vente',    perm: 'pos.use' },
+  { href: '/pos-settings', label: 'Paramètres caisse',    icon: '⚙', group: 'Vente',    perm: 'pos.use' },
+  { href: '/orders',       label: 'Commandes',            icon: '✿', group: 'Vente' },
+  { href: '/invoices',     label: 'Factures',             icon: '◼', group: 'Vente' },
   { href: '/customers',  label: 'Clients',              icon: '◉', group: 'Relation', perm: 'customers.read' },
   { href: '/loyalty',    label: 'Fidélité',             icon: '✦', group: 'Relation' },
   { href: '/products',   label: 'Produits',             icon: '◈', group: 'Catalogue',perm: 'products.read' },

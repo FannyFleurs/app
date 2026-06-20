@@ -17,6 +17,7 @@ export const PERMISSIONS = {
   'pos.discount_cart': ['super_admin', 'owner', 'manager'],
   'pos.refund': ['super_admin', 'owner', 'manager'],
   'pos.void_validated_sale': [], // jamais directement : passage par avoir uniquement
+  'pos.settings.write': ['super_admin', 'owner', 'manager'],
   // Produits
   'products.read': ['super_admin', 'owner', 'manager', 'vendeur', 'comptable', 'lecture_seule', 'support_technique'],
   'products.write': ['super_admin', 'owner', 'manager'],
