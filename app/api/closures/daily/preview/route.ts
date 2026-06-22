@@ -49,6 +49,44 @@ export async function GET(req: Request) {
     [storeId, date],
   );
 
+  // Fonds + mouvements espèces du jour pour la boutique
+  const cashBd = await query<{
+    opening_floats: string; ins: string; outs: string;
+  }>(
+    `SELECT
+        COALESCE(SUM(cs.opening_float), 0)::text AS opening_floats,
+        COALESCE((SELECT SUM(cm.amount) FROM cash_movements cm
+                   WHERE cm.cash_session_id IN (
+                     SELECT id FROM cash_sessions
+                      WHERE store_id = $1 AND opened_at::date = $2::date
+                   ) AND cm.movement_type = 'in'), 0)::text AS ins,
+        COALESCE((SELECT SUM(cm.amount) FROM cash_movements cm
+                   WHERE cm.cash_session_id IN (
+                     SELECT id FROM cash_sessions
+                      WHERE store_id = $1 AND opened_at::date = $2::date
+                   ) AND cm.movement_type = 'out'), 0)::text AS outs
+       FROM cash_sessions cs
+      WHERE cs.store_id = $1 AND cs.opened_at::date = $2::date`,
+    [storeId, date],
+  );
+  const openingFloats = Number(cashBd.rows[0]?.opening_floats ?? 0);
+  const cashIns = Number(cashBd.rows[0]?.ins ?? 0);
+  const cashOuts = Number(cashBd.rows[0]?.outs ?? 0);
+  const cashSales = Number(payments.rows.find((p) => p.method === 'cash')?.total ?? 0);
+  const cashExpected = Number((openingFloats + cashSales + cashIns - cashOuts).toFixed(2));
+
+  // Mouvements détaillés (pour affichage)
+  const movements = await query<{
+    id: string; movement_type: 'in' | 'out'; amount: string; reason: string; created_at: string;
+  }>(
+    `SELECT cm.id, cm.movement_type, cm.amount::text, cm.reason, cm.created_at
+       FROM cash_movements cm
+       JOIN cash_sessions cs ON cs.id = cm.cash_session_id
+      WHERE cs.store_id = $1 AND cs.opened_at::date = $2::date
+      ORDER BY cm.created_at DESC`,
+    [storeId, date],
+  );
+
   // Vérifie si déjà clôturé
   const sealed = await query<{ id: string; sealed_at: string }>(
     `SELECT id, sealed_at FROM daily_closures
@@ -70,9 +108,18 @@ export async function GET(req: Request) {
       tva: Number(r.tva),
       ttc: Number(r.ttc),
     })),
-    payments: payments.rows.map((r) => ({
-      method: r.method,
-      total: Number(r.total),
+    payments: payments.rows.map((r) => ({ method: r.method, total: Number(r.total) })),
+    cash_breakdown: {
+      opening_floats: openingFloats,
+      cash_sales: cashSales,
+      cash_in: cashIns,
+      cash_out: cashOuts,
+      expected: cashExpected,
+    },
+    movements: movements.rows.map((m) => ({
+      id: m.id, movement_type: m.movement_type,
+      amount: Number(m.amount), reason: m.reason,
+      created_at: m.created_at,
     })),
     sealed: sealed.rows[0] ?? null,
   });

@@ -7,6 +7,7 @@ import { audit } from '@/lib/audit/log';
 import {
   POS_TILE_SIZES,
   POS_THEME_COLORS,
+  OPENING_FLOAT_MODES,
   POS_UI_KEY,
   mergeWithDefaults,
   type PosUiSettings,
@@ -19,6 +20,8 @@ const schema = z.object({
   show_category_badge: z.boolean().optional(),
   show_price: z.boolean().optional(),
   show_tax_badge: z.boolean().optional(),
+  opening_float_mode: z.enum(OPENING_FLOAT_MODES).optional(),
+  opening_float_amount: z.number().min(0).max(100000).optional(),
 });
 
 export async function GET() {

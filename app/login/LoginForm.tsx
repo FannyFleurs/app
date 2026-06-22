@@ -25,7 +25,8 @@ export default function LoginForm() {
         setError(prettyError(j.error));
         return;
       }
-      router.push('/dashboard');
+      // Le routage par défaut décide entre /caisse et /dashboard selon le rôle
+      router.push('/');
       router.refresh();
     } catch {
       setError('Impossible de joindre le serveur');

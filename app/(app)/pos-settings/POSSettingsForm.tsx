@@ -9,10 +9,13 @@ import {
   POS_THEME_COLORS,
   POS_THEME_COLOR_VALUES,
   POS_UI_DEFAULTS,
+  OPENING_FLOAT_MODES,
+  OPENING_FLOAT_LABELS,
   tileMetrics,
   type PosUiSettings,
   type PosTileSize,
   type PosThemeColor,
+  type OpeningFloatMode,
 } from '@/lib/settings/pos-ui';
 import Badge from '@/components/Badge';
 
@@ -180,13 +183,54 @@ export default function POSSettingsForm({ initial, canWrite }: Props) {
           </div>
         </Section>
 
-        {/* Sections futures — stubs visibles pour montrer l'extensibilité */}
         <Section
-          title="Comportement"
-          description="Bientôt : verrouillage automatique, raccourcis clavier, scan auto."
-          disabled
+          title="Ouverture de la caisse"
+          description="Comment pré-remplir le fond de caisse à l'ouverture chaque matin."
         >
-          <div className="text-sm text-ink-soft">À venir — Phase 2.</div>
+          <div className="space-y-2">
+            {OPENING_FLOAT_MODES.map((mode) => {
+              const meta = OPENING_FLOAT_LABELS[mode];
+              const active = settings.opening_float_mode === mode;
+              return (
+                <label
+                  key={mode}
+                  className={`flex items-start gap-3 rounded-xl border p-3 cursor-pointer transition-all ${
+                    active ? 'border-ink bg-accent-soft' : 'border-border bg-white hover:border-gray-300'
+                  } ${!canWrite ? 'opacity-60 cursor-not-allowed' : ''}`}
+                >
+                  <input
+                    type="radio"
+                    name="opening_float_mode"
+                    value={mode}
+                    checked={active}
+                    onChange={() => patch('opening_float_mode', mode)}
+                    disabled={!canWrite}
+                    className="mt-1"
+                  />
+                  <div className="flex-1">
+                    <div className="font-medium text-sm">{meta.label}</div>
+                    <div className="text-xs text-ink-soft mt-0.5">{meta.description}</div>
+                  </div>
+                </label>
+              );
+            })}
+
+            {settings.opening_float_mode === 'fixed' && (
+              <div className="rounded-xl border border-border bg-white p-3 ml-7 mt-2">
+                <label className="text-xs font-medium text-ink-soft">Montant du fond fixe (€)</label>
+                <input
+                  type="number" step="0.01" min={0}
+                  className="input mt-1 max-w-xs"
+                  value={settings.opening_float_amount}
+                  onChange={(e) => patch('opening_float_amount', Number(e.target.value || 0))}
+                  disabled={!canWrite}
+                />
+                <p className="mt-1 text-xs text-ink-soft">
+                  Aperçu : {formatEUR(settings.opening_float_amount)}
+                </p>
+              </div>
+            )}
+          </div>
         </Section>
 
         <Section

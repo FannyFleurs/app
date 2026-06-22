@@ -13,6 +13,9 @@ export type PosTileSize = (typeof POS_TILE_SIZES)[number];
 export const POS_THEME_COLORS = ['sage', 'charcoal', 'navy', 'terracotta', 'rose', 'amber', 'plum'] as const;
 export type PosThemeColor = (typeof POS_THEME_COLORS)[number];
 
+export const OPENING_FLOAT_MODES = ['manual', 'fixed', 'previous_close'] as const;
+export type OpeningFloatMode = (typeof OPENING_FLOAT_MODES)[number];
+
 export interface PosUiSettings {
   tile_size: PosTileSize;
   theme_color: PosThemeColor;
@@ -20,7 +23,24 @@ export interface PosUiSettings {
   show_category_badge: boolean;
   show_price: boolean;
   show_tax_badge: boolean;
+  opening_float_mode: OpeningFloatMode;
+  opening_float_amount: number;
 }
+
+export const OPENING_FLOAT_LABELS: Record<OpeningFloatMode, { label: string; description: string }> = {
+  manual: {
+    label: 'Saisie manuelle',
+    description: 'Le caissier saisit le fond de caisse à chaque ouverture.',
+  },
+  fixed: {
+    label: 'Montant fixe',
+    description: 'On part toujours du même montant (champ ci-dessous).',
+  },
+  previous_close: {
+    label: 'Solde de la veille',
+    description: "Reprend le montant compté à la dernière clôture. Pratique si la caisse n'est pas vidée chaque soir.",
+  },
+};
 
 export const POS_UI_KEY = 'pos_ui';
 
@@ -31,6 +51,8 @@ export const POS_UI_DEFAULTS: PosUiSettings = {
   show_category_badge: true,
   show_price: true,
   show_tax_badge: true,
+  opening_float_mode: 'manual',
+  opening_float_amount: 0,
 };
 
 export const POS_THEME_COLOR_VALUES: Record<PosThemeColor, { label: string; main: string; deep: string; soft: string }> = {

@@ -112,8 +112,36 @@ export class ClosingService {
         total: Number(r.total),
       }));
 
-      const cashExpected = Number(
+      const cashSales = Number(
         paymentsBreakdown.find((p) => p.method === 'cash')?.total ?? 0,
+      );
+
+      // Fonds + mouvements caisse pour les sessions ouvertes ce jour-là sur cette boutique
+      const floatsRes = await client.query<{
+        opening_floats: string; ins: string; outs: string;
+      }>(
+        `SELECT
+            COALESCE(SUM(cs.opening_float), 0)::text AS opening_floats,
+            COALESCE((SELECT SUM(cm.amount) FROM cash_movements cm
+                       WHERE cm.cash_session_id IN (
+                         SELECT id FROM cash_sessions
+                          WHERE store_id = $1 AND opened_at::date = $2::date
+                       ) AND cm.movement_type = 'in'), 0)::text AS ins,
+            COALESCE((SELECT SUM(cm.amount) FROM cash_movements cm
+                       WHERE cm.cash_session_id IN (
+                         SELECT id FROM cash_sessions
+                          WHERE store_id = $1 AND opened_at::date = $2::date
+                       ) AND cm.movement_type = 'out'), 0)::text AS outs
+           FROM cash_sessions cs
+          WHERE cs.store_id = $1 AND cs.opened_at::date = $2::date`,
+        [args.storeId, args.businessDate],
+      );
+      const openingFloats = Number(floatsRes.rows[0]?.opening_floats ?? 0);
+      const cashIns = Number(floatsRes.rows[0]?.ins ?? 0);
+      const cashOuts = Number(floatsRes.rows[0]?.outs ?? 0);
+
+      const cashExpected = Number(
+        (openingFloats + cashSales + cashIns - cashOuts).toFixed(2),
       );
       const cashVariance =
         args.countedCash != null
@@ -157,6 +185,13 @@ export class ClosingService {
         },
         tva_breakdown: tvaBreakdown,
         payments_breakdown: enrichedPayments,
+        cash_breakdown: {
+          opening_floats: openingFloats,
+          cash_sales: cashSales,
+          cash_in: cashIns,
+          cash_out: cashOuts,
+          expected: cashExpected,
+        },
         cash_expected: cashExpected,
         cash_counted: args.countedCash ?? null,
         cash_variance: cashVariance,

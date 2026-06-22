@@ -14,5 +14,10 @@ export default async function ClosuresPage() {
     `SELECT id, name FROM stores WHERE organization_id = $1 AND is_active ORDER BY name`,
     [user.organizationId],
   );
-  return <ClosuresAdmin stores={stores.rows} />;
+  const registers = await query<{ id: string; store_id: string; code: string; name: string }>(
+    `SELECT id, store_id, code, name FROM registers
+      WHERE organization_id = $1 AND is_active ORDER BY name`,
+    [user.organizationId],
+  );
+  return <ClosuresAdmin stores={stores.rows} registers={registers.rows} />;
 }

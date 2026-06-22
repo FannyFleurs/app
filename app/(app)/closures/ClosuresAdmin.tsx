@@ -6,29 +6,32 @@ import { PAYMENT_LABELS } from '@/components/labels';
 import PageHeader from '@/components/PageHeader';
 import Badge from '@/components/Badge';
 import EmptyState from '@/components/EmptyState';
+import BankDepositModal from './BankDepositModal';
 
-const DENOMINATIONS: Array<{ value: number; label: string; kind: 'bill' | 'coin' }> = [
-  { value: 500,  label: '500 €',   kind: 'bill' },
-  { value: 200,  label: '200 €',   kind: 'bill' },
-  { value: 100,  label: '100 €',   kind: 'bill' },
-  { value: 50,   label: '50 €',    kind: 'bill' },
-  { value: 20,   label: '20 €',    kind: 'bill' },
-  { value: 10,   label: '10 €',    kind: 'bill' },
-  { value: 5,    label: '5 €',     kind: 'bill' },
-  { value: 2,    label: '2 €',     kind: 'coin' },
-  { value: 1,    label: '1 €',     kind: 'coin' },
-  { value: 0.5,  label: '0,50 €',  kind: 'coin' },
-  { value: 0.2,  label: '0,20 €',  kind: 'coin' },
-  { value: 0.1,  label: '0,10 €',  kind: 'coin' },
-  { value: 0.05, label: '0,05 €',  kind: 'coin' },
-  { value: 0.02, label: '0,02 €',  kind: 'coin' },
-  { value: 0.01, label: '0,01 €',  kind: 'coin' },
+const DENOMINATIONS: Array<{ value: number; label: string }> = [
+  { value: 500,  label: '500 €' },
+  { value: 200,  label: '200 €' },
+  { value: 100,  label: '100 €' },
+  { value: 50,   label: '50 €' },
+  { value: 20,   label: '20 €' },
+  { value: 10,   label: '10 €' },
+  { value: 5,    label: '5 €' },
+  { value: 2,    label: '2 €' },
+  { value: 1,    label: '1 €' },
+  { value: 0.5,  label: '0,50 €' },
+  { value: 0.2,  label: '0,20 €' },
+  { value: 0.1,  label: '0,10 €' },
+  { value: 0.05, label: '0,05 €' },
+  { value: 0.02, label: '0,02 €' },
+  { value: 0.01, label: '0,01 €' },
 ];
 
 interface PreviewData {
   totals: { sales: number; ht: number; tva: number; ttc: number; discount: number };
   tva_breakdown: { rate: number; base_ht: number; tva: number; ttc: number }[];
   payments: { method: string; total: number }[];
+  cash_breakdown: { opening_floats: number; cash_sales: number; cash_in: number; cash_out: number; expected: number };
+  movements: { id: string; movement_type: 'in' | 'out'; amount: number; reason: string; created_at: string }[];
   sealed: { id: string; sealed_at: string } | null;
 }
 
@@ -39,22 +42,32 @@ interface ClosureSummary {
   sealed_at: string; fiscal_hash: string;
 }
 
-export default function ClosuresAdmin({ stores }: { stores: { id: string; name: string }[] }) {
+interface Store { id: string; name: string }
+interface Register { id: string; store_id: string; code: string; name: string }
+
+export default function ClosuresAdmin({ stores, registers }: { stores: Store[]; registers: Register[] }) {
   const [storeId, setStoreId] = useState(stores[0]?.id ?? '');
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [preview, setPreview] = useState<PreviewData | null>(null);
   const [history, setHistory] = useState<ClosureSummary[]>([]);
   const [denomCount, setDenomCount] = useState<Record<string, number>>({});
-  const [declared, setDeclared] = useState<Record<string, string>>({}); // string pour saisie libre
+  const [declared, setDeclared] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState('');
   const [sealing, setSealing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sealedResult, setSealedResult] = useState<{ id: string; fiscal_hash: string } | null>(null);
+  const [showDeposit, setShowDeposit] = useState(false);
+  const [drawerToast, setDrawerToast] = useState<string | null>(null);
+
+  const registersForStore = useMemo(
+    () => registers.filter((r) => r.store_id === storeId),
+    [registers, storeId],
+  );
+  const [registerId, setRegisterId] = useState<string>('');
+  useEffect(() => { setRegisterId(registersForStore[0]?.id ?? ''); }, [registersForStore]);
 
   async function loadPreview() {
     setError(null);
-    setPreview(null);
-    setSealedResult(null);
     if (!storeId || !date) return;
     const r = await fetch(`/api/closures/daily/preview?store_id=${storeId}&date=${date}`);
     if (r.ok) setPreview(await r.json());
@@ -64,7 +77,7 @@ export default function ClosuresAdmin({ stores }: { stores: { id: string; name: 
     const r = await fetch(`/api/closures/daily?store_id=${storeId}`);
     if (r.ok) setHistory((await r.json()).closures);
   }
-  useEffect(() => { void loadPreview(); void loadHistory(); /* eslint-disable-next-line */ }, [storeId, date]);
+  useEffect(() => { setSealedResult(null); void loadPreview(); void loadHistory(); /* eslint-disable-next-line */ }, [storeId, date]);
 
   const countedCash = useMemo(() => {
     let total = 0;
@@ -74,19 +87,17 @@ export default function ClosuresAdmin({ stores }: { stores: { id: string; name: 
     return Number(total.toFixed(2));
   }, [denomCount]);
 
-  const expectedCash = preview?.payments.find((p) => p.method === 'cash')?.total ?? 0;
+  const expectedCash = preview?.cash_breakdown.expected ?? 0;
   const cashVariance = countedCash > 0 ? Number((countedCash - expectedCash).toFixed(2)) : 0;
 
   async function seal() {
     if (!preview) return;
     setSealing(true); setError(null);
-    // Construit les paiements déclarés (numériques seulement)
     const declaredPayments: Record<string, number> = {};
     for (const [k, v] of Object.entries(declared)) {
       const n = Number(v);
       if (Number.isFinite(n)) declaredPayments[k] = n;
     }
-    // Ne garde que les dénominations comptées
     const denominations: Record<string, number> = {};
     for (const [k, v] of Object.entries(denomCount)) {
       if (v > 0) denominations[k] = v;
@@ -114,7 +125,22 @@ export default function ClosuresAdmin({ stores }: { stores: { id: string; name: 
     const j = await r.json();
     setSealedResult({ id: j.daily_closure_id, fiscal_hash: j.fiscal_hash });
     await loadHistory();
-    await loadPreview(); // recharge → marquera sealed
+    await loadPreview();
+  }
+
+  async function openDrawer() {
+    if (!registerId) {
+      setDrawerToast('Aucune caisse active.');
+      return;
+    }
+    const r = await fetch('/api/cash-sessions/open-drawer', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ register_id: registerId, reason: 'Ouverture manuelle depuis clôture' }),
+    });
+    if (r.ok) {
+      setDrawerToast('Tiroir ouvert · action tracée dans l\'audit');
+      setTimeout(() => setDrawerToast(null), 2500);
+    }
   }
 
   if (!stores.length) {
@@ -126,13 +152,12 @@ export default function ClosuresAdmin({ stores }: { stores: { id: string; name: 
   }
 
   const alreadySealed = preview?.sealed != null;
-  const billsAndCoins = DENOMINATIONS;
 
   return (
     <div className="p-8 space-y-5">
       <PageHeader
         title="Clôture de caisse"
-        subtitle="Reconnaissez vos paiements, comptez vos espèces par dénomination, scellez la journée et imprimez le Z."
+        subtitle="Reconnaissez vos paiements, comptez vos espèces, sortez les remises en banque, scellez la journée et imprimez le Z."
       />
 
       <div className="card p-4 flex flex-wrap items-end gap-3">
@@ -146,24 +171,39 @@ export default function ClosuresAdmin({ stores }: { stores: { id: string; name: 
           <label className="text-xs font-medium text-ink-soft">Date d&apos;opération</label>
           <input type="date" className="input mt-1" value={date} onChange={(e) => setDate(e.target.value)} />
         </div>
+        {registersForStore.length > 1 && (
+          <div>
+            <label className="text-xs font-medium text-ink-soft">Caisse (pour tiroir & remise)</label>
+            <select className="input mt-1" value={registerId} onChange={(e) => setRegisterId(e.target.value)}>
+              {registersForStore.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+            </select>
+          </div>
+        )}
+
+        <div className="ml-auto flex items-center gap-2">
+          <button onClick={() => void openDrawer()} disabled={!registerId} className="btn-soft text-sm">
+            ◰ Ouvrir tiroir
+          </button>
+          <button onClick={() => setShowDeposit(true)} disabled={!registerId || alreadySealed} className="btn-soft text-sm">
+            ⤓ Remise en banque
+          </button>
+        </div>
         {alreadySealed && (
           <Badge tone="success">
-            Déjà scellée le {new Date(preview!.sealed!.sealed_at).toLocaleString('fr-FR')}
+            Scellée le {new Date(preview!.sealed!.sealed_at).toLocaleString('fr-FR')}
           </Badge>
         )}
       </div>
 
+      {drawerToast && (
+        <div className="rounded-xl bg-success/10 px-4 py-2 text-sm text-success">{drawerToast}</div>
+      )}
+
       {!preview ? (
         <div className="text-ink-soft text-sm">Chargement…</div>
-      ) : preview.totals.sales === 0 ? (
-        <EmptyState
-          icon="◐"
-          title="Aucune vente à clôturer"
-          description="Il n'y a pas de ventes validées pour cette date sur cette boutique."
-        />
       ) : (
         <>
-          {/* Synthèse système */}
+          {/* Synthèse système — toujours visible */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <Kpi label="Tickets" value={preview.totals.sales.toString()} />
             <Kpi label="Total HT" value={formatEUR(preview.totals.ht)} />
@@ -171,14 +211,20 @@ export default function ClosuresAdmin({ stores }: { stores: { id: string; name: 
             <Kpi label="Total TTC" value={formatEUR(preview.totals.ttc)} accent />
           </div>
 
+          {preview.totals.sales === 0 && (
+            <div className="rounded-xl border border-border bg-gray-50 px-4 py-3 text-sm text-ink-soft">
+              Aucune vente sur cette date. Vous pouvez quand même compter votre tiroir, faire une
+              remise en banque et sceller la journée pour la déclarer.
+            </div>
+          )}
+
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            {/* Colonne 1 : paiements + TVA */}
+            {/* Colonne 1 : paiements + TVA + mouvements */}
             <div className="space-y-5">
               <section className="card p-5">
                 <h3 className="font-semibold">Réconciliation des paiements</h3>
                 <p className="mt-1 text-sm text-ink-soft">
-                  Le système connaît les totaux. Saisissez ce que vous avez réellement reçu (CB,
-                  chèques, etc.) pour faire apparaître les écarts.
+                  Saisissez ce que vous avez réellement reçu pour faire apparaître les écarts.
                 </p>
                 <div className="mt-4 space-y-2">
                   {preview.payments.length === 0 ? (
@@ -197,7 +243,6 @@ export default function ClosuresAdmin({ stores }: { stores: { id: string; name: 
                             <span className="font-medium">{formatEUR(p.total)}</span>
                           </span>
                         </div>
-                        {/* Pas de saisie déclarée pour les espèces (gérées par comptage) */}
                         {p.method !== 'cash' && (
                           <div className="mt-2 flex items-center gap-2">
                             <label className="text-xs text-ink-soft w-24 shrink-0">Saisie réelle</label>
@@ -223,20 +268,43 @@ export default function ClosuresAdmin({ stores }: { stores: { id: string; name: 
                 </div>
               </section>
 
-              <section className="card p-5">
-                <h3 className="font-semibold">Récapitulatif TVA</h3>
-                <table className="mt-3 w-full text-sm">
-                  <tbody>
-                    {preview.tva_breakdown.map((t) => (
-                      <tr key={t.rate} className="border-t border-border first:border-t-0">
-                        <td className="py-2">TVA {t.rate}%</td>
-                        <td className="py-2 text-right text-ink-soft">Base {formatEUR(t.base_ht)}</td>
-                        <td className="py-2 text-right font-medium">{formatEUR(t.tva)}</td>
-                      </tr>
+              {preview.movements.length > 0 && (
+                <section className="card p-5">
+                  <h3 className="font-semibold">Mouvements caisse du jour</h3>
+                  <ul className="mt-3 space-y-1 text-sm">
+                    {preview.movements.map((m) => (
+                      <li key={m.id} className="flex items-center justify-between gap-2 border-b border-border/60 pb-1.5 last:border-0">
+                        <div className="flex items-center gap-2">
+                          <Badge tone={m.movement_type === 'in' ? 'success' : 'warning'}>
+                            {m.movement_type === 'in' ? 'Entrée' : 'Sortie'}
+                          </Badge>
+                          <span>{m.reason}</span>
+                        </div>
+                        <span className={`font-medium ${m.movement_type === 'in' ? 'text-success' : 'text-danger'}`}>
+                          {m.movement_type === 'in' ? '+' : '-'}{formatEUR(m.amount)}
+                        </span>
+                      </li>
                     ))}
-                  </tbody>
-                </table>
-              </section>
+                  </ul>
+                </section>
+              )}
+
+              {preview.tva_breakdown.length > 0 && (
+                <section className="card p-5">
+                  <h3 className="font-semibold">Récapitulatif TVA</h3>
+                  <table className="mt-3 w-full text-sm">
+                    <tbody>
+                      {preview.tva_breakdown.map((t) => (
+                        <tr key={t.rate} className="border-t border-border first:border-t-0">
+                          <td className="py-2">TVA {t.rate}%</td>
+                          <td className="py-2 text-right text-ink-soft">Base {formatEUR(t.base_ht)}</td>
+                          <td className="py-2 text-right font-medium">{formatEUR(t.tva)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </section>
+              )}
             </div>
 
             {/* Colonne 2 : comptage espèces */}
@@ -244,10 +312,9 @@ export default function ClosuresAdmin({ stores }: { stores: { id: string; name: 
               <h3 className="font-semibold">Comptage des espèces en caisse</h3>
               <p className="mt-1 text-sm text-ink-soft">
                 Saisissez le nombre de billets et pièces présents dans le tiroir.
-                Le total se calcule automatiquement.
               </p>
               <div className="mt-4 grid grid-cols-2 gap-2">
-                {billsAndCoins.map((d) => {
+                {DENOMINATIONS.map((d) => {
                   const qty = denomCount[String(d.value)] ?? 0;
                   const sub = qty * d.value;
                   return (
@@ -275,8 +342,16 @@ export default function ClosuresAdmin({ stores }: { stores: { id: string; name: 
               </div>
 
               <div className="mt-4 space-y-1.5 text-sm rounded-xl bg-gray-50 p-4">
-                <div className="flex justify-between">
-                  <span className="text-ink-soft">Espèces attendues (système)</span>
+                <div className="flex justify-between"><span className="text-ink-soft">Fonds de caisse ouverts</span><span>{formatEUR(preview.cash_breakdown.opening_floats)}</span></div>
+                <div className="flex justify-between"><span className="text-ink-soft">+ Ventes espèces</span><span>{formatEUR(preview.cash_breakdown.cash_sales)}</span></div>
+                {preview.cash_breakdown.cash_in > 0 && (
+                  <div className="flex justify-between"><span className="text-ink-soft">+ Entrées caisse</span><span>{formatEUR(preview.cash_breakdown.cash_in)}</span></div>
+                )}
+                {preview.cash_breakdown.cash_out > 0 && (
+                  <div className="flex justify-between"><span className="text-ink-soft">- Sorties caisse</span><span>-{formatEUR(preview.cash_breakdown.cash_out)}</span></div>
+                )}
+                <div className="flex justify-between pt-2 border-t border-border">
+                  <span className="font-medium">Espèces attendues</span>
                   <span className="font-medium">{formatEUR(expectedCash)}</span>
                 </div>
                 <div className="flex justify-between">
@@ -333,7 +408,7 @@ export default function ClosuresAdmin({ stores }: { stores: { id: string; name: 
               </a>
             ) : (
               <button
-                disabled={sealing || preview.totals.sales === 0}
+                disabled={sealing}
                 onClick={() => void seal()}
                 className="btn-primary w-full h-12 text-base"
               >
@@ -398,6 +473,15 @@ export default function ClosuresAdmin({ stores }: { stores: { id: string; name: 
           </div>
         )}
       </div>
+
+      {showDeposit && (
+        <BankDepositModal
+          registerId={registerId}
+          maxAmount={Math.max(0, preview?.cash_breakdown.expected ?? 0)}
+          onClose={() => setShowDeposit(false)}
+          onSaved={() => { setShowDeposit(false); void loadPreview(); }}
+        />
+      )}
     </div>
   );
 }
