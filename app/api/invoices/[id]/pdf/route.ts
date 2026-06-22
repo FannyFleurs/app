@@ -1,0 +1,113 @@
+import { NextResponse } from 'next/server';
+import { query } from '@/lib/db/client';
+import { requirePermission } from '@/lib/auth/guards';
+import { jsonError } from '@/lib/validation/api';
+import { renderInvoicePdf, type InvoicePdfData } from '@/lib/services/invoice-pdf';
+
+export async function GET(_req: Request, { params }: { params: { id: string } }) {
+  const g = await requirePermission('customers.read');
+  if ('response' in g) return g.response;
+
+  const inv = await query<{
+    number: string; invoice_type: string; status: string;
+    issue_date: string | null; service_date: string | null; due_date: string | null;
+    total_ht: string; total_tva: string; total_ttc: string;
+    tva_breakdown: { rate: number; base_ht: number; tva: number; ttc: number }[];
+    payment_terms: string | null; legal_mentions: string | null;
+    fiscal_hash: string | null;
+    org_name: string; org_legal: string; org_siret: string | null;
+    org_vat: string | null;
+    org_address: { line1?: string; zip?: string; city?: string } | null;
+    org_contact: { email?: string; phone?: string } | null;
+    customer_display: string | null;
+    customer_siret: string | null;
+    customer_vat: string | null;
+    customer_email: string | null;
+    customer_phone: string | null;
+    customer_address: { line1?: string; zip?: string; city?: string } | null;
+  }>(
+    `SELECT i.number, i.invoice_type, i.status,
+            i.issue_date, i.service_date, i.due_date,
+            i.total_ht::text, i.total_tva::text, i.total_ttc::text,
+            i.tva_breakdown, i.payment_terms, i.legal_mentions, i.fiscal_hash,
+            o.name AS org_name, o.legal_name AS org_legal, o.siret AS org_siret,
+            o.vat_number AS org_vat, o.address AS org_address, o.contact AS org_contact,
+            COALESCE(c.company_name, NULLIF(TRIM(CONCAT(c.first_name,' ',c.last_name)), '')) AS customer_display,
+            c.siret AS customer_siret, c.vat_number AS customer_vat,
+            c.email AS customer_email, c.phone AS customer_phone, c.address AS customer_address
+       FROM invoices i
+       JOIN organizations o ON o.id = i.organization_id
+       LEFT JOIN customers c ON c.id = i.customer_id
+      WHERE i.id = $1 AND i.organization_id = $2`,
+    [params.id, g.user.organizationId],
+  );
+  if (inv.rowCount === 0) return jsonError('NOT_FOUND', 404);
+  const r = inv.rows[0]!;
+
+  const lines = await query<{
+    label: string; quantity: string; unit_price_ht: string;
+    discount_pct: string; tax_rate: string;
+    line_ht: string; line_tva: string; line_ttc: string;
+  }>(
+    `SELECT label, quantity::text, unit_price_ht::text, discount_pct::text,
+            tax_rate::text, line_ht::text, line_tva::text, line_ttc::text
+       FROM invoice_lines WHERE invoice_id = $1 ORDER BY line_index`,
+    [params.id],
+  );
+
+  const data: InvoicePdfData = {
+    number: r.number,
+    invoice_type: r.invoice_type,
+    status: r.status,
+    issue_date: r.issue_date ?? '',
+    service_date: r.service_date,
+    due_date: r.due_date,
+    total_ht: Number(r.total_ht),
+    total_tva: Number(r.total_tva),
+    total_ttc: Number(r.total_ttc),
+    tva_breakdown: r.tva_breakdown ?? [],
+    payment_terms: r.payment_terms,
+    legal_mentions: r.legal_mentions,
+    fiscal_hash: r.fiscal_hash,
+    lines: lines.rows.map((l) => ({
+      label: l.label,
+      quantity: Number(l.quantity),
+      unit_price_ht: Number(l.unit_price_ht),
+      discount_pct: Number(l.discount_pct),
+      tax_rate: Number(l.tax_rate),
+      line_ht: Number(l.line_ht),
+      line_tva: Number(l.line_tva),
+      line_ttc: Number(l.line_ttc),
+    })),
+  };
+
+  const pdf = await renderInvoicePdf(
+    data,
+    {
+      name: r.org_name,
+      legal_name: r.org_legal,
+      siret: r.org_siret,
+      vat_number: r.org_vat,
+      address: r.org_address,
+      email: r.org_contact?.email ?? null,
+      phone: r.org_contact?.phone ?? null,
+    },
+    {
+      name: r.customer_display ?? 'Client',
+      siret: r.customer_siret,
+      vat_number: r.customer_vat,
+      address: r.customer_address,
+      email: r.customer_email,
+      phone: r.customer_phone,
+    },
+  );
+
+  return new NextResponse(pdf, {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `inline; filename="${r.number}.pdf"`,
+      'Cache-Control': 'private, no-store',
+    },
+  });
+}

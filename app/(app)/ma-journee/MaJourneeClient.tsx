@@ -18,6 +18,7 @@ interface Sale {
 
 interface SaleDetail {
   sale: Sale & {
+    customer_id: string | null;
     tva_breakdown: { rate: number; base_ht: number; tva: number; ttc: number }[];
   };
   lines: {
@@ -27,6 +28,7 @@ interface SaleDetail {
     line_ht: string; line_tva: string; line_ttc: string;
   }[];
   payments: { method: string; amount: string; reference: string | null }[];
+  invoice: { id: string; number: string } | null;
 }
 
 export default function MaJourneeClient() {
@@ -158,7 +160,10 @@ export default function MaJourneeClient() {
           ) : loadingDetail ? (
             <div className="card p-10 text-center text-ink-soft text-sm">Chargement…</div>
           ) : detail ? (
-            <SaleDetailPanel detail={detail} />
+            <SaleDetailPanel
+              detail={detail}
+              onInvoiceGenerated={() => void pickSale(detail.sale.id)}
+            />
           ) : (
             <EmptyState icon="⚠" title="Erreur de chargement" />
           )}
@@ -168,8 +173,29 @@ export default function MaJourneeClient() {
   );
 }
 
-function SaleDetailPanel({ detail }: { detail: SaleDetail }) {
+function SaleDetailPanel({ detail, onInvoiceGenerated }: {
+  detail: SaleDetail;
+  onInvoiceGenerated: () => void;
+}) {
   const s = detail.sale;
+  const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function generateInvoice() {
+    setGenerating(true); setError(null);
+    const res = await fetch(`/api/sales/${s.id}/invoice`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    setGenerating(false);
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      setError(j.error ?? 'Erreur');
+      return;
+    }
+    onInvoiceGenerated();
+  }
+
   return (
     <div className="space-y-4">
       <div className="card p-5">
@@ -183,11 +209,30 @@ function SaleDetailPanel({ detail }: { detail: SaleDetail }) {
               {s.customer && <> · Client : {s.customer}</>}
             </div>
           </div>
-          <a href={`/api/receipts/by-sale/${s.id}/pdf`} target="_blank" rel="noreferrer"
-             className="btn-soft text-xs whitespace-nowrap" title="Imprimer le ticket">
-            Voir le ticket
-          </a>
+          <div className="flex flex-col items-end gap-2">
+            <a href={`/api/receipts/by-sale/${s.id}/pdf`} target="_blank" rel="noreferrer"
+               className="btn-soft text-xs whitespace-nowrap">
+              Voir le ticket
+            </a>
+            {detail.invoice ? (
+              <a href={`/api/invoices/${detail.invoice.id}/pdf`} target="_blank" rel="noreferrer"
+                 className="btn-primary text-xs whitespace-nowrap">
+                Facture {detail.invoice.number}
+              </a>
+            ) : s.customer_id ? (
+              <button onClick={() => void generateInvoice()} disabled={generating}
+                      className="btn-primary text-xs whitespace-nowrap">
+                {generating ? 'Génération…' : 'Générer facture'}
+              </button>
+            ) : null}
+          </div>
         </div>
+        {!s.customer_id && !detail.invoice && (
+          <p className="mt-3 text-xs text-ink-soft">
+            Aucun client attaché — la génération de facture nécessite un client identifié.
+          </p>
+        )}
+        {error && <div className="mt-2 text-xs text-danger">{error}</div>}
       </div>
 
       <div className="card overflow-hidden">

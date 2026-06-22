@@ -7,6 +7,7 @@ import ReceiptPreviewModal from './ReceiptPreviewModal';
 import HoldListModal from './HoldListModal';
 import OpenSessionModal from './OpenSessionModal';
 import FreePriceModal from './FreePriceModal';
+import CustomerPickerModal, { type PickedCustomer } from './CustomerPickerModal';
 import { tileMetrics, type PosUiSettings } from '@/lib/settings/pos-ui';
 
 export interface PosProduct {
@@ -84,10 +85,12 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
   const [lines, setLines] = useState<CartLine[]>([]);
   const [savingLines, setSavingLines] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
-  const [receipt, setReceipt] = useState<{ id: string; number: string } | null>(null);
+  const [receipt, setReceipt] = useState<{ id: string; number: string; saleId: string; customerId: string | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showHeld, setShowHeld] = useState(false);
   const [showFreePrice, setShowFreePrice] = useState(false);
+  const [showPicker, setShowPicker] = useState(false);
+  const [customer, setCustomer] = useState<PickedCustomer | null>(null);
 
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -313,12 +316,41 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
   }
 
   async function onValidated(receiptId: string, receiptNumber: string) {
-    setReceipt({ id: receiptId, number: receiptNumber });
+    setReceipt({
+      id: receiptId, number: receiptNumber,
+      saleId: saleId!,
+      customerId: customer?.id ?? null,
+    });
     setShowPayment(false);
-    setSaleId(null); setLines([]);
+    setSaleId(null); setLines([]); setCustomer(null);
     // Retour à la vue catégories
     setView({ kind: 'categories' });
     setSearch('');
+  }
+
+  async function pickCustomer(c: PickedCustomer) {
+    const id = await ensureSale();
+    if (!id) return;
+    const res = await fetch(`/api/sales/${id}/customer`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ customer_id: c.id }),
+    });
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      setError(j.error ?? 'Impossible d\'attacher le client');
+      return;
+    }
+    setCustomer(c);
+    setShowPicker(false);
+  }
+
+  async function detachCustomer() {
+    if (!saleId) { setCustomer(null); return; }
+    const res = await fetch(`/api/sales/${saleId}/customer`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ customer_id: null }),
+    });
+    if (res.ok) setCustomer(null);
   }
 
   // Raccourcis clavier
@@ -495,11 +527,37 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
           </div>
           <button
             disabled={lines.length === 0}
-            onClick={() => { setLines([]); setSaleId(null); }}
+            onClick={() => { setLines([]); setSaleId(null); void detachCustomer(); }}
             className="btn-ghost text-xs"
           >
             Vider
           </button>
+        </div>
+
+        {/* Zone client */}
+        <div className="px-3 py-2 border-b border-border">
+          {customer ? (
+            <div className="flex items-center justify-between gap-2 rounded-xl bg-accent-soft px-3 py-2">
+              <div className="min-w-0">
+                <div className="text-[10px] uppercase tracking-wider text-ink-soft">Client</div>
+                <div className="text-sm font-medium truncate">{customer.display_name}</div>
+                {customer.email && <div className="text-xs text-ink-soft truncate">{customer.email}</div>}
+              </div>
+              <div className="flex items-center gap-1">
+                <button onClick={() => setShowPicker(true)} className="text-xs text-accent-deep hover:underline">
+                  Changer
+                </button>
+                <button onClick={() => void detachCustomer()} className="text-ink-soft hover:text-danger px-1">✕</button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowPicker(true)}
+              className="w-full rounded-xl border border-dashed border-border px-3 py-2 text-sm text-ink-soft hover:border-gray-300 hover:text-ink"
+            >
+              + Associer un client
+            </button>
+          )}
         </div>
 
         <div className="flex-1 overflow-auto px-3 py-2 space-y-2">
@@ -606,6 +664,12 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
           taxRates={taxRates}
           onClose={() => setShowFreePrice(false)}
           onConfirm={addFreeBouquet}
+        />
+      )}
+      {showPicker && (
+        <CustomerPickerModal
+          onClose={() => setShowPicker(false)}
+          onPick={(c) => void pickCustomer(c)}
         />
       )}
     </div>

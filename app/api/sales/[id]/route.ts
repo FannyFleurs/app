@@ -20,9 +20,16 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
        FROM payments WHERE sale_id = $1 ORDER BY created_at`,
     [params.id],
   );
+  const invoice = await query<{ id: string; number: string }>(
+    `SELECT id, number FROM invoices
+      WHERE sale_id = $1 AND organization_id = $2 AND status <> 'cancelled'
+      ORDER BY created_at DESC LIMIT 1`,
+    [params.id, g.user.organizationId],
+  );
   return NextResponse.json({
     sale: sale.rows[0],
     lines: lines.rows,
     payments: payments.rows,
+    invoice: invoice.rows[0] ?? null,
   });
 }

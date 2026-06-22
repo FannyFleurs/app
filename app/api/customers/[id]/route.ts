@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db/client';
 import { requirePermission } from '@/lib/auth/guards';
-import { jsonError } from '@/lib/validation/api';
+import { parseJson, jsonError } from '@/lib/validation/api';
+import { customerInputSchema } from '@/lib/validation/customer';
+import { audit } from '@/lib/audit/log';
 
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
   const g = await requirePermission('customers.read');
@@ -34,4 +36,40 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     sales: sales.rows,
     loyalty_points: loyalty.rows[0]?.points_balance ?? null,
   });
+}
+
+export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+  const g = await requirePermission('customers.write');
+  if ('response' in g) return g.response;
+  const parsed = await parseJson(req, customerInputSchema);
+  if ('response' in parsed) return parsed.response;
+  const c = parsed.data;
+
+  const email = c.email && c.email.length > 0 ? c.email : null;
+  const res = await query(
+    `UPDATE customers SET
+       type = $3, first_name = $4, last_name = $5, company_name = $6,
+       email = $7, phone = $8, siret = $9, vat_number = $10,
+       address = $11, consent_email = $12, consent_sms = $13,
+       internal_notes = $14, loyalty_code = $15,
+       updated_by = $16, updated_at = now()
+     WHERE id = $1 AND organization_id = $2`,
+    [
+      params.id, g.user.organizationId, c.type,
+      c.first_name ?? null, c.last_name ?? null, c.company_name ?? null,
+      email, c.phone ?? null, c.siret ?? null, c.vat_number ?? null,
+      JSON.stringify(c.address ?? {}),
+      c.consent_email ?? false, c.consent_sms ?? false,
+      c.internal_notes ?? null, c.loyalty_code ?? null,
+      g.user.id,
+    ],
+  );
+  if (res.rowCount === 0) return jsonError('NOT_FOUND', 404);
+
+  await audit({
+    organizationId: g.user.organizationId, userId: g.user.id,
+    action: 'customers.update', entityType: 'customer', entityId: params.id,
+    payload: { type: c.type },
+  });
+  return NextResponse.json({ ok: true });
 }

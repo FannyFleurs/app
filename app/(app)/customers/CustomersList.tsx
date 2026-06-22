@@ -1,10 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import PageHeader from '@/components/PageHeader';
 import Badge from '@/components/Badge';
 import EmptyState from '@/components/EmptyState';
+import CustomerFormModal, { type CustomerLike } from '@/components/CustomerFormModal';
 import { formatEUR } from '@/lib/services/money';
 
 interface Customer {
@@ -42,12 +44,16 @@ interface CustomerDetail {
   loyalty_points: number | null;
 }
 
-export default function CustomersList({ customers, canWrite }: { customers: Customer[]; canWrite: boolean }) {
+export default function CustomersList({ customers: initialCustomers, canWrite }: { customers: Customer[]; canWrite: boolean }) {
+  const router = useRouter();
+  const [customers, setCustomers] = useState(initialCustomers);
+  useEffect(() => { setCustomers(initialCustomers); }, [initialCustomers]);
   const [q, setQ] = useState('');
   const [type, setType] = useState<'all' | string>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<CustomerDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [editing, setEditing] = useState<CustomerLike | null | undefined>(undefined);
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -82,7 +88,7 @@ export default function CustomersList({ customers, canWrite }: { customers: Cust
         title="Clients"
         subtitle="Sélectionnez un client à gauche pour afficher sa fiche complète."
         actions={canWrite ? (
-          <button className="btn-primary" disabled title="Disponible en Phase 2">
+          <button className="btn-primary" onClick={() => setEditing(null)}>
             + Nouveau client
           </button>
         ) : null}
@@ -165,17 +171,35 @@ export default function CustomersList({ customers, canWrite }: { customers: Cust
           ) : loadingDetail ? (
             <div className="card p-10 text-center text-ink-soft">Chargement…</div>
           ) : detail ? (
-            <CustomerDetailPanel detail={detail} canWrite={canWrite} />
+            <CustomerDetailPanel
+              detail={detail}
+              canWrite={canWrite}
+              onEdit={() => setEditing(detail.customer as unknown as CustomerLike)}
+            />
           ) : (
             <EmptyState icon="⚠" title="Fiche indisponible" description="Impossible de charger ce client." />
           )}
         </div>
       </div>
+
+      {editing !== undefined && (
+        <CustomerFormModal
+          customer={editing}
+          onClose={() => setEditing(undefined)}
+          onSaved={(id) => {
+            setEditing(undefined);
+            void selectCustomer(id);
+            router.refresh();
+          }}
+        />
+      )}
     </div>
   );
 }
 
-function CustomerDetailPanel({ detail, canWrite: _canWrite }: { detail: CustomerDetail; canWrite: boolean }) {
+function CustomerDetailPanel({ detail, canWrite, onEdit }: {
+  detail: CustomerDetail; canWrite: boolean; onEdit: () => void;
+}) {
   const c = detail.customer;
   const display = c.company_name || [c.first_name, c.last_name].filter(Boolean).join(' ') || 'Client';
   const totalTtc = detail.sales.reduce((s, x) => s + Number(x.total_ttc), 0);
@@ -190,9 +214,16 @@ function CustomerDetailPanel({ detail, canWrite: _canWrite }: { detail: Customer
               Client depuis le {new Date(c.created_at).toLocaleDateString('fr-FR')}
             </div>
           </div>
-          <Link href={`/customers/${c.id}`} className="text-sm text-accent-deep hover:underline">
-            Vue complète →
-          </Link>
+          <div className="flex items-center gap-2">
+            {canWrite && (
+              <button onClick={onEdit} className="btn-soft text-sm">
+                Modifier
+              </button>
+            )}
+            <Link href={`/customers/${c.id}`} className="text-sm text-accent-deep hover:underline">
+              Vue complète →
+            </Link>
+          </div>
         </div>
         <div className="mt-4 grid grid-cols-3 gap-3">
           <Kpi label="Achats" value={detail.sales.length.toString()} />
