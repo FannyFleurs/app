@@ -10,6 +10,7 @@ export interface PickedCustomer {
   email: string | null;
   phone: string | null;
   company_name: string | null;
+  default_discount_pct: number | null;
 }
 
 interface Props {
@@ -102,7 +103,7 @@ export default function CustomerPickerModal({ onClose, onPick }: Props) {
               const list: PickedCustomer[] = (await r.json()).customers;
               const found = list.find((x) => x.id === id);
               if (found) onPick(found);
-              else onPick({ id, display_name: 'Nouveau client', type: 'particulier', email: null, phone: null, company_name: null });
+              else onPick({ id, display_name: 'Nouveau client', type: 'particulier', email: null, phone: null, company_name: null, default_discount_pct: null });
             }
           }}
         />

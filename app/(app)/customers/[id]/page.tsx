@@ -28,11 +28,12 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
     address: { line1?: string; zip?: string; city?: string; country?: string } | null;
     consent_email: boolean; consent_sms: boolean;
     internal_notes: string | null; loyalty_code: string | null;
+    default_discount_pct: string | null;
     created_at: string;
   }>(
     `SELECT id, type, first_name, last_name, company_name, email, phone,
             siret, vat_number, address, consent_email, consent_sms,
-            internal_notes, loyalty_code, created_at
+            internal_notes, loyalty_code, default_discount_pct, created_at
        FROM customers WHERE id = $1 AND organization_id = $2`,
     [params.id, user.organizationId],
   );
@@ -96,11 +97,23 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
       />
 
       <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Kpi label="Total dépensé" value={formatEUR(totalTtc)} />
         <Kpi label="Achats" value={sales.rowCount.toString()} />
-        <Kpi label="CA cumulé" value={formatEUR(totalTtc)} />
         <Kpi label="Panier moyen" value={formatEUR(sales.rowCount ? totalTtc / sales.rowCount : 0)} />
-        <Kpi label="Solde fidélité" value={loyalty.rows[0] ? `${loyalty.rows[0].points_balance} pts` : '—'} />
+        <Kpi label="Solde fidélité" value={loyalty.rows[0] ? formatEUR(loyalty.rows[0].points_balance) : '—'} />
       </section>
+
+      {c.default_discount_pct && Number(c.default_discount_pct) > 0 && (
+        <div className="card p-4 flex items-center gap-3">
+          <span className="text-xl">★</span>
+          <div>
+            <div className="font-medium text-sm">Remise systématique : -{Number(c.default_discount_pct)}%</div>
+            <div className="text-xs text-ink-soft">
+              Appliquée automatiquement à chaque ligne du ticket quand ce client est attaché.
+            </div>
+          </div>
+        </div>
+      )}
 
       <Tabs tabs={[
         {

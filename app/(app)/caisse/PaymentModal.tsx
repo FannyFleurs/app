@@ -1,11 +1,19 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { formatEUR, round2 } from '@/lib/services/money';
 import { PAYMENT_LABELS } from '@/components/labels';
 
-type Method = 'cash' | 'card' | 'check' | 'transfer' | 'gift_card' | 'credit_note' | 'other';
-const METHODS: Method[] = ['cash', 'card', 'check', 'transfer', 'gift_card', 'credit_note', 'other'];
+type Method = 'cash' | 'card' | 'check' | 'transfer' | 'gift_card' | 'credit_note' | 'other' | 'deferred';
+const FALLBACK_METHODS: Array<{ kind: Method; label: string }> = [
+  { kind: 'cash', label: 'Espèces' },
+  { kind: 'card', label: 'Carte bancaire' },
+  { kind: 'check', label: 'Chèque' },
+  { kind: 'transfer', label: 'Virement' },
+  { kind: 'gift_card', label: 'Carte cadeau' },
+  { kind: 'credit_note', label: 'Avoir' },
+  { kind: 'other', label: 'Autre' },
+];
 
 interface SplitPayment {
   key: string; method: Method; amount: number; given_amount?: number; reference?: string;
@@ -24,6 +32,19 @@ export default function PaymentModal({ saleId, totalTtc, onClose, onValidated }:
   ]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [methods, setMethods] = useState<Array<{ kind: Method; label: string }>>(FALLBACK_METHODS);
+
+  useEffect(() => {
+    void (async () => {
+      const r = await fetch('/api/payment-methods');
+      if (r.ok) {
+        const j = await r.json();
+        const active = (j.methods as Array<{ kind: Method; label: string; is_active: boolean }>)
+          .filter((m) => m.is_active);
+        if (active.length > 0) setMethods(active.map((m) => ({ kind: m.kind, label: m.label })));
+      }
+    })();
+  }, []);
 
   const paid = useMemo(
     () => round2(payments.reduce((s, p) => s + (Number(p.amount) || 0), 0)),
@@ -100,20 +121,19 @@ export default function PaymentModal({ saleId, totalTtc, onClose, onValidated }:
           <div className="text-3xl font-semibold tracking-tight">{formatEUR(totalTtc)}</div>
 
           <div className="mt-4 grid grid-cols-3 gap-2">
-            {METHODS.map((m) => (
+            {methods.map((m) => (
               <button
-                key={m}
+                key={m.kind + m.label}
                 className="btn-soft text-sm"
                 onClick={() => {
-                  // Ajoute un moyen pré-rempli avec le reste à payer
                   if (remaining <= 0) return;
                   setPayments((cur) => [
                     ...cur,
-                    { key: `p${cur.length + 1}`, method: m, amount: round2(remaining) },
+                    { key: `p${cur.length + 1}`, method: m.kind, amount: round2(remaining) },
                   ]);
                 }}
               >
-                {PAYMENT_LABELS[m]}
+                {m.label}
               </button>
             ))}
           </div>
@@ -146,7 +166,7 @@ export default function PaymentModal({ saleId, totalTtc, onClose, onValidated }:
                   value={p.method}
                   onChange={(e) => update(idx, { method: e.target.value as Method })}
                 >
-                  {METHODS.map((m) => <option key={m} value={m}>{PAYMENT_LABELS[m]}</option>)}
+                  {methods.map((m, i) => <option key={i} value={m.kind}>{m.label}</option>)}
                 </select>
                 <input
                   type="number" step="0.01" min={0}

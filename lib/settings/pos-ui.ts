@@ -16,15 +16,29 @@ export type PosThemeColor = (typeof POS_THEME_COLORS)[number];
 export const OPENING_FLOAT_MODES = ['manual', 'fixed', 'previous_close'] as const;
 export type OpeningFloatMode = (typeof OPENING_FLOAT_MODES)[number];
 
+export const COLOR_SCHEMES = ['light', 'dark', 'system'] as const;
+export type ColorScheme = (typeof COLOR_SCHEMES)[number];
+
+export interface LoyaltySettings {
+  enabled: boolean;
+  euros_earned: number;      // ex 5 : on gagne 5 € de fidélité
+  per_euros_spent: number;   // ex 100 : tous les 100 € dépensés
+  min_redeem: number;        // seuil mini d'utilisation (ex 5 €)
+  stackable: boolean;        // cumulable avec d'autres remises ?
+  on_excluded_categories: string[];
+}
+
 export interface PosUiSettings {
   tile_size: PosTileSize;
   theme_color: PosThemeColor;
+  color_scheme: ColorScheme;
   show_product_image: boolean;
   show_category_badge: boolean;
   show_price: boolean;
   show_tax_badge: boolean;
   opening_float_mode: OpeningFloatMode;
   opening_float_amount: number;
+  loyalty: LoyaltySettings;
 }
 
 export const OPENING_FLOAT_LABELS: Record<OpeningFloatMode, { label: string; description: string }> = {
@@ -47,12 +61,21 @@ export const POS_UI_KEY = 'pos_ui';
 export const POS_UI_DEFAULTS: PosUiSettings = {
   tile_size: 'normal',
   theme_color: 'sage',
+  color_scheme: 'light',
   show_product_image: true,
   show_category_badge: true,
   show_price: true,
   show_tax_badge: true,
   opening_float_mode: 'manual',
   opening_float_amount: 0,
+  loyalty: {
+    enabled: false,
+    euros_earned: 5,
+    per_euros_spent: 100,
+    min_redeem: 5,
+    stackable: false,
+    on_excluded_categories: [],
+  },
 };
 
 export const POS_THEME_COLOR_VALUES: Record<PosThemeColor, { label: string; main: string; deep: string; soft: string }> = {

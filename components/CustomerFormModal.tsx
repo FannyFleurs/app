@@ -17,6 +17,7 @@ export interface CustomerLike {
   consent_sms?: boolean;
   internal_notes?: string | null;
   loyalty_code?: string | null;
+  default_discount_pct?: number | null;
 }
 
 interface Props {
@@ -47,6 +48,9 @@ export default function CustomerFormModal({ customer, onClose, onSaved }: Props)
   const [consentEmail, setConsentEmail] = useState(customer?.consent_email ?? false);
   const [consentSms, setConsentSms] = useState(customer?.consent_sms ?? false);
   const [notes, setNotes] = useState(customer?.internal_notes ?? '');
+  const [discountPct, setDiscountPct] = useState<string>(
+    customer?.default_discount_pct != null ? String(customer.default_discount_pct) : '',
+  );
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -68,6 +72,7 @@ export default function CustomerFormModal({ customer, onClose, onSaved }: Props)
       consent_email: consentEmail,
       consent_sms: consentSms,
       internal_notes: notes.trim() || null,
+      default_discount_pct: discountPct.trim() ? Number(discountPct) : null,
     };
     const url = customer ? `/api/customers/${customer.id}` : '/api/customers';
     const method = customer ? 'PATCH' : 'POST';
@@ -157,6 +162,19 @@ export default function CustomerFormModal({ customer, onClose, onSaved }: Props)
             <input className="input" value={city} onChange={(e) => setCity(e.target.value)} />
           </Field>
 
+          <Field label="Remise systématique (%)" full>
+            <input
+              type="number" step="0.1" min={0} max={100}
+              className="input max-w-[150px]"
+              value={discountPct}
+              onChange={(e) => setDiscountPct(e.target.value)}
+              placeholder="0 = pas de remise"
+            />
+            <p className="mt-1 text-xs text-ink-soft">
+              Si renseigné, cette remise s&apos;applique automatiquement à chaque ligne
+              quand ce client est attaché à un ticket.
+            </p>
+          </Field>
           <Field label="Notes internes" full>
             <textarea className="input h-20" value={notes} onChange={(e) => setNotes(e.target.value)} />
           </Field>

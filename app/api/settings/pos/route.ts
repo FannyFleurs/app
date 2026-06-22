@@ -8,20 +8,32 @@ import {
   POS_TILE_SIZES,
   POS_THEME_COLORS,
   OPENING_FLOAT_MODES,
+  COLOR_SCHEMES,
   POS_UI_KEY,
   mergeWithDefaults,
   type PosUiSettings,
 } from '@/lib/settings/pos-ui';
 
+const loyaltySchema = z.object({
+  enabled: z.boolean().optional(),
+  euros_earned: z.number().min(0).optional(),
+  per_euros_spent: z.number().positive().optional(),
+  min_redeem: z.number().min(0).optional(),
+  stackable: z.boolean().optional(),
+  on_excluded_categories: z.array(z.string()).optional(),
+}).partial();
+
 const schema = z.object({
   tile_size: z.enum(POS_TILE_SIZES).optional(),
   theme_color: z.enum(POS_THEME_COLORS).optional(),
+  color_scheme: z.enum(COLOR_SCHEMES).optional(),
   show_product_image: z.boolean().optional(),
   show_category_badge: z.boolean().optional(),
   show_price: z.boolean().optional(),
   show_tax_badge: z.boolean().optional(),
   opening_float_mode: z.enum(OPENING_FLOAT_MODES).optional(),
   opening_float_amount: z.number().min(0).max(100000).optional(),
+  loyalty: loyaltySchema.optional(),
 });
 
 export async function GET() {
@@ -44,7 +56,15 @@ export async function PATCH(req: Request) {
     `SELECT value FROM settings WHERE organization_id = $1 AND key = $2`,
     [g.user.organizationId, POS_UI_KEY],
   );
-  const merged = mergeWithDefaults({ ...(current.rows[0]?.value ?? {}), ...parsed.data });
+  // Pour les sous-objets (loyalty), on merge récursivement avec l'existant + défauts.
+  const existing = current.rows[0]?.value ?? {};
+  const merged = mergeWithDefaults({
+    ...existing,
+    ...parsed.data,
+    loyalty: parsed.data.loyalty
+      ? { ...(existing.loyalty ?? {}), ...parsed.data.loyalty }
+      : existing.loyalty,
+  } as Partial<PosUiSettings>);
 
   await query(
     `INSERT INTO settings (organization_id, key, value, updated_by)

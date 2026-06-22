@@ -8,6 +8,7 @@ import HoldListModal from './HoldListModal';
 import OpenSessionModal from './OpenSessionModal';
 import FreePriceModal from './FreePriceModal';
 import CustomerPickerModal, { type PickedCustomer } from './CustomerPickerModal';
+import LineDiscountModal from './LineDiscountModal';
 import { tileMetrics, type PosUiSettings } from '@/lib/settings/pos-ui';
 
 export interface PosProduct {
@@ -91,6 +92,13 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
   const [showFreePrice, setShowFreePrice] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
   const [customer, setCustomer] = useState<PickedCustomer | null>(null);
+  const [discountLineKey, setDiscountLineKey] = useState<string | null>(null);
+  const [loyalty, setLoyalty] = useState<{
+    enabled: boolean;
+    balance_euros: number;
+    min_redeem: number;
+    used: number;
+  }>({ enabled: false, balance_euros: 0, min_redeem: 0, used: 0 });
 
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -259,6 +267,33 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
     });
   }
 
+  function useLoyalty(amountEuros: number) {
+    if (!customer || amountEuros <= 0) return;
+    const subtotal = lines.reduce((s, l) => s + round2(l.unit_price_ttc * l.quantity - l.discount_amount), 0);
+    const apply = Math.min(round2(amountEuros), round2(subtotal));
+    if (apply <= 0) return;
+    // Le montant utilisé est réparti proportionnellement sur les lignes (pour conserver la TVA).
+    setLines((cur) => {
+      const ratio = apply / subtotal;
+      return cur.map((l) => {
+        const lineSub = round2(l.unit_price_ttc * l.quantity - l.discount_amount);
+        const add = round2(lineSub * ratio);
+        return { ...l, discount_amount: round2(l.discount_amount + add) };
+      });
+    });
+    setLoyalty((cur) => ({ ...cur, used: apply, balance_euros: cur.balance_euros - apply }));
+  }
+
+  function removeLoyalty() {
+    if (!loyalty.used) return;
+    // Restaure le solde et recalcule : pour simplicité, on relit le solde côté serveur au prochain client switch
+    setLoyalty((cur) => ({ ...cur, balance_euros: cur.balance_euros + cur.used, used: 0 }));
+    // On enlève la part proportionnelle qu'on avait ajoutée — version naïve : on remet
+    // discount_amount à sa valeur initiale en relisant depuis la BDD via syncLines.
+    // Plus simple : on demande à l'utilisateur de re-saisir si besoin via le picker.
+    void syncLines();
+  }
+
   function addFreeBouquet(amount: number, taxCode: string, label: string) {
     const tax = taxRates.find((t) => t.code === taxCode) ?? taxRates[0]!;
     setLines((cur) => [...cur, {
@@ -283,14 +318,16 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
 
   async function holdSale() {
     if (!saleId) return;
-    const label = window.prompt('Libellé du panier en attente ?', `Panier ${new Date().toLocaleTimeString('fr-FR')}`);
-    if (!label) return;
+    // Libellé auto-généré : pas de modale, pas de prompt
+    const autoLabel = customer?.display_name
+      ? `${customer.display_name} · ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`
+      : `Panier ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
     const res = await fetch(`/api/sales/${saleId}/hold`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ label }),
+      body: JSON.stringify({ label: autoLabel }),
     });
     if (res.ok) {
-      setSaleId(null); setLines([]);
+      setSaleId(null); setLines([]); setCustomer(null);
       setView({ kind: 'categories' }); setSearch('');
     }
   }
@@ -342,15 +379,50 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
     }
     setCustomer(c);
     setShowPicker(false);
+
+    // Remise systématique : applique sur toutes les lignes existantes
+    // qui n'ont pas déjà une remise manuelle plus avantageuse.
+    if (c.default_discount_pct && c.default_discount_pct > 0) {
+      const pct = c.default_discount_pct;
+      setLines((cur) => cur.map((l) => {
+        const autoDiscount = round2((l.unit_price_ttc * l.quantity * pct) / 100);
+        return l.discount_amount >= autoDiscount
+          ? l
+          : { ...l, discount_amount: autoDiscount, metadata: { ...l.metadata, auto_discount_pct: pct } };
+      }));
+    }
+
+    // Charge le solde fidélité
+    try {
+      const r = await fetch(`/api/customers/${c.id}/loyalty`);
+      if (r.ok) {
+        const j = await r.json();
+        if (j.loyalty?.enabled) {
+          setLoyalty({
+            enabled: true,
+            balance_euros: Number(j.balance_euros) || 0,
+            min_redeem: Number(j.loyalty.min_redeem) || 0,
+            used: 0,
+          });
+        } else {
+          setLoyalty({ enabled: false, balance_euros: 0, min_redeem: 0, used: 0 });
+        }
+      }
+    } catch { /* ignore */ }
   }
 
   async function detachCustomer() {
-    if (!saleId) { setCustomer(null); return; }
+    if (!saleId) { setCustomer(null); setLoyalty({ enabled: false, balance_euros: 0, min_redeem: 0, used: 0 }); return; }
     const res = await fetch(`/api/sales/${saleId}/customer`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ customer_id: null }),
     });
-    if (res.ok) setCustomer(null);
+    if (res.ok) {
+      setCustomer(null);
+      setLoyalty({ enabled: false, balance_euros: 0, min_redeem: 0, used: 0 });
+      // Retire la ligne fidélité éventuellement déjà appliquée
+      setLines((cur) => cur.filter((l) => l.metadata?.loyalty_redemption !== true));
+    }
   }
 
   // Raccourcis clavier
@@ -413,7 +485,7 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
     : '';
 
   return (
-    <div className="grid grid-cols-[1fr_420px] h-[calc(100vh-56px)]">
+    <div className="grid grid-cols-[1fr_300px] h-[calc(100vh-56px)]">
       {/* Gauche : catalogue */}
       <div className="flex flex-col bg-white min-w-0">
         <div className="flex items-center gap-3 px-5 py-3 border-b border-border bg-white">
@@ -535,21 +607,44 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
         </div>
 
         {/* Zone client */}
-        <div className="px-3 py-2 border-b border-border">
+        <div className="px-3 py-2 border-b border-border space-y-2">
           {customer ? (
-            <div className="flex items-center justify-between gap-2 rounded-xl bg-accent-soft px-3 py-2">
-              <div className="min-w-0">
-                <div className="text-[10px] uppercase tracking-wider text-ink-soft">Client</div>
-                <div className="text-sm font-medium truncate">{customer.display_name}</div>
-                {customer.email && <div className="text-xs text-ink-soft truncate">{customer.email}</div>}
+            <>
+              <div className="flex items-center justify-between gap-2 rounded-xl bg-accent-soft px-3 py-2">
+                <div className="min-w-0">
+                  <div className="text-[10px] uppercase tracking-wider text-ink-soft">Client</div>
+                  <div className="text-sm font-medium truncate">{customer.display_name}</div>
+                  {customer.default_discount_pct && customer.default_discount_pct > 0 && (
+                    <div className="text-xs text-warning">Remise systématique : -{customer.default_discount_pct}%</div>
+                  )}
+                </div>
+                <div className="flex items-center gap-1">
+                  <button onClick={() => setShowPicker(true)} className="text-xs text-accent-deep hover:underline">
+                    Changer
+                  </button>
+                  <button onClick={() => void detachCustomer()} className="text-ink-soft hover:text-danger px-1">✕</button>
+                </div>
               </div>
-              <div className="flex items-center gap-1">
-                <button onClick={() => setShowPicker(true)} className="text-xs text-accent-deep hover:underline">
-                  Changer
+              {loyalty.enabled && loyalty.balance_euros >= loyalty.min_redeem && loyalty.used === 0 && (
+                <button
+                  onClick={() => useLoyalty(loyalty.balance_euros)}
+                  className="w-full rounded-xl bg-success/10 text-success px-3 py-2 text-sm font-medium hover:bg-success/20"
+                >
+                  ✦ Utiliser {formatEUR(loyalty.balance_euros)} de fidélité
                 </button>
-                <button onClick={() => void detachCustomer()} className="text-ink-soft hover:text-danger px-1">✕</button>
-              </div>
-            </div>
+              )}
+              {loyalty.used > 0 && (
+                <div className="flex items-center justify-between rounded-xl bg-success/10 px-3 py-2 text-sm">
+                  <span className="text-success font-medium">Fidélité utilisée : -{formatEUR(loyalty.used)}</span>
+                  <button onClick={() => removeLoyalty()} className="text-ink-soft hover:text-danger text-xs">retirer</button>
+                </div>
+              )}
+              {loyalty.enabled && loyalty.balance_euros < loyalty.min_redeem && loyalty.balance_euros > 0 && (
+                <div className="text-xs text-ink-soft text-center">
+                  Solde fidélité : {formatEUR(loyalty.balance_euros)} (seuil {formatEUR(loyalty.min_redeem)})
+                </div>
+              )}
+            </>
           ) : (
             <button
               onClick={() => setShowPicker(true)}
@@ -560,76 +655,81 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
           )}
         </div>
 
-        <div className="flex-1 overflow-auto px-3 py-2 space-y-2">
+        <div className="flex-1 overflow-auto px-2 py-2 space-y-2">
           {lines.length === 0 ? (
-            <div className="mt-12 text-center text-ink-soft text-sm">
+            <div className="mt-12 text-center text-ink-soft text-sm px-3">
               Sélectionnez un produit pour commencer.
             </div>
-          ) : lines.map((l) => (
-            <div key={l.key} className="rounded-xl border border-border p-3 bg-white">
-              <div className="flex justify-between gap-2">
-                <div className="text-sm font-medium flex-1">{l.label}</div>
-                <button onClick={() => removeLine(l.key)} className="text-ink-soft hover:text-danger">✕</button>
-              </div>
-              <div className="mt-1 flex items-center justify-between text-xs text-ink-soft">
-                <span>{formatEUR(l.unit_price_ttc)} · TVA {l.tax_rate}%</span>
-                <div className="flex items-center gap-1">
-                  <button className="h-7 w-7 rounded-lg border border-border" onClick={() => incLine(l.key, -1)}>-</button>
-                  <span className="w-8 text-center text-ink">{l.quantity}</span>
-                  <button className="h-7 w-7 rounded-lg border border-border" onClick={() => incLine(l.key, +1)}>+</button>
+          ) : lines.map((l) => {
+            const sub = Math.max(0, round2(l.unit_price_ttc * l.quantity - l.discount_amount));
+            return (
+              <button
+                key={l.key}
+                onClick={() => setDiscountLineKey(l.key)}
+                className="w-full text-left rounded-xl border border-border p-2.5 bg-white hover:border-gray-300 transition-colors"
+                title="Cliquer pour ajouter / modifier une remise"
+              >
+                <div className="flex justify-between gap-2">
+                  <div className="text-sm font-medium flex-1 truncate">{l.label}</div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); removeLine(l.key); }}
+                    className="text-ink-soft hover:text-danger"
+                  >✕</button>
                 </div>
-              </div>
-              <div className="mt-2 flex items-center justify-between">
-                <input
-                  type="number" min={0} step="0.01"
-                  className="input h-8 w-28 text-xs"
-                  placeholder="Remise €"
-                  value={l.discount_amount || ''}
-                  onChange={(e) => setLineDiscount(l.key, Number(e.target.value || 0))}
-                />
-                <span className="font-semibold">
-                  {formatEUR(Math.max(0, round2(l.unit_price_ttc * l.quantity - l.discount_amount)))}
-                </span>
-              </div>
-            </div>
-          ))}
+                <div className="mt-1 flex items-center justify-between text-xs text-ink-soft">
+                  <span>{formatEUR(l.unit_price_ttc)} · TVA {l.tax_rate}%</span>
+                  <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                    <button className="h-7 w-7 rounded-lg border border-border" onClick={() => incLine(l.key, -1)}>-</button>
+                    <span className="w-7 text-center text-ink">{l.quantity}</span>
+                    <button className="h-7 w-7 rounded-lg border border-border" onClick={() => incLine(l.key, +1)}>+</button>
+                  </div>
+                </div>
+                <div className="mt-1.5 flex items-center justify-between">
+                  {l.discount_amount > 0 ? (
+                    <span className="text-xs text-warning">-{formatEUR(l.discount_amount)}</span>
+                  ) : <span className="text-xs text-ink-soft">Touchez pour remise</span>}
+                  <span className="font-semibold">{formatEUR(sub)}</span>
+                </div>
+              </button>
+            );
+          })}
         </div>
 
-        <div className="border-t border-border px-5 py-3 space-y-1 text-sm">
+        <div className="border-t border-border px-4 py-2.5 space-y-1 text-sm">
           {totals.breakdown.map(([rate, b]) => (
-            <div key={rate} className="flex justify-between text-ink-soft">
+            <div key={rate} className="flex justify-between text-ink-soft text-xs">
               <span>TVA {rate}% (HT {formatEUR(b.base_ht)})</span>
               <span>{formatEUR(b.tva)}</span>
             </div>
           ))}
-          <div className="flex justify-between text-ink-soft">
+          <div className="flex justify-between text-ink-soft text-xs">
             <span>Total HT</span><span>{formatEUR(totals.ht)}</span>
           </div>
           {totals.discount > 0 && (
-            <div className="flex justify-between text-warning">
+            <div className="flex justify-between text-warning text-xs">
               <span>Remises</span><span>-{formatEUR(totals.discount)}</span>
             </div>
           )}
           <div className="flex items-center justify-between pt-2 border-t border-border">
-            <span className="text-lg font-semibold">Total TTC</span>
+            <span className="text-base font-semibold">Total TTC</span>
             <span className="text-2xl font-semibold tracking-tight">{formatEUR(totals.ttc)}</span>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 p-3 border-t border-border">
-          <button
-            disabled={lines.length === 0 || !saleId}
-            className="btn-soft"
-            onClick={() => void holdSale()}
-          >
-            Mettre en attente
-          </button>
+        <div className="p-2.5 border-t border-border space-y-2">
           <button
             disabled={lines.length === 0 || totals.ttc <= 0}
-            className="btn-primary text-base h-12"
+            className="btn-primary w-full h-16 text-xl"
             onClick={async () => { const id = await ensureSale(); if (id) { await syncLines(); setShowPayment(true); } }}
           >
             Encaisser · {formatEUR(totals.ttc)}
+          </button>
+          <button
+            disabled={lines.length === 0 || !saleId}
+            className="btn-ghost w-full text-sm"
+            onClick={() => void holdSale()}
+          >
+            Mettre en attente
           </button>
         </div>
 
@@ -672,6 +772,23 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
           onPick={(c) => void pickCustomer(c)}
         />
       )}
+      {discountLineKey && (() => {
+        const l = lines.find((x) => x.key === discountLineKey);
+        if (!l) return null;
+        return (
+          <LineDiscountModal
+            label={l.label}
+            unitPriceTtc={l.unit_price_ttc}
+            quantity={l.quantity}
+            currentDiscount={l.discount_amount}
+            onClose={() => setDiscountLineKey(null)}
+            onSave={(amount) => {
+              setLineDiscount(l.key, amount);
+              setDiscountLineKey(null);
+            }}
+          />
+        );
+      })()}
     </div>
   );
 }

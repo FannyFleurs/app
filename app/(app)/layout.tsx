@@ -25,6 +25,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <AppShell
       user={{ id: user.id, fullName: user.fullName, role: user.role, email: user.email }}
       themeColor={ui.theme_color}
+      colorScheme={ui.color_scheme}
       initialCollapsed={collapsed}
     >
       {children}

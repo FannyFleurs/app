@@ -12,7 +12,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   const cust = await query(
     `SELECT id, type, first_name, last_name, company_name, email, phone,
             siret, vat_number, address, consent_email, consent_sms,
-            internal_notes, loyalty_code, created_at
+            internal_notes, loyalty_code, default_discount_pct, created_at
        FROM customers WHERE id = $1 AND organization_id = $2`,
     [params.id, g.user.organizationId],
   );
@@ -52,7 +52,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
        email = $7, phone = $8, siret = $9, vat_number = $10,
        address = $11, consent_email = $12, consent_sms = $13,
        internal_notes = $14, loyalty_code = $15,
-       updated_by = $16, updated_at = now()
+       default_discount_pct = $16,
+       updated_by = $17, updated_at = now()
      WHERE id = $1 AND organization_id = $2`,
     [
       params.id, g.user.organizationId, c.type,
@@ -61,6 +62,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       JSON.stringify(c.address ?? {}),
       c.consent_email ?? false, c.consent_sms ?? false,
       c.internal_notes ?? null, c.loyalty_code ?? null,
+      c.default_discount_pct ?? null,
       g.user.id,
     ],
   );

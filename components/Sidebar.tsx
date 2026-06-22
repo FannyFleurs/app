@@ -22,7 +22,6 @@ const ITEMS: Item[] = [
   { href: '/orders',       label: 'Commandes',            icon: 'orders',       group: 'Vente' },
   { href: '/invoices',     label: 'Factures',             icon: 'invoices',     group: 'Vente' },
   { href: '/customers',    label: 'Clients',              icon: 'customers',    group: 'Relation', perm: 'customers.read' },
-  { href: '/loyalty',      label: 'Fidélité',             icon: 'loyalty',      group: 'Relation' },
   { href: '/products',     label: 'Produits',             icon: 'products',     group: 'Catalogue',perm: 'products.read' },
   { href: '/categories',   label: 'Catégories',           icon: 'categories',   group: 'Catalogue',perm: 'products.read' },
   { href: '/stock',        label: 'Stock',                icon: 'stock',        group: 'Catalogue' },

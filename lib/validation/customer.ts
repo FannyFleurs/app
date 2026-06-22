@@ -25,6 +25,7 @@ export const customerInputSchema = z.object({
   consent_sms: z.boolean().optional(),
   internal_notes: z.string().max(2000).nullable().optional(),
   loyalty_code: z.string().max(60).nullable().optional(),
+  default_discount_pct: z.number().min(0).max(100).nullable().optional(),
 }).refine(
   (d) => d.type === 'particulier'
     ? !!(d.first_name || d.last_name)

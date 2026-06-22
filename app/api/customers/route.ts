@@ -29,7 +29,7 @@ export async function GET(req: Request) {
 
   const { rows } = await query(
     `SELECT id, type, first_name, last_name, company_name, email, phone,
-            siret, vat_number, address, loyalty_code,
+            siret, vat_number, address, loyalty_code, default_discount_pct,
             COALESCE(company_name, NULLIF(TRIM(CONCAT(first_name,' ',last_name)), '')) AS display_name,
             created_at
        FROM customers
@@ -54,8 +54,9 @@ export async function POST(req: Request) {
        (organization_id, type, first_name, last_name, company_name,
         email, phone, siret, vat_number, address,
         consent_email, consent_sms, internal_notes, loyalty_code,
+        default_discount_pct,
         created_by, updated_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$15)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$16)
      RETURNING id`,
     [
       g.user.organizationId, c.type,
@@ -64,6 +65,7 @@ export async function POST(req: Request) {
       JSON.stringify(c.address ?? {}),
       c.consent_email ?? false, c.consent_sms ?? false,
       c.internal_notes ?? null, c.loyalty_code ?? null,
+      c.default_discount_pct ?? null,
       g.user.id,
     ],
   );

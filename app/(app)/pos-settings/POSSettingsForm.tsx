@@ -11,10 +11,12 @@ import {
   POS_UI_DEFAULTS,
   OPENING_FLOAT_MODES,
   OPENING_FLOAT_LABELS,
+  COLOR_SCHEMES,
   tileMetrics,
   type PosUiSettings,
   type PosTileSize,
   type PosThemeColor,
+  type ColorScheme,
   type OpeningFloatMode,
 } from '@/lib/settings/pos-ui';
 import Badge from '@/components/Badge';
@@ -34,10 +36,18 @@ export default function POSSettingsForm({ initial, canWrite }: Props) {
   const firstRender = useRef(true);
   const lastSaved = useRef<PosUiSettings>(initial);
 
-  // Aperçu en direct du thème : surcharge le data-theme du body pendant l'édition
+  // Aperçu en direct du thème + mode clair/sombre pendant l'édition
   useEffect(() => {
     document.body.setAttribute('data-theme', settings.theme_color);
   }, [settings.theme_color]);
+  useEffect(() => {
+    let mode: 'light' | 'dark' = 'light';
+    if (settings.color_scheme === 'dark') mode = 'dark';
+    else if (settings.color_scheme === 'system') {
+      mode = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    document.body.setAttribute('data-mode', mode);
+  }, [settings.color_scheme]);
 
   // Auto-save (debounce 400ms) à chaque changement.
   useEffect(() => {
@@ -92,6 +102,32 @@ export default function POSSettingsForm({ initial, canWrite }: Props) {
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
       {/* Colonne gauche : sections de réglages */}
       <div className="lg:col-span-2 space-y-5">
+        <Section
+          title="Mode d'affichage"
+          description="Clair, sombre, ou suit le mode du système."
+        >
+          <div className="grid grid-cols-3 gap-3">
+            {COLOR_SCHEMES.map((scheme) => {
+              const active = settings.color_scheme === scheme;
+              const label = scheme === 'light' ? 'Clair' : scheme === 'dark' ? 'Sombre' : 'Système';
+              return (
+                <button
+                  key={scheme}
+                  type="button"
+                  disabled={!canWrite}
+                  onClick={() => patch('color_scheme', scheme)}
+                  className={`rounded-2xl border p-4 transition-all
+                    ${active ? 'border-ink ring-2 ring-offset-1' : 'border-border hover:border-gray-300'}
+                    ${!canWrite ? 'opacity-60 cursor-not-allowed' : ''}`}
+                >
+                  <div className="text-2xl mb-1">{scheme === 'light' ? '☀' : scheme === 'dark' ? '☾' : '✦'}</div>
+                  <div className="font-medium text-sm">{label}</div>
+                </button>
+              );
+            })}
+          </div>
+        </Section>
+
         <Section
           title="Couleur des boutons"
           description="Couleur principale appliquée aux boutons d'action et accents. Modifiable à tout moment."
@@ -234,11 +270,68 @@ export default function POSSettingsForm({ initial, canWrite }: Props) {
         </Section>
 
         <Section
-          title="Périphériques"
-          description="Bientôt : imprimante ticket, tiroir-caisse, scanner, afficheur client."
-          disabled
+          title="Programme de fidélité"
+          description="Les remises de fidélité se déclenchent depuis la fiche client en caisse une fois le seuil atteint."
         >
-          <div className="text-sm text-ink-soft">À venir — Phase 4.</div>
+          <label className="flex items-center justify-between gap-3 py-2 border-b border-border/60">
+            <span className="text-sm font-medium">Programme activé</span>
+            <input
+              type="checkbox" className="h-5 w-5"
+              checked={settings.loyalty.enabled}
+              disabled={!canWrite}
+              onChange={(e) => patch('loyalty', { ...settings.loyalty, enabled: e.target.checked })}
+            />
+          </label>
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-ink-soft">€ de fidélité gagnés</label>
+              <input type="number" step="0.5" min={0}
+                     className="input mt-1"
+                     value={settings.loyalty.euros_earned}
+                     disabled={!canWrite || !settings.loyalty.enabled}
+                     onChange={(e) => patch('loyalty', { ...settings.loyalty, euros_earned: Number(e.target.value) || 0 })} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-ink-soft">… tous les € dépensés</label>
+              <input type="number" step="1" min={1}
+                     className="input mt-1"
+                     value={settings.loyalty.per_euros_spent}
+                     disabled={!canWrite || !settings.loyalty.enabled}
+                     onChange={(e) => patch('loyalty', { ...settings.loyalty, per_euros_spent: Number(e.target.value) || 1 })} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-ink-soft">Seuil d&apos;utilisation minimum (€)</label>
+              <input type="number" step="0.5" min={0}
+                     className="input mt-1"
+                     value={settings.loyalty.min_redeem}
+                     disabled={!canWrite || !settings.loyalty.enabled}
+                     onChange={(e) => patch('loyalty', { ...settings.loyalty, min_redeem: Number(e.target.value) || 0 })} />
+            </div>
+            <div className="flex items-end">
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox"
+                       checked={settings.loyalty.stackable}
+                       disabled={!canWrite || !settings.loyalty.enabled}
+                       onChange={(e) => patch('loyalty', { ...settings.loyalty, stackable: e.target.checked })} />
+                Cumulable avec d&apos;autres remises
+              </label>
+            </div>
+          </div>
+          {settings.loyalty.enabled && (
+            <p className="mt-3 text-xs text-ink-soft">
+              Règle actuelle : {settings.loyalty.euros_earned} € de fidélité gagnés tous les{' '}
+              {settings.loyalty.per_euros_spent} € dépensés. Utilisable à partir de{' '}
+              {settings.loyalty.min_redeem} € cumulés.
+              {settings.loyalty.stackable ? ' Cumulable avec d\'autres remises.' : ' Non cumulable avec une autre remise.'}
+            </p>
+          )}
+        </Section>
+
+        <Section
+          title="Modes de règlement"
+          description="Activer/désactiver et libellés des moyens de paiement disponibles en caisse."
+        >
+          <PaymentMethodsManager canWrite={canWrite} />
         </Section>
 
         <div className="flex items-center justify-between gap-3 pt-2">
@@ -311,6 +404,106 @@ function Toggle({ label, checked, onChange, disabled }: {
         />
       </button>
     </label>
+  );
+}
+
+interface PaymentMethod {
+  id: string;
+  code: string;
+  kind: string;
+  label: string;
+  is_active: boolean;
+  position: number;
+}
+
+const PM_KIND_OPTIONS = [
+  { value: 'cash', label: 'Espèces' },
+  { value: 'card', label: 'Carte bancaire' },
+  { value: 'check', label: 'Chèque' },
+  { value: 'transfer', label: 'Virement' },
+  { value: 'gift_card', label: 'Carte cadeau' },
+  { value: 'credit_note', label: 'Avoir' },
+  { value: 'deferred', label: 'Différé client' },
+  { value: 'other', label: 'Autre' },
+];
+
+function PaymentMethodsManager({ canWrite }: { canWrite: boolean }) {
+  const [items, setItems] = useState<PaymentMethod[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [newLabel, setNewLabel] = useState('');
+  const [newKind, setNewKind] = useState('other');
+
+  async function load() {
+    setLoading(true);
+    const r = await fetch('/api/payment-methods');
+    if (r.ok) setItems((await r.json()).methods);
+    setLoading(false);
+  }
+  useEffect(() => { void load(); }, []);
+
+  async function toggle(id: string, is_active: boolean) {
+    await fetch(`/api/payment-methods/${id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_active }),
+    });
+    void load();
+  }
+  async function rename(id: string, label: string) {
+    await fetch(`/api/payment-methods/${id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label }),
+    });
+    void load();
+  }
+  async function add() {
+    if (!newLabel.trim()) return;
+    await fetch('/api/payment-methods', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label: newLabel.trim(), kind: newKind }),
+    });
+    setNewLabel('');
+    void load();
+  }
+
+  return (
+    <div>
+      {loading ? (
+        <p className="text-sm text-ink-soft">Chargement…</p>
+      ) : (
+        <ul className="space-y-1.5">
+          {items.map((m) => (
+            <li key={m.id} className="flex items-center gap-2 rounded-xl border border-border p-2">
+              <span className="text-xs uppercase tracking-wider w-20 text-ink-soft">{m.kind}</span>
+              <input
+                className="input h-9 flex-1"
+                defaultValue={m.label}
+                disabled={!canWrite}
+                onBlur={(e) => e.target.value !== m.label && void rename(m.id, e.target.value)}
+              />
+              <label className="flex items-center gap-1 text-xs">
+                <input type="checkbox" checked={m.is_active}
+                       disabled={!canWrite}
+                       onChange={(e) => void toggle(m.id, e.target.checked)} />
+                Actif
+              </label>
+            </li>
+          ))}
+        </ul>
+      )}
+      {canWrite && (
+        <div className="mt-3 flex items-center gap-2">
+          <input className="input h-9 flex-1" placeholder="Nouveau libellé"
+                 value={newLabel} onChange={(e) => setNewLabel(e.target.value)} />
+          <select className="input h-9 max-w-[160px]" value={newKind}
+                  onChange={(e) => setNewKind(e.target.value)}>
+            {PM_KIND_OPTIONS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
+          </select>
+          <button className="btn-soft text-sm" onClick={() => void add()} disabled={!newLabel.trim()}>
+            + Ajouter
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 

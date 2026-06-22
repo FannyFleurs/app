@@ -6,24 +6,43 @@ import { useRouter } from 'next/navigation';
 import Sidebar from './Sidebar';
 import { ROLE_LABELS } from './labels';
 import type { Role } from '@/lib/auth/rbac';
-import type { PosThemeColor } from '@/lib/settings/pos-ui';
+import type { PosThemeColor, ColorScheme } from '@/lib/settings/pos-ui';
 
 interface User { id: string; fullName: string; role: Role; email: string }
 
 interface Props {
   user: User;
   themeColor: PosThemeColor;
+  colorScheme: ColorScheme;
   initialCollapsed: boolean;
   children: React.ReactNode;
 }
 
-export default function AppShell({ user, themeColor, initialCollapsed, children }: Props) {
+export default function AppShell({ user, themeColor, colorScheme, initialCollapsed, children }: Props) {
   const [collapsed, setCollapsed] = useState(initialCollapsed);
 
-  // Applique le thème de couleur sur <body>
+  // Thème de couleur d'accent
   useEffect(() => {
     document.body.setAttribute('data-theme', themeColor);
   }, [themeColor]);
+
+  // Mode clair / sombre / système
+  useEffect(() => {
+    function applyMode() {
+      let mode: 'light' | 'dark' = 'light';
+      if (colorScheme === 'dark') mode = 'dark';
+      else if (colorScheme === 'system') {
+        mode = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      }
+      document.body.setAttribute('data-mode', mode);
+    }
+    applyMode();
+    if (colorScheme === 'system') {
+      const mq = window.matchMedia('(prefers-color-scheme: dark)');
+      mq.addEventListener('change', applyMode);
+      return () => mq.removeEventListener('change', applyMode);
+    }
+  }, [colorScheme]);
 
   function toggle() {
     const next = !collapsed;
