@@ -1,13 +1,4 @@
 import PDFDocument from 'pdfkit';
-// bwip-js n'expose pas de types ; on importe en dynamique pour rester compatible.
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const bwipjs: {
-  toBuffer: (
-    opts: Record<string, unknown>,
-    cb: (err: Error | null, png: Buffer) => void,
-  ) => void;
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-} = require('bwip-js');
 import { formatEUR } from './money';
 
 export interface GiftCardPdfData {
@@ -28,20 +19,50 @@ export interface OrgInfo {
   phone?: string | null;
 }
 
+/**
+ * Charge bwip-js en différé. Si la lib n'est pas installée localement,
+ * on renvoie null et le PDF fonctionne sans visuel de code-barre.
+ */
+async function loadBwip(): Promise<null | {
+  toBuffer: (
+    opts: Record<string, unknown>,
+    cb: (err: Error | null, png: Buffer) => void,
+  ) => void;
+}> {
+  try {
+    // Indirection volontaire : empêche webpack de tracer le module au build.
+    // Si bwip-js n'est pas installé, on tombe juste dans le catch et le PDF
+    // est rendu sans visuel de code-barre.
+    const nodeRequire = eval('require') as NodeJS.Require;
+    const mod = nodeRequire('bwip-js');
+    return mod?.default ?? mod;
+  } catch {
+    return null;
+  }
+}
+
 export async function renderGiftCardPdf(data: GiftCardPdfData, org: OrgInfo): Promise<Buffer> {
-  // Génère le code-barre EAN-13 en PNG (server-side, sans canvas natif)
-  const barcodePng: Buffer = await new Promise((resolve, reject) => {
-    bwipjs.toBuffer({
-      bcid: 'ean13',
-      text: data.code,
-      scale: 3,
-      height: 14,
-      includetext: true,
-      textxalign: 'center',
-      textsize: 10,
-      backgroundcolor: 'FFFFFF',
-    }, (err, png) => (err ? reject(err) : resolve(png)));
-  });
+  // Génère le code-barre EAN-13 en PNG si la lib est dispo
+  const bwip = await loadBwip();
+  let barcodePng: Buffer | null = null;
+  if (bwip) {
+    try {
+      barcodePng = await new Promise<Buffer>((resolve, reject) => {
+        bwip.toBuffer({
+          bcid: 'ean13',
+          text: data.code,
+          scale: 3,
+          height: 14,
+          includetext: true,
+          textxalign: 'center',
+          textsize: 10,
+          backgroundcolor: 'FFFFFF',
+        }, (err: Error | null, png: Buffer) => (err ? reject(err) : resolve(png)));
+      });
+    } catch {
+      barcodePng = null;
+    }
+  }
 
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: 'A5', margin: 36 });
@@ -79,14 +100,22 @@ export async function renderGiftCardPdf(data: GiftCardPdfData, org: OrgInfo): Pr
 
     doc.moveDown(1);
 
-    // Code-barre (image PNG centrée)
-    const barcodeW = 260;
-    const barcodeX = (W - barcodeW) / 2;
-    doc.image(barcodePng, barcodeX, doc.y, { width: barcodeW });
-    doc.y += 80;
-
-    // Numéro lisible (fallback si scan impossible)
-    doc.font('Helvetica-Bold').fontSize(14).text(formatCodeReadable(data.code), { align: 'center' });
+    // Code-barre (image PNG centrée) ou code en gros si lib absente
+    if (barcodePng) {
+      const barcodeW = 260;
+      const barcodeX = (W - barcodeW) / 2;
+      doc.image(barcodePng, barcodeX, doc.y, { width: barcodeW });
+      doc.y += 80;
+      doc.font('Helvetica-Bold').fontSize(14).text(formatCodeReadable(data.code), { align: 'center' });
+    } else {
+      // Repli sans code-barre : le code en très grand caractère monospace
+      doc.font('Helvetica-Bold').fontSize(28).text(formatCodeReadable(data.code), { align: 'center' });
+      doc.moveDown(0.5);
+      doc.font('Helvetica-Oblique').fontSize(8).fillColor('#888')
+         .text('(code-barre visuel : installez la dépendance bwip-js pour l\'activer)',
+               { align: 'center' });
+      doc.fillColor('#000');
+    }
 
     // Validité
     doc.moveDown(0.5);
@@ -110,6 +139,5 @@ export async function renderGiftCardPdf(data: GiftCardPdfData, org: OrgInfo): Pr
 }
 
 function formatCodeReadable(code: string): string {
-  // Affiche par groupes de 4 chiffres
   return code.replace(/(\d{4})(?=\d)/g, '$1 ').trim();
 }
