@@ -14,6 +14,12 @@ export class ClosingService {
     userId: string;
     businessDate: string; // 'YYYY-MM-DD'
     countedCash?: number;
+    /** Totaux déclarés par l'utilisateur, méthode → montant. Comparés au système. */
+    declaredPayments?: Record<string, number>;
+    /** Comptage espèces par dénomination (ex { '50': 3, '20': 5, ... }) */
+    denominationCount?: Record<string, number>;
+    /** Notes libres du caissier. */
+    notes?: string;
   }): Promise<{
     daily_closure_id: string;
     fiscal_event_id: string;
@@ -125,6 +131,20 @@ export class ClosingService {
 
       // 5. Hash de scellement via FiscalCore
       const fiscal = new FiscalCore(client);
+
+      // Enrichit chaque ligne paiement avec le montant déclaré et l'écart éventuel.
+      const enrichedPayments = paymentsBreakdown.map((p) => {
+        const declared = args.declaredPayments?.[p.method];
+        return declared !== undefined
+          ? {
+              method: p.method,
+              counted: p.total,
+              declared: Number(declared),
+              variance: Number((declared - p.total).toFixed(2)),
+            }
+          : { method: p.method, counted: p.total };
+      });
+
       const payload = {
         store_id: args.storeId,
         business_date: args.businessDate,
@@ -136,10 +156,12 @@ export class ClosingService {
           total_discount: Number(totals.total_discount),
         },
         tva_breakdown: tvaBreakdown,
-        payments_breakdown: paymentsBreakdown,
+        payments_breakdown: enrichedPayments,
         cash_expected: cashExpected,
         cash_counted: args.countedCash ?? null,
         cash_variance: cashVariance,
+        denomination_count: args.denominationCount ?? null,
+        notes: args.notes ?? null,
         grand_total_ttc_running: previousGrandTotal, // pas de delta : la clôture n'ajoute pas, elle scelle
       };
 
@@ -173,7 +195,7 @@ export class ClosingService {
           Number(totals.total_tva),
           Number(totals.total_ttc),
           JSON.stringify(tvaBreakdown),
-          JSON.stringify(paymentsBreakdown),
+          JSON.stringify(enrichedPayments),
           Number(totals.total_discount),
           cashExpected,
           args.countedCash ?? null,

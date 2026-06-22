@@ -32,6 +32,7 @@ export interface Category {
   id: string;
   name: string;
   color: string | null;
+  image_url: string | null;
 }
 
 export interface CartLine {
@@ -634,8 +635,11 @@ function CategoryGrid({
           onClick={() => onPick(c.id)}
           className={`card ${metrics.padding} text-left hover:shadow-md hover:border-gray-300 transition-all active:scale-[0.98]`}
         >
-          <div className="mb-2 h-14 w-full rounded-lg bg-gray-50 grid place-items-center text-2xl text-ink-soft">
-            ◊
+          <div className="mb-2 h-20 w-full rounded-lg overflow-hidden grid place-items-center"
+               style={{ background: c.color ?? '#F5F5F5' }}>
+            {c.image_url
+              ? <img src={c.image_url} alt="" className="h-full w-full object-cover" />
+              : <span className="text-2xl text-ink-soft">◊</span>}
           </div>
           <div className={`${metrics.titleFontSize} ${metrics.titleMinHeight} font-medium leading-tight`}>
             {c.name}

@@ -9,6 +9,7 @@ const schema = z.object({
   parent_id: z.string().uuid().nullable().optional(),
   color: z.string().max(20).nullable().optional(),
   icon: z.string().max(40).nullable().optional(),
+  image_url: z.string().max(2048).nullable().optional(),
   position: z.number().int().nonnegative().default(0),
   visible_in_pos: z.boolean().default(true),
 });
@@ -17,7 +18,7 @@ export async function GET() {
   const g = await requirePermission('products.read');
   if ('response' in g) return g.response;
   const { rows } = await query(
-    `SELECT id, name, parent_id, color, icon, position, visible_in_pos, is_active
+    `SELECT id, name, parent_id, color, icon, image_url, position, visible_in_pos, is_active
        FROM product_categories
       WHERE organization_id = $1 AND is_active = TRUE
       ORDER BY position ASC, name ASC`,
@@ -34,14 +35,15 @@ export async function POST(req: Request) {
   const c = parsed.data;
   const ins = await query<{ id: string }>(
     `INSERT INTO product_categories
-       (organization_id, name, parent_id, color, icon, position, visible_in_pos)
-     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+       (organization_id, name, parent_id, color, icon, image_url, position, visible_in_pos)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
     [
       g.user.organizationId,
       c.name,
       c.parent_id ?? null,
       c.color ?? null,
       c.icon ?? null,
+      c.image_url ?? null,
       c.position,
       c.visible_in_pos,
     ],

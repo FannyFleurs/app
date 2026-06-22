@@ -10,6 +10,9 @@ const schema = z.object({
   store_id: z.string().uuid(),
   business_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   counted_cash: z.number().min(0).optional(),
+  declared_payments: z.record(z.number().min(0)).optional(),
+  denomination_count: z.record(z.number().int().min(0)).optional(),
+  notes: z.string().max(2000).optional(),
 });
 
 export async function POST(req: Request) {
@@ -25,6 +28,9 @@ export async function POST(req: Request) {
       userId: g.user.id,
       businessDate: parsed.data.business_date,
       countedCash: parsed.data.counted_cash,
+      declaredPayments: parsed.data.declared_payments,
+      denominationCount: parsed.data.denomination_count,
+      notes: parsed.data.notes,
     });
     await audit({
       organizationId: g.user.organizationId, userId: g.user.id,

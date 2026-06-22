@@ -4,32 +4,33 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { Role } from '@/lib/auth/rbac';
 import { hasPermission, type Permission } from '@/lib/auth/rbac';
+import Icon, { type IconName } from './Icon';
 
 interface Item {
   href: string;
   label: string;
   perm?: Permission;
-  icon: string;
+  icon: IconName;
   group: string;
 }
 
 const ITEMS: Item[] = [
-  { href: '/dashboard',    label: 'Tableau de bord',      icon: '◐', group: 'Pilotage' },
-  { href: '/caisse',       label: 'Caisse',               icon: '◆', group: 'Vente',    perm: 'pos.use' },
-  { href: '/ma-journee',   label: 'Ma journée',           icon: '☼', group: 'Vente',    perm: 'pos.use' },
-  { href: '/pos-settings', label: 'Paramètres caisse',    icon: '⚙', group: 'Vente',    perm: 'pos.use' },
-  { href: '/orders',       label: 'Commandes',            icon: '✿', group: 'Vente' },
-  { href: '/invoices',     label: 'Factures',             icon: '◼', group: 'Vente' },
-  { href: '/customers',    label: 'Clients',              icon: '◉', group: 'Relation', perm: 'customers.read' },
-  { href: '/loyalty',      label: 'Fidélité',             icon: '✦', group: 'Relation' },
-  { href: '/products',     label: 'Produits',             icon: '◈', group: 'Catalogue',perm: 'products.read' },
-  { href: '/categories',   label: 'Catégories',           icon: '◊', group: 'Catalogue',perm: 'products.read' },
-  { href: '/stock',        label: 'Stock',                icon: '▣', group: 'Catalogue' },
-  { href: '/closures',     label: 'Clôtures',             icon: '◐', group: 'Compta',   perm: 'closures.daily' },
-  { href: '/exports',      label: 'Exports comptables',   icon: '◇', group: 'Compta',   perm: 'fiscal.export' },
-  { href: '/fiscal',       label: 'Conformité fiscale',   icon: '◉', group: 'Compta',   perm: 'fiscal.audit' },
-  { href: '/users',        label: 'Utilisateurs',         icon: '◎', group: 'Système',  perm: 'users.read' },
-  { href: '/settings',     label: 'Paramètres',           icon: '○', group: 'Système',  perm: 'settings.read' },
+  { href: '/dashboard',    label: 'Tableau de bord',      icon: 'dashboard',    group: 'Pilotage' },
+  { href: '/caisse',       label: 'Caisse',               icon: 'pos',          group: 'Vente',    perm: 'pos.use' },
+  { href: '/ma-journee',   label: 'Ma journée',           icon: 'my-day',       group: 'Vente',    perm: 'pos.use' },
+  { href: '/pos-settings', label: 'Paramètres caisse',    icon: 'pos-settings', group: 'Vente',    perm: 'pos.use' },
+  { href: '/orders',       label: 'Commandes',            icon: 'orders',       group: 'Vente' },
+  { href: '/invoices',     label: 'Factures',             icon: 'invoices',     group: 'Vente' },
+  { href: '/customers',    label: 'Clients',              icon: 'customers',    group: 'Relation', perm: 'customers.read' },
+  { href: '/loyalty',      label: 'Fidélité',             icon: 'loyalty',      group: 'Relation' },
+  { href: '/products',     label: 'Produits',             icon: 'products',     group: 'Catalogue',perm: 'products.read' },
+  { href: '/categories',   label: 'Catégories',           icon: 'categories',   group: 'Catalogue',perm: 'products.read' },
+  { href: '/stock',        label: 'Stock',                icon: 'stock',        group: 'Catalogue' },
+  { href: '/closures',     label: 'Clôtures',             icon: 'closures',     group: 'Compta',   perm: 'closures.daily' },
+  { href: '/exports',      label: 'Exports comptables',   icon: 'exports',      group: 'Compta',   perm: 'fiscal.export' },
+  { href: '/fiscal',       label: 'Conformité fiscale',   icon: 'fiscal',       group: 'Compta',   perm: 'fiscal.audit' },
+  { href: '/users',        label: 'Utilisateurs',         icon: 'users',        group: 'Système',  perm: 'users.read' },
+  { href: '/settings',     label: 'Paramètres',           icon: 'settings',     group: 'Système',  perm: 'settings.read' },
 ];
 
 const GROUP_ORDER = ['Pilotage', 'Vente', 'Relation', 'Catalogue', 'Compta', 'Système'];
@@ -58,9 +59,11 @@ export default function Sidebar({ role, collapsed }: { role: Role; collapsed?: b
                     key={i.href}
                     href={i.href}
                     title={collapsed ? i.label : undefined}
-                    className={`nav-link ${active ? 'nav-link-active' : ''} ${collapsed ? 'justify-center' : ''}`}
+                    className={`nav-link ${active ? 'nav-link-active' : ''} ${collapsed ? 'justify-center px-2 py-2.5' : 'py-2'}`}
                   >
-                    <span className="w-5 text-center text-accent-deep shrink-0">{i.icon}</span>
+                    <span className="shrink-0 text-accent-deep">
+                      <Icon name={i.icon} size={collapsed ? 24 : 22} />
+                    </span>
                     {!collapsed && <span className="truncate">{i.label}</span>}
                   </Link>
                 );

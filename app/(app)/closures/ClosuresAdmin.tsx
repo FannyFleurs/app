@@ -1,14 +1,39 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { formatEUR } from '@/lib/services/money';
+import { PAYMENT_LABELS } from '@/components/labels';
 import PageHeader from '@/components/PageHeader';
 import Badge from '@/components/Badge';
 import EmptyState from '@/components/EmptyState';
 
-interface Closure {
-  id: string;
-  business_date: string;
+const DENOMINATIONS: Array<{ value: number; label: string; kind: 'bill' | 'coin' }> = [
+  { value: 500,  label: '500 €',   kind: 'bill' },
+  { value: 200,  label: '200 €',   kind: 'bill' },
+  { value: 100,  label: '100 €',   kind: 'bill' },
+  { value: 50,   label: '50 €',    kind: 'bill' },
+  { value: 20,   label: '20 €',    kind: 'bill' },
+  { value: 10,   label: '10 €',    kind: 'bill' },
+  { value: 5,    label: '5 €',     kind: 'bill' },
+  { value: 2,    label: '2 €',     kind: 'coin' },
+  { value: 1,    label: '1 €',     kind: 'coin' },
+  { value: 0.5,  label: '0,50 €',  kind: 'coin' },
+  { value: 0.2,  label: '0,20 €',  kind: 'coin' },
+  { value: 0.1,  label: '0,10 €',  kind: 'coin' },
+  { value: 0.05, label: '0,05 €',  kind: 'coin' },
+  { value: 0.02, label: '0,02 €',  kind: 'coin' },
+  { value: 0.01, label: '0,01 €',  kind: 'coin' },
+];
+
+interface PreviewData {
+  totals: { sales: number; ht: number; tva: number; ttc: number; discount: number };
+  tva_breakdown: { rate: number; base_ht: number; tva: number; ttc: number }[];
+  payments: { method: string; total: number }[];
+  sealed: { id: string; sealed_at: string } | null;
+}
+
+interface ClosureSummary {
+  id: string; business_date: string;
   total_sales: number; total_ttc: string; total_ht: string; total_tva: string;
   cash_expected: string; cash_counted: string | null; cash_variance: string | null;
   sealed_at: string; fiscal_hash: string;
@@ -16,38 +41,80 @@ interface Closure {
 
 export default function ClosuresAdmin({ stores }: { stores: { id: string; name: string }[] }) {
   const [storeId, setStoreId] = useState(stores[0]?.id ?? '');
-  const [items, setItems] = useState<Closure[]>([]);
-  const [today, setToday] = useState(new Date().toISOString().slice(0, 10));
-  const [cash, setCash] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [preview, setPreview] = useState<PreviewData | null>(null);
+  const [history, setHistory] = useState<ClosureSummary[]>([]);
+  const [denomCount, setDenomCount] = useState<Record<string, number>>({});
+  const [declared, setDeclared] = useState<Record<string, string>>({}); // string pour saisie libre
+  const [notes, setNotes] = useState('');
   const [sealing, setSealing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [sealedResult, setSealedResult] = useState<{ id: string; fiscal_hash: string } | null>(null);
 
-  async function reload() {
+  async function loadPreview() {
+    setError(null);
+    setPreview(null);
+    setSealedResult(null);
+    if (!storeId || !date) return;
+    const r = await fetch(`/api/closures/daily/preview?store_id=${storeId}&date=${date}`);
+    if (r.ok) setPreview(await r.json());
+  }
+  async function loadHistory() {
     if (!storeId) return;
     const r = await fetch(`/api/closures/daily?store_id=${storeId}`);
-    if (r.ok) setItems((await r.json()).closures);
+    if (r.ok) setHistory((await r.json()).closures);
   }
-  useEffect(() => { void reload(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [storeId]);
+  useEffect(() => { void loadPreview(); void loadHistory(); /* eslint-disable-next-line */ }, [storeId, date]);
+
+  const countedCash = useMemo(() => {
+    let total = 0;
+    for (const d of DENOMINATIONS) {
+      total += (denomCount[String(d.value)] ?? 0) * d.value;
+    }
+    return Number(total.toFixed(2));
+  }, [denomCount]);
+
+  const expectedCash = preview?.payments.find((p) => p.method === 'cash')?.total ?? 0;
+  const cashVariance = countedCash > 0 ? Number((countedCash - expectedCash).toFixed(2)) : 0;
 
   async function seal() {
-    setSealing(true); setError(null); setInfo(null);
-    const body: Record<string, unknown> = { store_id: storeId, business_date: today };
-    if (cash) body.counted_cash = Number(cash);
+    if (!preview) return;
+    setSealing(true); setError(null);
+    // Construit les paiements déclarés (numériques seulement)
+    const declaredPayments: Record<string, number> = {};
+    for (const [k, v] of Object.entries(declared)) {
+      const n = Number(v);
+      if (Number.isFinite(n)) declaredPayments[k] = n;
+    }
+    // Ne garde que les dénominations comptées
+    const denominations: Record<string, number> = {};
+    for (const [k, v] of Object.entries(denomCount)) {
+      if (v > 0) denominations[k] = v;
+    }
+    const body: Record<string, unknown> = {
+      store_id: storeId,
+      business_date: date,
+    };
+    if (countedCash > 0) body.counted_cash = countedCash;
+    if (Object.keys(declaredPayments).length > 0) body.declared_payments = declaredPayments;
+    if (Object.keys(denominations).length > 0) body.denomination_count = denominations;
+    if (notes.trim()) body.notes = notes.trim();
+
     const r = await fetch('/api/closures/daily', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
     setSealing(false);
     if (!r.ok) {
       const j = await r.json().catch(() => ({}));
-      setError(j.error ?? 'Erreur');
+      setError(j.error ?? 'Erreur de scellement');
       return;
     }
     const j = await r.json();
-    setInfo(`Clôture scellée. Empreinte ${j.fiscal_hash.slice(0,16)}…`);
-    setCash('');
-    await reload();
+    setSealedResult({ id: j.daily_closure_id, fiscal_hash: j.fiscal_hash });
+    await loadHistory();
+    await loadPreview(); // recharge → marquera sealed
   }
 
   if (!stores.length) {
@@ -58,84 +125,272 @@ export default function ClosuresAdmin({ stores }: { stores: { id: string; name: 
     );
   }
 
+  const alreadySealed = preview?.sealed != null;
+  const billsAndCoins = DENOMINATIONS;
+
   return (
     <div className="p-8 space-y-5">
       <PageHeader
-        title="Clôtures de caisse"
-        subtitle="Scellement journalier inaltérable : consolidation TVA, paiements, espèces, hash chaîné dans le journal fiscal."
+        title="Clôture de caisse"
+        subtitle="Reconnaissez vos paiements, comptez vos espèces par dénomination, scellez la journée et imprimez le Z."
       />
 
-      <section className="card p-5">
-        <h2 className="font-semibold">Nouvelle clôture journalière</h2>
-        <p className="mt-1 text-sm text-ink-soft">
-          Le scellement écrit un événement fiscal immuable dans la chaîne. Aucune correction directe possible
-          ensuite — toute rectification passera par une écriture corrective datée.
-        </p>
-        <div className="mt-4 grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
-          <div>
-            <label className="text-xs font-medium text-ink-soft">Boutique</label>
-            <select className="input mt-1" value={storeId} onChange={(e) => setStoreId(e.target.value)}>
-              {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="text-xs font-medium text-ink-soft">Date d&apos;opération</label>
-            <input type="date" className="input mt-1" value={today} onChange={(e) => setToday(e.target.value)} />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-ink-soft">Espèces comptées (€)</label>
-            <input
-              type="number" step="0.01" className="input mt-1"
-              value={cash} onChange={(e) => setCash(e.target.value)}
-              placeholder="optionnel"
-            />
-          </div>
-          <button disabled={sealing} onClick={() => void seal()} className="btn-primary h-11">
-            {sealing ? 'Scellement…' : '🔒 Sceller la journée'}
-          </button>
+      <div className="card p-4 flex flex-wrap items-end gap-3">
+        <div>
+          <label className="text-xs font-medium text-ink-soft">Boutique</label>
+          <select className="input mt-1" value={storeId} onChange={(e) => setStoreId(e.target.value)}>
+            {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
         </div>
-        {error && <div className="mt-3 rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
-        {info && <div className="mt-3 rounded-xl bg-success/10 px-3 py-2 text-sm text-success">{info}</div>}
-      </section>
+        <div>
+          <label className="text-xs font-medium text-ink-soft">Date d&apos;opération</label>
+          <input type="date" className="input mt-1" value={date} onChange={(e) => setDate(e.target.value)} />
+        </div>
+        {alreadySealed && (
+          <Badge tone="success">
+            Déjà scellée le {new Date(preview!.sealed!.sealed_at).toLocaleString('fr-FR')}
+          </Badge>
+        )}
+      </div>
 
+      {!preview ? (
+        <div className="text-ink-soft text-sm">Chargement…</div>
+      ) : preview.totals.sales === 0 ? (
+        <EmptyState
+          icon="◐"
+          title="Aucune vente à clôturer"
+          description="Il n'y a pas de ventes validées pour cette date sur cette boutique."
+        />
+      ) : (
+        <>
+          {/* Synthèse système */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <Kpi label="Tickets" value={preview.totals.sales.toString()} />
+            <Kpi label="Total HT" value={formatEUR(preview.totals.ht)} />
+            <Kpi label="TVA collectée" value={formatEUR(preview.totals.tva)} />
+            <Kpi label="Total TTC" value={formatEUR(preview.totals.ttc)} accent />
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            {/* Colonne 1 : paiements + TVA */}
+            <div className="space-y-5">
+              <section className="card p-5">
+                <h3 className="font-semibold">Réconciliation des paiements</h3>
+                <p className="mt-1 text-sm text-ink-soft">
+                  Le système connaît les totaux. Saisissez ce que vous avez réellement reçu (CB,
+                  chèques, etc.) pour faire apparaître les écarts.
+                </p>
+                <div className="mt-4 space-y-2">
+                  {preview.payments.length === 0 ? (
+                    <p className="text-sm text-ink-soft">Aucun paiement enregistré pour cette date.</p>
+                  ) : preview.payments.map((p) => {
+                    const declaredVal = declared[p.method] ?? '';
+                    const declaredNum = Number(declaredVal);
+                    const hasDeclared = declaredVal !== '' && Number.isFinite(declaredNum);
+                    const variance = hasDeclared ? Number((declaredNum - p.total).toFixed(2)) : null;
+                    return (
+                      <div key={p.method} className="rounded-xl border border-border p-3">
+                        <div className="flex items-center justify-between">
+                          <Badge tone="soft">{PAYMENT_LABELS[p.method] ?? p.method}</Badge>
+                          <span className="text-sm">
+                            <span className="text-ink-soft">Système : </span>
+                            <span className="font-medium">{formatEUR(p.total)}</span>
+                          </span>
+                        </div>
+                        {/* Pas de saisie déclarée pour les espèces (gérées par comptage) */}
+                        {p.method !== 'cash' && (
+                          <div className="mt-2 flex items-center gap-2">
+                            <label className="text-xs text-ink-soft w-24 shrink-0">Saisie réelle</label>
+                            <input
+                              type="number" step="0.01" min={0}
+                              placeholder="0,00"
+                              className="input h-9 flex-1"
+                              value={declaredVal}
+                              onChange={(e) => setDeclared({ ...declared, [p.method]: e.target.value })}
+                              disabled={alreadySealed}
+                            />
+                            {variance !== null && (
+                              <span className={`text-xs whitespace-nowrap font-medium ${
+                                variance === 0 ? 'text-success' : 'text-warning'}`}>
+                                Écart {variance >= 0 ? '+' : ''}{formatEUR(variance)}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+
+              <section className="card p-5">
+                <h3 className="font-semibold">Récapitulatif TVA</h3>
+                <table className="mt-3 w-full text-sm">
+                  <tbody>
+                    {preview.tva_breakdown.map((t) => (
+                      <tr key={t.rate} className="border-t border-border first:border-t-0">
+                        <td className="py-2">TVA {t.rate}%</td>
+                        <td className="py-2 text-right text-ink-soft">Base {formatEUR(t.base_ht)}</td>
+                        <td className="py-2 text-right font-medium">{formatEUR(t.tva)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </section>
+            </div>
+
+            {/* Colonne 2 : comptage espèces */}
+            <section className="card p-5">
+              <h3 className="font-semibold">Comptage des espèces en caisse</h3>
+              <p className="mt-1 text-sm text-ink-soft">
+                Saisissez le nombre de billets et pièces présents dans le tiroir.
+                Le total se calcule automatiquement.
+              </p>
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                {billsAndCoins.map((d) => {
+                  const qty = denomCount[String(d.value)] ?? 0;
+                  const sub = qty * d.value;
+                  return (
+                    <div key={d.value} className="flex items-center gap-2 rounded-lg border border-border p-2">
+                      <span className="w-16 text-sm font-medium tabular-nums">{d.label}</span>
+                      <input
+                        type="number"
+                        min={0}
+                        step={1}
+                        className="input h-9 flex-1 text-right tabular-nums"
+                        value={qty || ''}
+                        placeholder="0"
+                        onChange={(e) => {
+                          const v = Math.max(0, Math.floor(Number(e.target.value) || 0));
+                          setDenomCount({ ...denomCount, [String(d.value)]: v });
+                        }}
+                        disabled={alreadySealed}
+                      />
+                      <span className="w-20 text-right text-xs text-ink-soft tabular-nums">
+                        {formatEUR(sub)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="mt-4 space-y-1.5 text-sm rounded-xl bg-gray-50 p-4">
+                <div className="flex justify-between">
+                  <span className="text-ink-soft">Espèces attendues (système)</span>
+                  <span className="font-medium">{formatEUR(expectedCash)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-ink-soft">Espèces comptées</span>
+                  <span className="font-medium">{formatEUR(countedCash)}</span>
+                </div>
+                <div className="flex items-baseline justify-between pt-2 border-t border-border">
+                  <span className="font-semibold">Écart</span>
+                  <span className={`text-lg font-semibold ${
+                    cashVariance === 0 ? 'text-success' :
+                    cashVariance > 0 ? 'text-warning' : 'text-danger'}`}>
+                    {cashVariance >= 0 ? '+' : ''}{formatEUR(cashVariance)}
+                  </span>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          {/* Notes + Sceller */}
+          <section className="card p-5 space-y-3">
+            <label className="block">
+              <span className="text-sm font-medium text-ink-soft">Notes (facultatives)</span>
+              <textarea
+                className="input mt-1 h-20"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Commentaire, écart justifié, événement particulier…"
+                disabled={alreadySealed}
+              />
+            </label>
+
+            {error && <div className="rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
+
+            {sealedResult ? (
+              <div className="rounded-xl bg-success/10 px-4 py-3 text-sm text-success flex items-center justify-between gap-3">
+                <span>
+                  ✓ Clôture scellée. Empreinte fiscale <code className="font-mono">{sealedResult.fiscal_hash.slice(0,16)}…</code>
+                </span>
+                <a
+                  href={`/api/closures/${sealedResult.id}/z-pdf`}
+                  target="_blank" rel="noreferrer"
+                  className="btn-primary text-sm"
+                >
+                  Imprimer le Z
+                </a>
+              </div>
+            ) : alreadySealed ? (
+              <a
+                href={`/api/closures/${preview.sealed!.id}/z-pdf`}
+                target="_blank" rel="noreferrer"
+                className="btn-primary w-full justify-center"
+              >
+                Imprimer le Z de cette journée
+              </a>
+            ) : (
+              <button
+                disabled={sealing || preview.totals.sales === 0}
+                onClick={() => void seal()}
+                className="btn-primary w-full h-12 text-base"
+              >
+                {sealing ? 'Scellement…' : '🔒 Sceller la journée et générer le Z'}
+              </button>
+            )}
+
+            <p className="text-xs text-ink-soft">
+              Une fois scellée, la clôture est immuable. Toute correction passera par une écriture
+              corrective datée. Les triggers Postgres interdisent toute modification a posteriori.
+            </p>
+          </section>
+        </>
+      )}
+
+      {/* Historique */}
       <div>
         <h2 className="text-sm font-semibold uppercase tracking-wider text-ink-soft mb-2">
-          Historique ({items.length})
+          Historique des clôtures ({history.length})
         </h2>
-        {items.length === 0 ? (
-          <EmptyState icon="◐" title="Aucune clôture scellée" description="Procédez à votre première clôture ci-dessus." />
+        {history.length === 0 ? (
+          <EmptyState icon="◐" title="Aucune clôture historique" />
         ) : (
           <div className="card overflow-hidden">
             <table className="w-full text-sm">
-              <thead className="bg-bg text-ink-soft text-xs uppercase">
+              <thead className="bg-white text-ink-soft text-xs uppercase border-b border-border">
                 <tr>
                   <th className="text-left px-4 py-3">Date</th>
                   <th className="text-right px-4 py-3">Tickets</th>
                   <th className="text-right px-4 py-3">CA TTC</th>
-                  <th className="text-right px-4 py-3">TVA</th>
-                  <th className="text-right px-4 py-3">Espèces attendues</th>
-                  <th className="text-right px-4 py-3">Comptées</th>
+                  <th className="text-right px-4 py-3">Esp. attendues</th>
+                  <th className="text-right px-4 py-3">Esp. comptées</th>
                   <th className="text-right px-4 py-3">Écart</th>
-                  <th className="text-left px-4 py-3">Empreinte</th>
+                  <th className="text-right px-4 py-3"></th>
                 </tr>
               </thead>
               <tbody>
-                {items.map((c) => (
+                {history.map((c) => (
                   <tr key={c.id} className="border-t border-border">
                     <td className="px-4 py-3 font-medium">{c.business_date}</td>
                     <td className="px-4 py-3 text-right">{c.total_sales}</td>
                     <td className="px-4 py-3 text-right font-medium">{formatEUR(Number(c.total_ttc))}</td>
-                    <td className="px-4 py-3 text-right">{formatEUR(Number(c.total_tva))}</td>
                     <td className="px-4 py-3 text-right">{formatEUR(Number(c.cash_expected))}</td>
                     <td className="px-4 py-3 text-right">
                       {c.cash_counted == null ? '—' : formatEUR(Number(c.cash_counted))}
                     </td>
                     <td className="px-4 py-3 text-right">
                       {c.cash_variance == null ? <span className="text-ink-soft">—</span> :
-                       Number(c.cash_variance) === 0 ? <Badge tone="success">0,00 €</Badge> :
-                       <Badge tone="warning">{formatEUR(Number(c.cash_variance))}</Badge>}
+                        Number(c.cash_variance) === 0 ? <Badge tone="success">0,00 €</Badge> :
+                        <Badge tone="warning">{formatEUR(Number(c.cash_variance))}</Badge>}
                     </td>
-                    <td className="px-4 py-3 font-mono text-xs text-ink-soft">{c.fiscal_hash.slice(0,16)}…</td>
+                    <td className="px-4 py-3 text-right">
+                      <a href={`/api/closures/${c.id}/z-pdf`} target="_blank" rel="noreferrer"
+                         className="text-accent-deep hover:underline text-xs">
+                        Z PDF →
+                      </a>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -143,6 +398,15 @@ export default function ClosuresAdmin({ stores }: { stores: { id: string; name: 
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function Kpi({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+  return (
+    <div className="card p-4">
+      <div className="text-xs uppercase tracking-wider text-ink-soft">{label}</div>
+      <div className={`mt-1 text-xl font-semibold tracking-tight ${accent ? 'text-accent' : ''}`}>{value}</div>
     </div>
   );
 }
