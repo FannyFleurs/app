@@ -19,10 +19,6 @@ export interface OrgInfo {
   phone?: string | null;
 }
 
-/**
- * Charge bwip-js en différé. Si la lib n'est pas installée localement,
- * on renvoie null et le PDF fonctionne sans visuel de code-barre.
- */
 async function loadBwip(): Promise<null | {
   toBuffer: (
     opts: Record<string, unknown>,
@@ -30,9 +26,8 @@ async function loadBwip(): Promise<null | {
   ) => void;
 }> {
   try {
-    // Indirection volontaire : empêche webpack de tracer le module au build.
-    // Si bwip-js n'est pas installé, on tombe juste dans le catch et le PDF
-    // est rendu sans visuel de code-barre.
+    // Indirection : webpack ne trace pas, et si bwip-js n'est pas installé
+    // on tombe dans le catch et le PDF se rend sans visuel de code-barre.
     const nodeRequire = eval('require') as NodeJS.Require;
     const mod = nodeRequire('bwip-js');
     return mod?.default ?? mod;
@@ -41,8 +36,14 @@ async function loadBwip(): Promise<null | {
   }
 }
 
+/**
+ * PDF carte cadeau — format ticket imprimante 80mm (≈226pt de large).
+ * Page haute (1000pt) puis trimmée par l'imprimante au feed papier.
+ */
 export async function renderGiftCardPdf(data: GiftCardPdfData, org: OrgInfo): Promise<Buffer> {
-  // Génère le code-barre EAN-13 en PNG si la lib est dispo
+  const W = 226;
+
+  // Code-barre (PNG) si bwip-js est disponible
   const bwip = await loadBwip();
   let barcodePng: Buffer | null = null;
   if (bwip) {
@@ -51,12 +52,14 @@ export async function renderGiftCardPdf(data: GiftCardPdfData, org: OrgInfo): Pr
         bwip.toBuffer({
           bcid: 'ean13',
           text: data.code,
-          scale: 3,
-          height: 14,
+          scale: 2,
+          height: 12,
           includetext: true,
           textxalign: 'center',
           textsize: 10,
           backgroundcolor: 'FFFFFF',
+          paddingwidth: 4,
+          paddingheight: 4,
         }, (err: Error | null, png: Buffer) => (err ? reject(err) : resolve(png)));
       });
     } catch {
@@ -65,74 +68,87 @@ export async function renderGiftCardPdf(data: GiftCardPdfData, org: OrgInfo): Pr
   }
 
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: 'A5', margin: 36 });
+    const doc = new PDFDocument({
+      size: [W, 1000],
+      margins: { top: 12, bottom: 12, left: 8, right: 8 },
+    });
     const chunks: Buffer[] = [];
     doc.on('data', (b: Buffer) => chunks.push(b));
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
 
-    const W = doc.page.width;
-
     // En-tête boutique
     doc.font('Helvetica-Bold').fontSize(11).text(org.name, { align: 'center' });
-    if (org.address?.line1) {
-      doc.font('Helvetica').fontSize(8)
-         .text(`${org.address.line1}${org.address.zip || org.address.city ? ' · ' : ''}${org.address.zip ?? ''} ${org.address.city ?? ''}`.trim(),
-               { align: 'center' });
+    doc.font('Helvetica').fontSize(8);
+    if (org.legal_name && org.legal_name !== org.name) doc.text(org.legal_name, { align: 'center' });
+    if (org.address?.line1) doc.text(org.address.line1, { align: 'center' });
+    if (org.address?.zip || org.address?.city) {
+      doc.text(`${org.address.zip ?? ''} ${org.address.city ?? ''}`.trim(), { align: 'center' });
     }
+    if (org.siret) doc.text(`SIRET ${org.siret}`, { align: 'center' });
     if (org.phone) doc.text(org.phone, { align: 'center' });
 
-    doc.moveDown(1);
+    doc.moveDown(0.7);
+    doc.font('Helvetica').fontSize(7).text('-'.repeat(46), { align: 'center' });
+    doc.moveDown(0.3);
 
-    // Bandeau "CARTE CADEAU"
-    const bandY = doc.y;
-    doc.rect(36, bandY, W - 72, 50).fillColor('#EFF4EA').fill();
-    doc.fillColor('#3F5430').font('Helvetica-Bold').fontSize(22)
-       .text('CARTE CADEAU', 36, bandY + 8, { width: W - 72, align: 'center' });
-    doc.fontSize(13).text(formatEUR(data.amount), 36, bandY + 30, { width: W - 72, align: 'center' });
-    doc.fillColor('#000');
-    doc.y = bandY + 60;
+    // Titre
+    doc.font('Helvetica-Bold').fontSize(13).text('CARTE CADEAU', { align: 'center' });
+    doc.moveDown(0.2);
 
-    // Coordonnées
+    // Montant
+    doc.font('Helvetica-Bold').fontSize(22).text(formatEUR(data.amount), { align: 'center' });
+    doc.moveDown(0.4);
+
+    // Acheteur
+    if (data.buyer_name) {
+      doc.font('Helvetica').fontSize(8).text(`Offerte par : ${data.buyer_name}`, { align: 'center' });
+    }
+    if (data.buyer_phone) {
+      doc.font('Helvetica').fontSize(8).text(data.buyer_phone, { align: 'center' });
+    }
+
     doc.moveDown(0.5);
-    doc.font('Helvetica').fontSize(9);
-    if (data.buyer_name) doc.text(`Offerte par : ${data.buyer_name}`, { align: 'center' });
+    doc.font('Helvetica').fontSize(7).text('-'.repeat(46), { align: 'center' });
+    doc.moveDown(0.3);
 
-    doc.moveDown(1);
-
-    // Code-barre (image PNG centrée) ou code en gros si lib absente
+    // Code-barre OU code en gros (jamais les deux pour ne pas chevaucher).
+    // bwip-js insère déjà le numéro lisible sous le code-barre.
     if (barcodePng) {
-      const barcodeW = 260;
+      const barcodeW = Math.min(W - 24, 200);
       const barcodeX = (W - barcodeW) / 2;
       doc.image(barcodePng, barcodeX, doc.y, { width: barcodeW });
-      doc.y += 80;
-      doc.font('Helvetica-Bold').fontSize(14).text(formatCodeReadable(data.code), { align: 'center' });
+      // Avance le curseur sous l'image
+      doc.y += barcodeW * 0.55;
     } else {
-      // Repli sans code-barre : le code en très grand caractère monospace
-      doc.font('Helvetica-Bold').fontSize(28).text(formatCodeReadable(data.code), { align: 'center' });
-      doc.moveDown(0.5);
-      doc.font('Helvetica-Oblique').fontSize(8).fillColor('#888')
-         .text('(code-barre visuel : installez la dépendance bwip-js pour l\'activer)',
-               { align: 'center' });
+      doc.font('Helvetica-Bold').fontSize(16).text(formatCodeReadable(data.code), { align: 'center' });
+      doc.moveDown(0.3);
+      doc.font('Helvetica-Oblique').fontSize(6).fillColor('#888')
+         .text('(installer bwip-js pour le code-barre)', { align: 'center' });
       doc.fillColor('#000');
     }
 
-    // Validité
     doc.moveDown(0.5);
-    doc.font('Helvetica').fontSize(9).fillColor('#666');
-    doc.text(`Émise le ${new Date(data.issued_at).toLocaleDateString('fr-FR')}${
-      data.expires_at ? ` · Valable jusqu'au ${new Date(data.expires_at).toLocaleDateString('fr-FR')}` : ''
-    }`, { align: 'center' });
-    doc.fillColor('#000');
+    doc.font('Helvetica').fontSize(7).text('-'.repeat(46), { align: 'center' });
+    doc.moveDown(0.3);
+
+    // Validité
+    doc.font('Helvetica').fontSize(8);
+    doc.text(`Émise le ${new Date(data.issued_at).toLocaleDateString('fr-FR')}`, { align: 'center' });
+    if (data.expires_at) {
+      doc.text(`Valable jusqu'au ${new Date(data.expires_at).toLocaleDateString('fr-FR')}`, { align: 'center' });
+    }
+
+    doc.moveDown(0.6);
 
     // Conditions
-    doc.moveDown(1);
-    doc.font('Helvetica').fontSize(8).fillColor('#888').text(
-      `Présentez cette carte en boutique pour l'utiliser. Le solde sera débité automatiquement.` +
-      ` Carte non rechargeable, non remboursable en espèces.`,
-      { align: 'center', width: W - 72 },
+    doc.font('Helvetica').fontSize(7).fillColor('#444').text(
+      'Présentez cette carte en boutique. Solde débité automatiquement. Carte non rechargeable, non remboursable en espèces.',
+      { align: 'center' },
     );
     doc.fillColor('#000');
+
+    doc.moveDown(0.5);
 
     doc.end();
   });
