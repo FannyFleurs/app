@@ -1,34 +1,33 @@
 import { redirect } from 'next/navigation';
-import Link from 'next/link';
+import { cookies } from 'next/headers';
 import { readSessionFromCookie } from '@/lib/auth/session';
-import Sidebar from '@/components/Sidebar';
-import LogoutButton from '@/components/LogoutButton';
-import { ROLE_LABELS } from '@/components/labels';
+import { query } from '@/lib/db/client';
+import {
+  mergeWithDefaults,
+  POS_UI_KEY,
+  type PosUiSettings,
+} from '@/lib/settings/pos-ui';
+import AppShell from '@/components/AppShell';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await readSessionFromCookie();
   if (!user) redirect('/login');
 
+  const { rows } = await query<{ value: Partial<PosUiSettings> }>(
+    `SELECT value FROM settings WHERE organization_id = $1 AND key = $2`,
+    [user.organizationId, POS_UI_KEY],
+  );
+  const ui = mergeWithDefaults(rows[0]?.value ?? null);
+
+  const collapsed = cookies().get('florea_sidebar_collapsed')?.value === '1';
+
   return (
-    <div className="min-h-screen grid grid-cols-[260px_1fr]">
-      <aside className="relative border-r border-border bg-surface/60 backdrop-blur-sm overflow-y-auto">
-        <div className="px-4 py-5 sticky top-0 bg-surface/80 backdrop-blur-sm z-10 border-b border-border/60">
-          <Link href="/dashboard" className="flex items-center gap-3">
-            <div className="grid h-9 w-9 place-items-center rounded-xl bg-sage text-white font-semibold">F</div>
-            <div>
-              <div className="font-semibold leading-tight">Florea POS</div>
-              <div className="text-xs text-ink-soft">Back-office</div>
-            </div>
-          </Link>
-        </div>
-        <Sidebar role={user.role} />
-        <div className="absolute bottom-0 left-0 w-[260px] border-t border-border bg-surface/95 backdrop-blur-sm px-4 py-3">
-          <div className="text-sm font-medium truncate">{user.fullName}</div>
-          <div className="text-xs text-ink-soft">{ROLE_LABELS[user.role]}</div>
-          <LogoutButton />
-        </div>
-      </aside>
-      <main className="overflow-auto">{children}</main>
-    </div>
+    <AppShell
+      user={{ id: user.id, fullName: user.fullName, role: user.role, email: user.email }}
+      themeColor={ui.theme_color}
+      initialCollapsed={collapsed}
+    >
+      {children}
+    </AppShell>
   );
 }

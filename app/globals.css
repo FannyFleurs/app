@@ -4,7 +4,19 @@
 
 :root {
   color-scheme: light;
+  /* Palette du thème, surchargée par data-theme sur <body> */
+  --primary: #556B3E;
+  --primary-deep: #3F5430;
+  --primary-soft: #EFF4EA;
 }
+
+body[data-theme="sage"]       { --primary: #556B3E; --primary-deep: #3F5430; --primary-soft: #EFF4EA; }
+body[data-theme="charcoal"]   { --primary: #2A2F33; --primary-deep: #15191C; --primary-soft: #EEEEF0; }
+body[data-theme="navy"]       { --primary: #1F3A5F; --primary-deep: #15294A; --primary-soft: #E6EDF6; }
+body[data-theme="terracotta"] { --primary: #B5683E; --primary-deep: #8E4F2F; --primary-soft: #F7EAE0; }
+body[data-theme="rose"]       { --primary: #B85C5C; --primary-deep: #8E4040; --primary-soft: #F8E8E8; }
+body[data-theme="amber"]      { --primary: #B7791F; --primary-deep: #8E5B15; --primary-soft: #F7EFD7; }
+body[data-theme="plum"]       { --primary: #7A3C6E; --primary-deep: #5C2C53; --primary-soft: #F1E4EE; }
 
 html, body { height: 100%; }
 
@@ -13,10 +25,9 @@ button, [role="button"] {
   user-select: none;
 }
 
-/* Composants utilitaires */
 @layer components {
   .card {
-    @apply rounded-2xl bg-surface shadow-card border border-border;
+    @apply rounded-2xl bg-white shadow-card border border-border;
   }
   .btn {
     @apply inline-flex items-center justify-center gap-2 rounded-xl
@@ -24,13 +35,21 @@ button, [role="button"] {
            disabled:cursor-not-allowed select-none;
   }
   .btn-primary {
-    @apply btn bg-sage text-white hover:bg-sage-deep;
+    @apply btn text-white;
+    background-color: var(--primary);
+  }
+  .btn-primary:hover:not(:disabled) {
+    background-color: var(--primary-deep);
   }
   .btn-soft {
-    @apply btn bg-sage-soft text-sage-deep hover:bg-beige;
+    @apply btn text-ink;
+    background-color: var(--primary-soft);
+  }
+  .btn-soft:hover:not(:disabled) {
+    background-color: color-mix(in srgb, var(--primary-soft) 60%, white);
   }
   .btn-ghost {
-    @apply btn text-ink hover:bg-sage-soft;
+    @apply btn text-ink hover:bg-gray-50;
   }
   .btn-danger {
     @apply btn bg-danger/10 text-danger hover:bg-danger/20;
@@ -38,17 +57,34 @@ button, [role="button"] {
   .input {
     @apply w-full rounded-xl border border-border bg-white px-3 py-2.5
            text-ink placeholder:text-ink-soft/60
-           focus:outline-none focus:ring-2 focus:ring-sage/40 focus:border-sage;
+           focus:outline-none focus:ring-2 focus:border-transparent;
+  }
+  .input:focus {
+    --tw-ring-color: color-mix(in srgb, var(--primary) 40%, transparent);
   }
   .chip {
-    @apply inline-flex items-center gap-1 rounded-full bg-sage-soft
-           px-2.5 py-0.5 text-xs font-medium text-sage-deep;
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium;
+    background-color: var(--primary-soft);
+    color: var(--primary-deep);
   }
   .nav-link {
     @apply flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium
-           text-ink-soft hover:bg-sage-soft hover:text-sage-deep;
+           text-ink-soft hover:bg-gray-50 hover:text-ink;
   }
   .nav-link-active {
-    @apply bg-sage-soft text-sage-deep;
+    color: var(--primary-deep);
+    background-color: var(--primary-soft);
+  }
+  .accent-bar {
+    background-color: var(--primary);
+  }
+  .text-accent {
+    color: var(--primary);
+  }
+  .text-accent-deep {
+    color: var(--primary-deep);
+  }
+  .bg-accent-soft {
+    background-color: var(--primary-soft);
   }
 }

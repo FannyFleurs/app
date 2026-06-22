@@ -57,10 +57,13 @@ interface Props {
   posUi: PosUiSettings;
 }
 
+type View = { kind: 'categories' } | { kind: 'products'; categoryId: string | 'uncategorized' };
+
 const FREE_PRICE_TAX_CODE_DEFAULT = 'TVA20';
 
 export default function CashRegister({ stores, registers, taxRates, currentUser, posUi }: Props) {
   const metrics = useMemo(() => tileMetrics(posUi.tile_size), [posUi.tile_size]);
+
   const [storeId, setStoreId] = useState<string>(stores[0]!.id);
   const registersForStore = useMemo(
     () => registers.filter((r) => r.store_id === storeId),
@@ -74,7 +77,7 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
   const [products, setProducts] = useState<PosProduct[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [search, setSearch] = useState('');
-  const [activeCategory, setActiveCategory] = useState<string | 'all'>('all');
+  const [view, setView] = useState<View>({ kind: 'categories' });
 
   const [saleId, setSaleId] = useState<string | null>(null);
   const [lines, setLines] = useState<CartLine[]>([]);
@@ -177,21 +180,41 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
     } finally { setSavingLines(false); }
   }
 
-  // Filtrage produits
-  const visibleProducts = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return products.filter((p) => {
-      if (activeCategory !== 'all' && p.category_id !== activeCategory) return false;
-      if (!q) return true;
-      return (
-        p.name.toLowerCase().includes(q) ||
-        p.sku?.toLowerCase().includes(q) ||
-        p.barcode === q
-      );
-    });
-  }, [products, search, activeCategory]);
+  // Catégories effectivement présentes (au moins 1 produit) + bucket "sans catégorie"
+  const categoriesWithCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const p of products) {
+      const k = p.category_id ?? 'uncategorized';
+      counts.set(k, (counts.get(k) ?? 0) + 1);
+    }
+    const cats = categories
+      .map((c) => ({ ...c, count: counts.get(c.id) ?? 0 }))
+      .filter((c) => c.count > 0);
+    const uncat = counts.get('uncategorized') ?? 0;
+    return { cats, uncategorized: uncat };
+  }, [products, categories]);
 
-  // Totaux locaux (l'autorité reste le serveur, mais c'est utile pour l'UX)
+  // Liste des produits affichés (en mode recherche OU dans une catégorie)
+  const searchQ = search.trim().toLowerCase();
+  const visibleProducts = useMemo(() => {
+    if (searchQ) {
+      return products.filter((p) =>
+        p.name.toLowerCase().includes(searchQ) ||
+        p.sku?.toLowerCase().includes(searchQ) ||
+        p.barcode === searchQ.toUpperCase() || p.barcode === searchQ
+      );
+    }
+    if (view.kind === 'products') {
+      return products.filter((p) =>
+        view.categoryId === 'uncategorized'
+          ? p.category_id == null
+          : p.category_id === view.categoryId,
+      );
+    }
+    return [];
+  }, [products, searchQ, view]);
+
+  // Totaux locaux
   const totals = useMemo(() => {
     let ttc = 0, ht = 0, tva = 0, discount = 0;
     const byRate = new Map<number, { base_ht: number; tva: number; ttc: number }>();
@@ -208,17 +231,13 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
       b.ttc = round2(b.ttc + lineTtc);
       byRate.set(l.tax_rate, b);
     }
-    return {
-      ttc, ht, tva, discount,
-      breakdown: Array.from(byRate.entries()).sort((a,b)=>b[0]-a[0]),
-    };
+    return { ttc, ht, tva, discount, breakdown: Array.from(byRate.entries()).sort((a,b)=>b[0]-a[0]) };
   }, [lines]);
 
   function addProduct(p: PosProduct) {
     void ensureSale();
     if (p.price_is_free) { setShowFreePrice(true); return; }
     setLines((cur) => {
-      // empile si même produit + même prix + même tva
       const existing = cur.find(
         (l) => l.product_id === p.id && l.unit_price_ttc === p.sale_price_ttc && l.discount_amount === 0,
       );
@@ -249,11 +268,9 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
   }
 
   function incLine(key: string, delta: number) {
-    setLines((cur) =>
-      cur
-        .map((l) => l.key === key ? { ...l, quantity: round2(l.quantity + delta) } : l)
-        .filter((l) => l.quantity > 0),
-    );
+    setLines((cur) => cur
+      .map((l) => l.key === key ? { ...l, quantity: round2(l.quantity + delta) } : l)
+      .filter((l) => l.quantity > 0));
   }
   function removeLine(key: string) { setLines((cur) => cur.filter((l) => l.key !== key)); }
   function setLineDiscount(key: string, amount: number) {
@@ -270,6 +287,7 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
     });
     if (res.ok) {
       setSaleId(null); setLines([]);
+      setView({ kind: 'categories' }); setSearch('');
     }
   }
 
@@ -278,20 +296,18 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
     if (!res.ok) return;
     const j = await res.json();
     setSaleId(id);
-    setLines(
-      (j.lines as Record<string, unknown>[]).map((l) => ({
-        key: cryptoKey(),
-        product_id: (l.product_id as string) ?? null,
-        variant_id: (l.variant_id as string) ?? null,
-        label: l.label as string,
-        unit_price_ttc: Number(l.unit_price_ttc),
-        quantity: Number(l.quantity),
-        discount_amount: Number(l.discount_amount),
-        tax_rate: Number(l.tax_rate),
-        tax_rate_code: l.tax_rate_code as string,
-        metadata: (l.metadata as Record<string, unknown>) ?? {},
-      })),
-    );
+    setLines((j.lines as Record<string, unknown>[]).map((l) => ({
+      key: cryptoKey(),
+      product_id: (l.product_id as string) ?? null,
+      variant_id: (l.variant_id as string) ?? null,
+      label: l.label as string,
+      unit_price_ttc: Number(l.unit_price_ttc),
+      quantity: Number(l.quantity),
+      discount_amount: Number(l.discount_amount),
+      tax_rate: Number(l.tax_rate),
+      tax_rate_code: l.tax_rate_code as string,
+      metadata: (l.metadata as Record<string, unknown>) ?? {},
+    })));
     setShowHeld(false);
   }
 
@@ -299,6 +315,9 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
     setReceipt({ id: receiptId, number: receiptNumber });
     setShowPayment(false);
     setSaleId(null); setLines([]);
+    // Retour à la vue catégories
+    setView({ kind: 'categories' });
+    setSearch('');
   }
 
   // Raccourcis clavier
@@ -309,10 +328,13 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
       } else if (e.key === 'F2') { e.preventDefault(); setShowFreePrice(true); }
       else if (e.key === 'F4') { e.preventDefault(); setShowHeld(true); }
       else if (e.key === 'F9' && lines.length > 0) { e.preventDefault(); setShowPayment(true); }
+      else if (e.key === 'Escape' && view.kind === 'products' && !searchQ) {
+        e.preventDefault(); setView({ kind: 'categories' });
+      }
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [lines.length]);
+  }, [lines.length, view, searchQ]);
 
   if (sessionLoading) {
     return <div className="p-8 text-ink-soft">Chargement caisse…</div>;
@@ -325,16 +347,12 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
           <div className="card p-6 max-w-xl">
             <h1 className="text-xl font-semibold">Ouvrir la caisse</h1>
             <p className="mt-2 text-sm text-ink-soft">
-              Aucune session active sur cette caisse. Ouvrez la caisse en saisissant le fond.
+              Aucune session active. Ouvrez la caisse en saisissant le fond.
             </p>
             <div className="mt-4 flex items-center gap-2">
               <label className="text-sm text-ink-soft">Boutique :</label>
               <select className="input max-w-xs" value={storeId} onChange={(e) => setStoreId(e.target.value)}>
                 {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
-              <label className="text-sm text-ink-soft ml-2">Caisse :</label>
-              <select className="input max-w-xs" value={registerId} onChange={(e) => setRegisterId(e.target.value)}>
-                {registersForStore.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
               </select>
             </div>
             <button className="btn-primary mt-4" onClick={() => setShowOpenSession(true)}>
@@ -354,15 +372,22 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
     );
   }
 
+  const showingProducts = searchQ.length > 0 || view.kind === 'products';
+  const currentCategoryName = view.kind === 'products'
+    ? (view.categoryId === 'uncategorized'
+        ? 'Sans catégorie'
+        : categories.find((c) => c.id === view.categoryId)?.name ?? '')
+    : '';
+
   return (
-    <div className="grid grid-cols-[1fr_420px] h-screen">
-      {/* Gauche : produits */}
-      <div className="flex flex-col bg-bg">
-        <div className="flex items-center gap-3 px-5 py-3 border-b border-border bg-surface">
+    <div className="grid grid-cols-[1fr_420px] h-[calc(100vh-56px)]">
+      {/* Gauche : catalogue */}
+      <div className="flex flex-col bg-white min-w-0">
+        <div className="flex items-center gap-3 px-5 py-3 border-b border-border bg-white">
           <input
             ref={searchRef}
             className="input flex-1"
-            placeholder="Rechercher (/) ou scanner un code-barres…"
+            placeholder="Rechercher un produit (/) ou scanner…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={(e) => {
@@ -380,34 +405,50 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
           </button>
         </div>
 
-        <div className="flex gap-2 overflow-x-auto px-5 py-3 border-b border-border bg-surface">
-          <CategoryChip active={activeCategory === 'all'} label="Tout" onClick={() => setActiveCategory('all')} />
-          {categories.map((c) => (
-            <CategoryChip
-              key={c.id}
-              active={activeCategory === c.id}
-              label={c.name}
-              color={c.color}
-              onClick={() => setActiveCategory(c.id)}
-            />
-          ))}
-        </div>
+        {/* Fil d'Ariane minimal pour la vue produits */}
+        {showingProducts && !searchQ && (
+          <div className="px-5 py-2 border-b border-border bg-white text-sm text-ink-soft flex items-center gap-2">
+            <button onClick={() => setView({ kind: 'categories' })} className="hover:text-ink">Catégories</button>
+            <span>›</span>
+            <span className="text-ink font-medium">{currentCategoryName}</span>
+          </div>
+        )}
+        {searchQ && (
+          <div className="px-5 py-2 border-b border-border bg-white text-sm text-ink-soft">
+            Résultats pour <span className="font-medium text-ink">« {search} »</span>
+          </div>
+        )}
 
-        <div className="flex-1 overflow-auto p-5">
-          {visibleProducts.length === 0 ? (
-            <div className="text-center text-ink-soft mt-12">
-              Aucun produit. Ajoutez-en dans <a className="underline" href="/products">Produits</a>.
-            </div>
-          ) : (
+        <div className="flex-1 overflow-auto p-5 bg-white">
+          {showingProducts ? (
             <div className={`grid ${metrics.grid} ${metrics.gap}`}>
-              {visibleProducts.map((p) => (
+              {/* Bouton retour TOUJOURS en première position en vue produits, hors recherche */}
+              {!searchQ && (
+                <button
+                  onClick={() => setView({ kind: 'categories' })}
+                  className={`card ${metrics.padding} text-left hover:shadow-md transition-all active:scale-[0.98] border-dashed`}
+                >
+                  <div className="mb-2 h-14 w-full rounded-lg bg-gray-50 grid place-items-center text-ink-soft text-2xl">
+                    ‹
+                  </div>
+                  <div className={`${metrics.titleFontSize} ${metrics.titleMinHeight} font-medium leading-tight`}>
+                    Retour
+                  </div>
+                  <div className="mt-1 text-[11px] text-ink-soft">aux catégories</div>
+                </button>
+              )}
+              {visibleProducts.length === 0 ? (
+                <div className="col-span-full text-center text-ink-soft mt-8">
+                  {searchQ ? 'Aucun produit trouvé pour cette recherche.' : 'Aucun produit dans cette catégorie.'}
+                </div>
+              ) : visibleProducts.map((p) => (
                 <button
                   key={p.id}
                   onClick={() => addProduct(p)}
-                  className={`card ${metrics.padding} text-left hover:shadow-md hover:border-sage/40 transition-all active:scale-[0.98]`}
+                  className={`card ${metrics.padding} text-left hover:shadow-md hover:border-gray-300 transition-all active:scale-[0.98]`}
                 >
                   {posUi.show_product_image && (
-                    <div className="mb-2 h-14 w-full rounded-lg bg-sage-soft grid place-items-center text-sage-deep overflow-hidden">
+                    <div className="mb-2 h-14 w-full rounded-lg bg-gray-50 grid place-items-center text-ink-soft overflow-hidden">
                       {p.image_url
                         ? <img src={p.image_url} alt="" className="h-full w-full object-cover" />
                         : <span>✿</span>}
@@ -430,15 +471,23 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
                 </button>
               ))}
             </div>
+          ) : (
+            // VUE CATÉGORIES
+            <CategoryGrid
+              categories={categoriesWithCounts.cats}
+              uncategorizedCount={categoriesWithCounts.uncategorized}
+              onPick={(id) => setView({ kind: 'products', categoryId: id })}
+              metrics={metrics}
+            />
           )}
         </div>
       </div>
 
-      {/* Droite : panier */}
-      <aside className="flex flex-col bg-surface border-l border-border">
+      {/* Droite : panier (toujours visible) */}
+      <aside className="flex flex-col bg-white border-l border-border min-w-0">
         <div className="px-5 py-3 border-b border-border flex items-center justify-between">
           <div>
-            <div className="text-xs uppercase tracking-wider text-ink-soft">Panier</div>
+            <div className="text-xs uppercase tracking-wider text-ink-soft">Ticket en cours</div>
             <div className="text-sm font-medium">
               {lines.length} ligne(s){savingLines ? ' · sync…' : ''}
             </div>
@@ -458,7 +507,7 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
               Sélectionnez un produit pour commencer.
             </div>
           ) : lines.map((l) => (
-            <div key={l.key} className="rounded-xl border border-border p-3">
+            <div key={l.key} className="rounded-xl border border-border p-3 bg-white">
               <div className="flex justify-between gap-2">
                 <div className="text-sm font-medium flex-1">{l.label}</div>
                 <button onClick={() => removeLine(l.key)} className="text-ink-soft hover:text-danger">✕</button>
@@ -541,10 +590,7 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
         />
       )}
       {receipt && (
-        <ReceiptPreviewModal
-          receipt={receipt}
-          onClose={() => setReceipt(null)}
-        />
+        <ReceiptPreviewModal receipt={receipt} onClose={() => setReceipt(null)} />
       )}
       {showHeld && (
         <HoldListModal
@@ -555,9 +601,7 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
       )}
       {showFreePrice && (
         <FreePriceModal
-          defaultTaxCode={
-            taxRates.find((t) => t.is_default)?.code ?? FREE_PRICE_TAX_CODE_DEFAULT
-          }
+          defaultTaxCode={taxRates.find((t) => t.is_default)?.code ?? FREE_PRICE_TAX_CODE_DEFAULT}
           taxRates={taxRates}
           onClose={() => setShowFreePrice(false)}
           onConfirm={addFreeBouquet}
@@ -567,20 +611,51 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
   );
 }
 
-function CategoryChip({ active, label, color, onClick }: {
-  active: boolean; label: string; color?: string | null; onClick: () => void;
+function CategoryGrid({
+  categories, uncategorizedCount, onPick, metrics,
+}: {
+  categories: (Category & { count: number })[];
+  uncategorizedCount: number;
+  onPick: (id: string | 'uncategorized') => void;
+  metrics: ReturnType<typeof tileMetrics>;
 }) {
+  if (categories.length === 0 && uncategorizedCount === 0) {
+    return (
+      <div className="text-center text-ink-soft mt-12">
+        Aucun produit. Ajoutez-en dans <a className="underline" href="/products">Produits</a>.
+      </div>
+    );
+  }
   return (
-    <button
-      onClick={onClick}
-      className={`whitespace-nowrap rounded-full px-3.5 py-1.5 text-sm font-medium
-                  border transition-colors ${active
-                    ? 'bg-sage text-white border-sage'
-                    : 'bg-white text-ink border-border hover:bg-sage-soft hover:border-sage/40'}`}
-      style={!active && color ? { borderColor: color } : undefined}
-    >
-      {label}
-    </button>
+    <div className={`grid ${metrics.grid} ${metrics.gap}`}>
+      {categories.map((c) => (
+        <button
+          key={c.id}
+          onClick={() => onPick(c.id)}
+          className={`card ${metrics.padding} text-left hover:shadow-md hover:border-gray-300 transition-all active:scale-[0.98]`}
+        >
+          <div className="mb-2 h-14 w-full rounded-lg bg-gray-50 grid place-items-center text-2xl text-ink-soft">
+            ◊
+          </div>
+          <div className={`${metrics.titleFontSize} ${metrics.titleMinHeight} font-medium leading-tight`}>
+            {c.name}
+          </div>
+          <div className="mt-1 text-[11px] text-ink-soft">{c.count} article(s)</div>
+        </button>
+      ))}
+      {uncategorizedCount > 0 && (
+        <button
+          onClick={() => onPick('uncategorized')}
+          className={`card ${metrics.padding} text-left hover:shadow-md hover:border-gray-300 transition-all active:scale-[0.98]`}
+        >
+          <div className="mb-2 h-14 w-full rounded-lg bg-gray-50 grid place-items-center text-2xl text-ink-soft">…</div>
+          <div className={`${metrics.titleFontSize} ${metrics.titleMinHeight} font-medium leading-tight`}>
+            Sans catégorie
+          </div>
+          <div className="mt-1 text-[11px] text-ink-soft">{uncategorizedCount} article(s)</div>
+        </button>
+      )}
+    </div>
   );
 }
 

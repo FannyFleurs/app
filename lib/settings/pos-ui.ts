@@ -10,8 +10,12 @@
 export const POS_TILE_SIZES = ['compact', 'normal', 'large', 'xl'] as const;
 export type PosTileSize = (typeof POS_TILE_SIZES)[number];
 
+export const POS_THEME_COLORS = ['sage', 'charcoal', 'navy', 'terracotta', 'rose', 'amber', 'plum'] as const;
+export type PosThemeColor = (typeof POS_THEME_COLORS)[number];
+
 export interface PosUiSettings {
   tile_size: PosTileSize;
+  theme_color: PosThemeColor;
   show_product_image: boolean;
   show_category_badge: boolean;
   show_price: boolean;
@@ -22,10 +26,21 @@ export const POS_UI_KEY = 'pos_ui';
 
 export const POS_UI_DEFAULTS: PosUiSettings = {
   tile_size: 'normal',
+  theme_color: 'sage',
   show_product_image: true,
   show_category_badge: true,
   show_price: true,
   show_tax_badge: true,
+};
+
+export const POS_THEME_COLOR_VALUES: Record<PosThemeColor, { label: string; main: string; deep: string; soft: string }> = {
+  sage:       { label: 'Sauge',      main: '#556B3E', deep: '#3F5430', soft: '#EFF4EA' },
+  charcoal:   { label: 'Anthracite', main: '#2A2F33', deep: '#15191C', soft: '#EEEEF0' },
+  navy:       { label: 'Bleu nuit',  main: '#1F3A5F', deep: '#15294A', soft: '#E6EDF6' },
+  terracotta: { label: 'Terracotta', main: '#B5683E', deep: '#8E4F2F', soft: '#F7EAE0' },
+  rose:       { label: 'Rose poudré',main: '#B85C5C', deep: '#8E4040', soft: '#F8E8E8' },
+  amber:      { label: 'Ambre',      main: '#B7791F', deep: '#8E5B15', soft: '#F7EFD7' },
+  plum:       { label: 'Prune',      main: '#7A3C6E', deep: '#5C2C53', soft: '#F1E4EE' },
 };
 
 /**

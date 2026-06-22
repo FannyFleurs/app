@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { generateEan13 } from '@/lib/services/ean';
 
 interface Product {
   id: string; name: string; short_description: string | null;
@@ -92,8 +93,24 @@ export default function ProductFormModal({
           <Field label="SKU">
             <input className="input" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} />
           </Field>
-          <Field label="Code-barres">
-            <input className="input" value={form.barcode} onChange={(e) => setForm({ ...form, barcode: e.target.value })} />
+          <Field label="Code-barres (EAN-13)">
+            <div className="flex gap-2">
+              <input
+                className="input flex-1"
+                value={form.barcode}
+                onChange={(e) => setForm({ ...form, barcode: e.target.value })}
+                placeholder="13 chiffres"
+                maxLength={13}
+              />
+              <button
+                type="button"
+                className="btn-soft text-xs whitespace-nowrap"
+                onClick={() => setForm({ ...form, barcode: generateEan13('20') })}
+                title="Génère un EAN-13 valide avec préfixe interne 20"
+              >
+                Générer EAN
+              </button>
+            </div>
           </Field>
           <Field label="Catégorie">
             <select className="input" value={form.category_id ?? ''}

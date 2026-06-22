@@ -6,6 +6,7 @@ import { parseJson } from '@/lib/validation/api';
 import { audit } from '@/lib/audit/log';
 import {
   POS_TILE_SIZES,
+  POS_THEME_COLORS,
   POS_UI_KEY,
   mergeWithDefaults,
   type PosUiSettings,
@@ -13,6 +14,7 @@ import {
 
 const schema = z.object({
   tile_size: z.enum(POS_TILE_SIZES).optional(),
+  theme_color: z.enum(POS_THEME_COLORS).optional(),
   show_product_image: z.boolean().optional(),
   show_category_badge: z.boolean().optional(),
   show_price: z.boolean().optional(),

@@ -2,13 +2,17 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { formatEUR } from '@/lib/services/money';
+import { useRouter } from 'next/navigation';
 import {
   POS_TILE_SIZES,
   POS_TILE_SIZE_LABELS,
+  POS_THEME_COLORS,
+  POS_THEME_COLOR_VALUES,
   POS_UI_DEFAULTS,
   tileMetrics,
   type PosUiSettings,
   type PosTileSize,
+  type PosThemeColor,
 } from '@/lib/settings/pos-ui';
 import Badge from '@/components/Badge';
 
@@ -20,11 +24,17 @@ interface Props {
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
 export default function POSSettingsForm({ initial, canWrite }: Props) {
+  const router = useRouter();
   const [settings, setSettings] = useState<PosUiSettings>(initial);
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [error, setError] = useState<string | null>(null);
   const firstRender = useRef(true);
   const lastSaved = useRef<PosUiSettings>(initial);
+
+  // Aperçu en direct du thème : surcharge le data-theme du body pendant l'édition
+  useEffect(() => {
+    document.body.setAttribute('data-theme', settings.theme_color);
+  }, [settings.theme_color]);
 
   // Auto-save (debounce 400ms) à chaque changement.
   useEffect(() => {
@@ -55,6 +65,8 @@ export default function POSSettingsForm({ initial, canWrite }: Props) {
         lastSaved.current = j.settings;
         setSaveState('saved');
         setTimeout(() => setSaveState((s) => (s === 'saved' ? 'idle' : s)), 1500);
+        // Rafraîchit la page pour que le layout serveur recharge le thème pour tous les composants
+        router.refresh();
       } catch {
         setError('Réseau indisponible');
         setSaveState('error');
@@ -77,6 +89,35 @@ export default function POSSettingsForm({ initial, canWrite }: Props) {
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
       {/* Colonne gauche : sections de réglages */}
       <div className="lg:col-span-2 space-y-5">
+        <Section
+          title="Couleur des boutons"
+          description="Couleur principale appliquée aux boutons d'action et accents. Modifiable à tout moment."
+        >
+          <div className="grid grid-cols-3 md:grid-cols-7 gap-3">
+            {POS_THEME_COLORS.map((color) => {
+              const meta = POS_THEME_COLOR_VALUES[color];
+              const active = settings.theme_color === color;
+              return (
+                <button
+                  key={color}
+                  type="button"
+                  disabled={!canWrite}
+                  onClick={() => patch('theme_color', color)}
+                  className={`relative rounded-2xl border p-3 transition-all flex flex-col items-center gap-2
+                    ${active ? 'border-ink ring-2 ring-offset-1' : 'border-border hover:border-gray-300'}
+                    ${!canWrite ? 'opacity-60 cursor-not-allowed' : ''}`}
+                  style={{ ['--tw-ring-color' as string]: meta.main }}
+                  title={meta.label}
+                >
+                  <div className="h-10 w-10 rounded-full shadow-sm" style={{ background: meta.main }} />
+                  <span className="text-xs font-medium leading-tight text-center">{meta.label}</span>
+                  {active && <span className="absolute top-1.5 right-2 text-xs">✓</span>}
+                </button>
+              );
+            })}
+          </div>
+        </Section>
+
         <Section
           title="Apparence des tuiles produit"
           description="Taille des cartes affichées sur la grille produits de la caisse."

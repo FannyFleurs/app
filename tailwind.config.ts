@@ -5,22 +5,23 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        bg: '#F7F5EF',
+        bg: '#FFFFFF',
         surface: '#FFFFFF',
         ink: {
           DEFAULT: '#1F2A24',
-          soft: '#6B746B',
+          soft: '#6B6F73',
         },
+        // sage gardé pour compat ascendante (anciennes refs), mappé sur l'accent CSS var
         sage: {
-          DEFAULT: '#556B3E',
-          soft: '#E8EFE2',
-          deep: '#3F5430',
+          DEFAULT: 'var(--primary)',
+          soft: 'var(--primary-soft)',
+          deep: 'var(--primary-deep)',
         },
-        beige: '#EFE6D6',
+        beige: '#FFFFFF',
         danger: '#B42318',
         warning: '#B7791F',
         success: '#2F6B3F',
-        border: '#E5E2D8',
+        border: '#E7E7EA',
       },
       fontFamily: {
         sans: ['ui-sans-serif', 'system-ui', '-apple-system', 'Inter', 'sans-serif'],
@@ -30,7 +31,7 @@ const config: Config = {
         '2xl': '18px',
       },
       boxShadow: {
-        card: '0 1px 2px rgba(31, 42, 36, 0.04), 0 4px 12px rgba(31, 42, 36, 0.04)',
+        card: '0 1px 2px rgba(15, 17, 20, 0.04), 0 4px 12px rgba(15, 17, 20, 0.04)',
       },
     },
   },
