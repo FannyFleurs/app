@@ -54,7 +54,9 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       msg === 'SALE_ALREADY_VALIDATED' ? 409 :
       msg === 'SALE_NOT_FOUND' ? 404 :
       msg === 'SALE_EMPTY' ? 422 :
-      msg === 'LOYALTY_INSUFFICIENT_BALANCE' ? 422 : 400;
+      msg === 'LOYALTY_INSUFFICIENT_BALANCE' ? 422 :
+      msg.startsWith('CREDIT_NOTE_') ? 422 :
+      msg.startsWith('GIFT_CARD_') ? 422 : 400;
     return jsonError(msg, status);
   }
 }

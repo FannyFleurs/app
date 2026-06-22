@@ -20,6 +20,7 @@ interface RegisteredPayment {
   label: string;
   amount: number;            // montant alloué au ticket (toujours <= reste à payer)
   given_amount?: number;     // montant donné par le client (utile pour rendu monnaie espèces)
+  reference?: string;        // numéro avoir / code carte cadeau
 }
 
 interface Props {
@@ -36,6 +37,9 @@ export default function PaymentModal({ saleId, totalTtc, loyaltyRedemption, onCl
   const [payments, setPayments] = useState<RegisteredPayment[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lookupKind, setLookupKind] = useState<'credit_note' | 'gift_card' | null>(null);
+  const [lookupLabel, setLookupLabel] = useState('');
+  const [lookupAmountSeed, setLookupAmountSeed] = useState(0);
 
   useEffect(() => {
     void (async () => {
@@ -84,20 +88,27 @@ export default function PaymentModal({ saleId, totalTtc, loyaltyRedemption, onCl
    *     Le montant alloué reste = restant, given_amount = saisie.
    *   - Pour les autres méthodes : on alloue min(saisie, restant).
    */
-  function tapMethod(m: { kind: Method; label: string }) {
+  async function tapMethod(m: { kind: Method; label: string }) {
     setError(null);
     const typed = Number(amountStr || '0');
+
+    // Avoir / Carte cadeau : on ouvre une recherche pour récupérer la référence + solde
+    if (m.kind === 'credit_note' || m.kind === 'gift_card') {
+      setLookupKind(m.kind);
+      setLookupLabel(m.label);
+      setLookupAmountSeed(typed);
+      return;
+    }
+
     let allocate: number;
     let given: number | undefined = undefined;
 
     if (typed === 0) {
-      // Pas de saisie → on prend exactement le restant
       if (remaining <= 0) return;
       allocate = remaining;
     } else {
       const t = round2(typed);
       if (m.kind === 'cash' && t > remaining) {
-        // sur-paiement espèces = rendu monnaie
         allocate = remaining;
         given = t;
       } else {
@@ -120,6 +131,26 @@ export default function PaymentModal({ saleId, totalTtc, loyaltyRedemption, onCl
     setPayments((cur) => cur.filter((p) => p.key !== key));
   }
 
+  function addReferencePayment(args: {
+    method: 'credit_note' | 'gift_card';
+    label: string;
+    reference: string;
+    amount: number;
+    remainingOnRef: number;
+  }) {
+    const usable = Math.min(args.amount, args.remainingOnRef, remaining);
+    if (usable <= 0) return;
+    setPayments((cur) => [...cur, {
+      key: cryptoKey(),
+      method: args.method,
+      label: `${args.label} ${args.reference.slice(-6)}`,
+      amount: round2(usable),
+      reference: args.reference,
+    }]);
+    setLookupKind(null);
+    setAmountStr('');
+  }
+
   async function validate() {
     if (Math.abs(paidAllocated - totalTtc) > 0.005) {
       setError('Le total payé doit être égal au total dû.');
@@ -135,6 +166,7 @@ export default function PaymentModal({ saleId, totalTtc, loyaltyRedemption, onCl
             method: p.method,
             amount: p.amount,
             given_amount: p.given_amount,
+            reference: p.reference,
           })),
           loyalty_redemption_amount: loyaltyRedemption && loyaltyRedemption > 0 ? loyaltyRedemption : undefined,
         }),
@@ -272,6 +304,19 @@ export default function PaymentModal({ saleId, totalTtc, loyaltyRedemption, onCl
           </div>
         </div>
       </div>
+
+      {lookupKind && (
+        <ReferencePaymentModal
+          kind={lookupKind}
+          label={lookupLabel}
+          remainingDue={remaining}
+          typedAmount={lookupAmountSeed}
+          onClose={() => setLookupKind(null)}
+          onConfirm={(ref, amount, remainingOnRef) =>
+            addReferencePayment({ method: lookupKind, label: lookupLabel, reference: ref, amount, remainingOnRef })
+          }
+        />
+      )}
     </div>
   );
 }
@@ -279,4 +324,155 @@ export default function PaymentModal({ saleId, totalTtc, loyaltyRedemption, onCl
 function cryptoKey(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID();
   return Math.random().toString(36).slice(2);
+}
+
+interface RefLookupResult {
+  reference: string;
+  remaining: number;
+  label: string;
+  meta?: string;
+}
+
+function ReferencePaymentModal({
+  kind, label, remainingDue, typedAmount, onClose, onConfirm,
+}: {
+  kind: 'credit_note' | 'gift_card';
+  label: string;
+  remainingDue: number;
+  typedAmount: number;
+  onClose: () => void;
+  onConfirm: (reference: string, amount: number, remainingOnRef: number) => void;
+}) {
+  const [search, setSearch] = useState('');
+  const [found, setFound] = useState<RefLookupResult | null>(null);
+  const [results, setResults] = useState<Array<{ id: string; code: string; balance: number; buyer_name: string | null; buyer_phone: string | null }>>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [amount, setAmount] = useState<number>(typedAmount > 0 ? typedAmount : 0);
+
+  async function lookup(value: string) {
+    setError(null);
+    setLoading(true);
+    setFound(null);
+    try {
+      if (kind === 'credit_note') {
+        const r = await fetch(`/api/credit-notes/lookup?number=${encodeURIComponent(value.trim())}`);
+        if (!r.ok) { setError('Avoir introuvable'); return; }
+        const j = await r.json();
+        if (!j.usable) { setError(`Avoir ${j.status}, non utilisable.`); return; }
+        setFound({ reference: j.number, remaining: j.remaining, label: 'Avoir', meta: j.reason ?? '' });
+        if (amount === 0) setAmount(Math.min(j.remaining, remainingDue));
+      } else {
+        const r = await fetch(`/api/gift-cards/lookup?code=${encodeURIComponent(value.trim())}`);
+        if (!r.ok) { setError('Carte cadeau introuvable'); return; }
+        const j = await r.json();
+        if (!j.usable) { setError(`Carte non utilisable (${j.status}).`); return; }
+        setFound({
+          reference: j.code, remaining: j.remaining,
+          label: 'Carte cadeau',
+          meta: j.buyer_name ?? '',
+        });
+        if (amount === 0) setAmount(Math.min(j.remaining, remainingDue));
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function searchGiftCards(q: string) {
+    if (kind !== 'gift_card' || q.length < 2) { setResults([]); return; }
+    const r = await fetch(`/api/gift-cards?q=${encodeURIComponent(q)}`);
+    if (!r.ok) return;
+    const j = await r.json();
+    setResults((j.gift_cards as Array<{ id: string; code: string; balance: string; buyer_name: string | null; buyer_phone: string | null }>)
+      .map((c) => ({ ...c, balance: Number(c.balance) })));
+  }
+
+  return (
+    <div className="fixed inset-0 z-[60] grid place-items-center bg-ink/40 p-4">
+      <div className="card max-w-lg w-full p-5">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-semibold">{label}</h3>
+          <button onClick={onClose} className="text-ink-soft hover:text-ink">✕</button>
+        </div>
+        <p className="text-xs text-ink-soft mt-1">
+          {kind === 'credit_note'
+            ? "Saisissez le numéro d'avoir (ex : A-2026-000001)."
+            : 'Scannez ou saisissez le code de la carte cadeau, ou recherchez par nom / téléphone.'}
+        </p>
+
+        <div className="mt-3 flex gap-2">
+          <input
+            autoFocus
+            className="input flex-1"
+            placeholder={kind === 'credit_note' ? 'A-2026-000001' : '29… ou nom / téléphone'}
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              if (kind === 'gift_card') void searchGiftCards(e.target.value);
+            }}
+            onKeyDown={(e) => { if (e.key === 'Enter') void lookup(search); }}
+          />
+          <button onClick={() => void lookup(search)} className="btn-soft text-sm">
+            {loading ? '…' : 'Vérifier'}
+          </button>
+        </div>
+
+        {results.length > 0 && !found && (
+          <ul className="mt-3 space-y-1 max-h-40 overflow-auto">
+            {results.map((c) => (
+              <li key={c.id}>
+                <button
+                  className="w-full text-left px-3 py-2 rounded-lg border border-border hover:bg-gray-50"
+                  onClick={() => { setSearch(c.code); void lookup(c.code); }}
+                >
+                  <div className="flex justify-between text-sm">
+                    <span className="font-mono">{c.code}</span>
+                    <span className="font-medium">{formatEUR(c.balance)}</span>
+                  </div>
+                  <div className="text-xs text-ink-soft">
+                    {c.buyer_name ?? '—'}{c.buyer_phone ? ` · ${c.buyer_phone}` : ''}
+                  </div>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {error && <div className="mt-3 rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
+
+        {found && (
+          <div className="mt-4 rounded-xl border border-border p-3 space-y-2">
+            <div className="flex items-center justify-between text-sm">
+              <span className="font-mono">{found.reference}</span>
+              <span className="font-semibold text-success">Solde {formatEUR(found.remaining)}</span>
+            </div>
+            {found.meta && <div className="text-xs text-ink-soft">{found.meta}</div>}
+
+            <div>
+              <label className="text-xs font-medium text-ink-soft">Montant à utiliser</label>
+              <input
+                type="number" step="0.01" min={0}
+                max={Math.min(found.remaining, remainingDue)}
+                className="input mt-1 text-lg font-semibold"
+                value={amount || ''}
+                onChange={(e) => setAmount(Number(e.target.value) || 0)}
+              />
+              <p className="mt-1 text-xs text-ink-soft">
+                Maximum utilisable : {formatEUR(Math.min(found.remaining, remainingDue))}
+              </p>
+            </div>
+
+            <button
+              disabled={amount <= 0 || amount > Math.min(found.remaining, remainingDue) + 0.005}
+              onClick={() => onConfirm(found.reference, amount, found.remaining)}
+              className="btn-primary w-full h-11"
+            >
+              Utiliser {formatEUR(amount)}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }

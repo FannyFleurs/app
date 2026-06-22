@@ -21,6 +21,7 @@ const ITEMS: Item[] = [
   { href: '/pos-settings', label: 'Paramètres caisse',    icon: 'pos-settings', group: 'Vente',    perm: 'pos.use' },
   { href: '/orders',       label: 'Commandes',            icon: 'orders',       group: 'Vente' },
   { href: '/invoices',     label: 'Factures',             icon: 'invoices',     group: 'Vente' },
+  { href: '/gift-cards',   label: 'Cartes cadeaux',       icon: 'loyalty',      group: 'Vente',    perm: 'pos.use' },
   { href: '/customers',    label: 'Clients',              icon: 'customers',    group: 'Relation', perm: 'customers.read' },
   { href: '/products',     label: 'Produits',             icon: 'products',     group: 'Catalogue',perm: 'products.read' },
   { href: '/categories',   label: 'Catégories',           icon: 'categories',   group: 'Catalogue',perm: 'products.read' },

@@ -234,6 +234,69 @@ export class SaleService {
 
       // 2. Paiements
       for (const p of args.payments) {
+        // Pré-validation et débit des avoirs et cartes cadeaux
+        if (p.method === 'credit_note') {
+          if (!p.reference) throw new Error('CREDIT_NOTE_REFERENCE_REQUIRED');
+          const cnRes = await client.query<{
+            id: string; amount: string; used_amount: string; status: string;
+          }>(
+            `SELECT id, amount::text, used_amount::text, status
+               FROM credit_notes
+              WHERE organization_id = $1 AND number = $2 FOR UPDATE`,
+            [args.organizationId, p.reference],
+          );
+          if (cnRes.rowCount === 0) throw new Error('CREDIT_NOTE_NOT_FOUND');
+          const cn = cnRes.rows[0]!;
+          if (cn.status === 'used' || cn.status === 'cancelled') {
+            throw new Error('CREDIT_NOTE_NOT_USABLE');
+          }
+          const remaining = Number(cn.amount) - Number(cn.used_amount);
+          if (p.amount > remaining + 0.005) throw new Error('CREDIT_NOTE_INSUFFICIENT');
+          const newUsed = Number((Number(cn.used_amount) + p.amount).toFixed(2));
+          const newStatus = newUsed >= Number(cn.amount) - 0.005 ? 'used' : 'partially_used';
+          await client.query(
+            `UPDATE credit_notes SET used_amount = $1, status = $2
+              WHERE id = $3`,
+            [newUsed, newStatus, cn.id],
+          );
+        } else if (p.method === 'gift_card') {
+          if (!p.reference) throw new Error('GIFT_CARD_REFERENCE_REQUIRED');
+          const gcRes = await client.query<{
+            id: string; balance: string; status: string; expires_at: string | null;
+          }>(
+            `SELECT id, balance::text, status, expires_at
+               FROM gift_cards
+              WHERE organization_id = $1 AND code = $2 FOR UPDATE`,
+            [args.organizationId, p.reference],
+          );
+          if (gcRes.rowCount === 0) throw new Error('GIFT_CARD_NOT_FOUND');
+          const gc = gcRes.rows[0]!;
+          if (gc.status !== 'active' && gc.status !== 'partially_used') {
+            throw new Error('GIFT_CARD_NOT_USABLE');
+          }
+          if (gc.expires_at && new Date(gc.expires_at).getTime() < Date.now()) {
+            throw new Error('GIFT_CARD_EXPIRED');
+          }
+          const balance = Number(gc.balance);
+          if (p.amount > balance + 0.005) throw new Error('GIFT_CARD_INSUFFICIENT');
+          const newBalance = Number((balance - p.amount).toFixed(2));
+          const newStatus = newBalance <= 0.005 ? 'used' : 'partially_used';
+          await client.query(
+            `UPDATE gift_cards SET balance = $1, status = $2 WHERE id = $3`,
+            [newBalance, newStatus, gc.id],
+          );
+          await client.query(
+            `INSERT INTO gift_card_movements
+               (organization_id, gift_card_id, movement_type, amount_delta,
+                balance_after, sale_id, user_id)
+             VALUES ($1,$2,'use',$3,$4,$5,$6)`,
+            [
+              args.organizationId, gc.id, -p.amount, newBalance,
+              sale.id, args.userId,
+            ],
+          );
+        }
+
         const change = p.given_amount != null ? Number((p.given_amount - p.amount).toFixed(2)) : null;
         await client.query(
           `INSERT INTO payments

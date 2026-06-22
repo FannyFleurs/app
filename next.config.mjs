@@ -4,7 +4,7 @@ const nextConfig = {
   poweredByHeader: false,
   experimental: {
     serverActions: { bodySizeLimit: '2mb' },
-    serverComponentsExternalPackages: ['pdfkit', 'fontkit'],
+    serverComponentsExternalPackages: ['pdfkit', 'fontkit', 'bwip-js'],
   },
   async headers() {
     return [
