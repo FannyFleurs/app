@@ -6,6 +6,7 @@ import { PAYMENT_LABELS } from '@/components/labels';
 import PageHeader from '@/components/PageHeader';
 import EmptyState from '@/components/EmptyState';
 import Badge from '@/components/Badge';
+import ReturnModal from './ReturnModal';
 
 interface Sale {
   id: string; receipt_number: string;
@@ -180,6 +181,8 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
   const s = detail.sale;
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showReturn, setShowReturn] = useState(false);
+  const [creditNote, setCreditNote] = useState<{ id: string; number: string; amount: number } | null>(null);
 
   async function generateInvoice() {
     setGenerating(true); setError(null);
@@ -225,6 +228,10 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
                 {generating ? 'Génération…' : 'Générer facture'}
               </button>
             ) : null}
+            <button onClick={() => setShowReturn(true)}
+                    className="btn-ghost text-xs whitespace-nowrap text-danger">
+              Retour produit
+            </button>
           </div>
         </div>
         {!s.customer_id && !detail.invoice && (
@@ -318,9 +325,36 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
         </div>
       </div>
 
+      {creditNote && (
+        <div className="rounded-xl bg-danger/10 px-4 py-3 text-sm flex items-center justify-between">
+          <span>
+            <span className="font-semibold text-danger">Avoir {creditNote.number}</span>
+            <span className="text-ink-soft ml-2">émis pour {formatEUR(creditNote.amount)}</span>
+          </span>
+          <a href={`/api/credit-notes/${creditNote.id}/pdf`} target="_blank" rel="noreferrer"
+             className="btn-primary text-xs">
+            Télécharger l&apos;avoir
+          </a>
+        </div>
+      )}
+
       <div className="text-xs text-ink-soft font-mono px-1">
         Empreinte fiscale : {s.fiscal_hash?.slice(0, 32)}…
       </div>
+
+      {showReturn && (
+        <ReturnModal
+          saleId={s.id}
+          receiptNumber={s.receipt_number}
+          lines={detail.lines}
+          onClose={() => setShowReturn(false)}
+          onSuccess={(cn) => {
+            setCreditNote(cn);
+            setShowReturn(false);
+            onInvoiceGenerated(); // recharge le détail
+          }}
+        />
+      )}
     </div>
   );
 }
