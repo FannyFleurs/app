@@ -16,7 +16,6 @@ export interface GiftCardPdfData {
   buyer_name?: string | null;
   buyer_phone?: string | null;
   buyer_email?: string | null;
-  message?: string | null;
   issued_at: string;
   expires_at?: string | null;
 }
@@ -77,11 +76,6 @@ export async function renderGiftCardPdf(data: GiftCardPdfData, org: OrgInfo): Pr
     doc.moveDown(0.5);
     doc.font('Helvetica').fontSize(9);
     if (data.buyer_name) doc.text(`Offerte par : ${data.buyer_name}`, { align: 'center' });
-    if (data.message) {
-      doc.moveDown(0.3);
-      doc.font('Helvetica-Oblique').fontSize(10).text(`« ${data.message} »`, { align: 'center', width: W - 72 });
-      doc.font('Helvetica');
-    }
 
     doc.moveDown(1);
 

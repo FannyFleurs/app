@@ -11,14 +11,14 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   const { rows } = await query<{
     code: string; initial_amount: string;
     buyer_name: string | null; buyer_phone: string | null;
-    buyer_email: string | null; message: string | null;
+    buyer_email: string | null;
     issued_at: string; expires_at: string | null;
     org_name: string; org_legal: string; org_siret: string | null;
     org_address: { line1?: string; zip?: string; city?: string } | null;
     org_phone: string | null;
   }>(
     `SELECT gc.code, gc.initial_amount::text, gc.buyer_name, gc.buyer_phone,
-            gc.buyer_email, gc.message, gc.issued_at, gc.expires_at,
+            gc.buyer_email, gc.issued_at, gc.expires_at,
             o.name AS org_name, o.legal_name AS org_legal, o.siret AS org_siret,
             o.address AS org_address,
             (o.contact->>'phone') AS org_phone
@@ -37,7 +37,6 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
       buyer_name: r.buyer_name,
       buyer_phone: r.buyer_phone,
       buyer_email: r.buyer_email,
-      message: r.message,
       issued_at: r.issued_at,
       expires_at: r.expires_at,
     },

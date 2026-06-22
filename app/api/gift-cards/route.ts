@@ -14,7 +14,6 @@ const createSchema = z.object({
   buyer_phone: z.string().max(40).optional(),
   buyer_email: z.string().max(160).optional(),
   beneficiary_id: z.string().uuid().optional().nullable(),
-  message: z.string().max(500).optional(),
 });
 
 export async function GET(req: Request) {
@@ -26,16 +25,33 @@ export async function GET(req: Request) {
     const rows = await GiftCardService.search(g.user.organizationId, q, 50);
     return NextResponse.json({ gift_cards: rows });
   }
-  const { rows } = await query(
-    `SELECT id, code, initial_amount::text, balance::text, status,
-            issued_at, expires_at,
-            buyer_name, buyer_phone, buyer_email, message
-       FROM gift_cards
-      WHERE organization_id = $1
-      ORDER BY issued_at DESC
-      LIMIT 200`,
-    [g.user.organizationId],
-  );
+  let rows: unknown[] = [];
+  try {
+    const r = await query(
+      `SELECT id, code, initial_amount::text, balance::text, status,
+              issued_at, expires_at,
+              buyer_name, buyer_phone, buyer_email
+         FROM gift_cards
+        WHERE organization_id = $1
+        ORDER BY issued_at DESC
+        LIMIT 200`,
+      [g.user.organizationId],
+    );
+    rows = r.rows;
+  } catch {
+    // Schéma initial sans buyer_* : on retombe sur les colonnes garanties.
+    const r = await query(
+      `SELECT id, code, initial_amount::text, balance::text, status,
+              issued_at, expires_at,
+              NULL AS buyer_name, NULL AS buyer_phone, NULL AS buyer_email
+         FROM gift_cards
+        WHERE organization_id = $1
+        ORDER BY issued_at DESC
+        LIMIT 200`,
+      [g.user.organizationId],
+    );
+    rows = r.rows;
+  }
   return NextResponse.json({ gift_cards: rows });
 }
 
@@ -58,7 +74,6 @@ export async function POST(req: Request) {
         email: d.buyer_email,
       },
       beneficiaryId: d.beneficiary_id,
-      message: d.message,
     });
     await audit({
       organizationId: g.user.organizationId, userId: g.user.id,

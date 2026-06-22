@@ -12,7 +12,7 @@ interface GiftCard {
   status: string;
   issued_at: string; expires_at: string | null;
   buyer_name: string | null; buyer_phone: string | null;
-  buyer_email: string | null; message: string | null;
+  buyer_email: string | null;
 }
 
 const STATUS: Record<string, { label: string; tone: 'success' | 'soft' | 'warning' | 'neutral' | 'danger' }> = {
@@ -164,7 +164,6 @@ function CreateGiftCardModal({ onClose, onCreated }: {
   const [buyerName, setBuyerName] = useState('');
   const [buyerPhone, setBuyerPhone] = useState('');
   const [buyerEmail, setBuyerEmail] = useState('');
-  const [message, setMessage] = useState('');
   const [expires, setExpires] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -179,7 +178,6 @@ function CreateGiftCardModal({ onClose, onCreated }: {
         buyer_name: buyerName.trim() || undefined,
         buyer_phone: buyerPhone.trim() || undefined,
         buyer_email: buyerEmail.trim() || undefined,
-        message: message.trim() || undefined,
         expires_at: expires || undefined,
       }),
     });
@@ -220,10 +218,6 @@ function CreateGiftCardModal({ onClose, onCreated }: {
           <div>
             <label className="text-sm font-medium text-ink-soft">Email</label>
             <input type="email" className="input mt-1" value={buyerEmail} onChange={(e) => setBuyerEmail(e.target.value)} />
-          </div>
-          <div>
-            <label className="text-sm font-medium text-ink-soft">Message (carte cadeau)</label>
-            <textarea className="input mt-1 h-16" value={message} onChange={(e) => setMessage(e.target.value)} />
           </div>
           <div>
             <label className="text-sm font-medium text-ink-soft">Date d&apos;expiration (optionnel)</label>

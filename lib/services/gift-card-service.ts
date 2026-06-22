@@ -14,7 +14,6 @@ export class GiftCardService {
     expiresAt?: string | null;
     buyer?: { id?: string | null; name?: string; phone?: string; email?: string };
     beneficiaryId?: string | null;
-    message?: string;
   }): Promise<{ id: string; code: string }> {
     if (args.amount <= 0) throw new Error('AMOUNT_REQUIRED');
     return withTransaction(async (client) => {
@@ -30,24 +29,48 @@ export class GiftCardService {
       }
       if (!code) throw new Error('CODE_GENERATION_FAILED');
 
-      const ins = await client.query<{ id: string }>(
-        `INSERT INTO gift_cards
-           (organization_id, code, initial_amount, balance,
-            expires_at, buyer_id, beneficiary_id,
-            buyer_name, buyer_phone, buyer_email, message, status)
-         VALUES ($1,$2,$3,$3,$4,$5,$6,$7,$8,$9,$10,'active')
-         RETURNING id`,
-        [
-          args.organizationId, code, args.amount,
-          args.expiresAt ?? null,
-          args.buyer?.id ?? null,
-          args.beneficiaryId ?? null,
-          args.buyer?.name ?? null,
-          args.buyer?.phone ?? null,
-          args.buyer?.email ?? null,
-          args.message ?? null,
-        ],
+      // Détection runtime : colonnes acheteur présentes ? (la migration 0006 a-t-elle été appliquée ?)
+      const colsRes = await client.query<{ column_name: string }>(
+        `SELECT column_name FROM information_schema.columns
+          WHERE table_name = 'gift_cards' AND column_name IN ('buyer_name','buyer_phone','buyer_email')`,
       );
+      const hasBuyerCols = colsRes.rowCount === 3;
+
+      let ins;
+      if (hasBuyerCols) {
+        ins = await client.query<{ id: string }>(
+          `INSERT INTO gift_cards
+             (organization_id, code, initial_amount, balance,
+              expires_at, buyer_id, beneficiary_id,
+              buyer_name, buyer_phone, buyer_email, status)
+           VALUES ($1,$2,$3,$3,$4,$5,$6,$7,$8,$9,'active')
+           RETURNING id`,
+          [
+            args.organizationId, code, args.amount,
+            args.expiresAt ?? null,
+            args.buyer?.id ?? null,
+            args.beneficiaryId ?? null,
+            args.buyer?.name ?? null,
+            args.buyer?.phone ?? null,
+            args.buyer?.email ?? null,
+          ],
+        );
+      } else {
+        // Schéma initial — pas de coordonnées libres ; on accepte quand même la création.
+        ins = await client.query<{ id: string }>(
+          `INSERT INTO gift_cards
+             (organization_id, code, initial_amount, balance,
+              expires_at, buyer_id, beneficiary_id, status)
+           VALUES ($1,$2,$3,$3,$4,$5,$6,'active')
+           RETURNING id`,
+          [
+            args.organizationId, code, args.amount,
+            args.expiresAt ?? null,
+            args.buyer?.id ?? null,
+            args.beneficiaryId ?? null,
+          ],
+        );
+      }
 
       const gcId = ins.rows[0]!.id;
       await client.query(
