@@ -176,6 +176,8 @@ export class SaleService {
     organizationId: string;
     userId: string;
     payments: SalePaymentInput[];
+    /** Si > 0, somme en € débitée du compte fidélité du client */
+    loyaltyRedemptionAmount?: number;
   }): Promise<{
     saleId: string;
     receiptNumber: string;
@@ -183,6 +185,8 @@ export class SaleService {
     fiscalEventId: string;
     receiptId: string;
     snapshot: Record<string, unknown>;
+    loyalty?: { earned: number; redeemed: number; new_balance: number } | null;
+    stock_movements?: number;
   }> {
     return withTransaction(async (client) => {
       // 1. Lock vente + sanity checks
@@ -347,6 +351,141 @@ export class SaleService {
         ],
       );
 
+      // 7. Fidélité (auto-earn + redemption éventuelle)
+      let loyaltyResult: { earned: number; redeemed: number; new_balance: number } | null = null;
+      if (sale.customer_id) {
+        const cfgRes = await client.query<{ value: { enabled?: boolean; euros_earned?: number; per_euros_spent?: number } }>(
+          `SELECT value FROM settings WHERE organization_id = $1 AND key = 'pos_ui'`,
+          [args.organizationId],
+        );
+        const loyaltyCfg = cfgRes.rows[0]?.value?.enabled !== undefined
+          ? cfgRes.rows[0]!.value
+          : (cfgRes.rows[0]?.value as { loyalty?: { enabled?: boolean; euros_earned?: number; per_euros_spent?: number } } | undefined)?.loyalty;
+        const enabled = loyaltyCfg?.enabled === true;
+        const earnedPer = Number(loyaltyCfg?.euros_earned ?? 0);
+        const perSpent = Number(loyaltyCfg?.per_euros_spent ?? 0);
+        const redeemed = Number(args.loyaltyRedemptionAmount ?? 0);
+
+        if (enabled || redeemed > 0) {
+          // S'assure que le compte fidélité existe
+          let accId: string | null = null;
+          const accSel = await client.query<{ id: string; points_balance: number }>(
+            `SELECT id, points_balance FROM loyalty_accounts WHERE customer_id = $1 FOR UPDATE`,
+            [sale.customer_id],
+          );
+          let currentBalance = 0;
+          if (accSel.rowCount === 0) {
+            const accIns = await client.query<{ id: string }>(
+              `INSERT INTO loyalty_accounts (organization_id, customer_id, points_balance)
+               VALUES ($1,$2,0) RETURNING id`,
+              [args.organizationId, sale.customer_id],
+            );
+            accId = accIns.rows[0]!.id;
+          } else {
+            accId = accSel.rows[0]!.id;
+            currentBalance = Number(accSel.rows[0]!.points_balance);
+          }
+
+          // Débit (redeem) en premier — on stocke en € entiers dans points_balance (1 point = 1 €)
+          let balanceAfter = currentBalance;
+          if (redeemed > 0) {
+            const redeemedInt = Math.round(redeemed);
+            if (redeemedInt > currentBalance) {
+              throw new Error('LOYALTY_INSUFFICIENT_BALANCE');
+            }
+            balanceAfter = currentBalance - redeemedInt;
+            await client.query(
+              `INSERT INTO loyalty_movements
+                 (organization_id, account_id, movement_type, points_delta,
+                  balance_after, reason, source_type, source_id, user_id)
+               VALUES ($1,$2,'redeem',$3,$4,$5,'sale',$6,$7)`,
+              [
+                args.organizationId, accId, -redeemedInt, balanceAfter,
+                `Utilisation fidélité sur ticket ${receiptNumber}`,
+                sale.id, args.userId,
+              ],
+            );
+          }
+
+          // Crédit (earn) basé sur la règle
+          let earnedInt = 0;
+          if (enabled && earnedPer > 0 && perSpent > 0) {
+            earnedInt = Math.floor((totalTtc / perSpent) * earnedPer);
+            if (earnedInt > 0) {
+              balanceAfter = balanceAfter + earnedInt;
+              await client.query(
+                `INSERT INTO loyalty_movements
+                   (organization_id, account_id, movement_type, points_delta,
+                    balance_after, reason, source_type, source_id, user_id)
+                 VALUES ($1,$2,'earn',$3,$4,$5,'sale',$6,$7)`,
+                [
+                  args.organizationId, accId, earnedInt, balanceAfter,
+                  `Achat ticket ${receiptNumber}`,
+                  sale.id, args.userId,
+                ],
+              );
+            }
+          }
+
+          if (redeemed > 0 || earnedInt > 0) {
+            await client.query(
+              `UPDATE loyalty_accounts SET points_balance = $1, updated_at = now()
+                WHERE id = $2`,
+              [balanceAfter, accId],
+            );
+            loyaltyResult = {
+              earned: earnedInt,
+              redeemed: Math.round(redeemed),
+              new_balance: balanceAfter,
+            };
+          }
+        }
+      }
+
+      // 8. Décrément stock pour les produits suivis
+      let stockMovementCount = 0;
+      const lineProductRes = await client.query<{
+        product_id: string; variant_id: string | null; quantity: string;
+        track_stock: boolean;
+      }>(
+        `SELECT sl.product_id, sl.variant_id, sl.quantity, p.track_stock
+           FROM sale_lines sl
+           JOIN products p ON p.id = sl.product_id
+          WHERE sl.sale_id = $1 AND sl.product_id IS NOT NULL`,
+        [sale.id],
+      );
+      for (const line of lineProductRes.rows) {
+        if (!line.track_stock) continue;
+        const qty = Number(line.quantity);
+        // Lit ou crée le niveau stock pour ce store / produit / variant
+        const lvl = await client.query<{ id: string; quantity: string }>(
+          `INSERT INTO stock_levels (organization_id, store_id, product_id, variant_id, quantity)
+           VALUES ($1,$2,$3,$4,0)
+           ON CONFLICT (store_id, product_id, variant_id) DO UPDATE SET store_id = EXCLUDED.store_id
+           RETURNING id, quantity`,
+          [args.organizationId, sale.store_id, line.product_id, line.variant_id],
+        );
+        const prev = Number(lvl.rows[0]!.quantity);
+        const next = prev - qty;
+        await client.query(
+          `UPDATE stock_levels SET quantity = $1, updated_at = now() WHERE id = $2`,
+          [next, lvl.rows[0]!.id],
+        );
+        await client.query(
+          `INSERT INTO stock_movements
+             (organization_id, store_id, product_id, variant_id,
+              movement_type, quantity_delta, previous_quantity, new_quantity,
+              reason, source_type, source_id, user_id)
+           VALUES ($1,$2,$3,$4,'sale',$5,$6,$7,$8,'sale',$9,$10)`,
+          [
+            args.organizationId, sale.store_id, line.product_id, line.variant_id,
+            -qty, prev, next, `Vente ticket ${receiptNumber}`,
+            sale.id, args.userId,
+          ],
+        );
+        stockMovementCount++;
+      }
+
       return {
         saleId: sale.id,
         receiptNumber,
@@ -354,6 +493,8 @@ export class SaleService {
         fiscalEventId: event.id,
         receiptId: receiptRes.rows[0]!.id,
         snapshot,
+        loyalty: loyaltyResult,
+        stock_movements: stockMovementCount,
       };
     });
   }

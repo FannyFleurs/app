@@ -14,6 +14,7 @@ const paymentSchema = z.object({
 
 const schema = z.object({
   payments: z.array(paymentSchema).min(1),
+  loyalty_redemption_amount: z.number().min(0).optional(),
 });
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
@@ -27,6 +28,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       organizationId: g.user.organizationId,
       userId: g.user.id,
       payments: parsed.data.payments,
+      loyaltyRedemptionAmount: parsed.data.loyalty_redemption_amount,
     });
     await audit({
       organizationId: g.user.organizationId,
@@ -42,6 +44,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       receipt_id: out.receiptId,
       fiscal_hash: out.fiscalHash,
       fiscal_event_id: out.fiscalEventId,
+      loyalty: out.loyalty ?? null,
+      stock_movements: out.stock_movements ?? 0,
     });
   } catch (e) {
     const msg = (e as Error).message;
@@ -49,7 +53,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       msg === 'PAYMENTS_MISMATCH' ? 422 :
       msg === 'SALE_ALREADY_VALIDATED' ? 409 :
       msg === 'SALE_NOT_FOUND' ? 404 :
-      msg === 'SALE_EMPTY' ? 422 : 400;
+      msg === 'SALE_EMPTY' ? 422 :
+      msg === 'LOYALTY_INSUFFICIENT_BALANCE' ? 422 : 400;
     return jsonError(msg, status);
   }
 }

@@ -3,7 +3,10 @@
 import { useState } from 'react';
 
 interface Props {
-  receipt: { id: string; number: string; saleId: string; customerId: string | null };
+  receipt: {
+    id: string; number: string; saleId: string; customerId: string | null;
+    loyalty?: { earned: number; redeemed: number; new_balance: number } | null;
+  };
   onClose: () => void;
 }
 
@@ -45,6 +48,17 @@ export default function ReceiptPreviewModal({ receipt, onClose }: Props) {
           <a href={pdfUrl} download className="btn-soft">Télécharger</a>
           <button onClick={onClose} className="btn-ghost">Nouvelle vente</button>
         </div>
+
+        {receipt.loyalty && (receipt.loyalty.earned > 0 || receipt.loyalty.redeemed > 0) && (
+          <div className="mt-3 rounded-xl bg-success/10 px-4 py-2.5 text-sm text-success flex items-center justify-between">
+            <span>
+              {receipt.loyalty.earned > 0 && <>✦ <strong>+{receipt.loyalty.earned} €</strong> de fidélité gagnés</>}
+              {receipt.loyalty.earned > 0 && receipt.loyalty.redeemed > 0 && ' · '}
+              {receipt.loyalty.redeemed > 0 && <><strong>-{receipt.loyalty.redeemed} €</strong> utilisés</>}
+            </span>
+            <span className="text-xs text-ink-soft">Nouveau solde : <strong>{receipt.loyalty.new_balance} €</strong></span>
+          </div>
+        )}
 
         {/* Bloc facture */}
         <div className="mt-4 rounded-xl border border-border p-4 bg-gray-50">

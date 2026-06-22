@@ -86,7 +86,10 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
   const [lines, setLines] = useState<CartLine[]>([]);
   const [savingLines, setSavingLines] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
-  const [receipt, setReceipt] = useState<{ id: string; number: string; saleId: string; customerId: string | null } | null>(null);
+  const [receipt, setReceipt] = useState<{
+    id: string; number: string; saleId: string; customerId: string | null;
+    loyalty: { earned: number; redeemed: number; new_balance: number } | null;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showHeld, setShowHeld] = useState(false);
   const [showFreePrice, setShowFreePrice] = useState(false);
@@ -352,14 +355,20 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
     setShowHeld(false);
   }
 
-  async function onValidated(receiptId: string, receiptNumber: string) {
+  async function onValidated(
+    receiptId: string,
+    receiptNumber: string,
+    loyaltyInfo?: { earned: number; redeemed: number; new_balance: number } | null,
+  ) {
     setReceipt({
       id: receiptId, number: receiptNumber,
       saleId: saleId!,
       customerId: customer?.id ?? null,
+      loyalty: loyaltyInfo ?? null,
     });
     setShowPayment(false);
     setSaleId(null); setLines([]); setCustomer(null);
+    setLoyalty({ enabled: false, balance_euros: 0, min_redeem: 0, used: 0 });
     // Retour à la vue catégories
     setView({ kind: 'categories' });
     setSearch('');
@@ -735,6 +744,7 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
         <PaymentModal
           saleId={saleId}
           totalTtc={totals.ttc}
+          loyaltyRedemption={loyalty.used > 0 ? loyalty.used : undefined}
           onClose={() => setShowPayment(false)}
           onValidated={onValidated}
         />

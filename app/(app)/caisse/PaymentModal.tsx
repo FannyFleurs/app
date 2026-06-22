@@ -25,11 +25,12 @@ interface RegisteredPayment {
 interface Props {
   saleId: string;
   totalTtc: number;
+  loyaltyRedemption?: number;
   onClose: () => void;
-  onValidated: (receiptId: string, receiptNumber: string) => void;
+  onValidated: (receiptId: string, receiptNumber: string, loyalty?: { earned: number; redeemed: number; new_balance: number } | null) => void;
 }
 
-export default function PaymentModal({ saleId, totalTtc, onClose, onValidated }: Props) {
+export default function PaymentModal({ saleId, totalTtc, loyaltyRedemption, onClose, onValidated }: Props) {
   const [methods, setMethods] = useState<Array<{ kind: Method; label: string }>>(FALLBACK_METHODS);
   const [amountStr, setAmountStr] = useState<string>('');
   const [payments, setPayments] = useState<RegisteredPayment[]>([]);
@@ -135,6 +136,7 @@ export default function PaymentModal({ saleId, totalTtc, onClose, onValidated }:
             amount: p.amount,
             given_amount: p.given_amount,
           })),
+          loyalty_redemption_amount: loyaltyRedemption && loyaltyRedemption > 0 ? loyaltyRedemption : undefined,
         }),
       });
       if (!res.ok) {
@@ -143,7 +145,7 @@ export default function PaymentModal({ saleId, totalTtc, onClose, onValidated }:
         return;
       }
       const j = await res.json();
-      onValidated(j.receipt_id, j.receipt_number);
+      onValidated(j.receipt_id, j.receipt_number, j.loyalty);
     } finally { setLoading(false); }
   }
 
