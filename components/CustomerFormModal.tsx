@@ -84,7 +84,9 @@ export default function CustomerFormModal({ customer, onClose, onSaved }: Props)
     if (!res.ok) {
       const j = await res.json().catch(() => ({}));
       const msg = j.issues?.formErrors?.[0]
-        ?? j.error ?? 'Erreur d\'enregistrement';
+        ?? j.message
+        ?? j.error
+        ?? 'Erreur d\'enregistrement';
       setError(msg);
       return;
     }

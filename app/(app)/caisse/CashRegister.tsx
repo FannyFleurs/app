@@ -677,7 +677,7 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
                   >✕</button>
                 </div>
                 <div className="mt-1 flex items-center justify-between text-xs text-ink-soft">
-                  <span>{formatEUR(l.unit_price_ttc)} · TVA {l.tax_rate}%</span>
+                  <span>{formatEUR(l.unit_price_ttc)}</span>
                   <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                     <button className="h-7 w-7 rounded-lg border border-border" onClick={() => incLine(l.key, -1)}>-</button>
                     <span className="w-7 text-center text-ink">{l.quantity}</span>
@@ -696,22 +696,13 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
         </div>
 
         <div className="border-t border-border px-4 py-2.5 space-y-1 text-sm">
-          {totals.breakdown.map(([rate, b]) => (
-            <div key={rate} className="flex justify-between text-ink-soft text-xs">
-              <span>TVA {rate}% (HT {formatEUR(b.base_ht)})</span>
-              <span>{formatEUR(b.tva)}</span>
-            </div>
-          ))}
-          <div className="flex justify-between text-ink-soft text-xs">
-            <span>Total HT</span><span>{formatEUR(totals.ht)}</span>
-          </div>
           {totals.discount > 0 && (
             <div className="flex justify-between text-warning text-xs">
               <span>Remises</span><span>-{formatEUR(totals.discount)}</span>
             </div>
           )}
-          <div className="flex items-center justify-between pt-2 border-t border-border">
-            <span className="text-base font-semibold">Total TTC</span>
+          <div className="flex items-center justify-between pt-1">
+            <span className="text-base font-semibold">Total</span>
             <span className="text-2xl font-semibold tracking-tight">{formatEUR(totals.ttc)}</span>
           </div>
         </div>

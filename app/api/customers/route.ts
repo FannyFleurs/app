@@ -48,6 +48,7 @@ export async function POST(req: Request) {
   if ('response' in parsed) return parsed.response;
   const c = parsed.data;
 
+  try {
   const email = c.email && c.email.length > 0 ? c.email : null;
   const ins = await query<{ id: string }>(
     `INSERT INTO customers
@@ -77,4 +78,13 @@ export async function POST(req: Request) {
   });
 
   return NextResponse.json({ id: ins.rows[0]!.id }, { status: 201 });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[customers.create]', err);
+    const m = (err as Error).message ?? '';
+    const hint = m.includes('default_discount_pct')
+      ? 'Migration manquante : exécutez `npm run db:migrate` pour appliquer 0004_customer_default_discount.sql.'
+      : m;
+    return NextResponse.json({ error: 'INTERNAL_ERROR', message: hint }, { status: 500 });
+  }
 }

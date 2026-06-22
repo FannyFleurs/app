@@ -78,30 +78,39 @@ export async function POST(req: Request) {
   );
   if (tax.rowCount === 0) return jsonError('TAX_RATE_NOT_FOUND', 404);
 
-  const ins = await query<{ id: string }>(
-    `INSERT INTO products
-      (organization_id, name, short_description, long_description, category_id,
-       sku, barcode, supplier_ref, image_url, unit, tax_rate_id, purchase_price_ht,
-       sale_price_ttc, price_is_free, track_stock, min_stock, max_stock,
-       is_seasonal, is_customizable, visible_in_pos, is_active, tags,
-       created_by, updated_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$23)
-     RETURNING id`,
-    [
-      g.user.organizationId, p.name, p.short_description ?? null, p.long_description ?? null,
-      p.category_id ?? null, p.sku ?? null, p.barcode ?? null, p.supplier_ref ?? null,
-      p.image_url ?? null, p.unit, p.tax_rate_id, p.purchase_price_ht ?? null,
-      p.sale_price_ttc, p.price_is_free, p.track_stock, p.min_stock ?? null, p.max_stock ?? null,
-      p.is_seasonal, p.is_customizable, p.visible_in_pos, p.is_active, p.tags,
-      g.user.id,
-    ],
-  );
+  try {
+    const ins = await query<{ id: string }>(
+      `INSERT INTO products
+        (organization_id, name, short_description, long_description, category_id,
+         sku, barcode, supplier_ref, image_url, unit, tax_rate_id, purchase_price_ht,
+         sale_price_ttc, price_is_free, track_stock, min_stock, max_stock,
+         is_seasonal, is_customizable, visible_in_pos, is_active, tags,
+         created_by, updated_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$23)
+       RETURNING id`,
+      [
+        g.user.organizationId, p.name, p.short_description ?? null, p.long_description ?? null,
+        p.category_id ?? null, p.sku ?? null, p.barcode ?? null, p.supplier_ref ?? null,
+        p.image_url ?? null, p.unit, p.tax_rate_id, p.purchase_price_ht ?? null,
+        p.sale_price_ttc, p.price_is_free, p.track_stock, p.min_stock ?? null, p.max_stock ?? null,
+        p.is_seasonal, p.is_customizable, p.visible_in_pos, p.is_active, p.tags,
+        g.user.id,
+      ],
+    );
 
-  await audit({
-    organizationId: g.user.organizationId, userId: g.user.id,
-    action: 'products.create', entityType: 'product', entityId: ins.rows[0]!.id,
-    payload: { name: p.name },
-  });
+    await audit({
+      organizationId: g.user.organizationId, userId: g.user.id,
+      action: 'products.create', entityType: 'product', entityId: ins.rows[0]!.id,
+      payload: { name: p.name },
+    });
 
-  return NextResponse.json({ id: ins.rows[0]!.id }, { status: 201 });
+    return NextResponse.json({ id: ins.rows[0]!.id }, { status: 201 });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[products.create]', err);
+    return NextResponse.json(
+      { error: 'INTERNAL_ERROR', message: (err as Error).message },
+      { status: 500 },
+    );
+  }
 }

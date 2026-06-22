@@ -33,20 +33,30 @@ export async function POST(req: Request) {
   const parsed = await parseJson(req, schema);
   if ('response' in parsed) return parsed.response;
   const c = parsed.data;
-  const ins = await query<{ id: string }>(
-    `INSERT INTO product_categories
-       (organization_id, name, parent_id, color, icon, image_url, position, visible_in_pos)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
-    [
-      g.user.organizationId,
-      c.name,
-      c.parent_id ?? null,
-      c.color ?? null,
-      c.icon ?? null,
-      c.image_url ?? null,
-      c.position,
-      c.visible_in_pos,
-    ],
-  );
-  return NextResponse.json({ id: ins.rows[0]!.id }, { status: 201 });
+  try {
+    const ins = await query<{ id: string }>(
+      `INSERT INTO product_categories
+         (organization_id, name, parent_id, color, icon, image_url, position, visible_in_pos)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+      [
+        g.user.organizationId,
+        c.name,
+        c.parent_id ?? null,
+        c.color ?? null,
+        c.icon ?? null,
+        c.image_url ?? null,
+        c.position,
+        c.visible_in_pos,
+      ],
+    );
+    return NextResponse.json({ id: ins.rows[0]!.id }, { status: 201 });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[categories.create]', err);
+    const m = (err as Error).message ?? '';
+    const hint = m.includes('image_url')
+      ? 'Migration manquante : exécutez `npm run db:migrate` pour appliquer 0003_category_image.sql.'
+      : m;
+    return NextResponse.json({ error: 'INTERNAL_ERROR', message: hint }, { status: 500 });
+  }
 }

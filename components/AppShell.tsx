@@ -54,10 +54,10 @@ export default function AppShell({ user, themeColor, colorScheme, initialCollaps
 
   return (
     <div
-      className="min-h-screen grid"
+      className="h-screen overflow-hidden grid"
       style={{ gridTemplateColumns: `${sidebarWidth}px 1fr` }}
     >
-      <aside className="relative border-r border-border bg-white overflow-y-auto transition-[width] duration-200">
+      <aside className="relative border-r border-border bg-white overflow-y-auto transition-[width] duration-200 h-screen">
         <div className="px-3 py-4 sticky top-0 bg-white z-10 border-b border-border/60 flex items-center justify-between gap-2">
           <Link href="/dashboard" className="flex items-center gap-2 overflow-hidden">
             <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl accent-bar text-white font-semibold">
@@ -81,7 +81,7 @@ export default function AppShell({ user, themeColor, colorScheme, initialCollaps
         <Sidebar role={user.role} collapsed={collapsed} />
       </aside>
 
-      <div className="flex flex-col min-w-0">
+      <div className="flex flex-col min-w-0 h-screen">
         <TopBar user={user} />
         <main className="flex-1 overflow-auto bg-white">{children}</main>
       </div>

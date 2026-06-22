@@ -116,7 +116,7 @@ function CategoryFormModal({ category, onClose, onSaved }: {
     setSaving(false);
     if (!res.ok) {
       const j = await res.json().catch(() => ({}));
-      setError(j.error ?? 'Erreur');
+      setError(j.message ?? j.error ?? 'Erreur');
       return;
     }
     onSaved();

@@ -23,8 +23,8 @@ body[data-mode="dark"] {
   --bg: #0F1115;
   --surface: #1A1D22;
   --muted: #22262B;
-  --ink: #F2F2F0;
-  --ink-soft: #9AA0A6;
+  --ink: #EAE6DC;        /* off-white chaud */
+  --ink-soft: #A0A199;   /* gris chaud */
   --border: #2E3239;
 }
 
