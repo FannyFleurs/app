@@ -572,15 +572,12 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
               {!searchQ && (
                 <button
                   onClick={() => setView({ kind: 'categories' })}
-                  className={`card ${metrics.padding} text-left hover:shadow-md transition-all active:scale-[0.98] border-dashed`}
+                  className="rounded-2xl border border-border overflow-hidden hover:shadow-md hover:opacity-90 transition-all active:scale-[0.98] aspect-[5/3] grid place-items-center px-3 accent-bar text-white"
                 >
-                  <div className="mb-2 h-14 w-full rounded-lg bg-gray-50 grid place-items-center text-ink-soft text-2xl">
-                    ‹
+                  <div className="text-center leading-tight">
+                    <div className="text-3xl">‹</div>
+                    <div className={`${metrics.titleFontSize} font-semibold`}>Retour</div>
                   </div>
-                  <div className={`${metrics.titleFontSize} ${metrics.titleMinHeight} font-medium leading-tight`}>
-                    Retour
-                  </div>
-                  <div className="mt-1 text-[11px] text-ink-soft">aux catégories</div>
                 </button>
               )}
               {visibleProducts.length === 0 ? (

@@ -7,6 +7,8 @@ import PageHeader from '@/components/PageHeader';
 import EmptyState from '@/components/EmptyState';
 import Badge from '@/components/Badge';
 import ReturnModal from './ReturnModal';
+import PaymentCorrectionModal from './PaymentCorrectionModal';
+import AttachCustomerAfterSaleModal from './AttachCustomerAfterSaleModal';
 
 interface Sale {
   id: string; receipt_number: string;
@@ -183,6 +185,20 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
   const [error, setError] = useState<string | null>(null);
   const [showReturn, setShowReturn] = useState(false);
   const [creditNote, setCreditNote] = useState<{ id: string; number: string; amount: number } | null>(null);
+  const [showCorrection, setShowCorrection] = useState(false);
+  const [showAttach, setShowAttach] = useState(false);
+  const [info, setInfo] = useState<string | null>(null);
+
+  // Agrège les paiements par méthode (somme nette : positifs + corrections négatives)
+  const paymentsByMethod = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const p of detail.payments) {
+      map.set(p.method, (map.get(p.method) ?? 0) + Number(p.amount));
+    }
+    return Array.from(map.entries())
+      .filter(([, v]) => Math.abs(v) > 0.005)
+      .map(([method, amount]) => ({ method, amount: Number(amount.toFixed(2)) }));
+  }, [detail.payments]);
 
   async function generateInvoice() {
     setGenerating(true); setError(null);
@@ -228,10 +244,6 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
                 {generating ? 'Génération…' : 'Générer facture'}
               </button>
             ) : null}
-            <button onClick={() => setShowReturn(true)}
-                    className="btn-ghost text-xs whitespace-nowrap text-danger">
-              Retour produit
-            </button>
           </div>
         </div>
         {!s.customer_id && !detail.invoice && (
@@ -240,6 +252,22 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
           </p>
         )}
         {error && <div className="mt-2 text-xs text-danger">{error}</div>}
+        {info && <div className="mt-2 rounded-xl bg-success/10 px-3 py-2 text-xs text-success">{info}</div>}
+
+        {/* Boutons d'actions entre montant et liste articles */}
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button onClick={() => setShowCorrection(true)} className="btn-soft text-sm">
+            ⇄ Changer règlement
+          </button>
+          <button onClick={() => setShowReturn(true)} className="btn-soft text-sm text-danger">
+            ↩ Retour produit
+          </button>
+          {!s.customer_id && (
+            <button onClick={() => setShowAttach(true)} className="btn-soft text-sm">
+              + Attribuer un client
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="card overflow-hidden">
@@ -307,20 +335,31 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
 
         <div className="card p-5">
           <h3 className="font-semibold text-sm mb-3">Modes de règlement</h3>
-          {detail.payments.length === 0 ? (
+          {paymentsByMethod.length === 0 ? (
             <p className="text-sm text-ink-soft">Aucun paiement.</p>
           ) : (
             <ul className="space-y-2">
-              {detail.payments.map((p, i) => (
-                <li key={i} className="flex items-center justify-between text-sm border-b border-border/60 pb-2 last:border-0">
-                  <div>
-                    <Badge tone="soft">{PAYMENT_LABELS[p.method] ?? p.method}</Badge>
-                    {p.reference && <div className="text-xs text-ink-soft mt-0.5">Réf. {p.reference}</div>}
-                  </div>
-                  <span className="font-medium">{formatEUR(Number(p.amount))}</span>
+              {paymentsByMethod.map((p) => (
+                <li key={p.method} className="flex items-center justify-between text-sm border-b border-border/60 pb-2 last:border-0">
+                  <Badge tone="soft">{PAYMENT_LABELS[p.method] ?? p.method}</Badge>
+                  <span className="font-medium">{formatEUR(p.amount)}</span>
                 </li>
               ))}
             </ul>
+          )}
+          {/* Bouton sous la liste des paiements */}
+          {paymentsByMethod.some((p) => p.amount > 0) && (
+            <button
+              onClick={() => setShowCorrection(true)}
+              className="mt-3 w-full btn-ghost text-xs"
+            >
+              ⇄ Changer le règlement
+            </button>
+          )}
+          {detail.payments.some((p) => Number(p.amount) < 0) && (
+            <p className="mt-2 text-[11px] text-ink-soft italic">
+              Une ou plusieurs corrections ont été appliquées sur cette vente.
+            </p>
           )}
         </div>
       </div>
@@ -351,7 +390,36 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
           onSuccess={(cn) => {
             setCreditNote(cn);
             setShowReturn(false);
-            onInvoiceGenerated(); // recharge le détail
+            onInvoiceGenerated();
+          }}
+        />
+      )}
+      {showCorrection && (
+        <PaymentCorrectionModal
+          saleId={s.id}
+          paymentsByMethod={paymentsByMethod}
+          onClose={() => setShowCorrection(false)}
+          onSuccess={() => {
+            setShowCorrection(false);
+            setInfo('Règlement corrigé. Une trace fiscale a été inscrite.');
+            setTimeout(() => setInfo(null), 4000);
+            onInvoiceGenerated();
+          }}
+        />
+      )}
+      {showAttach && (
+        <AttachCustomerAfterSaleModal
+          saleId={s.id}
+          onClose={() => setShowAttach(false)}
+          onSuccess={(loyalty) => {
+            setShowAttach(false);
+            setInfo(
+              loyalty?.earned
+                ? `Client attribué · +${loyalty.earned} € de fidélité crédités (solde ${loyalty.new_balance} €)`
+                : 'Client attribué.',
+            );
+            setTimeout(() => setInfo(null), 4000);
+            onInvoiceGenerated();
           }}
         />
       )}

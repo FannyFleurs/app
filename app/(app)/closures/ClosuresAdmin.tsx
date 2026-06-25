@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { formatEUR } from '@/lib/services/money';
 import { PAYMENT_LABELS } from '@/components/labels';
-import PageHeader from '@/components/PageHeader';
 import Badge from '@/components/Badge';
 import EmptyState from '@/components/EmptyState';
 import BankDepositModal from './BankDepositModal';
@@ -35,21 +34,13 @@ interface PreviewData {
   sealed: { id: string; sealed_at: string } | null;
 }
 
-interface ClosureSummary {
-  id: string; business_date: string;
-  total_sales: number; total_ttc: string; total_ht: string; total_tva: string;
-  cash_expected: string; cash_counted: string | null; cash_variance: string | null;
-  sealed_at: string; fiscal_hash: string;
-}
-
 interface Store { id: string; name: string }
 interface Register { id: string; store_id: string; code: string; name: string }
 
 export default function ClosuresAdmin({ stores, registers }: { stores: Store[]; registers: Register[] }) {
   const [storeId, setStoreId] = useState(stores[0]?.id ?? '');
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date] = useState(new Date().toISOString().slice(0, 10));
   const [preview, setPreview] = useState<PreviewData | null>(null);
-  const [history, setHistory] = useState<ClosureSummary[]>([]);
   const [denomCount, setDenomCount] = useState<Record<string, number>>({});
   const [declared, setDeclared] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState('');
@@ -72,12 +63,7 @@ export default function ClosuresAdmin({ stores, registers }: { stores: Store[]; 
     const r = await fetch(`/api/closures/daily/preview?store_id=${storeId}&date=${date}`);
     if (r.ok) setPreview(await r.json());
   }
-  async function loadHistory() {
-    if (!storeId) return;
-    const r = await fetch(`/api/closures/daily?store_id=${storeId}`);
-    if (r.ok) setHistory((await r.json()).closures);
-  }
-  useEffect(() => { setSealedResult(null); void loadPreview(); void loadHistory(); /* eslint-disable-next-line */ }, [storeId, date]);
+  useEffect(() => { setSealedResult(null); void loadPreview(); /* eslint-disable-next-line */ }, [storeId, date]);
 
   const countedCash = useMemo(() => {
     let total = 0;
@@ -124,7 +110,7 @@ export default function ClosuresAdmin({ stores, registers }: { stores: Store[]; 
     }
     const j = await r.json();
     setSealedResult({ id: j.daily_closure_id, fiscal_hash: j.fiscal_hash });
-    await loadHistory();
+    /* historique retiré de la page */
     await loadPreview();
   }
 
@@ -154,41 +140,42 @@ export default function ClosuresAdmin({ stores, registers }: { stores: Store[]; 
   const alreadySealed = preview?.sealed != null;
 
   return (
-    <div className="p-8 space-y-5">
-      <PageHeader
-        title="Clôture de caisse"
-        subtitle="Reconnaissez vos paiements, comptez vos espèces, sortez les remises en banque, clôturez la journée et imprimez le Z."
-      />
-
-      <div className="flex flex-wrap items-center gap-2">
-        <button onClick={() => void openDrawer()} disabled={!registerId} className="btn-soft text-sm h-10">
-          ◰ Ouvrir tiroir
-        </button>
-        <button onClick={() => setShowDeposit(true)} disabled={!registerId || alreadySealed} className="btn-soft text-sm h-10">
-          ⤓ Remise en banque
-        </button>
-        {registersForStore.length > 1 && (
-          <select className="input h-10 max-w-[200px]" value={registerId} onChange={(e) => setRegisterId(e.target.value)} title="Caisse (pour tiroir et remise)">
-            {registersForStore.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-          </select>
-        )}
-        {alreadySealed && (
-          <Badge tone="success">
-            Scellée le {new Date(preview!.sealed!.sealed_at).toLocaleString('fr-FR')}
-          </Badge>
-        )}
+    <div className="p-6 flex flex-col gap-3 h-[calc(100vh-56px)] overflow-hidden">
+      {/* Header : titre + boutons à droite sur la même ligne */}
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Clôture de caisse</h1>
+          {alreadySealed && (
+            <Badge tone="success">
+              Scellée le {new Date(preview!.sealed!.sealed_at).toLocaleString('fr-FR')}
+            </Badge>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {registersForStore.length > 1 && (
+            <select className="input h-10 max-w-[180px]" value={registerId} onChange={(e) => setRegisterId(e.target.value)}>
+              {registersForStore.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+            </select>
+          )}
+          <button onClick={() => void openDrawer()} disabled={!registerId} className="btn-soft text-sm h-10">
+            ◰ Ouvrir tiroir
+          </button>
+          <button onClick={() => setShowDeposit(true)} disabled={!registerId || alreadySealed} className="btn-soft text-sm h-10">
+            ⤓ Remise en banque
+          </button>
+        </div>
       </div>
 
       {drawerToast && (
-        <div className="rounded-xl bg-success/10 px-4 py-2 text-sm text-success">{drawerToast}</div>
+        <div className="rounded-xl bg-success/10 px-3 py-1.5 text-xs text-success">{drawerToast}</div>
       )}
 
       {!preview ? (
         <div className="text-ink-soft text-sm">Chargement…</div>
       ) : (
         <>
-          {/* Synthèse système — toujours visible */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {/* KPI strip compact */}
+          <div className="grid grid-cols-4 gap-2">
             <Kpi label="Tickets" value={preview.totals.sales.toString()} />
             <Kpi label="Total HT" value={formatEUR(preview.totals.ht)} />
             <Kpi label="TVA collectée" value={formatEUR(preview.totals.tva)} />
@@ -196,16 +183,16 @@ export default function ClosuresAdmin({ stores, registers }: { stores: Store[]; 
           </div>
 
           {preview.totals.sales === 0 && (
-            <div className="rounded-xl border border-border bg-gray-50 px-4 py-3 text-sm text-ink-soft">
+            <div className="rounded-xl border border-border bg-gray-50 px-3 py-1.5 text-xs text-ink-soft">
               Aucune vente sur cette date. Vous pouvez quand même compter votre tiroir, faire une
               remise en banque et sceller la journée pour la déclarer.
             </div>
           )}
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 flex-1 min-h-0 overflow-hidden">
             {/* Colonne 1 : paiements + TVA + mouvements */}
-            <div className="space-y-5">
-              <section className="card p-5">
+            <div className="space-y-3 overflow-auto min-h-0">
+              <section className="card p-4">
                 <h3 className="font-semibold">Réconciliation des paiements</h3>
                 <p className="mt-1 text-sm text-ink-soft">
                   Saisissez ce que vous avez réellement reçu pour faire apparaître les écarts.
@@ -292,7 +279,7 @@ export default function ClosuresAdmin({ stores, registers }: { stores: Store[]; 
             </div>
 
             {/* Colonne 2 : comptage espèces */}
-            <section className="card p-5">
+            <section className="card p-4 overflow-auto min-h-0">
               <h3 className="font-semibold">Comptage des espèces en caisse</h3>
               <p className="mt-1 text-sm text-ink-soft">
                 Saisissez le nombre de billets et pièces présents dans le tiroir.
@@ -354,12 +341,12 @@ export default function ClosuresAdmin({ stores, registers }: { stores: Store[]; 
             </section>
           </div>
 
-          {/* Notes + Sceller */}
-          <section className="card p-5 space-y-3">
+          {/* Notes + Sceller (sticky en bas) */}
+          <section className="card p-3 space-y-2 shrink-0">
             <label className="block">
-              <span className="text-sm font-medium text-ink-soft">Notes (facultatives)</span>
+              <span className="text-xs font-medium text-ink-soft">Notes</span>
               <textarea
-                className="input mt-1 h-20"
+                className="input mt-1 h-10"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="Commentaire, écart justifié, événement particulier…"
@@ -394,69 +381,14 @@ export default function ClosuresAdmin({ stores, registers }: { stores: Store[]; 
               <button
                 disabled={sealing}
                 onClick={() => void seal()}
-                className="btn-primary w-full h-12 text-base"
+                className="btn-primary w-full h-11"
               >
                 {sealing ? 'Clôture…' : '🔒 Clôturer la journée et générer le Z'}
               </button>
             )}
-
-            <p className="text-xs text-ink-soft">
-              Une fois scellée, la clôture est immuable. Toute correction passera par une écriture
-              corrective datée. Les triggers Postgres interdisent toute modification a posteriori.
-            </p>
           </section>
         </>
       )}
-
-      {/* Historique */}
-      <div>
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-ink-soft mb-2">
-          Historique des clôtures ({history.length})
-        </h2>
-        {history.length === 0 ? (
-          <EmptyState icon="◐" title="Aucune clôture historique" />
-        ) : (
-          <div className="card overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-white text-ink-soft text-xs uppercase border-b border-border">
-                <tr>
-                  <th className="text-left px-4 py-3">Date</th>
-                  <th className="text-right px-4 py-3">Tickets</th>
-                  <th className="text-right px-4 py-3">CA TTC</th>
-                  <th className="text-right px-4 py-3">Esp. attendues</th>
-                  <th className="text-right px-4 py-3">Esp. comptées</th>
-                  <th className="text-right px-4 py-3">Écart</th>
-                  <th className="text-right px-4 py-3"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {history.map((c) => (
-                  <tr key={c.id} className="border-t border-border">
-                    <td className="px-4 py-3 font-medium">{c.business_date}</td>
-                    <td className="px-4 py-3 text-right">{c.total_sales}</td>
-                    <td className="px-4 py-3 text-right font-medium">{formatEUR(Number(c.total_ttc))}</td>
-                    <td className="px-4 py-3 text-right">{formatEUR(Number(c.cash_expected))}</td>
-                    <td className="px-4 py-3 text-right">
-                      {c.cash_counted == null ? '—' : formatEUR(Number(c.cash_counted))}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      {c.cash_variance == null ? <span className="text-ink-soft">—</span> :
-                        Number(c.cash_variance) === 0 ? <Badge tone="success">0,00 €</Badge> :
-                        <Badge tone="warning">{formatEUR(Number(c.cash_variance))}</Badge>}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <a href={`/api/closures/${c.id}/z-pdf`} target="_blank" rel="noreferrer"
-                         className="text-accent-deep hover:underline text-xs">
-                        Z PDF →
-                      </a>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
 
       {showDeposit && (
         <BankDepositModal
