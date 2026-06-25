@@ -96,6 +96,35 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
   const [showPicker, setShowPicker] = useState(false);
   const [customer, setCustomer] = useState<PickedCustomer | null>(null);
   const [discountLineKey, setDiscountLineKey] = useState<string | null>(null);
+
+  // Largeur du panier ticket (redimensionnable, persistée en localStorage)
+  const DEFAULT_TICKET_WIDTH = 360; // 300 * 1.2
+  const [ticketWidth, setTicketWidth] = useState<number>(DEFAULT_TICKET_WIDTH);
+  const dragging = useRef(false);
+  useEffect(() => {
+    const stored = Number(localStorage.getItem('florea_ticket_width') ?? '');
+    if (Number.isFinite(stored) && stored >= 280 && stored <= 600) setTicketWidth(stored);
+  }, []);
+  useEffect(() => {
+    function onMove(e: MouseEvent) {
+      if (!dragging.current) return;
+      const w = Math.max(280, Math.min(600, window.innerWidth - e.clientX));
+      setTicketWidth(w);
+    }
+    function onUp() {
+      if (dragging.current) {
+        dragging.current = false;
+        document.body.style.cursor = '';
+        localStorage.setItem('florea_ticket_width', String(ticketWidth));
+      }
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    return () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+  }, [ticketWidth]);
   const [loyalty, setLoyalty] = useState<{
     enabled: boolean;
     balance_euros: number;
@@ -494,7 +523,10 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
     : '';
 
   return (
-    <div className="grid grid-cols-[1fr_300px] h-[calc(100vh-56px)]">
+    <div
+      className="grid h-[calc(100vh-56px)]"
+      style={{ gridTemplateColumns: `1fr 6px ${ticketWidth}px` }}
+    >
       {/* Gauche : catalogue */}
       <div className="flex flex-col bg-white min-w-0">
         <div className="flex items-center gap-3 px-5 py-3 border-b border-border bg-white">
@@ -595,6 +627,16 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
             />
           )}
         </div>
+      </div>
+
+      {/* Splitter pour redimensionner le ticket */}
+      <div
+        onMouseDown={() => { dragging.current = true; document.body.style.cursor = 'col-resize'; }}
+        onDoubleClick={() => { setTicketWidth(DEFAULT_TICKET_WIDTH); localStorage.setItem('florea_ticket_width', String(DEFAULT_TICKET_WIDTH)); }}
+        className="cursor-col-resize hover:bg-accent-soft transition-colors flex items-center justify-center group"
+        title="Glisser pour redimensionner · Double-clic pour reset"
+      >
+        <div className="w-0.5 h-12 bg-border group-hover:bg-accent-deep rounded-full" />
       </div>
 
       {/* Droite : panier (toujours visible) */}
@@ -812,36 +854,54 @@ function CategoryGrid({
   return (
     <div className={`grid ${metrics.grid} ${metrics.gap}`}>
       {categories.map((c) => (
-        <button
-          key={c.id}
-          onClick={() => onPick(c.id)}
-          className={`card ${metrics.padding} text-left hover:shadow-md hover:border-gray-300 transition-all active:scale-[0.98]`}
-        >
-          <div className="mb-2 h-20 w-full rounded-lg overflow-hidden grid place-items-center"
-               style={{ background: c.color ?? '#F5F5F5' }}>
-            {c.image_url
-              ? <img src={c.image_url} alt="" className="h-full w-full object-cover" />
-              : <span className="text-2xl text-ink-soft">◊</span>}
-          </div>
-          <div className={`${metrics.titleFontSize} ${metrics.titleMinHeight} font-medium leading-tight`}>
-            {c.name}
-          </div>
-          <div className="mt-1 text-[11px] text-ink-soft">{c.count} article(s)</div>
-        </button>
+        <CategoryTile key={c.id} category={c} onPick={() => onPick(c.id)} metrics={metrics} />
       ))}
       {uncategorizedCount > 0 && (
-        <button
-          onClick={() => onPick('uncategorized')}
-          className={`card ${metrics.padding} text-left hover:shadow-md hover:border-gray-300 transition-all active:scale-[0.98]`}
-        >
-          <div className="mb-2 h-14 w-full rounded-lg bg-gray-50 grid place-items-center text-2xl text-ink-soft">…</div>
-          <div className={`${metrics.titleFontSize} ${metrics.titleMinHeight} font-medium leading-tight`}>
-            Sans catégorie
-          </div>
-          <div className="mt-1 text-[11px] text-ink-soft">{uncategorizedCount} article(s)</div>
-        </button>
+        <CategoryTile
+          category={{ id: 'uncategorized', name: 'Sans catégorie', color: '#F5F5F5', image_url: null, count: uncategorizedCount }}
+          onPick={() => onPick('uncategorized')}
+          metrics={metrics}
+        />
       )}
     </div>
+  );
+}
+
+function CategoryTile({
+  category: c, onPick, metrics,
+}: {
+  category: { id: string; name: string; color: string | null; image_url: string | null; count: number };
+  onPick: () => void;
+  metrics: ReturnType<typeof tileMetrics>;
+}) {
+  const hasImage = !!c.image_url;
+  if (hasImage) {
+    return (
+      <button
+        onClick={onPick}
+        className={`card ${metrics.padding} text-left hover:shadow-md hover:border-gray-300 transition-all active:scale-[0.98]`}
+      >
+        <div className="mb-2 h-20 w-full rounded-lg overflow-hidden grid place-items-center"
+             style={{ background: c.color ?? '#F5F5F5' }}>
+          <img src={c.image_url!} alt="" className="h-full w-full object-cover" />
+        </div>
+        <div className={`${metrics.titleFontSize} ${metrics.titleMinHeight} font-medium leading-tight`}>
+          {c.name}
+        </div>
+      </button>
+    );
+  }
+  // Sans image : tuile entièrement colorée + nom centré
+  return (
+    <button
+      onClick={onPick}
+      className="rounded-2xl border border-border overflow-hidden hover:shadow-md hover:border-gray-300 transition-all active:scale-[0.98] aspect-[5/3] grid place-items-center px-3"
+      style={{ background: c.color ?? '#F5F5F5' }}
+    >
+      <span className={`${metrics.titleFontSize} font-semibold text-center text-ink leading-tight`}>
+        {c.name}
+      </span>
+    </button>
   );
 }
 

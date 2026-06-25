@@ -157,37 +157,21 @@ export default function ClosuresAdmin({ stores, registers }: { stores: Store[]; 
     <div className="p-8 space-y-5">
       <PageHeader
         title="Clôture de caisse"
-        subtitle="Reconnaissez vos paiements, comptez vos espèces, sortez les remises en banque, scellez la journée et imprimez le Z."
+        subtitle="Reconnaissez vos paiements, comptez vos espèces, sortez les remises en banque, clôturez la journée et imprimez le Z."
       />
 
-      <div className="card p-4 flex flex-wrap items-end gap-3">
-        <div>
-          <label className="text-xs font-medium text-ink-soft">Boutique</label>
-          <select className="input mt-1" value={storeId} onChange={(e) => setStoreId(e.target.value)}>
-            {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="text-xs font-medium text-ink-soft">Date d&apos;opération</label>
-          <input type="date" className="input mt-1" value={date} onChange={(e) => setDate(e.target.value)} />
-        </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <button onClick={() => void openDrawer()} disabled={!registerId} className="btn-soft text-sm h-10">
+          ◰ Ouvrir tiroir
+        </button>
+        <button onClick={() => setShowDeposit(true)} disabled={!registerId || alreadySealed} className="btn-soft text-sm h-10">
+          ⤓ Remise en banque
+        </button>
         {registersForStore.length > 1 && (
-          <div>
-            <label className="text-xs font-medium text-ink-soft">Caisse (pour tiroir & remise)</label>
-            <select className="input mt-1" value={registerId} onChange={(e) => setRegisterId(e.target.value)}>
-              {registersForStore.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-            </select>
-          </div>
+          <select className="input h-10 max-w-[200px]" value={registerId} onChange={(e) => setRegisterId(e.target.value)} title="Caisse (pour tiroir et remise)">
+            {registersForStore.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+          </select>
         )}
-
-        <div className="ml-auto flex items-center gap-2">
-          <button onClick={() => void openDrawer()} disabled={!registerId} className="btn-soft text-sm">
-            ◰ Ouvrir tiroir
-          </button>
-          <button onClick={() => setShowDeposit(true)} disabled={!registerId || alreadySealed} className="btn-soft text-sm">
-            ⤓ Remise en banque
-          </button>
-        </div>
         {alreadySealed && (
           <Badge tone="success">
             Scellée le {new Date(preview!.sealed!.sealed_at).toLocaleString('fr-FR')}
@@ -412,7 +396,7 @@ export default function ClosuresAdmin({ stores, registers }: { stores: Store[]; 
                 onClick={() => void seal()}
                 className="btn-primary w-full h-12 text-base"
               >
-                {sealing ? 'Scellement…' : '🔒 Sceller la journée et générer le Z'}
+                {sealing ? 'Clôture…' : '🔒 Clôturer la journée et générer le Z'}
               </button>
             )}
 

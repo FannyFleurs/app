@@ -41,6 +41,20 @@ export default function PaymentModal({ saleId, totalTtc, loyaltyRedemption, onCl
   const [lookupLabel, setLookupLabel] = useState('');
   const [lookupAmountSeed, setLookupAmountSeed] = useState(0);
 
+  // Saisie clavier physique
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (lookupKind) return; // les sous-modaux gèrent leur propre clavier
+      if (e.key >= '0' && e.key <= '9') { press(e.key); e.preventDefault(); }
+      else if (e.key === '.' || e.key === ',') { press('.'); e.preventDefault(); }
+      else if (e.key === 'Backspace') { press('⌫'); e.preventDefault(); }
+      else if (e.key === 'Escape') { onClose(); }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lookupKind]);
+
   useEffect(() => {
     void (async () => {
       const r = await fetch('/api/payment-methods');
@@ -185,14 +199,15 @@ export default function PaymentModal({ saleId, totalTtc, loyaltyRedemption, onCl
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-ink/30 backdrop-blur-sm p-4">
-      <div className="card w-full max-w-3xl p-6">
+      <div className="card w-full max-w-5xl p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold">Encaissement</h2>
           <button onClick={onClose} className="text-ink-soft hover:text-ink">✕</button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-[1fr_320px] gap-6">
-          {/* Colonne gauche : pavé + méthodes */}
+        {/* 3 colonnes : numpad | méthodes | récap */}
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_240px_280px] gap-5">
+          {/* Colonne 1 : montant + numpad */}
           <div>
             <div className="rounded-2xl border border-border p-4 bg-gray-50">
               <div className="text-xs uppercase tracking-wider text-ink-soft">Montant à saisir</div>
@@ -204,44 +219,43 @@ export default function PaymentModal({ saleId, totalTtc, loyaltyRedemption, onCl
                         className="text-xs text-ink-soft hover:text-ink">Effacer</button>
               </div>
               <div className="mt-1 text-xs text-ink-soft">
-                Si vide : la méthode prendra le restant ({formatEUR(remaining)}).
+                Tapez au clavier ou utilisez le pavé. Vide = la méthode prendra le restant ({formatEUR(remaining)}).
               </div>
             </div>
 
-            {/* Pavé numérique */}
             <div className="mt-3 grid grid-cols-3 gap-2">
               {['7','8','9','4','5','6','1','2','3','.','0','⌫'].map((k) => (
                 <button
                   key={k}
                   onClick={() => press(k)}
-                  className="h-14 rounded-xl border border-border bg-white text-xl font-medium hover:bg-gray-50 active:scale-95 transition"
+                  className="h-16 rounded-xl border border-border bg-white text-2xl font-medium hover:bg-gray-50 active:scale-95 transition"
                 >
                   {k}
                 </button>
               ))}
             </div>
+          </div>
 
-            {/* Méthodes de règlement */}
-            <div className="mt-4">
-              <div className="text-xs uppercase tracking-wider text-ink-soft mb-2">
-                Toucher une méthode pour valider le montant
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                {methods.map((m) => (
-                  <button
-                    key={m.kind + m.label}
-                    onClick={() => tapMethod(m)}
-                    disabled={remaining <= 0 && Number(amountStr || '0') <= 0}
-                    className="btn-soft h-14 text-base"
-                  >
-                    {m.label}
-                  </button>
-                ))}
-              </div>
+          {/* Colonne 2 : méthodes (à droite du clavier, en pile verticale) */}
+          <div>
+            <div className="text-xs uppercase tracking-wider text-ink-soft mb-2">
+              Mode de règlement
+            </div>
+            <div className="grid grid-cols-1 gap-2">
+              {methods.map((m) => (
+                <button
+                  key={m.kind + m.label}
+                  onClick={() => tapMethod(m)}
+                  disabled={remaining <= 0 && Number(amountStr || '0') <= 0}
+                  className="btn-soft h-14 text-base"
+                >
+                  {m.label}
+                </button>
+              ))}
             </div>
           </div>
 
-          {/* Colonne droite : récap + valider */}
+          {/* Colonne 3 : récap + valider */}
           <div className="flex flex-col">
             <div className="rounded-2xl border border-border p-4 bg-white space-y-1.5 text-sm">
               <div className="flex justify-between">
@@ -266,24 +280,17 @@ export default function PaymentModal({ saleId, totalTtc, loyaltyRedemption, onCl
               )}
             </div>
 
-            <div className="mt-3 flex-1 min-h-[100px]">
-              <div className="text-xs uppercase tracking-wider text-ink-soft mb-2">Paiements enregistrés</div>
+            <div className="mt-3 flex-1 min-h-[80px]">
+              <div className="text-xs uppercase tracking-wider text-ink-soft mb-2">Paiements</div>
               {payments.length === 0 ? (
-                <div className="text-sm text-ink-soft italic">Aucun paiement pour le moment.</div>
+                <div className="text-sm text-ink-soft italic">Aucun paiement.</div>
               ) : (
                 <ul className="space-y-1.5">
                   {payments.map((p) => (
-                    <li key={p.key} className="flex items-center justify-between gap-2 rounded-xl border border-border px-3 py-2 text-sm">
-                      <span className="font-medium">{p.label}</span>
-                      <span className="tabular-nums">
-                        {formatEUR(p.amount)}
-                        {p.given_amount && p.given_amount > p.amount && (
-                          <span className="text-ink-soft text-xs ml-1">
-                            (reçu {formatEUR(p.given_amount)})
-                          </span>
-                        )}
-                      </span>
-                      <button onClick={() => removePayment(p.key)} className="text-ink-soft hover:text-danger">✕</button>
+                    <li key={p.key} className="flex items-center justify-between gap-2 rounded-xl border border-border px-2.5 py-1.5 text-sm">
+                      <span className="font-medium truncate">{p.label}</span>
+                      <span className="tabular-nums whitespace-nowrap">{formatEUR(p.amount)}</span>
+                      <button onClick={() => removePayment(p.key)} className="text-ink-soft hover:text-danger shrink-0">✕</button>
                     </li>
                   ))}
                 </ul>
