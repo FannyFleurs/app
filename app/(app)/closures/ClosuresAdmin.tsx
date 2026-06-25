@@ -32,6 +32,7 @@ interface PreviewData {
   cash_breakdown: { opening_floats: number; cash_sales: number; cash_in: number; cash_out: number; expected: number };
   movements: { id: string; movement_type: 'in' | 'out'; amount: number; reason: string; created_at: string }[];
   sealed: { id: string; sealed_at: string } | null;
+  held_count: number;
 }
 
 interface Store { id: string; name: string }
@@ -182,10 +183,16 @@ export default function ClosuresAdmin({ stores, registers }: { stores: Store[]; 
             <Kpi label="Total TTC" value={formatEUR(preview.totals.ttc)} accent />
           </div>
 
-          {preview.totals.sales === 0 && (
+          {alreadySealed && (
+            <div className="rounded-xl bg-success/10 px-3 py-2 text-sm text-success">
+              ✓ La journée a déjà été clôturée le {new Date(preview!.sealed!.sealed_at).toLocaleString('fr-FR')}.
+              Les écarts d&apos;espèces ne sont plus pertinents — vous pouvez réimprimer le Z.
+            </div>
+          )}
+          {!alreadySealed && preview.totals.sales === 0 && (
             <div className="rounded-xl border border-border bg-gray-50 px-3 py-1.5 text-xs text-ink-soft">
               Aucune vente sur cette date. Vous pouvez quand même compter votre tiroir, faire une
-              remise en banque et sceller la journée pour la déclarer.
+              remise en banque et clôturer la journée pour la déclarer.
             </div>
           )}
 
@@ -378,13 +385,20 @@ export default function ClosuresAdmin({ stores, registers }: { stores: Store[]; 
                 Imprimer le Z de cette journée
               </a>
             ) : (
-              <button
-                disabled={sealing}
-                onClick={() => void seal()}
-                className="btn-primary w-full h-11"
-              >
-                {sealing ? 'Clôture…' : '🔒 Clôturer la journée et générer le Z'}
-              </button>
+              <>
+                {(preview.held_count ?? 0) > 0 && (
+                  <div className="rounded-xl bg-warning/10 px-3 py-2 text-xs text-warning">
+                    ⚠ {preview.held_count} panier{preview.held_count > 1 ? 's' : ''} en attente — finissez-les ou videz-les avant de clôturer.
+                  </div>
+                )}
+                <button
+                  disabled={sealing || (preview.held_count ?? 0) > 0}
+                  onClick={() => void seal()}
+                  className="btn-primary w-full h-11"
+                >
+                  {sealing ? 'Clôture…' : '🔒 Clôturer la journée et générer le Z'}
+                </button>
+              </>
             )}
           </section>
         </>

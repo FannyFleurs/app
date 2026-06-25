@@ -21,6 +21,7 @@ interface Customer {
   last_visit: string | null;
   total_ttc: string;
   loyalty_points: string | null;
+  default_discount_pct?: string | null;
 }
 
 const TYPE_LABEL: Record<string, string> = {
@@ -147,7 +148,12 @@ export default function CustomersList({ customers: initialCustomers, canWrite }:
                   >
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-medium truncate">{c.display_name || '—'}</span>
-                      <Badge tone="neutral">{TYPE_LABEL[c.type] ?? c.type}</Badge>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {c.default_discount_pct && Number(c.default_discount_pct) > 0 && (
+                          <Badge tone="warning">-{Number(c.default_discount_pct)}%</Badge>
+                        )}
+                        <Badge tone="neutral">{TYPE_LABEL[c.type] ?? c.type}</Badge>
+                      </div>
                     </div>
                     <div className="flex items-center justify-between mt-1 text-xs text-ink-soft">
                       <span className="truncate">{c.email ?? c.phone ?? '—'}</span>

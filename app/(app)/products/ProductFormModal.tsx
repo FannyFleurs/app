@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { generateEan13 } from '@/lib/services/ean';
 
 interface Product {
@@ -22,6 +22,15 @@ export default function ProductFormModal({
   onSaved: () => void;
 }) {
   const defaultTax = taxRates.find((t) => t.is_default) ?? taxRates[0];
+  const [liveCategories, setLiveCategories] = useState(categories);
+  // Recharge la liste des catégories à l'ouverture pour intégrer celles
+  // créées depuis la dernière navigation.
+  useEffect(() => {
+    void (async () => {
+      const r = await fetch('/api/categories');
+      if (r.ok) setLiveCategories((await r.json()).categories);
+    })();
+  }, []);
   const [form, setForm] = useState({
     name: product?.name ?? '',
     short_description: product?.short_description ?? '',
@@ -116,7 +125,7 @@ export default function ProductFormModal({
             <select className="input" value={form.category_id ?? ''}
                     onChange={(e) => setForm({ ...form, category_id: e.target.value })}>
               <option value="">— Aucune —</option>
-              {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              {liveCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </Field>
           <Field label="Taux TVA">

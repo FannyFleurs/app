@@ -9,7 +9,7 @@ interface Props {
   currentDiscount: number;
   label: string;
   onClose: () => void;
-  onSave: (discountAmount: number) => void;
+  onSave: (discountAmount: number, reason?: string) => void;
 }
 
 export default function LineDiscountModal({

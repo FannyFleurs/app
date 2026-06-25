@@ -9,6 +9,8 @@ import OpenSessionModal from './OpenSessionModal';
 import FreePriceModal from './FreePriceModal';
 import CustomerPickerModal, { type PickedCustomer } from './CustomerPickerModal';
 import LineDiscountModal from './LineDiscountModal';
+import JustificationModal from './JustificationModal';
+import CartActionsModal from './CartActionsModal';
 import { tileMetrics, type PosUiSettings } from '@/lib/settings/pos-ui';
 
 export interface PosProduct {
@@ -92,10 +94,19 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showHeld, setShowHeld] = useState(false);
-  const [showFreePrice, setShowFreePrice] = useState(false);
+  const [showFreePrice, setShowFreePrice] = useState<{ label?: string } | null>(null);
   const [showPicker, setShowPicker] = useState(false);
   const [customer, setCustomer] = useState<PickedCustomer | null>(null);
   const [discountLineKey, setDiscountLineKey] = useState<string | null>(null);
+  const [justifyAction, setJustifyAction] = useState<
+    | { kind: 'remove'; key: string }
+    | { kind: 'lineDiscount'; key: string; amount: number }
+    | { kind: 'cartDiscount'; amount: number; mode: 'percent' | 'amount' }
+    | null
+  >(null);
+  const [cartComment, setCartComment] = useState('');
+  const [showCartActions, setShowCartActions] = useState(false);
+  const [heldCount, setHeldCount] = useState(0);
 
   // Largeur du panier ticket (redimensionnable, persistée en localStorage)
   const DEFAULT_TICKET_WIDTH = 360; // 300 * 1.2
@@ -168,6 +179,16 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
   }, [registerId]);
 
   useEffect(() => { void refreshSession(); }, [refreshSession]);
+
+  const refreshHeldCount = useCallback(async () => {
+    if (!registerId) return;
+    const r = await fetch(`/api/sales/held?register_id=${registerId}`);
+    if (r.ok) {
+      const j = await r.json();
+      setHeldCount((j.held ?? []).length);
+    }
+  }, [registerId]);
+  useEffect(() => { void refreshHeldCount(); }, [refreshHeldCount, showHeld]);
 
   // Persiste lignes côté serveur (debounced)
   useEffect(() => {
@@ -280,21 +301,35 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
 
   function addProduct(p: PosProduct) {
     void ensureSale();
-    if (p.price_is_free) { setShowFreePrice(true); return; }
+    if (p.price_is_free) { setShowFreePrice({ label: p.name }); return; }
+    // Remise systématique du client : appliquée automatiquement à chaque ajout
+    const autoPct = customer?.default_discount_pct ?? 0;
     setLines((cur) => {
       const existing = cur.find(
-        (l) => l.product_id === p.id && l.unit_price_ttc === p.sale_price_ttc && l.discount_amount === 0,
+        (l) => l.product_id === p.id
+            && l.unit_price_ttc === p.sale_price_ttc
+            && !l.metadata?.cart_discount
+            && (autoPct > 0 ? l.metadata?.auto_discount_pct === autoPct : l.discount_amount === 0),
       );
       if (existing) {
-        return cur.map((l) => l === existing ? { ...l, quantity: l.quantity + 1 } : l);
+        return cur.map((l) => {
+          if (l !== existing) return l;
+          const newQty = l.quantity + 1;
+          // Recalcule la remise auto proportionnellement
+          const newDiscount = autoPct > 0
+            ? round2((p.sale_price_ttc * newQty * autoPct) / 100)
+            : l.discount_amount;
+          return { ...l, quantity: newQty, discount_amount: newDiscount };
+        });
       }
+      const discount = autoPct > 0 ? round2((p.sale_price_ttc * autoPct) / 100) : 0;
       return [...cur, {
         key: cryptoKey(),
         product_id: p.id, variant_id: null,
         label: p.name, unit_price_ttc: p.sale_price_ttc,
-        quantity: 1, discount_amount: 0,
+        quantity: 1, discount_amount: discount,
         tax_rate: p.tax_rate, tax_rate_code: p.tax_rate_code,
-        metadata: {},
+        metadata: autoPct > 0 ? { auto_discount_pct: autoPct } : {},
       }];
     });
   }
@@ -334,7 +369,7 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
       label, unit_price_ttc: amount, quantity: 1, discount_amount: 0,
       tax_rate: tax.rate, tax_rate_code: tax.code, metadata: { freeform: true },
     }]);
-    setShowFreePrice(false);
+    setShowFreePrice(null);
     void ensureSale();
   }
 
@@ -344,6 +379,10 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
       .filter((l) => l.quantity > 0));
   }
   function removeLine(key: string) { setLines((cur) => cur.filter((l) => l.key !== key)); }
+  // Demande de justification pour suppression (cartes / contrôle de gestion)
+  function requestRemoveLine(key: string) {
+    setJustifyAction({ kind: 'remove', key });
+  }
   function setLineDiscount(key: string, amount: number) {
     setLines((cur) => cur.map((l) => l.key === key ? { ...l, discount_amount: Math.max(0, amount) } : l));
   }
@@ -468,7 +507,7 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
     function onKey(e: KeyboardEvent) {
       if (e.key === '/' && document.activeElement !== searchRef.current) {
         e.preventDefault(); searchRef.current?.focus();
-      } else if (e.key === 'F2') { e.preventDefault(); setShowFreePrice(true); }
+      } else if (e.key === 'F2') { e.preventDefault(); setShowFreePrice({}); }
       else if (e.key === 'F4') { e.preventDefault(); setShowHeld(true); }
       else if (e.key === 'F9' && lines.length > 0) { e.preventDefault(); setShowPayment(true); }
       else if (e.key === 'Escape' && view.kind === 'products' && !searchQ) {
@@ -543,11 +582,16 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
               }
             }}
           />
-          <button className="btn-soft" onClick={() => setShowFreePrice(true)} title="F2">
+          <button className="btn-soft" onClick={() => setShowFreePrice({})} title="F2">
             ✿ Bouquet prix libre
           </button>
           <button className="btn-ghost" onClick={() => setShowHeld(true)} title="F4">
-            Paniers en attente
+            Panier en attente
+            {heldCount > 0 && (
+              <span className="ml-1.5 inline-flex items-center justify-center h-5 min-w-[1.25rem] px-1.5 rounded-full text-[11px] font-semibold accent-bar text-white">
+                {heldCount}
+              </span>
+            )}
           </button>
         </div>
 
@@ -588,7 +632,7 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
                 <button
                   key={p.id}
                   onClick={() => addProduct(p)}
-                  className={`card ${metrics.padding} text-left hover:shadow-md hover:border-gray-300 transition-all active:scale-[0.98]`}
+                  className={`card ${metrics.padding} text-left hover:shadow-md hover:border-gray-300 transition-all active:scale-[0.98] aspect-[5/3] flex flex-col`}
                 >
                   {posUi.show_product_image && (
                     <div className="mb-2 h-14 w-full rounded-lg bg-gray-50 grid place-items-center text-ink-soft overflow-hidden">
@@ -638,20 +682,31 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
 
       {/* Droite : panier (toujours visible) */}
       <aside className="flex flex-col bg-white border-l border-border min-w-0">
-        <div className="px-5 py-3 border-b border-border flex items-center justify-between">
+        <div className="px-5 py-3 border-b border-border flex items-center justify-between gap-2">
           <div>
             <div className="text-xs uppercase tracking-wider text-ink-soft">Ticket en cours</div>
             <div className="text-sm font-medium">
               {lines.length} ligne(s){savingLines ? ' · sync…' : ''}
+              {cartComment && <span className="ml-1 text-xs text-ink-soft" title={cartComment}>· 💬</span>}
             </div>
           </div>
-          <button
-            disabled={lines.length === 0}
-            onClick={() => { setLines([]); setSaleId(null); void detachCustomer(); }}
-            className="btn-ghost text-xs"
-          >
-            Vider
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              disabled={lines.length === 0}
+              onClick={() => setShowCartActions(true)}
+              className="btn-soft text-xs"
+              title="Remise globale / commentaire"
+            >
+              Actions
+            </button>
+            <button
+              disabled={lines.length === 0}
+              onClick={() => { setLines([]); setSaleId(null); setCartComment(''); void detachCustomer(); }}
+              className="btn-ghost text-xs"
+            >
+              Vider
+            </button>
+          </div>
         </div>
 
         {/* Zone client */}
@@ -714,29 +769,27 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
               <button
                 key={l.key}
                 onClick={() => setDiscountLineKey(l.key)}
-                className="w-full text-left rounded-xl border border-border p-2.5 bg-white hover:border-gray-300 transition-colors"
+                className="w-full text-left rounded-lg border border-border px-2 py-1.5 bg-white hover:border-gray-300 transition-colors"
                 title="Cliquer pour ajouter / modifier une remise"
               >
-                <div className="flex justify-between gap-2">
+                <div className="flex justify-between items-center gap-2">
                   <div className="text-sm font-medium flex-1 truncate">{l.label}</div>
+                  <span className="font-semibold text-sm whitespace-nowrap">{formatEUR(sub)}</span>
                   <button
-                    onClick={(e) => { e.stopPropagation(); removeLine(l.key); }}
-                    className="text-ink-soft hover:text-danger"
+                    onClick={(e) => { e.stopPropagation(); requestRemoveLine(l.key); }}
+                    className="text-ink-soft hover:text-danger text-xs"
                   >✕</button>
                 </div>
-                <div className="mt-1 flex items-center justify-between text-xs text-ink-soft">
-                  <span>{formatEUR(l.unit_price_ttc)}</span>
-                  <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                    <button className="h-7 w-7 rounded-lg border border-border" onClick={() => incLine(l.key, -1)}>-</button>
-                    <span className="w-7 text-center text-ink">{l.quantity}</span>
-                    <button className="h-7 w-7 rounded-lg border border-border" onClick={() => incLine(l.key, +1)}>+</button>
+                <div className="mt-0.5 flex items-center justify-between text-[11px] text-ink-soft">
+                  <span>
+                    {formatEUR(l.unit_price_ttc)}
+                    {l.discount_amount > 0 && <span className="text-warning ml-1">· -{formatEUR(l.discount_amount)}</span>}
+                  </span>
+                  <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+                    <button className="h-6 w-6 rounded border border-border text-xs" onClick={() => incLine(l.key, -1)}>-</button>
+                    <span className="w-6 text-center text-ink">{l.quantity}</span>
+                    <button className="h-6 w-6 rounded border border-border text-xs" onClick={() => incLine(l.key, +1)}>+</button>
                   </div>
-                </div>
-                <div className="mt-1.5 flex items-center justify-between">
-                  {l.discount_amount > 0 ? (
-                    <span className="text-xs text-warning">-{formatEUR(l.discount_amount)}</span>
-                  ) : <span className="text-xs text-ink-soft">Touchez pour remise</span>}
-                  <span className="font-semibold">{formatEUR(sub)}</span>
                 </div>
               </button>
             );
@@ -801,8 +854,9 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
       {showFreePrice && (
         <FreePriceModal
           defaultTaxCode={taxRates.find((t) => t.is_default)?.code ?? FREE_PRICE_TAX_CODE_DEFAULT}
+          defaultLabel={showFreePrice.label}
           taxRates={taxRates}
-          onClose={() => setShowFreePrice(false)}
+          onClose={() => setShowFreePrice(null)}
           onConfirm={addFreeBouquet}
         />
       )}
@@ -823,8 +877,67 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
             currentDiscount={l.discount_amount}
             onClose={() => setDiscountLineKey(null)}
             onSave={(amount) => {
-              setLineDiscount(l.key, amount);
               setDiscountLineKey(null);
+              if (amount === 0) { setLineDiscount(l.key, 0); return; }
+              // Toute remise manuelle déclenche une justification
+              setJustifyAction({ kind: 'lineDiscount', key: l.key, amount });
+            }}
+          />
+        );
+      })()}
+      {showCartActions && (
+        <CartActionsModal
+          cartTotal={totals.ttc}
+          currentComment={cartComment}
+          onClose={() => setShowCartActions(false)}
+          onCartDiscount={(mode, value) => {
+            const computed = mode === 'percent'
+              ? round2((totals.ttc * value) / 100)
+              : Math.min(round2(value), round2(totals.ttc));
+            if (computed <= 0) return;
+            setShowCartActions(false);
+            setJustifyAction({ kind: 'cartDiscount', amount: computed, mode });
+          }}
+          onCommentSave={(c) => { setCartComment(c); setShowCartActions(false); }}
+        />
+      )}
+      {justifyAction && (() => {
+        const a = justifyAction;
+        return (
+          <JustificationModal
+            title={
+              a.kind === 'remove' ? 'Sortie d\'un produit'
+              : a.kind === 'lineDiscount' ? 'Remise sur ligne'
+              : 'Remise globale panier'
+            }
+            description={
+              a.kind === 'remove' ? 'Indiquez la raison du retrait de l\'article du panier.'
+              : 'Toute remise manuelle doit être justifiée.'
+            }
+            onClose={() => setJustifyAction(null)}
+            onConfirm={(reason) => {
+              if (a.kind === 'remove') {
+                removeLine(a.key);
+              } else if (a.kind === 'lineDiscount') {
+                setLines((cur) => cur.map((l) => l.key === a.key
+                  ? { ...l, discount_amount: a.amount, metadata: { ...l.metadata, manual_discount_reason: reason } }
+                  : l));
+              } else if (a.kind === 'cartDiscount') {
+                // Répartit la remise au prorata sur les lignes
+                const subtotal = lines.reduce((s, l) => s + round2(l.unit_price_ttc * l.quantity - l.discount_amount), 0);
+                if (subtotal > 0) {
+                  const ratio = a.amount / subtotal;
+                  setLines((cur) => cur.map((l) => {
+                    const lineSub = round2(l.unit_price_ttc * l.quantity - l.discount_amount);
+                    return {
+                      ...l,
+                      discount_amount: round2(l.discount_amount + lineSub * ratio),
+                      metadata: { ...l.metadata, cart_discount: true, cart_discount_reason: reason },
+                    };
+                  }));
+                }
+              }
+              setJustifyAction(null);
             }}
           />
         );

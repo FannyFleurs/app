@@ -23,10 +23,12 @@ export default async function CustomersPage() {
     last_visit: string | null;
     total_ttc: string;
     loyalty_points: string | null;
+    default_discount_pct: string | null;
   }>(
     `SELECT c.id, c.type,
             COALESCE(c.company_name, NULLIF(TRIM(CONCAT(c.first_name,' ',c.last_name)), '')) AS display_name,
             c.email, c.phone, c.company_name, c.siret,
+            c.default_discount_pct::text,
             COUNT(s.id)::text AS nb_sales,
             MAX(s.validated_at)::text AS last_visit,
             COALESCE(SUM(s.total_ttc),0)::text AS total_ttc,

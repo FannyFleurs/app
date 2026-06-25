@@ -94,6 +94,14 @@ export async function GET(req: Request) {
     [storeId, date],
   );
 
+  // Paniers encore en attente sur la boutique
+  const held = await query<{ c: string }>(
+    `SELECT COUNT(*)::text AS c FROM sales
+      WHERE store_id = $1 AND status = 'on_hold'`,
+    [storeId],
+  );
+  const heldCount = Number(held.rows[0]?.c ?? 0);
+
   return NextResponse.json({
     totals: {
       sales: Number(totals.rows[0]!.sales),
@@ -122,5 +130,6 @@ export async function GET(req: Request) {
       created_at: m.created_at,
     })),
     sealed: sealed.rows[0] ?? null,
+    held_count: heldCount,
   });
 }
