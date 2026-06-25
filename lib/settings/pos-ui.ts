@@ -39,6 +39,7 @@ export interface PosUiSettings {
   opening_float_mode: OpeningFloatMode;
   opening_float_amount: number;
   loyalty: LoyaltySettings;
+  hidden_sidebar_paths: string[];
 }
 
 export const OPENING_FLOAT_LABELS: Record<OpeningFloatMode, { label: string; description: string }> = {
@@ -76,6 +77,7 @@ export const POS_UI_DEFAULTS: PosUiSettings = {
     stackable: false,
     on_excluded_categories: [],
   },
+  hidden_sidebar_paths: [],
 };
 
 export const POS_THEME_COLOR_VALUES: Record<PosThemeColor, { label: string; main: string; deep: string; soft: string }> = {

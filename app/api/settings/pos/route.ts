@@ -34,6 +34,7 @@ const schema = z.object({
   opening_float_mode: z.enum(OPENING_FLOAT_MODES).optional(),
   opening_float_amount: z.number().min(0).max(100000).optional(),
   loyalty: loyaltySchema.optional(),
+  hidden_sidebar_paths: z.array(z.string().max(120)).optional(),
 });
 
 export async function GET() {

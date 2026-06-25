@@ -1,5 +1,4 @@
 import { redirect } from 'next/navigation';
-import { cookies } from 'next/headers';
 import { readSessionFromCookie } from '@/lib/auth/session';
 import { query } from '@/lib/db/client';
 import {
@@ -19,14 +18,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   );
   const ui = mergeWithDefaults(rows[0]?.value ?? null);
 
-  const collapsed = cookies().get('florea_sidebar_collapsed')?.value === '1';
-
   return (
     <AppShell
       user={{ id: user.id, fullName: user.fullName, role: user.role, email: user.email }}
       themeColor={ui.theme_color}
       colorScheme={ui.color_scheme}
-      initialCollapsed={collapsed}
+      hiddenPaths={ui.hidden_sidebar_paths ?? []}
     >
       {children}
     </AppShell>
