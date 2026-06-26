@@ -12,20 +12,25 @@ const schema = z.object({
   full_name: z.string().min(1).max(120),
   email: z.string().email().max(160),
   role: z.enum(ROLES),
-  pin: z.string().regex(/^\d{4}$/, 'PIN doit être 4 chiffres'),
+  pin: z.string().regex(/^\d{4}$/, 'PIN doit être 4 chiffres').optional(),
+  pin_required: z.boolean().optional(),
   is_active: z.boolean().optional(),
-});
+}).refine(
+  (d) => d.pin_required === false || !!d.pin,
+  { message: 'PIN obligatoire quand pin_required est activé', path: ['pin'] },
+);
 
 export async function GET() {
   const g = await requirePermission('users.read');
   if ('response' in g) return g.response;
   const { rows } = await query<{
     id: string; email: string; full_name: string; role: string;
-    is_active: boolean; has_pin: boolean;
+    is_active: boolean; has_pin: boolean; pin_required: boolean;
     last_login_at: string | null;
   }>(
     `SELECT id, email, full_name, role, is_active,
             (pin_code_hash IS NOT NULL) AS has_pin,
+            COALESCE(pin_required, TRUE) AS pin_required,
             last_login_at
        FROM users WHERE organization_id = $1
        ORDER BY full_name`,
@@ -49,17 +54,18 @@ export async function POST(req: Request) {
     );
     if (exists.rowCount && exists.rowCount > 0) return jsonError('EMAIL_ALREADY_EXISTS', 409);
 
-    const pinHash = await hashPassword(d.pin);
-    // Mot de passe applicatif : on stocke un hash du PIN (légalement requis NOT NULL)
-    const passwordHash = pinHash;
+    const pinHash = d.pin ? await hashPassword(d.pin) : null;
+    // Mot de passe applicatif (NOT NULL) : hash du PIN, sinon hash aléatoire
+    const passwordHash = pinHash ?? await hashPassword(crypto.randomUUID());
 
     const ins = await query<{ id: string }>(
       `INSERT INTO users
-         (organization_id, email, password_hash, full_name, role, is_active, pin_code_hash)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+         (organization_id, email, password_hash, full_name, role, is_active,
+          pin_code_hash, pin_required)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
       [
         g.user.organizationId, d.email.toLowerCase(), passwordHash, d.full_name.trim(),
-        d.role, d.is_active ?? true, pinHash,
+        d.role, d.is_active ?? true, pinHash, d.pin_required ?? true,
       ],
     );
 

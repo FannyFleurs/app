@@ -21,6 +21,7 @@ export interface ZReportData {
     counted: number;
     variance: number;
     denomination_count?: Record<string, number>;
+    bank_deposits?: number;
   };
 }
 
@@ -151,6 +152,9 @@ export async function renderZReportPdf(data: ZReportData, org: OrgInfoMinimal): 
     doc.font('Helvetica-Bold').fontSize(11).text('Contrôle des espèces');
     doc.moveDown(0.3);
     doc.font('Helvetica').fontSize(10);
+    if (data.cash.bank_deposits && data.cash.bank_deposits > 0) {
+      kv(doc, 'Remise en banque', `-${formatEUR(data.cash.bank_deposits)}`);
+    }
     kv(doc, 'Espèces attendues (système)', formatEUR(data.cash.expected));
     kv(doc, 'Espèces comptées', formatEUR(data.cash.counted));
     const variance = data.cash.variance;

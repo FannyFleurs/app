@@ -648,29 +648,24 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
                 <button
                   key={p.id}
                   onClick={() => addProduct(p)}
-                  className={`card ${metrics.padding} text-left hover:shadow-md hover:border-gray-300 transition-all active:scale-[0.98] aspect-[5/3] flex flex-col`}
+                  className={`card ${metrics.padding} hover:shadow-md hover:border-gray-300 transition-all active:scale-[0.98] aspect-[5/3] grid place-items-center text-center`}
                 >
-                  {posUi.show_product_image && (
-                    <div className="mb-2 h-14 w-full rounded-lg bg-gray-50 grid place-items-center text-ink-soft overflow-hidden">
-                      {p.image_url
-                        ? <img src={p.image_url} alt="" className="h-full w-full object-cover" />
-                        : <span>✿</span>}
-                    </div>
-                  )}
-                  <div className={`${metrics.titleFontSize} ${metrics.titleMinHeight} font-medium line-clamp-2 leading-tight`}>
-                    {p.name}
-                  </div>
-                  <div className="mt-2 flex items-center justify-between gap-1">
+                  <div className="flex flex-col items-center justify-center gap-1.5 max-w-full">
+                    {posUi.show_product_image && p.image_url && (
+                      <img src={p.image_url} alt="" className="h-12 w-12 rounded-md object-cover mb-1" />
+                    )}
+                    <span className={`${metrics.titleFontSize} font-semibold text-ink leading-tight line-clamp-2`}>
+                      {p.name}
+                    </span>
                     {posUi.show_price && (
-                      <span className={`${metrics.priceFontSize} font-semibold`}>
-                        {p.price_is_free ? 'libre' : formatEUR(p.sale_price_ttc)}
+                      <span className="text-sm font-medium text-ink-soft">
+                        {p.price_is_free ? 'prix libre' : formatEUR(p.sale_price_ttc)}
                       </span>
                     )}
-                    {posUi.show_tax_badge && <span className="chip">{p.tax_rate}%</span>}
+                    {posUi.show_tax_badge && (
+                      <span className="chip text-[10px] px-1.5 py-0">{p.tax_rate}%</span>
+                    )}
                   </div>
-                  {posUi.show_category_badge && p.category_name && (
-                    <div className="mt-1 text-[11px] text-ink-soft truncate">{p.category_name}</div>
-                  )}
                 </button>
               ))}
             </div>

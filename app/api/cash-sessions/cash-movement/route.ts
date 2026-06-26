@@ -36,10 +36,10 @@ export async function POST(req: Request) {
   if (session.rowCount === 0) return jsonError('NO_OPEN_SESSION', 400);
   const s = session.rows[0]!;
 
-  await query(
+  const ins = await query<{ id: string }>(
     `INSERT INTO cash_movements
        (organization_id, cash_session_id, movement_type, amount, reason, user_id)
-     VALUES ($1,$2,$3,$4,$5,$6)`,
+     VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
     [g.user.organizationId, s.id, movement_type, amount, reason, g.user.id],
   );
 
@@ -52,7 +52,7 @@ export async function POST(req: Request) {
     payload: { amount, reason, register_id },
   });
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, id: ins.rows[0]!.id });
 }
 
 /**

@@ -227,7 +227,8 @@ export default function StockAdmin({ canAdjust, stores }: { canAdjust: boolean; 
           <div className="p-6 max-w-xl">
             {canAdjust ? (
               <InlineMovementForm
-                stores={stores}
+                storeId={stores[0]?.id ?? ''}
+                storeName={stores[0]?.name ?? ''}
                 onSaved={() => { setSection('movements'); }}
               />
             ) : (
@@ -345,10 +346,12 @@ function exportCsv(rows: StockLevel[]) {
   URL.revokeObjectURL(url);
 }
 
-function InlineMovementForm({ stores, onSaved }: { stores: Store[]; onSaved: () => void }) {
+function InlineMovementForm({ storeId, storeName, onSaved }: {
+  storeId: string; storeName: string; onSaved: () => void;
+}) {
   const [products, setProducts] = useState<Array<{ id: string; name: string; sku: string | null }>>([]);
   const [productId, setProductId] = useState('');
-  const [storeId, setStoreId] = useState(stores[0]?.id ?? '');
+  const [productSearch, setProductSearch] = useState('');
   const [type, setType] = useState<'purchase' | 'adjustment' | 'loss' | 'inventory'>('purchase');
   const [delta, setDelta] = useState<number>(0);
   const [reason, setReason] = useState('');
@@ -357,15 +360,36 @@ function InlineMovementForm({ stores, onSaved }: { stores: Store[]; onSaved: () 
 
   useEffect(() => {
     void (async () => {
-      const r = await fetch('/api/products');
+      const r = await fetch('/api/products?active=false');
       if (r.ok) setProducts((await r.json()).products);
     })();
   }, []);
 
+  const filteredProducts = useMemo(() => {
+    const needle = productSearch.trim().toLowerCase();
+    if (!needle) return products.slice(0, 20);
+    return products
+      .filter((p) =>
+        p.name.toLowerCase().includes(needle) ||
+        p.sku?.toLowerCase().includes(needle),
+      )
+      .slice(0, 20);
+  }, [products, productSearch]);
+
+  const selectedProduct = useMemo(
+    () => products.find((p) => p.id === productId) ?? null,
+    [products, productId],
+  );
+
+  // Motif obligatoire uniquement pour sortie (delta < 0) ou perte
+  const reasonRequired = delta < 0 || type === 'loss' || type === 'adjustment';
+
   async function submit() {
-    if (!productId || !storeId || delta === 0 || !reason.trim()) {
-      setError('Tous les champs sont requis (et delta ≠ 0).');
-      return;
+    if (!productId) { setError('Sélectionnez un produit.'); return; }
+    if (!storeId) { setError('Aucune boutique configurée.'); return; }
+    if (delta === 0) { setError('La quantité ne peut pas être nulle.'); return; }
+    if (reasonRequired && !reason.trim()) {
+      setError('Un motif est requis pour une sortie ou une perte.'); return;
     }
     setSaving(true); setError(null);
     const r = await fetch('/api/stock/movement', {
@@ -375,7 +399,7 @@ function InlineMovementForm({ stores, onSaved }: { stores: Store[]; onSaved: () 
         product_id: productId,
         movement_type: type,
         quantity_delta: delta,
-        reason: reason.trim(),
+        reason: reason.trim() || (delta > 0 ? 'Entrée stock' : 'Mouvement stock'),
       }),
     });
     setSaving(false);
@@ -391,35 +415,69 @@ function InlineMovementForm({ stores, onSaved }: { stores: Store[]; onSaved: () 
     <div>
       <h2 className="text-xl font-semibold tracking-tight">Faire un mouvement</h2>
       <p className="mt-1 text-sm text-ink-soft">
-        Enregistre une entrée, sortie, perte ou ajustement. Le journal est append-only.
+        Enregistre une entrée, sortie, perte ou ajustement sur la boutique connectée :
+        <span className="ml-1 font-medium text-ink">{storeName || '—'}</span>.
       </p>
       <div className="card p-5 mt-4 space-y-3">
         <div>
           <label className="text-sm font-medium text-ink-soft">Produit</label>
-          <select className="input mt-1 h-11" value={productId} onChange={(e) => setProductId(e.target.value)}>
-            <option value="">— Sélectionner —</option>
-            {products.map((p) => (
-              <option key={p.id} value={p.id}>{p.name}{p.sku ? ` (${p.sku})` : ''}</option>
-            ))}
+          {selectedProduct ? (
+            <div className="mt-1 flex items-center justify-between gap-2 rounded-xl border border-border bg-accent-soft px-3 py-2.5">
+              <div className="min-w-0">
+                <div className="font-medium truncate">{selectedProduct.name}</div>
+                {selectedProduct.sku && (
+                  <div className="text-[11px] text-ink-soft font-mono">{selectedProduct.sku}</div>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => { setProductId(''); setProductSearch(''); }}
+                className="text-ink-soft hover:text-danger text-sm"
+              >
+                ✕
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="relative mt-1">
+                <input
+                  className="input pr-9"
+                  placeholder="Rechercher produit (nom ou SKU)…"
+                  value={productSearch}
+                  onChange={(e) => setProductSearch(e.target.value)}
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-soft">⌕</span>
+              </div>
+              {filteredProducts.length > 0 && (
+                <div className="mt-2 max-h-60 overflow-y-auto rounded-xl border border-border divide-y divide-border">
+                  {filteredProducts.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => { setProductId(p.id); setProductSearch(''); }}
+                      className="w-full text-left px-3 py-2 hover:bg-gray-50"
+                    >
+                      <div className="font-medium text-sm">{p.name}</div>
+                      {p.sku && <div className="text-[11px] text-ink-soft font-mono">{p.sku}</div>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        <div>
+          <label className="text-sm font-medium text-ink-soft">Type</label>
+          <select className="input mt-1 h-11" value={type}
+                  onChange={(e) => setType(e.target.value as typeof type)}>
+            <option value="purchase">Entrée fournisseur</option>
+            <option value="adjustment">Ajustement</option>
+            <option value="loss">Perte / casse</option>
+            <option value="inventory">Inventaire</option>
           </select>
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-sm font-medium text-ink-soft">Boutique</label>
-            <select className="input mt-1 h-11" value={storeId} onChange={(e) => setStoreId(e.target.value)}>
-              {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="text-sm font-medium text-ink-soft">Type</label>
-            <select className="input mt-1 h-11" value={type} onChange={(e) => setType(e.target.value as typeof type)}>
-              <option value="purchase">Entrée fournisseur</option>
-              <option value="adjustment">Ajustement</option>
-              <option value="loss">Perte / casse</option>
-              <option value="inventory">Inventaire</option>
-            </select>
-          </div>
-        </div>
+
         <div>
           <label className="text-sm font-medium text-ink-soft">Quantité (+/−)</label>
           <input
@@ -431,11 +489,17 @@ function InlineMovementForm({ stores, onSaved }: { stores: Store[]; onSaved: () 
           />
           <p className="mt-1 text-xs text-ink-soft">Positif pour entrée, négatif pour sortie.</p>
         </div>
+
         <div>
-          <label className="text-sm font-medium text-ink-soft">Motif</label>
+          <label className="text-sm font-medium text-ink-soft">
+            Motif {reasonRequired ? '' : <span className="text-ink-soft/60">(optionnel)</span>}
+          </label>
           <input className="input mt-1" value={reason} onChange={(e) => setReason(e.target.value)}
-                 placeholder="ex : Livraison Aoki Fleurs, perte fleurs fanées" />
+                 placeholder={reasonRequired
+                   ? 'ex : perte fleurs fanées, ajustement après inventaire'
+                   : 'ex : Livraison Aoki Fleurs'} />
         </div>
+
         {error && <div className="rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
         <button onClick={() => void submit()} disabled={saving} className="btn-primary w-full h-11">
           {saving ? 'Enregistrement…' : 'Enregistrer le mouvement'}

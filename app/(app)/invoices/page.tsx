@@ -56,10 +56,7 @@ export default async function InvoicesPage() {
       <PageHeader
         title="Factures"
         subtitle="B2C, B2B, pro forma, acomptes, soldes et avoirs. Numérotation séquentielle sans rupture."
-        badge={{ label: 'Module Phase 2 — schéma actif', tone: 'soft' }}
-        actions={(
-          <button className="btn-primary" disabled title="Phase 2">+ Nouvelle facture</button>
-        )}
+        actions={null}
       />
 
       <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -88,13 +85,14 @@ export default async function InvoicesPage() {
                 <th className="text-right px-4 py-3">HT</th>
                 <th className="text-right px-4 py-3">TTC</th>
                 <th className="text-left px-4 py-3">Statut</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
               {invoices.rows.map((i) => {
                 const s = STATUS[i.status] ?? { label: i.status, tone: 'neutral' as const };
                 return (
-                  <tr key={i.id} className="border-t border-border hover:bg-bg/60">
+                  <tr key={i.id} className="border-t border-border hover:bg-gray-50">
                     <td className="px-4 py-3 font-mono text-xs">
                       <Link href={`/invoices/${i.id}`} className="hover:underline">
                         {i.number ?? '—'}
@@ -107,6 +105,18 @@ export default async function InvoicesPage() {
                     <td className="px-4 py-3 text-right">{formatEUR(Number(i.total_ht))}</td>
                     <td className="px-4 py-3 text-right font-medium">{formatEUR(Number(i.total_ttc))}</td>
                     <td className="px-4 py-3"><Badge tone={s.tone}>{s.label}</Badge></td>
+                    <td className="px-4 py-3 text-right">
+                      <a
+                        href={`/api/invoices/${i.id}/pdf`}
+                        target="_blank" rel="noreferrer"
+                        className="text-accent-deep text-sm hover:underline mr-3"
+                      >
+                        PDF
+                      </a>
+                      <Link href={`/invoices/${i.id}`} className="text-accent-deep text-sm hover:underline">
+                        Détail
+                      </Link>
+                    </td>
                   </tr>
                 );
               })}

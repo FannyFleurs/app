@@ -15,17 +15,24 @@ export default function BankDepositModal({ registerId, maxAmount, onClose, onSav
   const [reason, setReason] = useState('Remise en banque');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [printReceipt, setPrintReceipt] = useState(true);
 
   async function submit() {
     if (amount <= 0) { setError('Montant invalide.'); return; }
     setLoading(true); setError(null);
+    // Force le mot-clé "banque" dans le motif pour que la remise soit reconnue
+    // et défalquée dans la clôture / le Z.
+    const finalReason = (() => {
+      const r = reason.trim() || 'Remise en banque';
+      return /banque/i.test(r) ? r : `Remise en banque · ${r}`;
+    })();
     const res = await fetch('/api/cash-sessions/cash-movement', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         register_id: registerId,
         movement_type: 'out',
         amount,
-        reason: reason.trim() || 'Remise en banque',
+        reason: finalReason,
       }),
     });
     setLoading(false);
@@ -33,6 +40,10 @@ export default function BankDepositModal({ registerId, maxAmount, onClose, onSav
       const j = await res.json().catch(() => ({}));
       setError(j.error ?? 'Erreur');
       return;
+    }
+    const j = await res.json();
+    if (printReceipt && j.id) {
+      window.open(`/api/cash-sessions/cash-movement/${j.id}/receipt-pdf`, '_blank');
     }
     onSaved();
   }
@@ -72,6 +83,12 @@ export default function BankDepositModal({ registerId, maxAmount, onClose, onSav
           onChange={(e) => setReason(e.target.value)}
           placeholder="Remise en banque · numéro de bordereau"
         />
+
+        <label className="mt-3 flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={printReceipt}
+                 onChange={(e) => setPrintReceipt(e.target.checked)} />
+          Imprimer le reçu (date, vendeur, montant)
+        </label>
 
         {error && <div className="mt-3 rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
 

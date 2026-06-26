@@ -53,6 +53,19 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   );
   const denom = ev.rows[0]?.payload?.denomination_count ?? undefined;
 
+  // Remises en banque du jour
+  const depositsRes = await query<{ total: string }>(
+    `SELECT COALESCE(SUM(cm.amount), 0)::text AS total
+       FROM cash_movements cm
+       JOIN cash_sessions cs ON cs.id = cm.cash_session_id
+      WHERE cs.organization_id = $1
+        AND cs.opened_at::date = $2::date
+        AND cm.movement_type = 'out'
+        AND cm.reason ILIKE '%banque%'`,
+    [g.user.organizationId, c.business_date],
+  );
+  const bankDeposits = Number(depositsRes.rows[0]?.total ?? 0);
+
   const data: ZReportData = {
     business_date: c.business_date,
     store_name: c.store_name,
@@ -73,6 +86,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
       counted: c.cash_counted != null ? Number(c.cash_counted) : Number(c.cash_expected),
       variance: c.cash_variance != null ? Number(c.cash_variance) : 0,
       denomination_count: denom,
+      bank_deposits: bankDeposits,
     },
   };
 

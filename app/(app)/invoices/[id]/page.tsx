@@ -5,6 +5,7 @@ import { query } from '@/lib/db/client';
 import { formatEUR } from '@/lib/services/money';
 import PageHeader from '@/components/PageHeader';
 import Badge from '@/components/Badge';
+import InvoiceActions from './InvoiceActions';
 
 export const dynamic = 'force-dynamic';
 
@@ -73,10 +74,12 @@ export default async function InvoiceDetailPage({ params }: { params: { id: stri
         subtitle={`Émise le ${i.issue_date ?? '—'}${i.due_date ? ` · Échéance ${i.due_date}` : ''}`}
         badge={{ label: s.label, tone: s.tone === 'success' || s.tone === 'warning' ? s.tone : 'soft' }}
         actions={(
-          <>
-            <button className="btn-soft" disabled title="Phase 2">Télécharger PDF</button>
-            <button className="btn-soft" disabled title="Phase 2">Envoyer par email</button>
-          </>
+          <InvoiceActions
+            invoiceId={i.id}
+            invoiceNumber={i.number ?? null}
+            customerEmail={i.customer_email}
+            customerName={i.customer_display}
+          />
         )}
       />
 

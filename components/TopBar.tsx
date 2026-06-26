@@ -15,6 +15,7 @@ const TOP_TABS_ORDER: string[] = [
   '/orders',
   '/ma-journee',
   '/stock',
+  '/credit-notes',
   '/gift-cards',
   '/customers',
 ];

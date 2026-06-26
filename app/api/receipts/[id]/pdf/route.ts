@@ -3,6 +3,7 @@ import { requirePermission } from '@/lib/auth/guards';
 import { jsonError } from '@/lib/validation/api';
 import { query } from '@/lib/db/client';
 import { renderReceiptPdf, type ReceiptSnapshot, type OrgInfo } from '@/lib/services/receipt-pdf';
+import { RECEIPT_KEY, mergeReceiptDefaults, type ReceiptSettings } from '@/lib/settings/receipt';
 
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
   const g = await requirePermission('pos.use');
@@ -51,11 +52,18 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     address: c.org_address, phone: c.org_phone,
   };
 
+  const settingsRes = await query<{ value: Partial<ReceiptSettings> }>(
+    `SELECT value FROM settings WHERE organization_id = $1 AND key = $2`,
+    [g.user.organizationId, RECEIPT_KEY],
+  );
+  const receiptSettings = mergeReceiptDefaults(settingsRes.rows[0]?.value ?? null);
+
   const buf = await renderReceiptPdf(rec.snapshot, org, {
     fiscalHash: rec.fiscal_hash,
     storeName: c.store_name ?? undefined,
     registerCode: c.register_code ?? undefined,
     cashier: c.user_name ?? undefined,
+    receipt: receiptSettings,
   });
   return new NextResponse(buf, {
     status: 200,

@@ -29,7 +29,14 @@ interface PreviewData {
   totals: { sales: number; ht: number; tva: number; ttc: number; discount: number };
   tva_breakdown: { rate: number; base_ht: number; tva: number; ttc: number }[];
   payments: { method: string; total: number }[];
-  cash_breakdown: { opening_floats: number; cash_sales: number; cash_in: number; cash_out: number; expected: number };
+  cash_breakdown: {
+    opening_floats: number;
+    cash_sales: number;
+    cash_in: number;
+    cash_out: number;
+    bank_deposits: number;
+    expected: number;
+  };
   movements: { id: string; movement_type: 'in' | 'out'; amount: number; reason: string; created_at: string }[];
   sealed: { id: string; sealed_at: string } | null;
   held_count: number;
@@ -325,8 +332,18 @@ export default function ClosuresAdmin({ stores, registers }: { stores: Store[]; 
                 {preview.cash_breakdown.cash_in > 0 && (
                   <div className="flex justify-between"><span className="text-ink-soft">+ Entrées caisse</span><span>{formatEUR(preview.cash_breakdown.cash_in)}</span></div>
                 )}
-                {preview.cash_breakdown.cash_out > 0 && (
-                  <div className="flex justify-between"><span className="text-ink-soft">- Sorties caisse</span><span>-{formatEUR(preview.cash_breakdown.cash_out)}</span></div>
+                {preview.cash_breakdown.cash_out > 0
+                  && preview.cash_breakdown.cash_out > preview.cash_breakdown.bank_deposits && (
+                  <div className="flex justify-between">
+                    <span className="text-ink-soft">- Autres sorties caisse</span>
+                    <span>-{formatEUR(preview.cash_breakdown.cash_out - preview.cash_breakdown.bank_deposits)}</span>
+                  </div>
+                )}
+                {preview.cash_breakdown.bank_deposits > 0 && (
+                  <div className="flex justify-between text-warning">
+                    <span>⤓ Remise en banque</span>
+                    <span>-{formatEUR(preview.cash_breakdown.bank_deposits)}</span>
+                  </div>
                 )}
                 <div className="flex justify-between pt-2 border-t border-border">
                   <span className="font-medium">Espèces attendues</span>

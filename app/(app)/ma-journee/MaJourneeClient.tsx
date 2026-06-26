@@ -186,9 +186,24 @@ export default function MaJourneeClient() {
               <div className="relative flex-1 max-w-md">
                 <input
                   className="input pr-9"
-                  placeholder="Rechercher…"
+                  placeholder="Rechercher ou scanner un numéro de ticket…"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
+                  onKeyDown={async (e) => {
+                    if (e.key === 'Enter' && search.trim()) {
+                      // Tente d'abord un scan exact (toutes dates)
+                      const r = await fetch(
+                        `/api/sales/today?scan=${encodeURIComponent(search.trim())}`,
+                      );
+                      if (r.ok) {
+                        const j = await r.json();
+                        if (j.sales?.[0]?.id) {
+                          await pickSale(j.sales[0].id);
+                          setSearch('');
+                        }
+                      }
+                    }
+                  }}
                 />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-soft">⌕</span>
               </div>
@@ -268,6 +283,90 @@ export default function MaJourneeClient() {
   );
 }
 
+function SendInvoiceButton({
+  invoiceId, invoiceNumber, onSent,
+}: {
+  invoiceId: string;
+  invoiceNumber: string;
+  onSent: (email: string) => void;
+}) {
+  const [sending, setSending] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+
+  async function trigger(email?: string) {
+    setSending(true);
+    const r = await fetch(`/api/invoices/${invoiceId}/email`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(email ? { email } : {}),
+    });
+    setSending(false);
+    if (!r.ok) {
+      if (r.status === 400) {
+        // Pas d'email sur le client → modale pour le saisir
+        setShowModal(true);
+        return;
+      }
+      return;
+    }
+    const j = await r.json();
+    onSent(j.email);
+    setShowModal(false);
+  }
+
+  return (
+    <>
+      <button
+        onClick={() => void trigger()}
+        disabled={sending}
+        className="btn-primary text-xs whitespace-nowrap"
+      >
+        {sending ? 'Envoi…' : `✉ Envoyer facture`}
+      </button>
+      {showModal && (
+        <InlineEmailModal
+          invoiceNumber={invoiceNumber}
+          busy={sending}
+          onClose={() => setShowModal(false)}
+          onSend={(email) => void trigger(email)}
+        />
+      )}
+    </>
+  );
+}
+
+function InlineEmailModal({ invoiceNumber, busy, onClose, onSend }: {
+  invoiceNumber: string;
+  busy: boolean;
+  onClose: () => void;
+  onSend: (email: string) => void;
+}) {
+  const [email, setEmail] = useState('');
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-ink/30 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="card max-w-sm w-full p-5" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-semibold">Envoyer la facture</h2>
+          <button onClick={onClose} className="text-ink-soft hover:text-ink">✕</button>
+        </div>
+        <p className="text-sm text-ink-soft mb-3">
+          Renseignez l&apos;adresse pour envoyer la facture <strong className="text-ink">{invoiceNumber}</strong>.
+          Elle sera enregistrée sur la fiche client.
+        </p>
+        <label className="text-sm font-medium text-ink-soft">Email</label>
+        <input type="email" autoFocus className="input mt-1" value={email}
+               onChange={(e) => setEmail(e.target.value)} placeholder="client@exemple.fr" />
+        <button
+          onClick={() => onSend(email.trim())}
+          disabled={busy || !email.includes('@')}
+          className="btn-primary w-full mt-4 h-11"
+        >
+          {busy ? 'Envoi…' : 'Envoyer'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function KpiRow({ label, value, tone }: { label: string; value: string; tone?: 'warning' }) {
   return (
     <div className="flex items-center justify-between py-2 border-b border-border/60 last:border-0">
@@ -337,10 +436,17 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
               Voir le ticket
             </a>
             {detail.invoice ? (
-              <a href={`/api/invoices/${detail.invoice.id}/pdf`} target="_blank" rel="noreferrer"
-                 className="btn-primary text-xs whitespace-nowrap">
-                Facture {detail.invoice.number}
-              </a>
+              <div className="flex flex-col items-end gap-1.5">
+                <a href={`/api/invoices/${detail.invoice.id}/pdf`} target="_blank" rel="noreferrer"
+                   className="btn-soft text-xs whitespace-nowrap">
+                  🖨 Imprimer facture {detail.invoice.number}
+                </a>
+                <SendInvoiceButton
+                  invoiceId={detail.invoice.id}
+                  invoiceNumber={detail.invoice.number}
+                  onSent={(email) => setInfo(`Facture envoyée à ${email}`)}
+                />
+              </div>
             ) : s.customer_id ? (
               <button onClick={() => void generateInvoice()} disabled={generating}
                       className="btn-primary text-xs whitespace-nowrap">

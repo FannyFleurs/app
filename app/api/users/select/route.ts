@@ -11,9 +11,12 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   try {
     const { rows } = await query<{
-      id: string; full_name: string; role: string; has_pin: boolean;
+      id: string; full_name: string; role: string;
+      has_pin: boolean; pin_required: boolean;
     }>(
-      `SELECT id, full_name, role, (pin_code_hash IS NOT NULL) AS has_pin
+      `SELECT id, full_name, role,
+              (pin_code_hash IS NOT NULL) AS has_pin,
+              COALESCE(pin_required, TRUE) AS pin_required
          FROM users
         WHERE is_active = TRUE
         ORDER BY full_name`,
@@ -22,9 +25,8 @@ export async function GET() {
   } catch (err) {
     const m = (err as Error).message ?? '';
     if (m.includes('pin_code_hash')) {
-      // Migration 0007 pas encore appliquée — fallback sans PIN
       const { rows } = await query(
-        `SELECT id, full_name, role, FALSE AS has_pin
+        `SELECT id, full_name, role, FALSE AS has_pin, TRUE AS pin_required
            FROM users
           WHERE is_active = TRUE
           ORDER BY full_name`,
@@ -32,6 +34,20 @@ export async function GET() {
       return NextResponse.json({
         users: rows,
         migration_required: '0007_user_pin_and_settings',
+      });
+    }
+    if (m.includes('pin_required')) {
+      const { rows } = await query(
+        `SELECT id, full_name, role,
+                (pin_code_hash IS NOT NULL) AS has_pin,
+                TRUE AS pin_required
+           FROM users
+          WHERE is_active = TRUE
+          ORDER BY full_name`,
+      );
+      return NextResponse.json({
+        users: rows,
+        migration_required: '0009_user_pin_optional',
       });
     }
     // eslint-disable-next-line no-console

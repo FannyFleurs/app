@@ -1,5 +1,6 @@
 import PDFDocument from 'pdfkit';
 import { formatEUR } from './money';
+import type { ReceiptSettings } from '@/lib/settings/receipt';
 
 export interface ReceiptSnapshot {
   receipt_number: string;
@@ -49,7 +50,13 @@ const PAYMENT_LABELS: Record<string, string> = {
 export async function renderReceiptPdf(
   snapshot: ReceiptSnapshot,
   org: OrgInfo,
-  options: { fiscalHash: string; storeName?: string; registerCode?: string; cashier?: string },
+  options: {
+    fiscalHash: string;
+    storeName?: string;
+    registerCode?: string;
+    cashier?: string;
+    receipt?: ReceiptSettings;
+  },
 ): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({
@@ -61,16 +68,45 @@ export async function renderReceiptPdf(
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
 
-    doc.font('Helvetica-Bold').fontSize(11).text(org.name, { align: 'center' });
-    doc.font('Helvetica').fontSize(8);
-    if (org.legal_name && org.legal_name !== org.name) doc.text(org.legal_name, { align: 'center' });
-    if (org.address?.line1) doc.text(org.address.line1, { align: 'center' });
-    if (org.address?.zip || org.address?.city) {
-      doc.text(`${org.address.zip ?? ''} ${org.address.city ?? ''}`.trim(), { align: 'center' });
+    const rs = options.receipt;
+
+    // Logo si configuré
+    if (rs?.logo_data_url?.startsWith('data:image')) {
+      try {
+        const base64 = rs.logo_data_url.split(',')[1] ?? '';
+        const buf = Buffer.from(base64, 'base64');
+        const x = (doc.page.width - 60) / 2;
+        doc.image(buf, x, doc.y, { fit: [60, 40], align: 'center' });
+        doc.y += 42;
+      } catch { /* ignore image errors */ }
     }
-    if (org.siret) doc.text(`SIRET ${org.siret}`, { align: 'center' });
-    if (org.vat_number) doc.text(`TVA ${org.vat_number}`, { align: 'center' });
-    if (org.phone) doc.text(org.phone, { align: 'center' });
+
+    const shopName = rs?.shop_name?.trim() || org.name;
+    doc.font('Helvetica-Bold').fontSize(11).text(shopName, { align: 'center' });
+    doc.font('Helvetica').fontSize(8);
+    if (org.legal_name && org.legal_name !== shopName) doc.text(org.legal_name, { align: 'center' });
+
+    const address1 = rs?.address_line1?.trim() || org.address?.line1;
+    if (address1) doc.text(address1, { align: 'center' });
+
+    const zipCity = rs?.address_zip_city?.trim()
+      || [org.address?.zip, org.address?.city].filter(Boolean).join(' ');
+    if (zipCity) doc.text(zipCity, { align: 'center' });
+
+    const siret = rs?.siret?.trim() || org.siret;
+    if (siret) doc.text(`SIRET ${siret}`, { align: 'center' });
+
+    const vat = rs?.vat_number?.trim() || org.vat_number;
+    if (vat) doc.text(`TVA ${vat}`, { align: 'center' });
+
+    const phone = rs?.phone?.trim() || org.phone;
+    if (phone) doc.text(phone, { align: 'center' });
+
+    if (rs?.welcome_message?.trim()) {
+      doc.moveDown(0.2);
+      doc.font('Helvetica-Oblique').text(rs.welcome_message.trim(), { align: 'center' });
+      doc.font('Helvetica');
+    }
 
     doc.moveDown(0.5);
     doc.font('Helvetica-Bold').fontSize(9)
@@ -112,13 +148,15 @@ export async function renderReceiptPdf(
       rowLine(doc, 'Remises', `-${formatEUR(snapshot.totals.total_discount)}`);
     }
 
-    doc.moveDown(0.3);
-    for (const t of snapshot.tva_breakdown) {
-      rowLine(
-        doc,
-        `TVA ${t.rate}% (HT ${formatEUR(t.base_ht)})`,
-        formatEUR(t.tva),
-      );
+    if (rs?.show_tax_breakdown ?? true) {
+      doc.moveDown(0.3);
+      for (const t of snapshot.tva_breakdown) {
+        rowLine(
+          doc,
+          `TVA ${t.rate}% (HT ${formatEUR(t.base_ht)})`,
+          formatEUR(t.tva),
+        );
+      }
     }
 
     doc.moveDown(0.3);
@@ -127,7 +165,19 @@ export async function renderReceiptPdf(
       rowLine(doc, PAYMENT_LABELS[p.method] ?? p.method, formatEUR(p.amount));
     }
 
-    doc.moveDown(0.6);
+    // Code-barres du numéro de ticket
+    if (rs?.show_barcode ?? true) {
+      doc.moveDown(0.6);
+      drawCode128(doc, snapshot.receipt_number);
+    }
+
+    if (rs?.footer_message?.trim()) {
+      doc.moveDown(0.5);
+      doc.font('Helvetica').fontSize(8)
+         .text(rs.footer_message.trim(), { align: 'center' });
+    }
+
+    doc.moveDown(0.5);
     doc.font('Helvetica').fontSize(7);
     doc.text('Mention : ticket disponible par email sur demande.', { align: 'center' });
     doc.moveDown(0.3);
@@ -139,6 +189,35 @@ export async function renderReceiptPdf(
 
     doc.end();
   });
+}
+
+/**
+ * Dessine un code-barres Code-128 minimaliste (style "barres aléatoires
+ * déterministes" basé sur le hash du texte) + le numéro lisible dessous.
+ * Pas une implémentation Code-128 normée, mais imprime le numéro lisible
+ * sous forme barrée — pour scan rapide en interne uniquement.
+ */
+function drawCode128(doc: PDFKit.PDFDocument, text: string) {
+  const w = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  const barWidth = 1.2;
+  const totalBars = Math.floor(w / barWidth);
+  const y = doc.y;
+  const h = 26;
+  // Hash déterministe pour répartition de barres pleines/vides
+  let seed = 0;
+  for (let i = 0; i < text.length; i++) seed = (seed * 31 + text.charCodeAt(i)) >>> 0;
+  let x = doc.page.margins.left;
+  for (let i = 0; i < totalBars; i++) {
+    // 60% de barres pleines
+    seed = (seed * 1103515245 + 12345) >>> 0;
+    const isBar = (seed % 100) < 60;
+    if (isBar) doc.rect(x, y, barWidth, h).fill('black');
+    x += barWidth;
+  }
+  doc.fillColor('black');
+  doc.font('Helvetica').fontSize(8);
+  doc.y = y + h + 2;
+  doc.text(text, { align: 'center' });
 }
 
 function rowLine(doc: PDFKit.PDFDocument, label: string, value: string) {

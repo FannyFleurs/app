@@ -9,6 +9,7 @@ import EmptyState from '@/components/EmptyState';
 interface User {
   id: string; email: string; full_name: string;
   role: string; is_active: boolean; has_pin: boolean;
+  pin_required?: boolean;
   last_login_at: string | null;
 }
 
@@ -139,12 +140,15 @@ function UserFormModal({ user, onClose, onSaved }: {
   const [role, setRole] = useState<string>(user?.role ?? 'vendeur');
   const [pin, setPin] = useState('');
   const [isActive, setIsActive] = useState(user?.is_active ?? true);
+  const [pinRequired, setPinRequired] = useState(user?.pin_required ?? true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function submit() {
     if (!fullName.trim() || !email.trim()) { setError('Nom et email obligatoires.'); return; }
-    if (!user && !/^\d{4}$/.test(pin)) { setError('Le PIN doit faire 4 chiffres.'); return; }
+    if (!user && pinRequired && !/^\d{4}$/.test(pin)) {
+      setError('Le PIN doit faire 4 chiffres.'); return;
+    }
     if (pin && !/^\d{4}$/.test(pin)) { setError('Le PIN doit faire 4 chiffres.'); return; }
     setSaving(true); setError(null);
     const payload: Record<string, unknown> = {
@@ -152,6 +156,7 @@ function UserFormModal({ user, onClose, onSaved }: {
       email: email.trim(),
       role,
       is_active: isActive,
+      pin_required: pinRequired,
     };
     if (pin) payload.pin = pin;
     const url = user ? `/api/users/${user.id}` : '/api/users';
@@ -244,12 +249,26 @@ function UserFormModal({ user, onClose, onSaved }: {
             </div>
           </div>
 
-          {user && (
-            <label className="flex items-center gap-2 text-sm pt-1">
-              <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
-              Compte actif
+          <div className="pt-1 space-y-1.5">
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={pinRequired}
+                     onChange={(e) => setPinRequired(e.target.checked)} />
+              Demander le code PIN à la connexion
             </label>
-          )}
+            {!pinRequired && (
+              <p className="text-[11px] text-warning ml-6">
+                ⚠ Cet utilisateur sera connecté en un clic sur sa tuile (sans saisie).
+                À réserver aux postes physiquement sécurisés.
+              </p>
+            )}
+            {user && (
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={isActive}
+                       onChange={(e) => setIsActive(e.target.checked)} />
+                Compte actif
+              </label>
+            )}
+          </div>
         </div>
 
         {error && <div className="mt-3 rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}

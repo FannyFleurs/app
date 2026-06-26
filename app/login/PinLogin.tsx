@@ -8,6 +8,7 @@ interface User {
   full_name: string;
   role: string;
   has_pin: boolean;
+  pin_required?: boolean;
 }
 
 const APP_NAME = 'Florea POS';
@@ -174,7 +175,19 @@ export default function PinLogin() {
               return (
                 <button
                   key={u.id}
-                  onClick={() => { setSelectedId(u.id); setPin(''); setError(null); }}
+                  onClick={async () => {
+                    setError(null);
+                    if (!u.pin_required) {
+                      // Connexion sans PIN explicitement autorisée
+                      const r = await fetch('/api/auth/no-pin-login', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ user_id: u.id }),
+                      });
+                      if (r.ok) { router.push('/'); router.refresh(); return; }
+                    }
+                    setSelectedId(u.id);
+                    setPin('');
+                  }}
                   className={`relative w-full text-left rounded-xl border bg-white px-4 py-3 pl-5 transition-all flex items-center gap-3 ${
                     isSelected
                       ? 'border-transparent ring-2 shadow-md'

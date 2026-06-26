@@ -73,6 +73,19 @@ export async function GET(req: Request) {
   const cashIns = Number(cashBd.rows[0]?.ins ?? 0);
   const cashOuts = Number(cashBd.rows[0]?.outs ?? 0);
   const cashSales = Number(payments.rows.find((p) => p.method === 'cash')?.total ?? 0);
+
+  // Remises en banque = sorties dont le motif contient "banque" (case-insensitive)
+  const depositsRes = await query<{ total: string }>(
+    `SELECT COALESCE(SUM(cm.amount), 0)::text AS total
+       FROM cash_movements cm
+       JOIN cash_sessions cs ON cs.id = cm.cash_session_id
+      WHERE cs.store_id = $1 AND cs.opened_at::date = $2::date
+        AND cm.movement_type = 'out'
+        AND cm.reason ILIKE '%banque%'`,
+    [storeId, date],
+  );
+  const bankDeposits = Number(depositsRes.rows[0]?.total ?? 0);
+
   const cashExpected = Number((openingFloats + cashSales + cashIns - cashOuts).toFixed(2));
 
   // Mouvements détaillés (pour affichage)
@@ -122,6 +135,7 @@ export async function GET(req: Request) {
       cash_sales: cashSales,
       cash_in: cashIns,
       cash_out: cashOuts,
+      bank_deposits: bankDeposits,
       expected: cashExpected,
     },
     movements: movements.rows.map((m) => ({

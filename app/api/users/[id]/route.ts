@@ -13,6 +13,7 @@ const patch = z.object({
   email: z.string().email().max(160).optional(),
   role: z.enum(ROLES).optional(),
   pin: z.string().regex(/^\d{4}$/).optional(),
+  pin_required: z.boolean().optional(),
   is_active: z.boolean().optional(),
 });
 
@@ -30,6 +31,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   if (d.email !== undefined) { sets.push(`email = $${i++}`); vals.push(d.email.toLowerCase()); }
   if (d.role !== undefined) { sets.push(`role = $${i++}`); vals.push(d.role); }
   if (d.is_active !== undefined) { sets.push(`is_active = $${i++}`); vals.push(d.is_active); }
+  if (d.pin_required !== undefined) { sets.push(`pin_required = $${i++}`); vals.push(d.pin_required); }
   if (d.pin !== undefined) {
     const h = await hashPassword(d.pin);
     sets.push(`pin_code_hash = $${i++}`); vals.push(h);
