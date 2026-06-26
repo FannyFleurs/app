@@ -85,8 +85,8 @@ export default function AppShell({
   useEffect(() => {
     if (autoLogoutMode !== 'after_sale') return;
     function onSale() { void logout(); }
-    window.addEventListener('florea:sale_validated', onSale);
-    return () => window.removeEventListener('florea:sale_validated', onSale);
+    window.addEventListener('webpos:sale_validated', onSale);
+    return () => window.removeEventListener('webpos:sale_validated', onSale);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoLogoutMode]);
 

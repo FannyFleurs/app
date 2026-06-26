@@ -1,7 +1,7 @@
 # Checklist de revue fiscale
 
 À utiliser par un expert-comptable, avocat fiscaliste ou organisme certificateur
-pour évaluer la base technique Florea POS.
+pour évaluer la base technique Webpos POS.
 
 ## Code & architecture
 

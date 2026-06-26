@@ -18,8 +18,8 @@ interface ApiResp {
   server_now?: string;
 }
 
-const STORAGE_KEY = 'florea_last_paid_check';
-const SEEN_KEY = 'florea_seen_paid_orders';
+const STORAGE_KEY = 'webpos_last_paid_check';
+const SEEN_KEY = 'webpos_seen_paid_orders';
 const POLL_INTERVAL_MS = 8_000;
 
 function loadSeen(): Set<string> {

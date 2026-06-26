@@ -263,7 +263,7 @@ function AdminActions({ id, initialMaxDevices, onChange }: {
           <div className="font-medium text-sm">Note interne</div>
           <textarea className="input mt-2 h-20 text-sm" value={note}
                     onChange={(e) => setNote(e.target.value)}
-                    placeholder="Note visible uniquement par l'équipe Florea" />
+                    placeholder="Note visible uniquement par l'équipe Webpos" />
           <button onClick={() => { if (note.trim()) { void call({ action: 'note', text: note.trim() }); setNote(''); } }}
                   disabled={busy !== null || !note.trim()} className="btn-soft text-xs w-full mt-2">
             Enregistrer la note

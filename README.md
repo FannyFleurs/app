@@ -1,4 +1,4 @@
-# Florea POS
+# Webpos POS
 
 **Caisse SaaS moderne pour fleuristes, magasins de plantes et commerces végétaux.**
 Conçue *certification-ready* par rapport aux exigences françaises applicables aux
@@ -33,8 +33,8 @@ openssl rand -hex 32   # à coller dans SESSION_SECRET
 openssl rand -hex 32   # à coller dans FISCAL_SIGNING_KEY
 
 # 3. Préparer Postgres
-createdb florea
-# (ou via Docker : docker run -p 5432:5432 -e POSTGRES_PASSWORD=florea -e POSTGRES_USER=florea -e POSTGRES_DB=florea postgres:15)
+createdb webpos
+# (ou via Docker : docker run -p 5432:5432 -e POSTGRES_PASSWORD=webpos -e POSTGRES_USER=webpos -e POSTGRES_DB=webpos postgres:15)
 
 # 4. Migrer + seed
 npm run db:migrate
@@ -44,8 +44,8 @@ npm run db:seed
 npm run dev
 # http://localhost:3000
 
-# Comptes de démonstration (mot de passe : Florea2026!) :
-# owner@florea.test, manager@florea.test, vendeur@florea.test, comptable@florea.test
+# Comptes de démonstration (mot de passe : Webpos2026!) :
+# owner@webpos.test, manager@webpos.test, vendeur@webpos.test, comptable@webpos.test
 ```
 
 ## Scripts

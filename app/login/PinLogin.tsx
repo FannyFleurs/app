@@ -11,7 +11,7 @@ interface User {
   pin_required?: boolean;
 }
 
-const APP_NAME = 'Florea POS';
+const APP_NAME = 'Webpos POS';
 
 const ROLE_LABELS: Record<string, string> = {
   super_admin: 'Super Admin',

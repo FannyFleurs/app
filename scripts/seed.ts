@@ -75,14 +75,14 @@ async function main() {
     }
 
     // Utilisateurs
-    const pwd = await hashPassword('Florea2026!');
+    const pwd = await hashPassword('Webpos2026!');
     // PIN par défaut "1234" pour tous les comptes seedés
     const pinHash = await hashPassword('1234');
     const users: Array<[string, string, string]> = [
-      ['owner@florea.test', 'Camille Dupont', 'owner'],
-      ['manager@florea.test', 'Léa Martin', 'manager'],
-      ['vendeur@florea.test', 'Mathieu Rivière', 'vendeur'],
-      ['comptable@florea.test', 'Aïcha Bensaïd', 'comptable'],
+      ['owner@webpos.test', 'Camille Dupont', 'owner'],
+      ['manager@webpos.test', 'Léa Martin', 'manager'],
+      ['vendeur@webpos.test', 'Mathieu Rivière', 'vendeur'],
+      ['comptable@webpos.test', 'Aïcha Bensaïd', 'comptable'],
     ];
     const userIds: Record<string, string> = {};
     for (const [email, name, role] of users) {
@@ -97,7 +97,7 @@ async function main() {
     // Accès boutique pour le vendeur
     await client.query(
       `INSERT INTO user_store_access (user_id, store_id) VALUES ($1,$2)`,
-      [userIds['vendeur@florea.test'], storeId],
+      [userIds['vendeur@webpos.test'], storeId],
     );
 
     // Catégories
@@ -130,7 +130,7 @@ async function main() {
 
     // eslint-disable-next-line no-console
     console.log('✓ Seed terminé');
-    console.log('Comptes (mot de passe : Florea2026!) :');
+    console.log('Comptes (mot de passe : Webpos2026!) :');
     for (const [email] of users) console.log('  •', email);
   });
 

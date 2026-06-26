@@ -85,7 +85,7 @@ export async function POST(req: Request) {
       }
 
       // 2. Slug unique (suffixe -2, -3… en cas de collision)
-      const base = slugify(d.company.name) || 'florea';
+      const base = slugify(d.company.name) || 'webpos';
       let slug = base;
       for (let i = 2; i < 100; i++) {
         const r = await client.query(`SELECT 1 FROM organizations WHERE slug = $1`, [slug]);

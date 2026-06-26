@@ -6,7 +6,7 @@ import { hashPassword } from '../lib/auth/password';
  * Script utilitaire dev :
  *  - Si des utilisateurs existent sans PIN  → attribue le PIN 1234 à chacun
  *  - Si aucun utilisateur n'existe          → crée une organisation + un admin
- *    'admin@florea.test' avec le PIN 1234
+ *    'admin@webpos.test' avec le PIN 1234
  */
 async function main() {
   await withTransaction(async (client) => {
@@ -51,9 +51,9 @@ async function main() {
     if (orgRes.rowCount === 0) {
       const orgIns = await client.query<{ id: string }>(
         `INSERT INTO organizations (name, legal_name, address, contact)
-         VALUES ('Florea Dev', 'Florea Dev',
+         VALUES ('Webpos Dev', 'Webpos Dev',
                  '{"line1":"1 rue Test","zip":"75001","city":"Paris","country":"FR"}'::jsonb,
-                 '{"email":"contact@florea.test"}'::jsonb)
+                 '{"email":"contact@webpos.test"}'::jsonb)
          RETURNING id`,
       );
       orgId = orgIns.rows[0]!.id;
@@ -87,13 +87,13 @@ async function main() {
     const pinHash = await hashPassword('1234');
     await client.query(
       `INSERT INTO users (organization_id, email, password_hash, full_name, role, pin_code_hash)
-       VALUES ($1, 'admin@florea.test', $2, 'Admin Florea', 'owner', $2)`,
+       VALUES ($1, 'admin@webpos.test', $2, 'Admin Webpos', 'owner', $2)`,
       [orgId, pinHash],
     );
     // eslint-disable-next-line no-console
     console.log('✓ Utilisateur admin créé :');
     // eslint-disable-next-line no-console
-    console.log('  Email : admin@florea.test');
+    console.log('  Email : admin@webpos.test');
     // eslint-disable-next-line no-console
     console.log('  PIN   : 1234');
     // eslint-disable-next-line no-console

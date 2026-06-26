@@ -68,7 +68,7 @@ export default function ClosuresAdmin({ stores, registers }: { stores: Store[]; 
   // d'aller faire autre chose (ex : remise en banque, retour produit), et de
   // retrouver son comptage tel quel au retour — jusqu'à la clôture effective
   // qui purge la clé.
-  const storageKey = storeId && date ? `florea_closure_draft:${storeId}:${date}` : null;
+  const storageKey = storeId && date ? `webpos_closure_draft:${storeId}:${date}` : null;
 
   // Référence : indique si la restauration depuis localStorage est terminée.
   // Tant qu'elle ne l'est pas, on ne sauvegarde pas → évite la race

@@ -123,7 +123,7 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
   const [ticketWidth, setTicketWidth] = useState<number>(DEFAULT_TICKET_WIDTH);
   const dragging = useRef(false);
   useEffect(() => {
-    const stored = Number(localStorage.getItem('florea_ticket_width') ?? '');
+    const stored = Number(localStorage.getItem('webpos_ticket_width') ?? '');
     if (Number.isFinite(stored) && stored >= 280 && stored <= 600) setTicketWidth(stored);
   }, []);
   useEffect(() => {
@@ -136,7 +136,7 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
       if (dragging.current) {
         dragging.current = false;
         document.body.style.cursor = '';
-        localStorage.setItem('florea_ticket_width', String(ticketWidth));
+        localStorage.setItem('webpos_ticket_width', String(ticketWidth));
       }
     }
     document.addEventListener('mousemove', onMove);
@@ -218,7 +218,7 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
 
   // Persiste le saleId en cours dans localStorage (scopé au register actif)
   // pour le restaurer si l'utilisateur change de page et revient.
-  const cartKey = registerId ? `florea_active_sale:${registerId}` : null;
+  const cartKey = registerId ? `webpos_active_sale:${registerId}` : null;
   useEffect(() => {
     if (!cartKey || typeof window === 'undefined') return;
     if (saleId) localStorage.setItem(cartKey, saleId);
@@ -571,7 +571,7 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
     // Retour à la vue catégories
     setView({ kind: 'categories' });
     setSearch('');
-    // NB : l'événement 'florea:sale_validated' est dispatché APRÈS la
+    // NB : l'événement 'webpos:sale_validated' est dispatché APRÈS la
     // fermeture de la modale de ticket (cf. <ReceiptPreviewModal onClose>),
     // de sorte que l'auto-logout 'after_sale' n'interrompt pas la
     // visualisation / impression / envoi du ticket.
@@ -825,7 +825,7 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
       {/* Splitter pour redimensionner le ticket (desktop uniquement) */}
       <div
         onMouseDown={() => { dragging.current = true; document.body.style.cursor = 'col-resize'; }}
-        onDoubleClick={() => { setTicketWidth(DEFAULT_TICKET_WIDTH); localStorage.setItem('florea_ticket_width', String(DEFAULT_TICKET_WIDTH)); }}
+        onDoubleClick={() => { setTicketWidth(DEFAULT_TICKET_WIDTH); localStorage.setItem('webpos_ticket_width', String(DEFAULT_TICKET_WIDTH)); }}
         className="hidden md:flex cursor-col-resize hover:bg-accent-soft transition-colors items-center justify-center group"
         title="Glisser pour redimensionner · Double-clic pour reset"
       >
@@ -1079,7 +1079,7 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
             setReceipt(null);
             // C'est maintenant qu'on signale la fin de la vente : la modale a
             // été ouverte le temps de visualiser / imprimer / envoyer.
-            window.dispatchEvent(new CustomEvent('florea:sale_validated'));
+            window.dispatchEvent(new CustomEvent('webpos:sale_validated'));
           }}
         />
       )}

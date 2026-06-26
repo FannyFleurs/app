@@ -1,6 +1,6 @@
 {
-  "name": "Florea POS",
-  "short_name": "Florea",
+  "name": "Webpos POS",
+  "short_name": "Webpos",
   "description": "Caisse SaaS pour fleuristes et commerces végétaux",
   "start_url": "/caisse",
   "scope": "/",

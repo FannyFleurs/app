@@ -52,7 +52,7 @@ export default function TopBar({
         <span className="grid h-9 w-9 place-items-center rounded-xl accent-bar text-white font-semibold">
           F
         </span>
-        <span className="font-semibold tracking-tight hidden sm:inline text-ink">Florea POS</span>
+        <span className="font-semibold tracking-tight hidden sm:inline text-ink">Webpos POS</span>
       </Link>
 
       {/* Onglets — style "tab" : actif sur fond accent, sinon ghost */}

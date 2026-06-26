@@ -7,7 +7,7 @@ if [ ! -d node_modules ]; then
   npm install --no-audit --no-fund --prefer-offline 2>&1 | tail -20 || true
 fi
 
-echo "✓ Florea POS prêt. Commandes utiles :"
+echo "✓ Webpos POS prêt. Commandes utiles :"
 echo "  npm run dev          # lance le serveur (port 3000)"
 echo "  npm run typecheck    # vérification TS"
 echo "  npm test             # tests Vitest"

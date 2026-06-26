@@ -7,13 +7,13 @@
  * - Lu par /api/users/select pour ne lister que les utilisateurs du
  *   tenant actuellement choisi sur le poste.
  *
- * Note : la session utilisateur (cookie florea_session) reste prioritaire.
+ * Note : la session utilisateur (cookie webpos_session) reste prioritaire.
  * Si une session est valide, on prend son organisation_id ; le cookie
  * tenant n'est utilisé qu'en pré-connexion (écran de PIN login).
  */
 import { cookies } from 'next/headers';
 
-const TENANT_COOKIE = 'florea_tenant';
+const TENANT_COOKIE = 'webpos_tenant';
 const MAX_AGE_S = 60 * 60 * 24 * 30; // 30 jours
 
 export function setTenantCookie(organizationId: string) {

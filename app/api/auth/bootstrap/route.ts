@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 
 /**
  * Endpoint d'amorçage première utilisation : crée une organisation minimale
- * + un administrateur 'admin@florea.test' avec PIN 1234.
+ * + un administrateur 'admin@webpos.test' avec PIN 1234.
  *
  * Sécurité : refuse si au moins UN utilisateur existe déjà dans la base.
  * Ne peut donc être exécuté qu'une seule fois, sur un système vierge.
@@ -26,9 +26,9 @@ export async function POST() {
       if (orgRes.rowCount === 0) {
         const ins = await client.query<{ id: string }>(
           `INSERT INTO organizations (name, legal_name, address, contact)
-           VALUES ('Florea Dev', 'Florea Dev',
+           VALUES ('Webpos Dev', 'Webpos Dev',
                    '{"line1":"1 rue Test","zip":"75001","city":"Paris","country":"FR"}'::jsonb,
-                   '{"email":"contact@florea.test"}'::jsonb)
+                   '{"email":"contact@webpos.test"}'::jsonb)
            RETURNING id`,
         );
         orgId = ins.rows[0]!.id;
@@ -63,11 +63,11 @@ export async function POST() {
       const pinHash = await hashPassword('1234');
       await client.query(
         `INSERT INTO users (organization_id, email, password_hash, full_name, role, pin_code_hash)
-         VALUES ($1, 'admin@florea.test', $2, 'Admin Florea', 'owner', $2)`,
+         VALUES ($1, 'admin@webpos.test', $2, 'Admin Webpos', 'owner', $2)`,
         [orgId, pinHash],
       );
 
-      return { email: 'admin@florea.test', pin: '1234' };
+      return { email: 'admin@webpos.test', pin: '1234' };
     });
 
     return NextResponse.json(result, { status: 201 });

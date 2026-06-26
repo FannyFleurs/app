@@ -1,4 +1,4 @@
-# Architecture Florea POS
+# Architecture Webpos POS
 
 ## Couches
 

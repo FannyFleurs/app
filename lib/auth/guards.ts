@@ -37,7 +37,7 @@ export async function requirePermission(
 }
 
 /**
- * Garde réservée aux opérateurs SaaS de Florea POS (super_admin).
+ * Garde réservée aux opérateurs SaaS de Webpos POS (super_admin).
  * Permet d'accéder aux endpoints cross-tenant (/admin/*).
  */
 export async function requireSuperAdmin(): Promise<

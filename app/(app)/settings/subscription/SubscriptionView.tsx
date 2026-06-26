@@ -53,7 +53,7 @@ const ADDONS: Array<{ key: string; label: string; price: string; description: st
     key: 'multi_device',
     label: 'Multi-appareils',
     price: '+9 €/mois',
-    description: 'Connectez Florea POS sur plusieurs iPads / postes simultanément (vendeurs en parallèle).',
+    description: 'Connectez Webpos POS sur plusieurs iPads / postes simultanément (vendeurs en parallèle).',
   },
 ];
 
@@ -199,7 +199,7 @@ export default function SubscriptionView() {
               </div>
               <p className="mt-2 text-sm text-ink-soft">{a.description}</p>
               <button className="btn-soft mt-3 text-sm w-full" disabled
-                      title="Demandez l'activation à contact@florea-pos.fr">
+                      title="Demandez l'activation à contact@webpos-pos.fr">
                 Activer l&apos;option
               </button>
             </div>
@@ -207,8 +207,8 @@ export default function SubscriptionView() {
         </div>
         <p className="mt-3 text-xs text-ink-soft">
           Pour activer votre abonnement, contactez{' '}
-          <a href="mailto:contact@florea-pos.fr" className="text-accent-deep hover:underline">
-            contact@florea-pos.fr
+          <a href="mailto:contact@webpos-pos.fr" className="text-accent-deep hover:underline">
+            contact@webpos-pos.fr
           </a>. Le paiement en ligne (Stripe) arrive prochainement.
         </p>
       </div>

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 
 /**
  * Affiche une bannière (iPad/iPhone) ou une modale (Android/Chrome) qui
- * invite l'utilisateur à installer Florea POS comme PWA. La bannière
+ * invite l'utilisateur à installer Webpos POS comme PWA. La bannière
  * disparaît automatiquement dès que l'app est lancée en mode standalone
  * (depuis l'écran d'accueil iOS) ou installée.
  *
@@ -37,7 +37,7 @@ export default function InstallPrompt() {
     else setPlatform('desktop');
 
     // Déjà refusée récemment ?
-    const dismissedAt = localStorage.getItem('florea_install_dismissed');
+    const dismissedAt = localStorage.getItem('webpos_install_dismissed');
     if (dismissedAt && Date.now() - Number(dismissedAt) < 7 * 24 * 60 * 60_000) {
       setDismissed(true);
     }
@@ -54,7 +54,7 @@ export default function InstallPrompt() {
   }, []);
 
   function dismiss() {
-    localStorage.setItem('florea_install_dismissed', String(Date.now()));
+    localStorage.setItem('webpos_install_dismissed', String(Date.now()));
     setDismissed(true);
   }
 
@@ -81,7 +81,7 @@ export default function InstallPrompt() {
           F
         </div>
         <div className="flex-1 min-w-0">
-          <div className="font-semibold">Installer Florea POS</div>
+          <div className="font-semibold">Installer Webpos POS</div>
           {platform === 'ios' ? (
             <p className="mt-0.5 text-xs text-ink-soft">
               Pour utiliser l&apos;app en plein écran sur cet iPad : tapez{' '}
@@ -97,7 +97,7 @@ export default function InstallPrompt() {
             </p>
           ) : (
             <p className="mt-0.5 text-xs text-ink-soft">
-              Installez Florea POS pour une expérience plein écran sans barre de navigation.
+              Installez Webpos POS pour une expérience plein écran sans barre de navigation.
             </p>
           )}
           {platform !== 'ios' && deferredEvent && (

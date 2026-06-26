@@ -4,7 +4,7 @@ import { cookies } from 'next/headers';
 import { query } from '@/lib/db/client';
 import type { Role } from './rbac';
 
-const COOKIE_NAME = 'florea_session';
+const COOKIE_NAME = 'webpos_session';
 
 function secretKey(): Uint8Array {
   const k = process.env.SESSION_SECRET;

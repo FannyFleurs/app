@@ -2,7 +2,7 @@ import { Pool, PoolClient } from 'pg';
 
 declare global {
   // eslint-disable-next-line no-var
-  var __floreaPool: Pool | undefined;
+  var __webposPool: Pool | undefined;
 }
 
 function makePool(): Pool {
@@ -12,15 +12,15 @@ function makePool(): Pool {
     connectionString: url,
     max: 10,
     idleTimeoutMillis: 30_000,
-    application_name: 'florea-pos',
+    application_name: 'webpos-pos',
   });
 }
 
 // Init paresseuse : on n'instancie le pool qu'au premier accès,
 // pour ne pas casser `next build` (collecte des pages) sans DATABASE_URL.
 export function getPool(): Pool {
-  if (!globalThis.__floreaPool) globalThis.__floreaPool = makePool();
-  return globalThis.__floreaPool;
+  if (!globalThis.__webposPool) globalThis.__webposPool = makePool();
+  return globalThis.__webposPool;
 }
 
 /**
@@ -30,7 +30,7 @@ export function getPool(): Pool {
 export const pool = {
   connect: () => getPool().connect(),
   query: ((text: string, params?: unknown[]) => getPool().query(text, params as unknown[])) as Pool['query'],
-  end: () => (globalThis.__floreaPool ? globalThis.__floreaPool.end() : Promise.resolve()),
+  end: () => (globalThis.__webposPool ? globalThis.__webposPool.end() : Promise.resolve()),
 } as unknown as Pool;
 
 export async function query<T = Record<string, unknown>>(
