@@ -22,6 +22,7 @@ const patchSchema = z.object({
   track_stock: z.boolean().optional(),
   is_seasonal: z.boolean().optional(),
   is_top_product: z.boolean().optional(),
+  no_discount: z.boolean().optional(),
   is_customizable: z.boolean().optional(),
   visible_in_pos: z.boolean().optional(),
   is_active: z.boolean().optional(),
@@ -66,17 +67,20 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       );
     }
 
-    // Si la migration 0008 n'a pas été appliquée, ignore is_top_product
-    // silencieusement pour ne pas planter la mise à jour.
+    // Détection runtime des colonnes optionnelles ajoutées par migrations
+    // ultérieures (0008 is_top_product, 0012 no_discount). On les ignore
+    // silencieusement si la migration n'a pas encore été appliquée.
     let hasTopCol = true;
-    if (patch.is_top_product != null) {
-      const colCheck = await client.query<{ exists: boolean }>(
-        `SELECT EXISTS (
-           SELECT 1 FROM information_schema.columns
-            WHERE table_name = 'products' AND column_name = 'is_top_product'
-         ) AS exists`,
+    let hasNdCol = true;
+    if (patch.is_top_product != null || patch.no_discount != null) {
+      const colCheck = await client.query<{ column_name: string }>(
+        `SELECT column_name FROM information_schema.columns
+          WHERE table_name = 'products'
+            AND column_name IN ('is_top_product','no_discount')`,
       );
-      hasTopCol = !!colCheck.rows[0]?.exists;
+      const set = new Set(colCheck.rows.map((r) => r.column_name));
+      hasTopCol = set.has('is_top_product');
+      hasNdCol = set.has('no_discount');
     }
 
     const setParts: string[] = ['updated_by = $1', 'updated_at = now()'];
@@ -85,6 +89,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     for (const [k, v] of Object.entries(patch)) {
       if (k === 'price_change_reason') continue;
       if (k === 'is_top_product' && !hasTopCol) continue;
+      if (k === 'no_discount' && !hasNdCol) continue;
       setParts.push(`${k} = $${i++}`);
       values.push(v);
     }

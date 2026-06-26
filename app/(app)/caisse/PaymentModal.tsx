@@ -357,6 +357,14 @@ function ReferencePaymentModal({
   const [error, setError] = useState<string | null>(null);
   const [amount, setAmount] = useState<number>(typedAmount > 0 ? typedAmount : 0);
 
+  // À l'ouverture de la modale, on précharge les cartes / avoirs les plus
+  // récents pour faciliter le repérage visuel.
+  useEffect(() => {
+    if (kind === 'gift_card') void searchGiftCards('');
+    else void searchCreditNotes('');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kind]);
+
   async function lookup(value: string) {
     setError(null);
     setLoading(true);
@@ -387,16 +395,28 @@ function ReferencePaymentModal({
   }
 
   async function searchGiftCards(q: string) {
-    if (kind !== 'gift_card' || q.length < 2) { setResults([]); return; }
+    if (kind !== 'gift_card') { setResults([]); return; }
     const r = await fetch(`/api/gift-cards?q=${encodeURIComponent(q)}`);
     if (!r.ok) return;
     const j = await r.json();
-    setResults((j.gift_cards as Array<{ id: string; code: string; balance: string; buyer_name: string | null; buyer_phone: string | null }>)
-      .map((c) => ({ ...c, balance: Number(c.balance) })));
+    setResults(
+      (j.gift_cards as Array<{
+        id: string; code: string; balance: string;
+        buyer_name: string | null; buyer_phone: string | null;
+        beneficiary_name?: string | null;
+      }>)
+        .map((c) => ({
+          id: c.id,
+          code: c.code,
+          balance: Number(c.balance),
+          buyer_name: c.beneficiary_name ?? c.buyer_name ?? null,
+          buyer_phone: c.buyer_phone,
+        })),
+    );
   }
 
   async function searchCreditNotes(q: string) {
-    if (kind !== 'credit_note' || q.length < 2) { setResults([]); return; }
+    if (kind !== 'credit_note') { setResults([]); return; }
     const r = await fetch(`/api/credit-notes?q=${encodeURIComponent(q)}`);
     if (!r.ok) return;
     const j = await r.json();

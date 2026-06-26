@@ -313,6 +313,22 @@ export class SaleService {
             args.userId,
           ],
         );
+
+        // "En compte" (deferred) → débite le solde du client (négatif).
+        // Le solde devient positif quand le client règle son ardoise plus tard.
+        if (p.method === 'deferred' && sale.customer_id) {
+          try {
+            await client.query(
+              `UPDATE customers
+                  SET account_balance = COALESCE(account_balance, 0) - $2,
+                      updated_at = now()
+                WHERE id = $1`,
+              [sale.customer_id, p.amount],
+            );
+          } catch {
+            // Migration 0012 pas encore appliquée : on ignore silencieusement.
+          }
+        }
       }
 
       // 3. Réservation du numéro de ticket

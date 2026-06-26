@@ -27,6 +27,7 @@ const productSchema = z.object({
   visible_in_pos: z.boolean().default(true),
   is_active: z.boolean().default(true),
   is_top_product: z.boolean().default(false),
+  no_discount: z.boolean().default(false),
   tags: z.array(z.string()).default([]),
 });
 
@@ -68,11 +69,23 @@ export async function GET(req: Request) {
     ? `COALESCE(p.is_top_product, FALSE) AS is_top_product`
     : `FALSE AS is_top_product`;
 
+  // Détection optionnelle de la colonne no_discount (migration 0012).
+  const ndRes = await query<{ exists: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'products' AND column_name = 'no_discount'
+     ) AS exists`,
+  );
+  const ndCol = ndRes.rows[0]?.exists
+    ? `COALESCE(p.no_discount, FALSE) AS no_discount`
+    : `FALSE AS no_discount`;
+
   const { rows } = await query(
     `SELECT p.id, p.name, p.short_description, p.sku, p.barcode, p.image_url, p.unit,
             p.sale_price_ttc, p.purchase_price_ht, p.price_is_free,
             p.category_id, p.visible_in_pos, p.is_active,
             ${topCol},
+            ${ndCol},
             p.tags, p.is_seasonal, p.is_customizable,
             t.rate AS tax_rate, t.id AS tax_rate_id, t.code AS tax_rate_code, t.label AS tax_rate_label,
             c.name AS category_name, c.color AS category_color
@@ -120,6 +133,17 @@ export async function POST(req: Request) {
     if (withTop) {
       cols.push('is_top_product');
       values.push(p.is_top_product);
+    }
+    // Détection optionnelle de la colonne no_discount (migration 0012).
+    const ndExists = await query<{ exists: boolean }>(
+      `SELECT EXISTS (
+         SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'products' AND column_name = 'no_discount'
+       ) AS exists`,
+    );
+    if (ndExists.rows[0]?.exists) {
+      cols.push('no_discount');
+      values.push(p.no_discount);
     }
     // created_by + updated_by partagent la même valeur
     cols.push('created_by', 'updated_by');

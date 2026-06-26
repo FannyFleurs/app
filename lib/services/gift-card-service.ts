@@ -101,18 +101,47 @@ export class GiftCardService {
     return rows[0] ?? null;
   }
 
-  /** Recherche libre (nom acheteur OU téléphone OU début de code). */
+  /**
+   * Recherche libre. Si q est vide on renvoie les cartes utilisables les
+   * plus récentes (utile au moment de l'encaissement).
+   * Champs cherchés : code, buyer_name, buyer_phone, buyer_email,
+   *                   nom du client bénéficiaire rattaché.
+   */
   static async search(organizationId: string, q: string, limit = 20) {
-    const needle = `%${q.trim().toLowerCase()}%`;
+    const trimmed = q.trim().toLowerCase();
+    if (!trimmed) {
+      const { rows } = await query(
+        `SELECT g.id, g.code, g.balance::text, g.status, g.expires_at,
+                g.buyer_name, g.buyer_phone, g.initial_amount::text,
+                COALESCE(c.company_name,
+                  NULLIF(TRIM(CONCAT(c.first_name,' ',c.last_name)), '')) AS beneficiary_name
+           FROM gift_cards g
+           LEFT JOIN customers c ON c.id = g.beneficiary_id
+          WHERE g.organization_id = $1
+            AND g.status IN ('active','partially_used')
+          ORDER BY g.issued_at DESC
+          LIMIT $2`,
+        [organizationId, limit],
+      );
+      return rows;
+    }
+    const needle = `%${trimmed}%`;
     const { rows } = await query(
-      `SELECT id, code, balance::text, status, expires_at,
-              buyer_name, buyer_phone, initial_amount::text
-         FROM gift_cards
-        WHERE organization_id = $1
-          AND (lower(coalesce(buyer_name,'')) LIKE $2
-               OR coalesce(buyer_phone,'') LIKE $2
-               OR code LIKE $2)
-        ORDER BY issued_at DESC
+      `SELECT g.id, g.code, g.balance::text, g.status, g.expires_at,
+              g.buyer_name, g.buyer_phone, g.initial_amount::text,
+              COALESCE(c.company_name,
+                NULLIF(TRIM(CONCAT(c.first_name,' ',c.last_name)), '')) AS beneficiary_name
+         FROM gift_cards g
+         LEFT JOIN customers c ON c.id = g.beneficiary_id
+        WHERE g.organization_id = $1
+          AND (lower(coalesce(g.buyer_name,'')) LIKE $2
+               OR coalesce(g.buyer_phone,'') LIKE $2
+               OR lower(coalesce(g.buyer_email,'')) LIKE $2
+               OR g.code LIKE $2
+               OR lower(coalesce(c.company_name,'')) LIKE $2
+               OR lower(coalesce(c.first_name,'')) LIKE $2
+               OR lower(coalesce(c.last_name,'')) LIKE $2)
+        ORDER BY g.issued_at DESC
         LIMIT $3`,
       [organizationId, needle, limit],
     );

@@ -30,6 +30,8 @@ export interface PosProduct {
   short_description: string | null;
   is_customizable: boolean;
   is_top_product: boolean;
+  /** Si true, AUCUNE remise (client ou globale) n'est appliquée. Cartes cadeaux. */
+  no_discount?: boolean;
   tags: string[];
 }
 
@@ -144,6 +146,14 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
     used: number;
   }>({ enabled: false, balance_euros: 0, min_redeem: 0, used: 0 });
 
+  // Soldes complémentaires du client (cartes cadeau, compte client, avoirs)
+  // affichés dans la zone ticket. Rafraîchis quand un client est attaché.
+  const [customerBalances, setCustomerBalances] = useState<{
+    gift_card_balance: number;
+    account_balance: number;
+    credit_notes_balance: number;
+  }>({ gift_card_balance: 0, account_balance: 0, credit_notes_balance: 0 });
+
   const searchRef = useRef<HTMLInputElement>(null);
 
   // Charge produits + catégories
@@ -198,6 +208,69 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lines, saleId]);
+
+  // Persiste le saleId en cours dans localStorage (scopé au register actif)
+  // pour le restaurer si l'utilisateur change de page et revient.
+  const cartKey = registerId ? `florea_active_sale:${registerId}` : null;
+  useEffect(() => {
+    if (!cartKey || typeof window === 'undefined') return;
+    if (saleId) localStorage.setItem(cartKey, saleId);
+    else localStorage.removeItem(cartKey);
+  }, [cartKey, saleId]);
+
+  // Restauration : au premier mount, si un saleId est mémorisé pour ce register
+  // et qu'il pointe encore sur une vente draft/on_hold, on recharge les lignes.
+  const restoredOnceRef = useRef(false);
+  useEffect(() => {
+    if (!cartKey || restoredOnceRef.current) return;
+    if (typeof window === 'undefined') return;
+    const stored = localStorage.getItem(cartKey);
+    if (!stored) return;
+    restoredOnceRef.current = true;
+    void (async () => {
+      const r = await fetch(`/api/sales/${stored}`);
+      if (!r.ok) { localStorage.removeItem(cartKey); return; }
+      const j = await r.json();
+      if (j.sale?.status !== 'draft' && j.sale?.status !== 'on_hold') {
+        localStorage.removeItem(cartKey);
+        return;
+      }
+      setSaleId(stored);
+      setLines((j.lines as Record<string, unknown>[]).map((l) => ({
+        key: cryptoKey(),
+        product_id: (l.product_id as string) ?? null,
+        variant_id: (l.variant_id as string) ?? null,
+        label: l.label as string,
+        unit_price_ttc: Number(l.unit_price_ttc),
+        quantity: Number(l.quantity),
+        discount_amount: Number(l.discount_amount),
+        tax_rate: Number(l.tax_rate),
+        tax_rate_code: l.tax_rate_code as string,
+        metadata: (l.metadata as Record<string, unknown>) ?? {},
+      })));
+      // Recharge éventuellement le client attaché
+      if (j.sale.customer_id) {
+        const cr = await fetch(`/api/customers/${j.sale.customer_id}`);
+        if (cr.ok) {
+          const cj = await cr.json();
+          if (cj.customer) {
+            const cu = cj.customer;
+            setCustomer({
+              id: cu.id,
+              display_name: cu.company_name
+                || [cu.first_name, cu.last_name].filter(Boolean).join(' ')
+                || 'Client',
+              type: cu.type ?? 'particulier',
+              email: cu.email ?? null,
+              phone: cu.phone ?? null,
+              company_name: cu.company_name ?? null,
+              default_discount_pct: Number(cu.default_discount_pct ?? 0),
+            });
+          }
+        }
+      }
+    })();
+  }, [cartKey]);
 
   const ensureSale = useCallback(async (): Promise<string | null> => {
     if (saleId) return saleId;
@@ -310,7 +383,9 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
     void ensureSale();
     if (p.price_is_free) { setShowFreePrice({ label: p.name }); return; }
     // Remise systématique du client : appliquée automatiquement à chaque ajout
-    const autoPct = customer?.default_discount_pct ?? 0;
+    // SAUF si le produit est marqué "prix fort" (no_discount = true) — typiquement
+    // les cartes cadeaux, qui sont toujours vendues au prix affiché.
+    const autoPct = p.no_discount ? 0 : (customer?.default_discount_pct ?? 0);
     setLines((cur) => {
       const existing = cur.find(
         (l) => l.product_id === p.id
@@ -406,6 +481,7 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
     setSaleId(null);
     setCustomer(null);
     setLoyalty({ enabled: false, balance_euros: 0, min_redeem: 0, used: 0 });
+    setCustomerBalances({ gift_card_balance: 0, account_balance: 0, credit_notes_balance: 0 });
     setCartComment('');
     setView({ kind: 'categories' });
     setSearch('');
@@ -462,6 +538,7 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
     setShowPayment(false);
     setSaleId(null); setLines([]); setCustomer(null);
     setLoyalty({ enabled: false, balance_euros: 0, min_redeem: 0, used: 0 });
+    setCustomerBalances({ gift_card_balance: 0, account_balance: 0, credit_notes_balance: 0 });
     setCartComment('');
     // Retour à la vue catégories
     setView({ kind: 'categories' });
@@ -489,9 +566,12 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
 
     // Remise systématique : applique sur toutes les lignes existantes
     // qui n'ont pas déjà une remise manuelle plus avantageuse.
+    // Les lignes "no_discount" (cartes cadeaux) sont exclues.
     if (c.default_discount_pct && c.default_discount_pct > 0) {
       const pct = c.default_discount_pct;
       setLines((cur) => cur.map((l) => {
+        const prod = l.product_id ? products.find((pp) => pp.id === l.product_id) : null;
+        if (prod?.no_discount) return l;
         const autoDiscount = round2((l.unit_price_ttc * l.quantity * pct) / 100);
         return l.discount_amount >= autoDiscount
           ? l
@@ -513,13 +593,28 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
           });
         } else {
           setLoyalty({ enabled: false, balance_euros: 0, min_redeem: 0, used: 0 });
+    setCustomerBalances({ gift_card_balance: 0, account_balance: 0, credit_notes_balance: 0 });
         }
+      }
+    } catch { /* ignore */ }
+
+    // Charge les soldes complémentaires (cartes cadeau, compte client, avoirs)
+    try {
+      const r = await fetch(`/api/customers/${c.id}/balances`);
+      if (r.ok) {
+        const j = await r.json();
+        setCustomerBalances({
+          gift_card_balance: Number(j.gift_card_balance) || 0,
+          account_balance: Number(j.account_balance) || 0,
+          credit_notes_balance: Number(j.credit_notes_balance) || 0,
+        });
       }
     } catch { /* ignore */ }
   }
 
   async function detachCustomer() {
-    if (!saleId) { setCustomer(null); setLoyalty({ enabled: false, balance_euros: 0, min_redeem: 0, used: 0 }); return; }
+    if (!saleId) { setCustomer(null); setLoyalty({ enabled: false, balance_euros: 0, min_redeem: 0, used: 0 });
+    setCustomerBalances({ gift_card_balance: 0, account_balance: 0, credit_notes_balance: 0 }); return; }
     const res = await fetch(`/api/sales/${saleId}/customer`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ customer_id: null }),
@@ -527,6 +622,7 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
     if (res.ok) {
       setCustomer(null);
       setLoyalty({ enabled: false, balance_euros: 0, min_redeem: 0, used: 0 });
+    setCustomerBalances({ gift_card_balance: 0, account_balance: 0, credit_notes_balance: 0 });
       // Retire la ligne fidélité éventuellement déjà appliquée
       setLines((cur) => cur.filter((l) => l.metadata?.loyalty_redemption !== true));
     }
@@ -753,6 +849,31 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
                   <button onClick={() => void detachCustomer()} className="text-ink-soft hover:text-danger px-1">✕</button>
                 </div>
               </div>
+              {/* Pastilles soldes : cartes cadeau, avoirs, en compte. */}
+              {customerBalances.gift_card_balance > 0 && (
+                <div className="flex items-center justify-between rounded-xl bg-accent-soft px-3 py-2 text-sm">
+                  <span className="text-accent-deep font-medium">🎁 Carte cadeau dispo</span>
+                  <span className="font-semibold">{formatEUR(customerBalances.gift_card_balance)}</span>
+                </div>
+              )}
+              {customerBalances.credit_notes_balance > 0 && (
+                <div className="flex items-center justify-between rounded-xl bg-accent-soft px-3 py-2 text-sm">
+                  <span className="text-accent-deep font-medium">↩ Avoir dispo</span>
+                  <span className="font-semibold">{formatEUR(customerBalances.credit_notes_balance)}</span>
+                </div>
+              )}
+              {customerBalances.account_balance < 0 && (
+                <div className="flex items-center justify-between rounded-xl bg-danger/10 px-3 py-2 text-sm">
+                  <span className="text-danger font-medium">💳 En compte (dû)</span>
+                  <span className="font-semibold text-danger">{formatEUR(customerBalances.account_balance)}</span>
+                </div>
+              )}
+              {customerBalances.account_balance > 0 && (
+                <div className="flex items-center justify-between rounded-xl bg-success/10 px-3 py-2 text-sm">
+                  <span className="text-success font-medium">💳 Crédit en compte</span>
+                  <span className="font-semibold">+{formatEUR(customerBalances.account_balance)}</span>
+                </div>
+              )}
               {loyalty.enabled && loyalty.balance_euros >= loyalty.min_redeem && loyalty.used === 0 && (
                 <button
                   onClick={() => useLoyalty(loyalty.balance_euros)}

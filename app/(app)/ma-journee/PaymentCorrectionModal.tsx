@@ -78,19 +78,39 @@ export default function PaymentCorrectionModal({ saleId, paymentsByMethod, onClo
 
         <div className="space-y-3">
           <div>
-            <label className="text-sm font-medium text-ink-soft">Méthode à corriger</label>
-            <select className="input mt-1" value={fromMethod} onChange={(e) => setFromMethod(e.target.value)}>
-              {positive.map((p) => (
-                <option key={p.method} value={p.method}>
-                  {PAYMENT_LABELS[p.method] ?? p.method} ({formatEUR(p.amount)})
-                </option>
-              ))}
-            </select>
+            <label className="text-sm font-medium text-ink-soft">Règlement initial</label>
+            {/* Mode initial NON modifiable : c'est celui de la vente.
+                S'il y a plusieurs modes positifs, tap sur l'un d'eux. */}
+            {positive.length === 1 ? (
+              <div className="mt-1 rounded-xl border border-border bg-gray-50 px-3 py-2.5 text-sm font-medium">
+                {PAYMENT_LABELS[positive[0]!.method] ?? positive[0]!.method}{' '}
+                <span className="text-ink-soft font-normal">— {formatEUR(positive[0]!.amount)}</span>
+              </div>
+            ) : (
+              <div className="mt-1 flex flex-wrap gap-1.5">
+                {positive.map((p) => (
+                  <button
+                    key={p.method}
+                    type="button"
+                    onClick={() => setFromMethod(p.method)}
+                    className={`rounded-xl border px-3 py-2 text-sm font-medium ${
+                      fromMethod === p.method
+                        ? 'accent-bar text-white border-transparent'
+                        : 'bg-white border-border text-ink hover:border-gray-300'
+                    }`}
+                  >
+                    {PAYMENT_LABELS[p.method] ?? p.method} · {formatEUR(p.amount)}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
           <div>
-            <label className="text-sm font-medium text-ink-soft">Nouvelle méthode</label>
+            <label className="text-sm font-medium text-ink-soft">Nouveau règlement</label>
             <select className="input mt-1" value={toMethod} onChange={(e) => setToMethod(e.target.value)}>
-              {methods.map((m) => <option key={m.kind} value={m.kind}>{m.label}</option>)}
+              {methods
+                .filter((m) => m.kind !== fromMethod)
+                .map((m) => <option key={m.kind} value={m.kind}>{m.label}</option>)}
             </select>
           </div>
           <div>

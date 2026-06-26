@@ -255,6 +255,26 @@ function CustomerDetailContent({ tab, detail, canWrite, onEdit }: {
   const totalTtc = detail.sales.reduce((s, x) => s + Number(x.total_ttc), 0);
   const avg = detail.sales.length > 0 ? totalTtc / detail.sales.length : 0;
   const lastVisit = detail.sales[0]?.validated_at;
+  const [balances, setBalances] = useState<{
+    account_balance: number;
+    gift_card_balance: number;
+    credit_notes_balance: number;
+  }>({ account_balance: 0, gift_card_balance: 0, credit_notes_balance: 0 });
+
+  useEffect(() => {
+    setBalances({ account_balance: 0, gift_card_balance: 0, credit_notes_balance: 0 });
+    void fetch(`/api/customers/${c.id}/balances`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((j) => {
+        if (j) setBalances({
+          account_balance: Number(j.account_balance) || 0,
+          gift_card_balance: Number(j.gift_card_balance) || 0,
+          credit_notes_balance: Number(j.credit_notes_balance) || 0,
+        });
+      })
+      .catch(() => undefined);
+  }, [c.id]);
+  const accountDue = balances.account_balance < 0 ? -balances.account_balance : 0;
 
   return (
     <div className="p-6 space-y-5">
@@ -279,13 +299,14 @@ function CustomerDetailContent({ tab, detail, canWrite, onEdit }: {
 
       {tab === 'dashboard' && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Tile value={formatEUR(totalTtc)}   label="Total des achats" />
-          <Tile value={formatEUR(0)}          label="Montant dû" />
-          <Tile value={detail.sales.length.toString()} label="Nombre de passages" />
-          <Tile value={formatEUR(avg)}        label="Ticket moyen TTC" />
-          <Tile value={formatEUR(0)}          label="Crédits à dépenser" />
-          <Tile value={formatEUR(0)}          label="Bons cadeaux à dépenser" />
-          <Tile value={(detail.loyalty_points ?? 0).toString()} label="Points de fidélité" />
+          <Tile value={formatEUR(totalTtc)}                       label="Total des achats" />
+          <Tile value={formatEUR(accountDue)}                     label="Montant dû (en compte)"
+                tone={accountDue > 0 ? 'danger' : undefined} />
+          <Tile value={detail.sales.length.toString()}            label="Nombre de passages" />
+          <Tile value={formatEUR(avg)}                            label="Ticket moyen TTC" />
+          <Tile value={formatEUR(balances.credit_notes_balance)}  label="Crédits à dépenser" />
+          <Tile value={formatEUR(balances.gift_card_balance)}     label="Bons cadeaux à dépenser" />
+          <Tile value={(detail.loyalty_points ?? 0).toString()}   label="Points de fidélité" />
         </div>
       )}
 
@@ -404,10 +425,12 @@ function TicketsTable({ sales, link }: { sales: CustomerDetail['sales']; link?: 
   );
 }
 
-function Tile({ value, label }: { value: string; label: string }) {
+function Tile({ value, label, tone }: { value: string; label: string; tone?: 'danger' }) {
+  const cls = tone === 'danger' ? 'text-danger' : 'text-accent-deep';
+  const border = tone === 'danger' ? 'border-danger/40' : 'border-accent-deep/40';
   return (
-    <div className="rounded-2xl border border-accent-deep/40 px-5 py-4 bg-white">
-      <div className="text-xl font-semibold tracking-tight text-accent-deep">{value}</div>
+    <div className={`rounded-2xl border ${border} px-5 py-4 bg-white`}>
+      <div className={`text-xl font-semibold tracking-tight ${cls}`}>{value}</div>
       <div className="text-xs text-ink-soft mt-1">{label}</div>
     </div>
   );

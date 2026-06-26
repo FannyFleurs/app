@@ -12,6 +12,7 @@ interface Product {
   visible_in_pos: boolean; is_active: boolean;
   is_seasonal: boolean; is_customizable: boolean;
   is_top_product?: boolean;
+  no_discount?: boolean;
 }
 
 export default function ProductFormModal({
@@ -48,6 +49,7 @@ export default function ProductFormModal({
     is_seasonal: product?.is_seasonal ?? false,
     is_customizable: product?.is_customizable ?? false,
     is_top_product: product?.is_top_product ?? false,
+    no_discount: product?.no_discount ?? false,
     price_change_reason: '',
   });
   const [error, setError] = useState<string | null>(null);
@@ -70,6 +72,7 @@ export default function ProductFormModal({
       is_seasonal: form.is_seasonal,
       is_customizable: form.is_customizable,
       is_top_product: form.is_top_product,
+      no_discount: form.no_discount,
     };
     if (product && form.price_change_reason) payload.price_change_reason = form.price_change_reason;
     const res = product
@@ -195,6 +198,8 @@ export default function ProductFormModal({
                      onChange={(v) => setForm({ ...form, price_is_free: v, sale_price_ttc: v ? 0 : form.sale_price_ttc })} />
               <Check label="Top produit (épinglé en grille)" checked={form.is_top_product}
                      onChange={(v) => setForm({ ...form, is_top_product: v })} />
+              <Check label="Prix fort (aucune remise applicable)" checked={form.no_discount}
+                     onChange={(v) => setForm({ ...form, no_discount: v })} />
               <Check label="Visible en caisse" checked={form.visible_in_pos}
                      onChange={(v) => setForm({ ...form, visible_in_pos: v })} />
               <Check label="Saisonnier" checked={form.is_seasonal}
