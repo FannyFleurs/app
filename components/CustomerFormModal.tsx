@@ -48,6 +48,7 @@ export default function CustomerFormModal({ customer, onClose, onSaved }: Props)
   const [consentEmail, setConsentEmail] = useState(customer?.consent_email ?? false);
   const [consentSms, setConsentSms] = useState(customer?.consent_sms ?? false);
   const [notes, setNotes] = useState(customer?.internal_notes ?? '');
+  const [loyaltyCode, setLoyaltyCode] = useState(customer?.loyalty_code ?? '');
   const [discountPct, setDiscountPct] = useState<string>(
     customer?.default_discount_pct != null ? String(customer.default_discount_pct) : '',
   );
@@ -85,6 +86,7 @@ export default function CustomerFormModal({ customer, onClose, onSaved }: Props)
       consent_email: consentEmail,
       consent_sms: consentSms,
       internal_notes: notes.trim() || null,
+      loyalty_code: loyaltyCode.trim() || null,
       default_discount_pct: discountPct.trim() ? Number(discountPct) : null,
     };
     const url = customer ? `/api/customers/${customer.id}` : '/api/customers';
@@ -177,6 +179,18 @@ export default function CustomerFormModal({ customer, onClose, onSaved }: Props)
             <input className="input" value={city} onChange={(e) => setCity(e.target.value)} />
           </Field>
 
+          <Field label="N° carte de fidélité (optionnel)" full>
+            <input
+              className="input max-w-[280px]"
+              value={loyaltyCode}
+              onChange={(e) => setLoyaltyCode(e.target.value)}
+              placeholder="ex : FL-001234 (scan possible)"
+            />
+            <p className="mt-1 text-xs text-ink-soft">
+              Numéro de carte physique ou code scannable. Reconnu en caisse pour
+              identifier rapidement le client.
+            </p>
+          </Field>
           <Field label="Remise systématique (%)" full>
             <input
               type="number" step="0.1" min={0} max={100}

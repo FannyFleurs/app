@@ -50,7 +50,6 @@ type Tab =
   | 'commentaires'
   | 'tickets'
   | 'achats'
-  | 'paiements'
   | 'fidelite'
   | 'bons-achats';
 
@@ -60,7 +59,6 @@ const TABS: Array<{ key: Tab; label: string }> = [
   { key: 'commentaires', label: 'Commentaires' },
   { key: 'tickets',      label: 'Liste des tickets' },
   { key: 'achats',       label: 'Liste des achats' },
-  { key: 'paiements',    label: 'Récapitulatif des paiements' },
   { key: 'fidelite',     label: 'Fidélité' },
   { key: 'bons-achats',  label: 'Bons d\'achats' },
 ];
@@ -356,13 +354,7 @@ function CustomerDetailContent({ tab, detail, canWrite, onEdit }: {
       )}
 
       {tab === 'tickets' && <TicketsTable sales={detail.sales} link />}
-      {tab === 'achats'  && <TicketsTable sales={detail.sales} />}
-
-      {tab === 'paiements' && (
-        <div className="card p-5 text-sm text-ink-soft">
-          Récapitulatif des paiements à venir — agrège les modes de règlement pour ce client.
-        </div>
-      )}
+      {tab === 'achats'  && <PurchasedItemsTable customerId={c.id} />}
 
       {tab === 'fidelite' && (
         <div className="card p-5">
@@ -387,6 +379,60 @@ function CustomerDetailContent({ tab, detail, canWrite, onEdit }: {
           Vue complète →
         </Link>
       </div>
+    </div>
+  );
+}
+
+function PurchasedItemsTable({ customerId }: { customerId: string }) {
+  const [items, setItems] = useState<Array<{
+    product_id: string | null; label: string;
+    total_quantity: string; total_ttc: string;
+    receipt_count: string; last_purchase_at: string;
+  }>>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    void fetch(`/api/customers/${customerId}/purchases`)
+      .then((r) => r.ok ? r.json() : { purchases: [] })
+      .then((j) => setItems(j.purchases ?? []))
+      .finally(() => setLoading(false));
+  }, [customerId]);
+
+  if (loading) return <div className="card p-8 text-center text-ink-soft text-sm">Chargement…</div>;
+  if (items.length === 0) {
+    return <div className="card p-8 text-center text-ink-soft text-sm">Aucun article acheté.</div>;
+  }
+  return (
+    <div className="card overflow-hidden">
+      <table className="w-full text-sm">
+        <thead className="text-ink-soft text-[10px] uppercase tracking-widest border-b border-border">
+          <tr>
+            <th className="text-left px-4 py-3 font-semibold">Article</th>
+            <th className="text-right px-4 py-3 font-semibold">Quantité totale</th>
+            <th className="text-right px-4 py-3 font-semibold">Nb tickets</th>
+            <th className="text-right px-4 py-3 font-semibold">CA TTC cumulé</th>
+            <th className="text-left px-4 py-3 font-semibold">Dernier achat</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((it, i) => (
+            <tr key={`${it.product_id ?? 'free'}-${i}`} className="border-t border-border">
+              <td className="px-4 py-2 font-medium">{it.label}</td>
+              <td className="px-4 py-2 text-right tabular-nums">
+                {Number(it.total_quantity).toFixed(0)}
+              </td>
+              <td className="px-4 py-2 text-right text-ink-soft">{it.receipt_count}</td>
+              <td className="px-4 py-2 text-right font-medium">
+                {formatEUR(Number(it.total_ttc))}
+              </td>
+              <td className="px-4 py-2 text-ink-soft text-xs">
+                {new Date(it.last_purchase_at).toLocaleDateString('fr-FR')}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

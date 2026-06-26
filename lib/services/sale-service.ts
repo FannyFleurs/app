@@ -486,10 +486,34 @@ export class SaleService {
             );
           }
 
-          // Crédit (earn) basé sur la règle
+          // Crédit (earn) basé sur la règle.
+          // Les lignes de produits no_discount (cartes cadeaux notamment) ne
+          // génèrent PAS de fidélité (pas de double-rémunération : la fidélité
+          // sera générée à l'utilisation de la carte cadeau, comme un paiement
+          // normal).
           let earnedInt = 0;
           if (enabled && earnedPer > 0 && perSpent > 0) {
-            earnedInt = Math.floor((totalTtc / perSpent) * earnedPer);
+            const productIds = linesRes.rows
+              .map((l: { product_id: string | null }) => l.product_id)
+              .filter(Boolean) as string[];
+            let noLoyaltyIds = new Set<string>();
+            if (productIds.length > 0) {
+              try {
+                const ndRes = await client.query<{ id: string }>(
+                  `SELECT id FROM products
+                    WHERE id = ANY($1::uuid[]) AND COALESCE(no_discount, FALSE) = TRUE`,
+                  [productIds],
+                );
+                noLoyaltyIds = new Set(ndRes.rows.map((r) => r.id));
+              } catch { /* colonne no_discount absente : ignore */ }
+            }
+            const eligibleTtc = linesRes.rows.reduce((s: number, l: {
+              product_id: string | null; line_ttc: string;
+            }) => {
+              if (l.product_id && noLoyaltyIds.has(l.product_id)) return s;
+              return s + Number(l.line_ttc);
+            }, 0);
+            earnedInt = Math.floor((eligibleTtc / perSpent) * earnedPer);
             if (earnedInt > 0) {
               balanceAfter = balanceAfter + earnedInt;
               await client.query(
