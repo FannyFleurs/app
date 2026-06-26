@@ -10,7 +10,7 @@ interface Props {
   onClose: () => void;
 }
 
-const AUTO_CLOSE_MS = 60_000;
+const AUTO_CLOSE_MS = 5_000;
 
 export default function ReceiptPreviewModal({ receipt, onClose }: Props) {
   const pdfUrl = `/api/receipts/${receipt.id}/pdf`;
