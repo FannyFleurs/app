@@ -466,8 +466,10 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
     // Retour à la vue catégories
     setView({ kind: 'categories' });
     setSearch('');
-    // Signal pour l'auto-logout 'after_sale'
-    window.dispatchEvent(new CustomEvent('florea:sale_validated'));
+    // NB : l'événement 'florea:sale_validated' est dispatché APRÈS la
+    // fermeture de la modale de ticket (cf. <ReceiptPreviewModal onClose>),
+    // de sorte que l'auto-logout 'after_sale' n'interrompt pas la
+    // visualisation / impression / envoi du ticket.
   }
 
   async function pickCustomer(c: PickedCustomer) {
@@ -865,7 +867,15 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
         />
       )}
       {receipt && (
-        <ReceiptPreviewModal receipt={receipt} onClose={() => setReceipt(null)} />
+        <ReceiptPreviewModal
+          receipt={receipt}
+          onClose={() => {
+            setReceipt(null);
+            // C'est maintenant qu'on signale la fin de la vente : la modale a
+            // été ouverte le temps de visualiser / imprimer / envoyer.
+            window.dispatchEvent(new CustomEvent('florea:sale_validated'));
+          }}
+        />
       )}
       {showHeld && (
         <HoldListModal

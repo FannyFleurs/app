@@ -57,6 +57,60 @@ export default function ClosuresAdmin({ stores, registers }: { stores: Store[]; 
   const [sealedResult, setSealedResult] = useState<{ id: string; fiscal_hash: string } | null>(null);
   const [showDeposit, setShowDeposit] = useState(false);
   const [drawerToast, setDrawerToast] = useState<string | null>(null);
+  const [restored, setRestored] = useState<boolean>(false);
+
+  // ---------------------------------------------------------------------------
+  // PERSISTANCE LOCALE DU COMPTAGE
+  // ---------------------------------------------------------------------------
+  // Le précomptage des espèces, la saisie des montants déclarés par moyen de
+  // paiement et les notes sont sauvegardés dans localStorage, scopés à
+  // (store_id, business_date). Cela permet à l'utilisateur de quitter la page,
+  // d'aller faire autre chose (ex : remise en banque, retour produit), et de
+  // retrouver son comptage tel quel au retour — jusqu'à la clôture effective
+  // qui purge la clé.
+  const storageKey = storeId && date ? `florea_closure_draft:${storeId}:${date}` : null;
+
+  // Restaure depuis localStorage à chaque changement (store, date).
+  useEffect(() => {
+    if (!storageKey || typeof window === 'undefined') return;
+    setRestored(false);
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (raw) {
+        const draft = JSON.parse(raw) as {
+          denom?: Record<string, number>;
+          declared?: Record<string, string>;
+          notes?: string;
+        };
+        setDenomCount(draft.denom ?? {});
+        setDeclared(draft.declared ?? {});
+        setNotes(draft.notes ?? '');
+        setRestored(true);
+      } else {
+        setDenomCount({}); setDeclared({}); setNotes('');
+      }
+    } catch { /* ignore */ }
+  }, [storageKey]);
+
+  // Sauvegarde à chaque modification.
+  useEffect(() => {
+    if (!storageKey || typeof window === 'undefined') return;
+    const hasContent =
+      Object.values(denomCount).some((v) => v > 0)
+      || Object.values(declared).some((v) => v && v !== '')
+      || notes.trim() !== '';
+    if (!hasContent) {
+      localStorage.removeItem(storageKey);
+      return;
+    }
+    try {
+      localStorage.setItem(storageKey, JSON.stringify({
+        denom: denomCount,
+        declared,
+        notes,
+      }));
+    } catch { /* ignore */ }
+  }, [storageKey, denomCount, declared, notes]);
 
   const registersForStore = useMemo(
     () => registers.filter((r) => r.store_id === storeId),
@@ -118,7 +172,10 @@ export default function ClosuresAdmin({ stores, registers }: { stores: Store[]; 
     }
     const j = await r.json();
     setSealedResult({ id: j.daily_closure_id, fiscal_hash: j.fiscal_hash });
-    /* historique retiré de la page */
+    // Clôture effective → purge le brouillon local.
+    if (storageKey && typeof window !== 'undefined') {
+      try { localStorage.removeItem(storageKey); } catch { /* ignore */ }
+    }
     await loadPreview();
   }
 
@@ -176,6 +233,26 @@ export default function ClosuresAdmin({ stores, registers }: { stores: Store[]; 
 
       {drawerToast && (
         <div className="rounded-xl bg-success/10 px-3 py-1.5 text-xs text-success">{drawerToast}</div>
+      )}
+
+      {restored && !sealedResult && !alreadySealed && (
+        <div className="rounded-xl bg-accent-soft px-3 py-1.5 text-xs flex items-center justify-between gap-3">
+          <span className="text-accent-deep">
+            ↻ Précomptage restauré — votre saisie a été conservée depuis votre dernière visite.
+          </span>
+          <button
+            onClick={() => {
+              setDenomCount({}); setDeclared({}); setNotes('');
+              if (storageKey && typeof window !== 'undefined') {
+                try { localStorage.removeItem(storageKey); } catch { /* ignore */ }
+              }
+              setRestored(false);
+            }}
+            className="text-xs text-ink-soft hover:text-danger underline"
+          >
+            Repartir de zéro
+          </button>
+        </div>
       )}
 
       {!preview ? (
