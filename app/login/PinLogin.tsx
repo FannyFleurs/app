@@ -30,14 +30,34 @@ export default function PinLogin() {
   const [pin, setPin] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [bootstrapping, setBootstrapping] = useState(false);
+  const [bootstrapResult, setBootstrapResult] = useState<{ email: string; pin: string } | null>(null);
+
+  async function loadUsers() {
+    const r = await fetch('/api/users/select');
+    if (r.ok) setUsers((await r.json()).users);
+  }
 
   useEffect(() => {
     void (async () => {
-      const r = await fetch('/api/users/select');
-      if (r.ok) setUsers((await r.json()).users);
+      await loadUsers();
       setLoading(false);
     })();
   }, []);
+
+  async function bootstrap() {
+    setBootstrapping(true);
+    const r = await fetch('/api/auth/bootstrap', { method: 'POST' });
+    setBootstrapping(false);
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      setError(j.message ?? j.error ?? 'Erreur');
+      return;
+    }
+    const j = await r.json();
+    setBootstrapResult(j);
+    await loadUsers();
+  }
 
   const selected = useMemo(
     () => users.find((u) => u.id === selectedId) ?? null,
@@ -105,11 +125,33 @@ export default function PinLogin() {
         {loading ? (
           <div className="text-sm text-ink-soft">Chargement…</div>
         ) : users.length === 0 ? (
-          <div className="card p-8 text-center max-w-md">
+          <div className="card p-6 max-w-md">
             <div className="font-semibold">Aucun utilisateur</div>
             <p className="mt-2 text-sm text-ink-soft">
-              Aucun compte n&apos;est configuré. Demandez à un administrateur de créer le premier compte.
+              Aucun compte n&apos;est configuré dans la base. Pour démarrer rapidement,
+              vous pouvez créer un compte administrateur par défaut.
             </p>
+            {bootstrapResult ? (
+              <div className="mt-4 rounded-xl bg-success/10 px-3 py-3 text-sm text-success">
+                ✓ Compte créé : <strong>{bootstrapResult.email}</strong><br />
+                PIN : <strong>{bootstrapResult.pin}</strong>
+                <p className="mt-2 text-xs text-ink-soft">
+                  Sélectionnez la tuile ci-dessus, saisissez le PIN puis modifiez-le
+                  ensuite dans Paramètres → Gestion utilisateurs.
+                </p>
+              </div>
+            ) : (
+              <button
+                onClick={() => void bootstrap()}
+                disabled={bootstrapping}
+                className="btn-primary mt-4 w-full"
+              >
+                {bootstrapping ? 'Création…' : 'Créer un compte administrateur'}
+              </button>
+            )}
+            {error && (
+              <div className="mt-3 rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 content-start">
