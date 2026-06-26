@@ -58,6 +58,19 @@ export default function CustomerFormModal({ customer, onClose, onSaved }: Props)
   const isPro = type !== 'particulier';
 
   async function submit() {
+    // Validation côté UI : un client doit au minimum avoir une identité
+    // (nom + prénom pour un particulier, raison sociale pour les autres)
+    // et un téléphone — pour pouvoir le rappeler / rattacher à une carte
+    // cadeau / un compte client.
+    if (isPro) {
+      if (!companyName.trim()) { setError('Raison sociale obligatoire.'); return; }
+    } else {
+      if (!firstName.trim() || !lastName.trim()) {
+        setError('Prénom et nom obligatoires.'); return;
+      }
+    }
+    if (!phone.trim()) { setError('Téléphone obligatoire.'); return; }
+
     setSaving(true); setError(null);
     const payload = {
       type,
@@ -121,15 +134,15 @@ export default function CustomerFormModal({ customer, onClose, onSaved }: Props)
         <div className="grid grid-cols-2 gap-3">
           {!isPro ? (
             <>
-              <Field label="Prénom">
+              <Field label="Prénom *">
                 <input className="input" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
               </Field>
-              <Field label="Nom">
+              <Field label="Nom *">
                 <input className="input" value={lastName} onChange={(e) => setLastName(e.target.value)} />
               </Field>
             </>
           ) : (
-            <Field label="Raison sociale" full>
+            <Field label="Raison sociale *" full>
               <input className="input" value={companyName} onChange={(e) => setCompanyName(e.target.value)} />
             </Field>
           )}
@@ -137,7 +150,7 @@ export default function CustomerFormModal({ customer, onClose, onSaved }: Props)
           <Field label="Email">
             <input type="email" className="input" value={email} onChange={(e) => setEmail(e.target.value)} />
           </Field>
-          <Field label="Téléphone">
+          <Field label="Téléphone *">
             <input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} />
           </Field>
 

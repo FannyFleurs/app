@@ -5,6 +5,7 @@ import { formatEUR } from '@/lib/services/money';
 import PageHeader from '@/components/PageHeader';
 import Badge from '@/components/Badge';
 import EmptyState from '@/components/EmptyState';
+import CustomerPickerModal, { type PickedCustomer } from '../caisse/CustomerPickerModal';
 
 interface GiftCard {
   id: string; code: string;
@@ -13,6 +14,9 @@ interface GiftCard {
   issued_at: string; expires_at: string | null;
   buyer_name: string | null; buyer_phone: string | null;
   buyer_email: string | null;
+  beneficiary_id?: string | null;
+  beneficiary_name?: string | null;
+  beneficiary_phone?: string | null;
 }
 
 const STATUS: Record<string, { label: string; tone: 'success' | 'soft' | 'warning' | 'neutral' | 'danger' }> = {
@@ -44,7 +48,9 @@ export default function GiftCardsAdmin() {
       c.code.includes(needle) ||
       c.buyer_name?.toLowerCase().includes(needle) ||
       c.buyer_phone?.includes(needle) ||
-      c.buyer_email?.toLowerCase().includes(needle),
+      c.buyer_email?.toLowerCase().includes(needle) ||
+      c.beneficiary_name?.toLowerCase().includes(needle) ||
+      c.beneficiary_phone?.includes(needle),
     );
   }, [items, q]);
 
@@ -98,7 +104,7 @@ export default function GiftCardsAdmin() {
             <thead className="bg-white text-ink-soft text-xs uppercase border-b border-border">
               <tr>
                 <th className="text-left px-4 py-3">Code</th>
-                <th className="text-left px-4 py-3">Acheteur</th>
+                <th className="text-left px-4 py-3">Bénéficiaire</th>
                 <th className="text-right px-4 py-3">Initial</th>
                 <th className="text-right px-4 py-3">Solde</th>
                 <th className="text-center px-4 py-3">Statut</th>
@@ -109,15 +115,15 @@ export default function GiftCardsAdmin() {
             <tbody>
               {filtered.map((c) => {
                 const s = STATUS[c.status] ?? { label: c.status, tone: 'neutral' as const };
+                const benefName = c.beneficiary_name ?? c.buyer_name ?? null;
+                const benefPhone = c.beneficiary_phone ?? c.buyer_phone ?? null;
                 return (
                   <tr key={c.id} className="border-t border-border">
                     <td className="px-4 py-3 font-mono text-xs">{c.code}</td>
                     <td className="px-4 py-3">
-                      <div className="text-sm">{c.buyer_name ?? '—'}</div>
-                      {(c.buyer_phone || c.buyer_email) && (
-                        <div className="text-xs text-ink-soft">
-                          {[c.buyer_phone, c.buyer_email].filter(Boolean).join(' · ')}
-                        </div>
+                      <div className="text-sm">{benefName ?? '—'}</div>
+                      {benefPhone && (
+                        <div className="text-xs text-ink-soft">{benefPhone}</div>
                       )}
                     </td>
                     <td className="px-4 py-3 text-right">{formatEUR(Number(c.initial_amount))}</td>
@@ -161,23 +167,30 @@ function CreateGiftCardModal({ onClose, onCreated }: {
   onCreated: (id: string, code: string) => void;
 }) {
   const [amount, setAmount] = useState<number>(50);
-  const [buyerName, setBuyerName] = useState('');
-  const [buyerPhone, setBuyerPhone] = useState('');
-  const [buyerEmail, setBuyerEmail] = useState('');
+  const [beneficiary, setBeneficiary] = useState<PickedCustomer | null>(null);
+  const [showPicker, setShowPicker] = useState(false);
   const [expires, setExpires] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function submit() {
-    if (amount <= 0) { setError('Montant invalide'); return; }
+    if (amount <= 0) { setError('Montant invalide.'); return; }
+    if (!beneficiary?.id) {
+      setError('Sélectionnez ou créez un client bénéficiaire.');
+      return;
+    }
     setSaving(true); setError(null);
     const r = await fetch('/api/gift-cards', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         amount,
-        buyer_name: buyerName.trim() || undefined,
-        buyer_phone: buyerPhone.trim() || undefined,
-        buyer_email: buyerEmail.trim() || undefined,
+        beneficiary_id: beneficiary.id,
+        // Copie également les coordonnées dans les champs "buyer" pour
+        // que les anciens écrans (recherche par nom/téléphone) continuent
+        // de matcher. Tous deux pointent vers le bénéficiaire.
+        buyer_name: beneficiary.display_name ?? undefined,
+        buyer_phone: beneficiary.phone ?? undefined,
+        buyer_email: beneficiary.email ?? undefined,
         expires_at: expires || undefined,
       }),
     });
@@ -192,49 +205,95 @@ function CreateGiftCardModal({ onClose, onCreated }: {
   }
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-ink/30 backdrop-blur-sm p-4 overflow-auto">
-      <div className="card max-w-md w-full p-6 my-8">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-lg font-semibold">Nouvelle carte cadeau</h2>
-          <button onClick={onClose} className="text-ink-soft hover:text-ink">✕</button>
-        </div>
-
-        <div className="space-y-3">
-          <div>
-            <label className="text-sm font-medium text-ink-soft">Montant (€)</label>
-            <input type="number" step="0.5" min={1} className="input mt-1 text-xl font-semibold"
-                   value={amount} onChange={(e) => setAmount(Number(e.target.value) || 0)} autoFocus />
+    <>
+      <div className="fixed inset-0 z-50 grid place-items-center bg-ink/30 backdrop-blur-sm p-4 overflow-auto">
+        <div className="card max-w-md w-full p-6 my-8">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-lg font-semibold">Nouvelle carte cadeau</h2>
+            <button onClick={onClose} className="text-ink-soft hover:text-ink">✕</button>
           </div>
-          <div className="grid grid-cols-2 gap-2">
+
+          <div className="space-y-3">
             <div>
-              <label className="text-sm font-medium text-ink-soft">Nom acheteur</label>
-              <input className="input mt-1" value={buyerName} onChange={(e) => setBuyerName(e.target.value)} />
+              <label className="text-sm font-medium text-ink-soft">Montant (€)</label>
+              <input
+                type="number" step="0.5" min={1}
+                className="input mt-1 text-xl font-semibold"
+                value={amount}
+                onChange={(e) => setAmount(Number(e.target.value) || 0)}
+                autoFocus
+              />
             </div>
+
             <div>
-              <label className="text-sm font-medium text-ink-soft">Téléphone</label>
-              <input className="input mt-1" value={buyerPhone} onChange={(e) => setBuyerPhone(e.target.value)} />
+              <label className="text-sm font-medium text-ink-soft">
+                Bénéficiaire <span className="text-danger">*</span>
+              </label>
+              <p className="text-xs text-ink-soft mb-1.5">
+                La carte cadeau est rattachée au client qui la <strong>reçoit</strong>.
+              </p>
+              {beneficiary ? (
+                <div className="flex items-center justify-between gap-2 rounded-xl border border-border bg-accent-soft px-3 py-2.5">
+                  <div className="min-w-0">
+                    <div className="font-medium truncate">{beneficiary.display_name}</div>
+                    <div className="text-xs text-ink-soft truncate">
+                      {[beneficiary.phone, beneficiary.email].filter(Boolean).join(' · ') || '—'}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setBeneficiary(null)}
+                    className="text-ink-soft hover:text-danger text-sm"
+                  >
+                    Changer
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowPicker(true)}
+                  className="w-full rounded-xl border border-dashed border-border px-3 py-3 text-sm text-ink-soft hover:border-gray-300 hover:text-ink"
+                >
+                  + Choisir ou créer le client bénéficiaire
+                </button>
+              )}
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-ink-soft">
+                Date d&apos;expiration (optionnel)
+              </label>
+              <input
+                type="date"
+                className="input mt-1"
+                value={expires}
+                onChange={(e) => setExpires(e.target.value)}
+              />
             </div>
           </div>
-          <div>
-            <label className="text-sm font-medium text-ink-soft">Email</label>
-            <input type="email" className="input mt-1" value={buyerEmail} onChange={(e) => setBuyerEmail(e.target.value)} />
-          </div>
-          <div>
-            <label className="text-sm font-medium text-ink-soft">Date d&apos;expiration (optionnel)</label>
-            <input type="date" className="input mt-1" value={expires} onChange={(e) => setExpires(e.target.value)} />
-          </div>
-        </div>
 
-        {error && <div className="mt-3 rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
+          {error && <div className="mt-3 rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
 
-        <div className="mt-4 flex justify-end gap-2">
-          <button onClick={onClose} className="btn-ghost">Annuler</button>
-          <button onClick={() => void submit()} disabled={saving || amount <= 0} className="btn-primary">
-            {saving ? 'Création…' : `Créer et imprimer (${formatEUR(amount)})`}
-          </button>
+          <div className="mt-4 flex justify-end gap-2">
+            <button onClick={onClose} className="btn-ghost">Annuler</button>
+            <button
+              onClick={() => void submit()}
+              disabled={saving || amount <= 0 || !beneficiary}
+              className="btn-primary"
+            >
+              {saving ? 'Création…' : `Créer et imprimer (${formatEUR(amount)})`}
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+
+      {showPicker && (
+        <CustomerPickerModal
+          onClose={() => setShowPicker(false)}
+          onPick={(c) => { setBeneficiary(c); setShowPicker(false); }}
+        />
+      )}
+    </>
   );
 }
 

@@ -28,12 +28,17 @@ export async function GET(req: Request) {
   let rows: unknown[] = [];
   try {
     const r = await query(
-      `SELECT id, code, initial_amount::text, balance::text, status,
-              issued_at, expires_at,
-              buyer_name, buyer_phone, buyer_email
-         FROM gift_cards
-        WHERE organization_id = $1
-        ORDER BY issued_at DESC
+      `SELECT g.id, g.code, g.initial_amount::text, g.balance::text, g.status,
+              g.issued_at, g.expires_at,
+              g.buyer_name, g.buyer_phone, g.buyer_email,
+              g.beneficiary_id,
+              COALESCE(c.company_name,
+                NULLIF(TRIM(CONCAT(c.first_name,' ',c.last_name)), '')) AS beneficiary_name,
+              c.phone AS beneficiary_phone
+         FROM gift_cards g
+         LEFT JOIN customers c ON c.id = g.beneficiary_id
+        WHERE g.organization_id = $1
+        ORDER BY g.issued_at DESC
         LIMIT 200`,
       [g.user.organizationId],
     );
@@ -43,7 +48,8 @@ export async function GET(req: Request) {
     const r = await query(
       `SELECT id, code, initial_amount::text, balance::text, status,
               issued_at, expires_at,
-              NULL AS buyer_name, NULL AS buyer_phone, NULL AS buyer_email
+              NULL AS buyer_name, NULL AS buyer_phone, NULL AS buyer_email,
+              NULL AS beneficiary_id, NULL AS beneficiary_name, NULL AS beneficiary_phone
          FROM gift_cards
         WHERE organization_id = $1
         ORDER BY issued_at DESC
