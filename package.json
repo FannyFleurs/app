@@ -17,6 +17,7 @@
     "grant:admin": "tsx scripts/grant-admin.ts",
     "create:super-admin": "tsx scripts/create-super-admin.ts",
     "reset:password": "tsx scripts/reset-password.ts",
+    "list:users": "tsx scripts/list-users.ts",
     "fiscal:verify": "tsx scripts/verify-fiscal-chain.ts",
     "test": "vitest run",
     "test:watch": "vitest"
