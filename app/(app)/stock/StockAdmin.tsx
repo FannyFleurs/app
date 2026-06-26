@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import PageHeader from '@/components/PageHeader';
 import Badge from '@/components/Badge';
 import EmptyState from '@/components/EmptyState';
+import Icon, { type IconName } from '@/components/Icon';
 import { formatEUR } from '@/lib/services/money';
 
 interface Store { id: string; name: string }
@@ -18,6 +18,8 @@ interface StockLevel {
   min_stock: string | null;
   max_stock: string | null;
   unit: string;
+  purchase_price_ht?: string | null;
+  sale_price_ttc?: string | null;
 }
 
 interface Movement {
@@ -44,26 +46,34 @@ const TYPE_LABELS: Record<string, { label: string; tone: 'success'|'soft'|'warni
   inventory:    { label: 'Inventaire',   tone: 'neutral' },
 };
 
+type Section = 'levels' | 'create' | 'movements' | 'inventory';
+
+const NAV: Array<{ key: Section; group: 'Gestion' | 'Inventaire'; label: string; icon: IconName }> = [
+  { key: 'levels',     group: 'Gestion',    label: 'Visualiser stock',       icon: 'stock' },
+  { key: 'create',     group: 'Gestion',    label: 'Faire un mouvement',     icon: 'exports' },
+  { key: 'movements',  group: 'Gestion',    label: 'Visualiser mouvements',  icon: 'orders' },
+  { key: 'inventory',  group: 'Inventaire', label: 'Inventaire',             icon: 'invoices' },
+];
+
 export default function StockAdmin({ canAdjust, stores }: { canAdjust: boolean; stores: Store[] }) {
-  const [tab, setTab] = useState<'levels' | 'movements'>('levels');
+  const [section, setSection] = useState<Section>('levels');
   const [levels, setLevels] = useState<StockLevel[]>([]);
   const [movements, setMovements] = useState<Movement[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
-  const [showCreate, setShowCreate] = useState(false);
 
   async function reload() {
     setLoading(true);
-    if (tab === 'levels') {
-      const r = await fetch('/api/stock/levels');
-      if (r.ok) setLevels((await r.json()).levels);
-    } else {
+    if (section === 'movements') {
       const r = await fetch('/api/stock/movement');
       if (r.ok) setMovements((await r.json()).movements);
+    } else {
+      const r = await fetch('/api/stock/levels');
+      if (r.ok) setLevels((await r.json()).levels);
     }
     setLoading(false);
   }
-  useEffect(() => { void reload(); /* eslint-disable-next-line */ }, [tab]);
+  useEffect(() => { void reload(); /* eslint-disable-next-line */ }, [section]);
 
   const filteredLevels = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -74,158 +84,268 @@ export default function StockAdmin({ canAdjust, stores }: { canAdjust: boolean; 
     );
   }, [levels, q]);
 
-  const lowStock = levels.filter((l) =>
-    l.min_stock != null && Number(l.quantity) <= Number(l.min_stock),
+  const totalPurchaseValue = useMemo(
+    () => levels.reduce((s, l) => s + Number(l.purchase_price_ht ?? 0) * Number(l.quantity), 0),
+    [levels],
   );
-  const totalRefs = new Set(levels.map((l) => l.product_id)).size;
-  const totalUnits = levels.reduce((s, l) => s + Number(l.quantity), 0);
+  const totalSaleValue = useMemo(
+    () => levels.reduce((s, l) => s + Number(l.sale_price_ttc ?? 0) * Number(l.quantity), 0),
+    [levels],
+  );
+
+  const groups: Record<string, typeof NAV> = NAV.reduce((acc, item) => {
+    (acc[item.group] = acc[item.group] || []).push(item);
+    return acc;
+  }, {} as Record<string, typeof NAV>);
 
   return (
-    <div className="p-8 space-y-5">
-      <PageHeader
-        title="Stock"
-        subtitle="Niveaux par boutique, journal des mouvements append-only et ajustements."
-        actions={canAdjust ? (
-          <button className="btn-primary" onClick={() => setShowCreate(true)}>
-            + Mouvement stock
-          </button>
-        ) : null}
-      />
-
-      <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Kpi label="Références suivies" value={totalRefs.toString()} />
-        <Kpi label="Unités totales" value={totalUnits.toFixed(0)} />
-        <Kpi label="Alertes stock bas" value={lowStock.length.toString()} tone={lowStock.length > 0 ? 'warning' : undefined} />
-        <Kpi label="Boutiques" value={stores.length.toString()} />
-      </section>
-
-      <div className="flex gap-1 border-b border-border">
-        <button onClick={() => setTab('levels')}
-                className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${
-                  tab === 'levels' ? 'border-sage text-accent-deep' : 'border-transparent text-ink-soft'
-                }`}>
-          Niveaux actuels
-        </button>
-        <button onClick={() => setTab('movements')}
-                className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${
-                  tab === 'movements' ? 'border-sage text-accent-deep' : 'border-transparent text-ink-soft'
-                }`}>
-          Journal des mouvements
-        </button>
-      </div>
-
-      {tab === 'levels' ? (
-        <>
-          <input
-            className="input max-w-md"
-            placeholder="Rechercher par nom ou SKU…"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-          />
-          {loading ? (
-            <div className="text-sm text-ink-soft">Chargement…</div>
-          ) : filteredLevels.length === 0 ? (
-            <EmptyState
-              icon="▣"
-              title="Aucun produit avec suivi de stock"
-              description="Activez « Suivi du stock » sur la fiche produit, ou ajoutez un mouvement d'entrée."
-            />
-          ) : (
-            <div className="card overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-white text-ink-soft text-xs uppercase border-b border-border">
-                  <tr>
-                    <th className="text-left px-4 py-3">Produit</th>
-                    <th className="text-left px-4 py-3">SKU</th>
-                    <th className="text-left px-4 py-3">Boutique</th>
-                    <th className="text-right px-4 py-3">Quantité</th>
-                    <th className="text-right px-4 py-3">Seuil min</th>
-                    <th className="text-center px-4 py-3">État</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredLevels.map((l) => {
-                    const q = Number(l.quantity);
-                    const min = l.min_stock != null ? Number(l.min_stock) : null;
-                    const low = min != null && q <= min;
-                    return (
-                      <tr key={`${l.product_id}-${l.store_id}`} className="border-t border-border">
-                        <td className="px-4 py-3 font-medium">{l.product_name}</td>
-                        <td className="px-4 py-3 text-ink-soft text-xs font-mono">{l.product_sku ?? '—'}</td>
-                        <td className="px-4 py-3 text-ink-soft">{l.store_name}</td>
-                        <td className="px-4 py-3 text-right">{q} {l.unit}</td>
-                        <td className="px-4 py-3 text-right text-ink-soft">{l.min_stock ?? '—'}</td>
-                        <td className="px-4 py-3 text-center">
-                          {low ? <Badge tone="warning">Stock bas</Badge> : <Badge tone="success">OK</Badge>}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+    <div className="grid grid-cols-[260px_1fr] h-[calc(100vh-56px)] overflow-hidden">
+      {/* SIDEBAR */}
+      <aside className="border-r border-border bg-white overflow-y-auto">
+        <div className="px-5 py-4 border-b border-border">
+          <div className="text-[10px] uppercase tracking-widest text-ink-soft font-semibold">Section</div>
+          <div className="text-lg font-semibold tracking-tight">Stock</div>
+        </div>
+        <div className="p-3 space-y-4">
+          {Object.entries(groups).map(([g, items]) => (
+            <div key={g}>
+              <div className="px-3 mb-1 text-[10px] uppercase tracking-widest text-ink-soft font-semibold">
+                {g}
+              </div>
+              <div className="space-y-0.5">
+                {items.map((it) => {
+                  const active = section === it.key;
+                  return (
+                    <button
+                      key={it.key}
+                      onClick={() => setSection(it.key)}
+                      className={`nav-link w-full ${active ? 'nav-link-active' : ''}`}
+                    >
+                      <span className={active ? 'text-accent-deep' : 'text-ink-soft'}>
+                        <Icon name={it.icon} size={20} />
+                      </span>
+                      <span className="truncate">{it.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          )}
-        </>
-      ) : (
-        <>
-          {loading ? (
-            <div className="text-sm text-ink-soft">Chargement…</div>
-          ) : movements.length === 0 ? (
-            <EmptyState icon="∅" title="Aucun mouvement" />
-          ) : (
-            <div className="card overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-white text-ink-soft text-xs uppercase border-b border-border">
-                  <tr>
-                    <th className="text-left px-4 py-3">Date</th>
-                    <th className="text-left px-4 py-3">Produit</th>
-                    <th className="text-left px-4 py-3">Boutique</th>
-                    <th className="text-left px-4 py-3">Type</th>
-                    <th className="text-right px-4 py-3">Δ</th>
-                    <th className="text-right px-4 py-3">Avant → Après</th>
-                    <th className="text-left px-4 py-3">Motif</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {movements.map((m) => {
-                    const t = TYPE_LABELS[m.movement_type] ?? { label: m.movement_type, tone: 'neutral' as const };
-                    return (
-                      <tr key={m.id} className="border-t border-border">
-                        <td className="px-4 py-3 text-ink-soft text-xs">{new Date(m.created_at).toLocaleString('fr-FR')}</td>
-                        <td className="px-4 py-3 font-medium">{m.product_name}</td>
-                        <td className="px-4 py-3 text-ink-soft">{m.store_name}</td>
-                        <td className="px-4 py-3"><Badge tone={t.tone}>{t.label}</Badge></td>
-                        <td className={`px-4 py-3 text-right ${Number(m.quantity_delta) >= 0 ? 'text-success' : 'text-danger'}`}>
-                          {Number(m.quantity_delta) > 0 ? '+' : ''}{m.quantity_delta}
-                        </td>
-                        <td className="px-4 py-3 text-right text-ink-soft text-xs">
-                          {m.previous_quantity} → {m.new_quantity}
-                        </td>
-                        <td className="px-4 py-3 text-xs">{m.reason}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </>
-      )}
+          ))}
+        </div>
+      </aside>
 
-      {showCreate && (
-        <CreateMovementModal
-          stores={stores}
-          onClose={() => setShowCreate(false)}
-          onSaved={() => { setShowCreate(false); void reload(); }}
-        />
-      )}
+      {/* CONTENU */}
+      <main className="overflow-y-auto bg-white">
+        {section === 'levels' && (
+          <div className="p-6 space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3">
+              <ValueCard
+                value={totalPurchaseValue}
+                label="Valeur à l'achat"
+                tone="accent"
+              />
+              <ValueCard
+                value={totalSaleValue}
+                label="Valeur à la vente (TTC)"
+                tone="success"
+              />
+              <button
+                className="btn-primary md:self-stretch md:px-6"
+                onClick={() => exportCsv(filteredLevels)}
+              >
+                Exporter le rapport complet
+              </button>
+            </div>
+
+            <div className="relative max-w-2xl">
+              <input
+                className="input pr-9"
+                placeholder="Rechercher…"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-soft">⌕</span>
+            </div>
+
+            {loading ? (
+              <div className="text-sm text-ink-soft">Chargement…</div>
+            ) : filteredLevels.length === 0 ? (
+              <EmptyState
+                icon="▣"
+                title="Aucun produit avec suivi de stock"
+                description="Activez « Suivi du stock » sur la fiche produit, ou ajoutez un mouvement d'entrée."
+              />
+            ) : (
+              <div className="card overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="text-ink-soft text-[10px] uppercase tracking-widest border-b border-border">
+                    <tr>
+                      <th className="text-left px-4 py-3 font-semibold">Produit</th>
+                      <th className="text-right px-4 py-3 font-semibold">Stock</th>
+                      <th className="text-right px-4 py-3 font-semibold">Valeur achat</th>
+                      <th className="text-right px-4 py-3 font-semibold">Valeur vente</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredLevels.map((l) => {
+                      const qty = Number(l.quantity);
+                      const min = l.min_stock != null ? Number(l.min_stock) : null;
+                      const negative = qty < 0;
+                      const low = !negative && min != null && qty <= min;
+                      const purchase = Number(l.purchase_price_ht ?? 0) * qty;
+                      const sale = Number(l.sale_price_ttc ?? 0) * qty;
+                      return (
+                        <tr key={`${l.product_id}-${l.store_id}`} className="border-t border-border hover:bg-gray-50">
+                          <td className="px-4 py-3 font-medium">
+                            <div>{l.product_name}</div>
+                            {l.product_sku && (
+                              <div className="text-[11px] text-ink-soft font-mono">{l.product_sku}</div>
+                            )}
+                          </td>
+                          <td className={`px-4 py-3 text-right font-medium ${
+                            negative ? 'text-danger' : low ? 'text-warning' : 'text-success'
+                          }`}>
+                            {qty}
+                          </td>
+                          <td className={`px-4 py-3 text-right ${negative ? 'text-danger' : 'text-ink'}`}>
+                            {formatEUR(purchase)}
+                          </td>
+                          <td className={`px-4 py-3 text-right font-medium ${negative ? 'text-danger' : 'text-ink'}`}>
+                            {formatEUR(sale)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {section === 'create' && (
+          <div className="p-6 max-w-xl">
+            {canAdjust ? (
+              <InlineMovementForm
+                stores={stores}
+                onSaved={() => { setSection('movements'); }}
+              />
+            ) : (
+              <EmptyState
+                icon="🔒"
+                title="Action restreinte"
+                description="Vous n'avez pas la permission de créer un mouvement de stock."
+              />
+            )}
+          </div>
+        )}
+
+        {section === 'movements' && (
+          <div className="p-6 space-y-4">
+            {loading ? (
+              <div className="text-sm text-ink-soft">Chargement…</div>
+            ) : movements.length === 0 ? (
+              <EmptyState icon="∅" title="Aucun mouvement" />
+            ) : (
+              <div className="card overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="text-ink-soft text-[10px] uppercase tracking-widest border-b border-border">
+                    <tr>
+                      <th className="text-left px-4 py-3 font-semibold">Date</th>
+                      <th className="text-left px-4 py-3 font-semibold">Produit</th>
+                      <th className="text-left px-4 py-3 font-semibold">Boutique</th>
+                      <th className="text-left px-4 py-3 font-semibold">Type</th>
+                      <th className="text-right px-4 py-3 font-semibold">Δ</th>
+                      <th className="text-right px-4 py-3 font-semibold">Avant → Après</th>
+                      <th className="text-left px-4 py-3 font-semibold">Motif</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {movements.map((m) => {
+                      const t = TYPE_LABELS[m.movement_type] ?? { label: m.movement_type, tone: 'neutral' as const };
+                      return (
+                        <tr key={m.id} className="border-t border-border">
+                          <td className="px-4 py-3 text-ink-soft text-xs">{new Date(m.created_at).toLocaleString('fr-FR')}</td>
+                          <td className="px-4 py-3 font-medium">{m.product_name}</td>
+                          <td className="px-4 py-3 text-ink-soft">{m.store_name}</td>
+                          <td className="px-4 py-3"><Badge tone={t.tone}>{t.label}</Badge></td>
+                          <td className={`px-4 py-3 text-right ${Number(m.quantity_delta) >= 0 ? 'text-success' : 'text-danger'}`}>
+                            {Number(m.quantity_delta) > 0 ? '+' : ''}{m.quantity_delta}
+                          </td>
+                          <td className="px-4 py-3 text-right text-ink-soft text-xs">
+                            {m.previous_quantity} → {m.new_quantity}
+                          </td>
+                          <td className="px-4 py-3 text-xs">{m.reason}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {section === 'inventory' && (
+          <div className="p-6 max-w-2xl">
+            <h2 className="text-xl font-semibold tracking-tight">Inventaire</h2>
+            <p className="mt-1 text-sm text-ink-soft">
+              Lance un inventaire complet en générant un mouvement de type <strong>inventaire</strong> par produit.
+            </p>
+            <div className="mt-4 card p-5">
+              <p className="text-sm text-ink-soft">
+                Pour ajuster un stock après comptage, créez un mouvement de type
+                <em> Inventaire </em> (delta = quantité physique − quantité système).
+              </p>
+              <button
+                className="btn-primary mt-3 text-sm"
+                onClick={() => setSection('create')}
+              >
+                + Saisir un ajustement d&apos;inventaire
+              </button>
+            </div>
+          </div>
+        )}
+      </main>
     </div>
   );
 }
 
-function CreateMovementModal({ stores, onClose, onSaved }: {
-  stores: Store[]; onClose: () => void; onSaved: () => void;
-}) {
+function ValueCard({ value, label, tone }: { value: number; label: string; tone: 'accent' | 'success' }) {
+  return (
+    <div className="card p-5">
+      <div className={`text-2xl font-semibold tracking-tight ${tone === 'accent' ? 'text-accent-deep' : 'text-success'}`}>
+        {formatEUR(value)}
+      </div>
+      <div className="text-xs text-ink-soft mt-1">{label}</div>
+    </div>
+  );
+}
+
+function exportCsv(rows: StockLevel[]) {
+  const head = ['Produit', 'SKU', 'Boutique', 'Quantité', 'PA HT', 'PV TTC', 'Valeur achat', 'Valeur vente'];
+  const lines = [head.join(';')].concat(
+    rows.map((l) => [
+      JSON.stringify(l.product_name),
+      l.product_sku ?? '',
+      JSON.stringify(l.store_name),
+      l.quantity,
+      l.purchase_price_ht ?? '',
+      l.sale_price_ttc ?? '',
+      (Number(l.purchase_price_ht ?? 0) * Number(l.quantity)).toFixed(2),
+      (Number(l.sale_price_ttc ?? 0) * Number(l.quantity)).toFixed(2),
+    ].join(';')),
+  );
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `stock_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function InlineMovementForm({ stores, onSaved }: { stores: Store[]; onSaved: () => void }) {
   const [products, setProducts] = useState<Array<{ id: string; name: string; sku: string | null }>>([]);
   const [productId, setProductId] = useState('');
   const [storeId, setStoreId] = useState(stores[0]?.id ?? '');
@@ -238,10 +358,7 @@ function CreateMovementModal({ stores, onClose, onSaved }: {
   useEffect(() => {
     void (async () => {
       const r = await fetch('/api/products');
-      if (r.ok) {
-        const j = await r.json();
-        setProducts(j.products);
-      }
+      if (r.ok) setProducts((await r.json()).products);
     })();
   }, []);
 
@@ -271,76 +388,59 @@ function CreateMovementModal({ stores, onClose, onSaved }: {
   }
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-ink/30 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="card max-w-md w-full p-5" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-lg font-semibold">Nouveau mouvement</h2>
-          <button onClick={onClose} className="text-ink-soft hover:text-ink">✕</button>
+    <div>
+      <h2 className="text-xl font-semibold tracking-tight">Faire un mouvement</h2>
+      <p className="mt-1 text-sm text-ink-soft">
+        Enregistre une entrée, sortie, perte ou ajustement. Le journal est append-only.
+      </p>
+      <div className="card p-5 mt-4 space-y-3">
+        <div>
+          <label className="text-sm font-medium text-ink-soft">Produit</label>
+          <select className="input mt-1 h-11" value={productId} onChange={(e) => setProductId(e.target.value)}>
+            <option value="">— Sélectionner —</option>
+            {products.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}{p.sku ? ` (${p.sku})` : ''}</option>
+            ))}
+          </select>
         </div>
-
-        <div className="space-y-3">
+        <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-sm font-medium text-ink-soft">Produit</label>
-            <select className="input mt-1" value={productId} onChange={(e) => setProductId(e.target.value)}>
-              <option value="">— Sélectionner —</option>
-              {products.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}{p.sku ? ` (${p.sku})` : ''}</option>
-              ))}
+            <label className="text-sm font-medium text-ink-soft">Boutique</label>
+            <select className="input mt-1 h-11" value={storeId} onChange={(e) => setStoreId(e.target.value)}>
+              {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="text-sm font-medium text-ink-soft">Boutique</label>
-              <select className="input mt-1" value={storeId} onChange={(e) => setStoreId(e.target.value)}>
-                {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-ink-soft">Type</label>
-              <select className="input mt-1" value={type} onChange={(e) => setType(e.target.value as typeof type)}>
-                <option value="purchase">Entrée fournisseur</option>
-                <option value="adjustment">Ajustement</option>
-                <option value="loss">Perte / casse</option>
-                <option value="inventory">Inventaire</option>
-              </select>
-            </div>
-          </div>
           <div>
-            <label className="text-sm font-medium text-ink-soft">Quantité (+/−)</label>
-            <input
-              type="number" step="0.001"
-              className="input mt-1 text-xl font-semibold"
-              value={delta || ''}
-              onChange={(e) => setDelta(Number(e.target.value) || 0)}
-              placeholder="ex : 10 ou -2"
-            />
-            <p className="mt-1 text-xs text-ink-soft">Positif pour entrée, négatif pour sortie.</p>
-          </div>
-          <div>
-            <label className="text-sm font-medium text-ink-soft">Motif</label>
-            <input className="input mt-1" value={reason} onChange={(e) => setReason(e.target.value)}
-                   placeholder="ex : Livraison Aoki Fleurs, perte fleurs fanées" />
+            <label className="text-sm font-medium text-ink-soft">Type</label>
+            <select className="input mt-1 h-11" value={type} onChange={(e) => setType(e.target.value as typeof type)}>
+              <option value="purchase">Entrée fournisseur</option>
+              <option value="adjustment">Ajustement</option>
+              <option value="loss">Perte / casse</option>
+              <option value="inventory">Inventaire</option>
+            </select>
           </div>
         </div>
-
-        {error && <div className="mt-3 rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
-
-        <div className="mt-4 flex justify-end gap-2">
-          <button onClick={onClose} className="btn-ghost">Annuler</button>
-          <button onClick={() => void submit()} disabled={saving} className="btn-primary">
-            {saving ? 'Enregistrement…' : 'Enregistrer'}
-          </button>
+        <div>
+          <label className="text-sm font-medium text-ink-soft">Quantité (+/−)</label>
+          <input
+            type="number" step="0.001"
+            className="input mt-1 text-xl font-semibold"
+            value={delta || ''}
+            onChange={(e) => setDelta(Number(e.target.value) || 0)}
+            placeholder="ex : 10 ou -2"
+          />
+          <p className="mt-1 text-xs text-ink-soft">Positif pour entrée, négatif pour sortie.</p>
         </div>
+        <div>
+          <label className="text-sm font-medium text-ink-soft">Motif</label>
+          <input className="input mt-1" value={reason} onChange={(e) => setReason(e.target.value)}
+                 placeholder="ex : Livraison Aoki Fleurs, perte fleurs fanées" />
+        </div>
+        {error && <div className="rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
+        <button onClick={() => void submit()} disabled={saving} className="btn-primary w-full h-11">
+          {saving ? 'Enregistrement…' : 'Enregistrer le mouvement'}
+        </button>
       </div>
-    </div>
-  );
-}
-
-function Kpi({ label, value, tone }: { label: string; value: string; tone?: 'warning' }) {
-  return (
-    <div className="card p-4">
-      <div className="text-xs uppercase tracking-wider text-ink-soft">{label}</div>
-      <div className={`mt-1 text-xl font-semibold tracking-tight ${tone === 'warning' ? 'text-warning' : ''}`}>{value}</div>
     </div>
   );
 }

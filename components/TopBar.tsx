@@ -8,15 +8,15 @@ import Icon from './Icon';
 
 /**
  * Identifiants (href) des items affichés comme onglets dans la barre supérieure.
- * Les autres restent accessibles via le menu hamburger.
+ * Les autres restent accessibles via le menu hamburger (toutes les pages).
  */
 const TOP_TABS_ORDER: string[] = [
-  '/caisse',       // Accueil
-  '/orders',       // Tickets / commandes
-  '/ma-journee',   // Ma journée
-  '/stock',        // Gestion du stock
-  '/gift-cards',   // Avoir / Bon cadeau
-  '/customers',    // Comptes clients
+  '/caisse',
+  '/orders',
+  '/ma-journee',
+  '/stock',
+  '/gift-cards',
+  '/customers',
 ];
 
 export interface TopBarUser {
@@ -40,21 +40,16 @@ export default function TopBar({ user, hiddenPaths, onOpenMenu, onLogout }: Prop
     .filter((i) => !i.perm || hasPermission(user.role, i.perm))
     .filter((i) => i.required || !hiddenPaths.includes(i.href));
 
-  const initials = user.fullName
-    .split(/\s+/).map((s) => s[0]).filter(Boolean).slice(0, 2).join('').toUpperCase();
   const firstName = user.fullName.split(/\s+/)[0] ?? user.fullName;
 
   return (
-    <header
-      className="sticky top-0 z-40 h-14 shrink-0 flex items-stretch text-white"
-      style={{ backgroundColor: 'var(--topbar-bg)' }}
-    >
+    <header className="sticky top-0 z-40 h-14 shrink-0 flex items-stretch bg-white border-b border-border">
       {/* Logo */}
-      <Link href="/caisse" className="flex items-center gap-2.5 pl-4 pr-5 shrink-0">
-        <span className="grid h-9 w-9 place-items-center rounded-xl bg-white/10 text-white font-semibold">
+      <Link href="/caisse" className="flex items-center gap-2.5 pl-4 pr-5 shrink-0 hover:bg-gray-50 transition-colors">
+        <span className="grid h-9 w-9 place-items-center rounded-xl accent-bar text-white font-semibold">
           F
         </span>
-        <span className="font-semibold tracking-tight hidden sm:inline">Florea POS</span>
+        <span className="font-semibold tracking-tight hidden sm:inline text-ink">Florea POS</span>
       </Link>
 
       {/* Onglets */}
@@ -67,11 +62,17 @@ export default function TopBar({ user, hiddenPaths, onOpenMenu, onLogout }: Prop
               href={t.href}
               className={`relative flex items-center gap-2 px-4 text-sm font-medium whitespace-nowrap transition-colors ${
                 active
-                  ? 'bg-white/10 text-white'
-                  : 'text-white/75 hover:text-white hover:bg-white/5'
+                  ? 'text-accent-deep'
+                  : 'text-ink-soft hover:text-ink hover:bg-gray-50'
               }`}
             >
               {t.label}
+              {active && (
+                <span
+                  className="absolute left-3 right-3 bottom-0 h-[3px] rounded-t-full"
+                  style={{ backgroundColor: 'var(--primary)' }}
+                />
+              )}
             </Link>
           );
         })}
@@ -81,7 +82,7 @@ export default function TopBar({ user, hiddenPaths, onOpenMenu, onLogout }: Prop
       <button
         onClick={onOpenMenu}
         aria-label="Ouvrir la vue toutes les pages"
-        className="px-4 flex items-center justify-center text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+        className="px-4 flex items-center justify-center text-ink-soft hover:text-ink hover:bg-gray-50 transition-colors border-l border-border"
       >
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -93,18 +94,16 @@ export default function TopBar({ user, hiddenPaths, onOpenMenu, onLogout }: Prop
       <button
         onClick={onLogout}
         title="Se déconnecter"
-        className="relative flex items-center gap-3 px-5 border-l border-white/10 hover:bg-white/5 transition-colors min-w-[140px]"
-        style={{ backgroundColor: 'var(--topbar-user-bg)' }}
+        className="relative flex items-center gap-3 px-5 border-l border-border hover:bg-gray-50 transition-colors min-w-[140px]"
       >
         <span
           className="absolute left-0 top-2 bottom-2 w-1 rounded-r-full"
           style={{ backgroundColor: 'var(--primary)' }}
         />
-        <span className="text-white/90">
+        <span className="text-accent-deep">
           <Icon name="users" size={20} />
         </span>
-        <span className="text-sm font-medium text-white">{firstName}</span>
-        <span className="sr-only">{initials}</span>
+        <span className="text-sm font-medium text-ink">{firstName}</span>
       </button>
     </header>
   );

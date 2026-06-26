@@ -3,9 +3,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { formatEUR } from '@/lib/services/money';
 import { PAYMENT_LABELS } from '@/components/labels';
-import PageHeader from '@/components/PageHeader';
 import EmptyState from '@/components/EmptyState';
 import Badge from '@/components/Badge';
+import Icon from '@/components/Icon';
 import ReturnModal from './ReturnModal';
 import PaymentCorrectionModal from './PaymentCorrectionModal';
 import AttachCustomerAfterSaleModal from './AttachCustomerAfterSaleModal';
@@ -34,6 +34,8 @@ interface SaleDetail {
   invoice: { id: string; number: string } | null;
 }
 
+type SummaryMode = 'simple' | 'complet';
+
 export default function MaJourneeClient() {
   const today = new Date().toISOString().slice(0, 10);
   const [date, setDate] = useState(today);
@@ -42,6 +44,8 @@ export default function MaJourneeClient() {
   const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<SaleDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [search, setSearch] = useState('');
+  const [mode, setMode] = useState<SummaryMode>('simple');
 
   useEffect(() => {
     setLoading(true);
@@ -66,112 +70,212 @@ export default function MaJourneeClient() {
   }
 
   const totals = useMemo(() => {
-    let ttc = 0, ht = 0, tva = 0;
+    let ttc = 0, ht = 0, tva = 0, discount = 0;
     for (const s of sales) {
       ttc += Number(s.total_ttc); ht += Number(s.total_ht); tva += Number(s.total_tva);
+      discount += Number(s.total_discount);
     }
     const avg = sales.length > 0 ? ttc / sales.length : 0;
-    return { ttc, ht, tva, count: sales.length, avg };
+    return { ttc, ht, tva, discount, count: sales.length, avg };
   }, [sales]);
 
+  const filtered = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    if (!needle) return sales;
+    return sales.filter((s) =>
+      s.receipt_number.toLowerCase().includes(needle) ||
+      s.cashier?.toLowerCase().includes(needle) ||
+      s.customer?.toLowerCase().includes(needle),
+    );
+  }, [sales, search]);
+
+  const dateLabel = new Date(date).toLocaleDateString('fr-FR', {
+    weekday: 'long', day: 'numeric', month: 'long',
+  });
+
   return (
-    <div className="p-8 space-y-5">
-      <PageHeader
-        title="Ma journée"
-        subtitle="Vos ventes du jour. Cliquez sur une vente pour voir le détail complet (articles, remises, paiements)."
-        actions={(
-          <div className="flex items-center gap-2">
-            <label className="text-xs text-ink-soft">Date</label>
-            <input
-              type="date"
-              className="input h-9 w-auto"
-              value={date}
-              max={today}
-              onChange={(e) => setDate(e.target.value)}
-            />
+    <div className="grid grid-cols-[300px_1fr] h-[calc(100vh-56px)] overflow-hidden">
+      {/* SIDEBAR GAUCHE — synthèse journée */}
+      <aside className="border-r border-border bg-white overflow-y-auto flex flex-col">
+        <div className="px-5 py-4 border-b border-border">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-xs uppercase tracking-widest text-ink-soft font-semibold">Synthèse</div>
+              <div className="text-lg font-semibold tracking-tight capitalize">{dateLabel}</div>
+            </div>
+            <label className="inline-flex items-center cursor-pointer relative">
+              <input
+                type="date"
+                value={date}
+                max={today}
+                onChange={(e) => setDate(e.target.value)}
+                className="absolute inset-0 opacity-0 cursor-pointer"
+              />
+              <span className="grid h-9 w-9 place-items-center rounded-xl border border-border text-ink-soft hover:bg-gray-50">
+                <Icon name="my-day" size={18} />
+              </span>
+            </label>
+          </div>
+          <div className="mt-2 inline-flex items-center gap-1.5 text-xs">
+            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: 'var(--primary)' }} />
+            <span className="text-ink-soft">{totals.count} vente(s) ce jour</span>
+          </div>
+        </div>
+
+        {/* Switch X Simple / X Complet */}
+        <div className="px-5 pt-4">
+          <div className="grid grid-cols-2 gap-1 rounded-2xl bg-gray-50 p-1">
+            <button
+              onClick={() => setMode('simple')}
+              className={`rounded-xl py-2 text-sm font-medium transition-colors ${
+                mode === 'simple' ? 'bg-white shadow-sm text-ink' : 'text-ink-soft'
+              }`}
+            >
+              X Simple
+            </button>
+            <button
+              onClick={() => setMode('complet')}
+              className={`rounded-xl py-2 text-sm font-medium transition-colors ${
+                mode === 'complet' ? 'bg-white shadow-sm text-ink' : 'text-ink-soft'
+              }`}
+            >
+              X Complet
+            </button>
+          </div>
+        </div>
+
+        {/* Total HT mis en avant */}
+        <div className="px-5 py-6 text-center">
+          <div className="inline-flex items-center gap-1 text-xs text-ink-soft">
+            <Icon name="dashboard" size={14} /> CA HT
+          </div>
+          <div className="mt-1 text-4xl font-semibold tracking-tight">{formatEUR(totals.ht)}</div>
+        </div>
+
+        {/* KPI lignes */}
+        <div className="px-5 pb-4 space-y-3">
+          <KpiRow label="CA Total TTC" value={formatEUR(totals.ttc)} />
+          <KpiRow label="Ventes" value={totals.count.toString()} />
+          <KpiRow label="Panier moyen" value={formatEUR(totals.avg)} />
+          {mode === 'complet' && (
+            <>
+              <KpiRow label="TVA collectée" value={formatEUR(totals.tva)} />
+              <KpiRow label="Remises" value={formatEUR(totals.discount)} tone="warning" />
+            </>
+          )}
+        </div>
+
+        <div className="flex-1" />
+
+        {/* Action en pied — équivalent du "Actions sur ma journée" */}
+        <div className="border-t border-border p-3 bg-white sticky bottom-0">
+          <a
+            href="/closures"
+            className="btn-primary w-full text-sm h-11"
+          >
+            Actions sur ma journée
+          </a>
+        </div>
+      </aside>
+
+      {/* CONTENU — table de tickets / détail */}
+      <main className="overflow-y-auto bg-white">
+        {!selected ? (
+          <div className="p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="relative flex-1 max-w-md">
+                <input
+                  className="input pr-9"
+                  placeholder="Rechercher…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-soft">⌕</span>
+              </div>
+              <div className="ml-auto flex items-center gap-2">
+                <span className="text-xs text-ink-soft">{filtered.length} ticket(s)</span>
+              </div>
+            </div>
+
+            {loading ? (
+              <div className="card p-10 text-center text-ink-soft text-sm">Chargement…</div>
+            ) : filtered.length === 0 ? (
+              <EmptyState
+                icon="☼"
+                title="Aucune vente"
+                description={sales.length === 0 ? 'Aucun ticket validé pour cette date.' : 'Aucun résultat pour cette recherche.'}
+              />
+            ) : (
+              <div className="card overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="text-ink-soft text-[10px] uppercase tracking-widest border-b border-border">
+                    <tr>
+                      <th className="text-left px-4 py-3 font-semibold">Ticket</th>
+                      <th className="text-left px-4 py-3 font-semibold">Vente</th>
+                      <th className="text-left px-4 py-3 font-semibold">Vendeur</th>
+                      <th className="text-right px-4 py-3 font-semibold">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map((s) => (
+                      <tr
+                        key={s.id}
+                        onClick={() => void pickSale(s.id)}
+                        className="border-t border-border hover:bg-gray-50 cursor-pointer"
+                      >
+                        <td className="px-4 py-3">
+                          <div className="font-mono font-medium">{s.receipt_number}</div>
+                          <div className="text-xs text-ink-soft">
+                            {new Date(s.validated_at).toLocaleTimeString('fr-FR', {
+                              hour: '2-digit', minute: '2-digit', second: '2-digit',
+                            })}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-ink-soft">
+                          {s.customer ?? '—'}
+                        </td>
+                        <td className="px-4 py-3 text-ink-soft">{s.cashier}</td>
+                        <td className="px-4 py-3 text-right font-medium">{formatEUR(Number(s.total_ttc))}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="p-6">
+            <button
+              onClick={() => { setSelected(null); setDetail(null); }}
+              className="btn-ghost text-sm mb-3"
+            >
+              ‹ Retour à la liste
+            </button>
+            {loadingDetail ? (
+              <div className="card p-10 text-center text-ink-soft text-sm">Chargement…</div>
+            ) : detail ? (
+              <SaleDetailPanel
+                detail={detail}
+                onInvoiceGenerated={() => void pickSale(detail.sale.id)}
+              />
+            ) : (
+              <EmptyState icon="⚠" title="Erreur de chargement" />
+            )}
           </div>
         )}
-      />
+      </main>
+    </div>
+  );
+}
 
-      <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Kpi label="Tickets" value={totals.count.toString()} />
-        <Kpi label="CA TTC" value={formatEUR(totals.ttc)} />
-        <Kpi label="TVA collectée" value={formatEUR(totals.tva)} />
-        <Kpi label="Panier moyen" value={formatEUR(totals.avg)} />
-      </section>
-
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_540px] gap-5 min-h-[55vh]">
-        {/* Liste */}
-        <div>
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-ink-soft mb-2 px-1">
-            Ventes du {new Date(date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}
-          </h2>
-          {loading ? (
-            <div className="card p-10 text-center text-ink-soft text-sm">Chargement…</div>
-          ) : sales.length === 0 ? (
-            <EmptyState
-              icon="☼"
-              title="Aucune vente"
-              description="Aucun ticket validé pour cette date."
-            />
-          ) : (
-            <div className="card divide-y divide-border max-h-[60vh] overflow-auto">
-              {sales.map((s) => {
-                const active = s.id === selected;
-                return (
-                  <button
-                    key={s.id}
-                    onClick={() => void pickSale(s.id)}
-                    className={`w-full text-left px-4 py-3 transition-colors ${
-                      active ? 'bg-accent-soft' : 'hover:bg-gray-50'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <div className="font-mono text-xs text-ink-soft">{s.receipt_number}</div>
-                        <div className="text-sm text-ink-soft">
-                          {new Date(s.validated_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
-                          {' · '}{s.cashier}
-                          {s.customer && <> · <span className="text-ink">{s.customer}</span></>}
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="font-semibold">{formatEUR(Number(s.total_ttc))}</div>
-                        {Number(s.total_discount) > 0 && (
-                          <div className="text-xs text-warning">-{formatEUR(Number(s.total_discount))}</div>
-                        )}
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Détail */}
-        <div>
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-ink-soft mb-2 px-1">
-            Détail de la vente
-          </h2>
-          {!selected ? (
-            <EmptyState
-              icon="✦"
-              title="Sélectionnez une vente"
-              description="Cliquez sur un ticket pour afficher son détail : articles, remises, modes de paiement, empreinte fiscale."
-            />
-          ) : loadingDetail ? (
-            <div className="card p-10 text-center text-ink-soft text-sm">Chargement…</div>
-          ) : detail ? (
-            <SaleDetailPanel
-              detail={detail}
-              onInvoiceGenerated={() => void pickSale(detail.sale.id)}
-            />
-          ) : (
-            <EmptyState icon="⚠" title="Erreur de chargement" />
-          )}
-        </div>
-      </div>
+function KpiRow({ label, value, tone }: { label: string; value: string; tone?: 'warning' }) {
+  return (
+    <div className="flex items-center justify-between py-2 border-b border-border/60 last:border-0">
+      <span className="inline-flex items-center gap-1.5 text-sm text-ink-soft">
+        <span className="text-ink-soft/60">?</span>
+        {label}
+      </span>
+      <span className={`text-base font-semibold ${tone === 'warning' ? 'text-warning' : ''}`}>{value}</span>
     </div>
   );
 }
@@ -189,7 +293,6 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
   const [showAttach, setShowAttach] = useState(false);
   const [info, setInfo] = useState<string | null>(null);
 
-  // Agrège les paiements par méthode (somme nette : positifs + corrections négatives)
   const paymentsByMethod = useMemo(() => {
     const map = new Map<string, number>();
     for (const p of detail.payments) {
@@ -254,7 +357,6 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
         {error && <div className="mt-2 text-xs text-danger">{error}</div>}
         {info && <div className="mt-2 rounded-xl bg-success/10 px-3 py-2 text-xs text-success">{info}</div>}
 
-        {/* Boutons d'actions entre montant et liste articles */}
         <div className="mt-4 flex flex-wrap gap-2">
           <button onClick={() => setShowCorrection(true)} className="btn-soft text-sm">
             ⇄ Changer règlement
@@ -347,7 +449,6 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
               ))}
             </ul>
           )}
-          {/* Bouton sous la liste des paiements */}
           {paymentsByMethod.some((p) => p.amount > 0) && (
             <button
               onClick={() => setShowCorrection(true)}
@@ -423,15 +524,6 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
           }}
         />
       )}
-    </div>
-  );
-}
-
-function Kpi({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="card p-4">
-      <div className="text-xs uppercase tracking-wider text-ink-soft">{label}</div>
-      <div className="mt-1 text-xl font-semibold tracking-tight">{value}</div>
     </div>
   );
 }

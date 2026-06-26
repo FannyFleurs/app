@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import PageHeader from '@/components/PageHeader';
 import Badge from '@/components/Badge';
 import EmptyState from '@/components/EmptyState';
 import CustomerFormModal, { type CustomerLike } from '@/components/CustomerFormModal';
@@ -45,6 +44,27 @@ interface CustomerDetail {
   loyalty_points: number | null;
 }
 
+type Tab =
+  | 'dashboard'
+  | 'informations'
+  | 'commentaires'
+  | 'tickets'
+  | 'achats'
+  | 'paiements'
+  | 'fidelite'
+  | 'bons-achats';
+
+const TABS: Array<{ key: Tab; label: string }> = [
+  { key: 'dashboard',    label: 'Dashboard' },
+  { key: 'informations', label: 'Informations' },
+  { key: 'commentaires', label: 'Commentaires' },
+  { key: 'tickets',      label: 'Liste des tickets' },
+  { key: 'achats',       label: 'Liste des achats' },
+  { key: 'paiements',    label: 'Récapitulatif des paiements' },
+  { key: 'fidelite',     label: 'Fidélité' },
+  { key: 'bons-achats',  label: 'Bons d\'achats' },
+];
+
 export default function CustomersList({ customers: initialCustomers, canWrite }: { customers: Customer[]; canWrite: boolean }) {
   const router = useRouter();
   const [customers, setCustomers] = useState(initialCustomers);
@@ -55,6 +75,7 @@ export default function CustomersList({ customers: initialCustomers, canWrite }:
   const [detail, setDetail] = useState<CustomerDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [editing, setEditing] = useState<CustomerLike | null | undefined>(undefined);
+  const [tab, setTab] = useState<Tab>('dashboard');
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -73,6 +94,7 @@ export default function CustomersList({ customers: initialCustomers, canWrite }:
 
   async function selectCustomer(id: string) {
     setSelectedId(id);
+    setTab('dashboard');
     setLoadingDetail(true);
     setDetail(null);
     try {
@@ -84,39 +106,32 @@ export default function CustomersList({ customers: initialCustomers, canWrite }:
   }
 
   return (
-    <div className="p-8 space-y-5">
-      <PageHeader
-        title="Clients"
-        subtitle="Sélectionnez un client à gauche pour afficher sa fiche complète."
-        actions={canWrite ? (
-          <button className="btn-primary" onClick={() => setEditing(null)}>
-            + Nouveau client
-          </button>
-        ) : null}
-      />
-
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-        <Kpi label="Clients" value={customers.length.toString()} />
-        <Kpi label="Pros & assoc." value={customers.filter((c) => c.type !== 'particulier').length.toString()} />
-        <Kpi label="CA cumulé" value={formatEUR(customers.reduce((s, c) => s + Number(c.total_ttc), 0))} />
-        <Kpi label="Avec fidélité" value={customers.filter((c) => c.loyalty_points).length.toString()} />
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-[420px_1fr] gap-5 min-h-[60vh]">
-        {/* Colonne gauche : liste */}
-        <div className="space-y-3">
-          <div className="card p-3 space-y-2">
-            <input
-              className="input"
-              placeholder="Rechercher par nom, email, téléphone, SIRET…"
-              value={q} onChange={(e) => setQ(e.target.value)}
-            />
+    <>
+      <div className="grid grid-cols-[320px_240px_1fr] h-[calc(100vh-56px)] overflow-hidden">
+        {/* COLONNE 1 — Liste clients */}
+        <aside className="border-r border-border bg-white flex flex-col overflow-hidden">
+          <div className="px-5 py-3 border-b border-border flex items-center justify-between">
+            <div>
+              <div className="text-[10px] uppercase tracking-widest text-ink-soft font-semibold">Section</div>
+              <div className="text-lg font-semibold tracking-tight">Comptes clients</div>
+            </div>
+            <span className="text-xs text-ink-soft">{customers.length} clients</span>
+          </div>
+          <div className="p-3 space-y-2 border-b border-border">
+            <div className="relative">
+              <input
+                className="input pr-9"
+                placeholder="Rechercher…"
+                value={q} onChange={(e) => setQ(e.target.value)}
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-soft">⌕</span>
+            </div>
             <div className="flex gap-1 flex-wrap">
               {(['all', 'particulier', 'professionnel', 'collectivite', 'association'] as const).map((t) => (
                 <button
                   key={t}
                   onClick={() => setType(t)}
-                  className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-colors ${
+                  className={`rounded-full px-3 py-1 text-[11px] font-medium border transition-colors ${
                     type === t ? 'accent-bar text-white border-transparent' : 'bg-white text-ink border-border hover:border-gray-300'
                   }`}
                 >
@@ -126,66 +141,95 @@ export default function CustomersList({ customers: initialCustomers, canWrite }:
             </div>
           </div>
 
-          {filtered.length === 0 ? (
-            <EmptyState
-              icon="◉"
-              title={customers.length === 0 ? 'Aucun client' : 'Aucun résultat'}
-              description={customers.length === 0
-                ? "Les clients sont créés depuis la caisse à l'encaissement."
-                : "Modifiez les filtres pour voir des résultats."}
-            />
-          ) : (
-            <div className="card divide-y divide-border max-h-[60vh] overflow-auto">
-              {filtered.map((c) => {
-                const isActive = c.id === selectedId;
-                return (
-                  <button
-                    key={c.id}
-                    onClick={() => void selectCustomer(c.id)}
-                    className={`w-full text-left px-4 py-3 transition-colors ${
-                      isActive ? 'bg-accent-soft' : 'hover:bg-gray-50'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-medium truncate">{c.display_name || '—'}</span>
-                      <div className="flex items-center gap-1 shrink-0">
-                        {c.default_discount_pct && Number(c.default_discount_pct) > 0 && (
-                          <Badge tone="warning">-{Number(c.default_discount_pct)}%</Badge>
-                        )}
+          <div className="flex-1 overflow-y-auto">
+            {filtered.length === 0 ? (
+              <div className="p-6 text-center text-ink-soft text-sm">
+                {customers.length === 0 ? 'Aucun client.' : 'Aucun résultat.'}
+              </div>
+            ) : (
+              <div className="divide-y divide-border">
+                {filtered.map((c) => {
+                  const isActive = c.id === selectedId;
+                  const subline =
+                    c.email ?? c.phone ?? (c.company_name ?? '—');
+                  return (
+                    <button
+                      key={c.id}
+                      onClick={() => void selectCustomer(c.id)}
+                      className={`w-full text-left px-4 py-3 transition-colors ${
+                        isActive ? 'bg-accent-soft' : 'hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-medium truncate">{c.display_name || '—'}</span>
                         <Badge tone="neutral">{TYPE_LABEL[c.type] ?? c.type}</Badge>
                       </div>
-                    </div>
-                    <div className="flex items-center justify-between mt-1 text-xs text-ink-soft">
-                      <span className="truncate">{c.email ?? c.phone ?? '—'}</span>
-                      <span className="font-medium text-ink">{formatEUR(Number(c.total_ttc))}</span>
-                    </div>
+                      <div className="mt-0.5 text-xs text-ink-soft truncate">{subline}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="border-t border-border p-3 bg-white">
+            {canWrite && (
+              <button onClick={() => setEditing(null)} className="btn-primary w-full h-11">
+                + Ajouter un client
+              </button>
+            )}
+          </div>
+        </aside>
+
+        {/* COLONNE 2 — Sous-navigation client */}
+        <nav className="border-r border-border bg-white overflow-y-auto">
+          {!selectedId ? (
+            <div className="p-6 text-center text-ink-soft text-sm">
+              Sélectionnez un client.
+            </div>
+          ) : (
+            <div className="p-3 space-y-0.5">
+              {TABS.map((t) => {
+                const active = t.key === tab;
+                return (
+                  <button
+                    key={t.key}
+                    onClick={() => setTab(t.key)}
+                    className={`w-full text-left rounded-xl px-4 py-2.5 text-sm font-medium transition-colors ${
+                      active
+                        ? 'bg-accent-soft text-accent-deep'
+                        : 'text-ink-soft hover:text-ink hover:bg-gray-50'
+                    }`}
+                  >
+                    {t.label}
                   </button>
                 );
               })}
             </div>
           )}
-        </div>
+        </nav>
 
-        {/* Colonne droite : détail ou écran vide */}
-        <div>
+        {/* COLONNE 3 — Contenu */}
+        <main className="overflow-y-auto bg-white">
           {!selectedId ? (
-            <EmptyState
-              icon="◉"
-              title="Sélectionnez un client"
-              description="La fiche complète (informations, historique d'achats, fidélité) apparaîtra ici."
-            />
-          ) : loadingDetail ? (
-            <div className="card p-10 text-center text-ink-soft">Chargement…</div>
-          ) : detail ? (
-            <CustomerDetailPanel
+            <div className="h-full grid place-items-center p-10">
+              <EmptyState
+                icon="◉"
+                title="Sélectionnez un client"
+                description="La fiche complète, son historique et sa fidélité s'affichent ici."
+              />
+            </div>
+          ) : loadingDetail || !detail ? (
+            <div className="p-10 text-center text-ink-soft text-sm">Chargement…</div>
+          ) : (
+            <CustomerDetailContent
+              tab={tab}
               detail={detail}
               canWrite={canWrite}
               onEdit={() => setEditing(detail.customer as unknown as CustomerLike)}
             />
-          ) : (
-            <EmptyState icon="⚠" title="Fiche indisponible" description="Impossible de charger ce client." />
           )}
-        </div>
+        </main>
       </div>
 
       {editing !== undefined && (
@@ -199,128 +243,177 @@ export default function CustomersList({ customers: initialCustomers, canWrite }:
           }}
         />
       )}
-    </div>
+    </>
   );
 }
 
-function CustomerDetailPanel({ detail, canWrite, onEdit }: {
-  detail: CustomerDetail; canWrite: boolean; onEdit: () => void;
+function CustomerDetailContent({ tab, detail, canWrite, onEdit }: {
+  tab: Tab; detail: CustomerDetail; canWrite: boolean; onEdit: () => void;
 }) {
   const c = detail.customer;
   const display = c.company_name || [c.first_name, c.last_name].filter(Boolean).join(' ') || 'Client';
   const totalTtc = detail.sales.reduce((s, x) => s + Number(x.total_ttc), 0);
+  const avg = detail.sales.length > 0 ? totalTtc / detail.sales.length : 0;
+  const lastVisit = detail.sales[0]?.validated_at;
 
   return (
-    <div className="space-y-4">
-      <div className="card p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h2 className="text-xl font-semibold tracking-tight">{display}</h2>
-            <div className="text-sm text-ink-soft mt-0.5">
-              Client depuis le {new Date(c.created_at).toLocaleDateString('fr-FR')}
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {canWrite && (
-              <button onClick={onEdit} className="btn-soft text-sm">
-                Modifier
-              </button>
-            )}
-            <Link href={`/customers/${c.id}`} className="text-sm text-accent-deep hover:underline">
-              Vue complète →
-            </Link>
+    <div className="p-6 space-y-5">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-semibold tracking-tight">{display}</h2>
+          <div className="text-sm text-ink-soft mt-0.5">
+            {lastVisit
+              ? <>Dernière visite le {new Date(lastVisit).toLocaleDateString('fr-FR')}</>
+              : <>Client depuis le {new Date(c.created_at).toLocaleDateString('fr-FR')}</>
+            }
           </div>
         </div>
-        <div className="mt-4 grid grid-cols-3 gap-3">
-          <Kpi label="Achats" value={detail.sales.length.toString()} />
-          <Kpi label="CA cumulé" value={formatEUR(totalTtc)} />
-          <Kpi label="Fidélité" value={detail.loyalty_points != null ? `${detail.loyalty_points} pts` : '—'} />
+        <div className="flex items-center gap-2 shrink-0">
+          {canWrite && (
+            <button onClick={onEdit} className="btn-primary text-sm">
+              Modifier client
+            </button>
+          )}
+          <button className="btn-soft text-sm">Changer la date</button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="card p-5">
-          <h3 className="font-semibold mb-3">Identité</h3>
-          <dl className="grid grid-cols-2 gap-3 text-sm">
-            <Item label="Type" value={TYPE_LABEL[c.type] ?? c.type} />
-            <Item label="Email" value={c.email ?? '—'} />
-            <Item label="Téléphone" value={c.phone ?? '—'} />
-            <Item label="Code fidélité" value={c.loyalty_code ?? '—'} />
-            {c.type !== 'particulier' && (
-              <>
-                <Item label="SIRET" value={c.siret ?? '—'} />
-                <Item label="TVA intra." value={c.vat_number ?? '—'} />
-              </>
-            )}
-          </dl>
-        </div>
-        <div className="card p-5">
-          <h3 className="font-semibold mb-3">Adresse principale</h3>
-          <div className="text-sm space-y-0.5">
-            <div>{c.address?.line1 ?? '—'}</div>
-            <div>{[c.address?.zip, c.address?.city].filter(Boolean).join(' ') || ''}</div>
-          </div>
-          <h3 className="font-semibold mt-5 mb-2">RGPD</h3>
-          <div className="flex gap-2">
-            <Badge tone={c.consent_email ? 'success' : 'neutral'}>
-              Email : {c.consent_email ? 'consenti' : 'non'}
-            </Badge>
-            <Badge tone={c.consent_sms ? 'success' : 'neutral'}>
-              SMS : {c.consent_sms ? 'consenti' : 'non'}
-            </Badge>
-          </div>
-        </div>
-      </div>
-
-      <div className="card overflow-hidden">
-        <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-          <h3 className="font-semibold">Historique d&apos;achats</h3>
-          <span className="text-xs text-ink-soft">{detail.sales.length} ticket(s)</span>
-        </div>
-        {detail.sales.length === 0 ? (
-          <div className="p-6 text-center text-ink-soft text-sm">Aucun achat enregistré.</div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-white text-ink-soft text-xs uppercase border-b border-border">
-              <tr>
-                <th className="text-left px-4 py-2">Ticket</th>
-                <th className="text-left px-4 py-2">Date</th>
-                <th className="text-right px-4 py-2">Total TTC</th>
-              </tr>
-            </thead>
-            <tbody>
-              {detail.sales.map((s) => (
-                <tr key={s.id} className="border-t border-border">
-                  <td className="px-4 py-2 font-mono text-xs">{s.receipt_number}</td>
-                  <td className="px-4 py-2 text-ink-soft">
-                    {new Date(s.validated_at).toLocaleString('fr-FR')}
-                  </td>
-                  <td className="px-4 py-2 text-right font-medium">{formatEUR(Number(s.total_ttc))}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      {c.internal_notes && (
-        <div className="card p-5">
-          <h3 className="font-semibold mb-2">Notes internes</h3>
-          <p className="text-sm text-ink-soft whitespace-pre-wrap">{c.internal_notes}</p>
+      {tab === 'dashboard' && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Tile value={formatEUR(totalTtc)}   label="Total des achats" />
+          <Tile value={formatEUR(0)}          label="Montant dû" />
+          <Tile value={detail.sales.length.toString()} label="Nombre de passages" />
+          <Tile value={formatEUR(avg)}        label="Ticket moyen TTC" />
+          <Tile value={formatEUR(0)}          label="Crédits à dépenser" />
+          <Tile value={formatEUR(0)}          label="Bons cadeaux à dépenser" />
+          <Tile value={(detail.loyalty_points ?? 0).toString()} label="Points de fidélité" />
         </div>
       )}
+
+      {tab === 'informations' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="card p-5">
+            <h3 className="font-semibold mb-3">Identité</h3>
+            <dl className="grid grid-cols-2 gap-3 text-sm">
+              <Item label="Type" value={TYPE_LABEL[c.type] ?? c.type} />
+              <Item label="Email" value={c.email ?? '—'} />
+              <Item label="Téléphone" value={c.phone ?? '—'} />
+              <Item label="Code fidélité" value={c.loyalty_code ?? '—'} />
+              {c.type !== 'particulier' && (
+                <>
+                  <Item label="SIRET" value={c.siret ?? '—'} />
+                  <Item label="TVA intra." value={c.vat_number ?? '—'} />
+                </>
+              )}
+            </dl>
+          </div>
+          <div className="card p-5">
+            <h3 className="font-semibold mb-3">Adresse</h3>
+            <div className="text-sm space-y-0.5">
+              <div>{c.address?.line1 ?? '—'}</div>
+              <div>{[c.address?.zip, c.address?.city].filter(Boolean).join(' ') || ''}</div>
+            </div>
+            <h3 className="font-semibold mt-5 mb-2">RGPD</h3>
+            <div className="flex gap-2">
+              <Badge tone={c.consent_email ? 'success' : 'neutral'}>
+                Email : {c.consent_email ? 'consenti' : 'non'}
+              </Badge>
+              <Badge tone={c.consent_sms ? 'success' : 'neutral'}>
+                SMS : {c.consent_sms ? 'consenti' : 'non'}
+              </Badge>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tab === 'commentaires' && (
+        <div className="card p-5">
+          <h3 className="font-semibold mb-2">Notes internes</h3>
+          <p className="text-sm text-ink-soft whitespace-pre-wrap min-h-[120px]">
+            {c.internal_notes ?? 'Aucune note enregistrée.'}
+          </p>
+        </div>
+      )}
+
+      {tab === 'tickets' && <TicketsTable sales={detail.sales} link />}
+      {tab === 'achats'  && <TicketsTable sales={detail.sales} />}
+
+      {tab === 'paiements' && (
+        <div className="card p-5 text-sm text-ink-soft">
+          Récapitulatif des paiements à venir — agrège les modes de règlement pour ce client.
+        </div>
+      )}
+
+      {tab === 'fidelite' && (
+        <div className="card p-5">
+          <h3 className="font-semibold mb-2">Solde fidélité</h3>
+          <div className="text-3xl font-semibold">
+            {detail.loyalty_points != null ? `${detail.loyalty_points} pts` : '—'}
+          </div>
+          <p className="text-xs text-ink-soft mt-2">
+            Le solde est crédité automatiquement à chaque vente validée, selon le programme actif.
+          </p>
+        </div>
+      )}
+
+      {tab === 'bons-achats' && (
+        <div className="card p-5 text-sm text-ink-soft">
+          Aucun bon d&apos;achat enregistré pour ce client.
+        </div>
+      )}
+
+      <div className="pt-2">
+        <Link href={`/customers/${c.id}`} className="text-sm text-accent-deep hover:underline">
+          Vue complète →
+        </Link>
+      </div>
     </div>
   );
 }
 
-function Kpi({ label, value }: { label: string; value: string }) {
+function TicketsTable({ sales, link }: { sales: CustomerDetail['sales']; link?: boolean }) {
+  if (sales.length === 0) {
+    return <div className="card p-8 text-center text-ink-soft text-sm">Aucun achat enregistré.</div>;
+  }
   return (
-    <div className="card p-4">
-      <div className="text-xs uppercase tracking-wider text-ink-soft">{label}</div>
-      <div className="mt-1 text-xl font-semibold tracking-tight">{value}</div>
+    <div className="card overflow-hidden">
+      <table className="w-full text-sm">
+        <thead className="text-ink-soft text-[10px] uppercase tracking-widest border-b border-border">
+          <tr>
+            <th className="text-left px-4 py-3 font-semibold">Ticket</th>
+            <th className="text-left px-4 py-3 font-semibold">Date</th>
+            <th className="text-right px-4 py-3 font-semibold">Total TTC</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sales.map((s) => (
+            <tr key={s.id} className="border-t border-border">
+              <td className="px-4 py-2 font-mono text-xs">
+                {link
+                  ? <Link href={`/ma-journee?focus=${s.id}`} className="text-accent-deep hover:underline">{s.receipt_number}</Link>
+                  : s.receipt_number}
+              </td>
+              <td className="px-4 py-2 text-ink-soft">
+                {new Date(s.validated_at).toLocaleString('fr-FR')}
+              </td>
+              <td className="px-4 py-2 text-right font-medium">{formatEUR(Number(s.total_ttc))}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
+
+function Tile({ value, label }: { value: string; label: string }) {
+  return (
+    <div className="rounded-2xl border border-accent-deep/40 px-5 py-4 bg-white">
+      <div className="text-xl font-semibold tracking-tight text-accent-deep">{value}</div>
+      <div className="text-xs text-ink-soft mt-1">{label}</div>
+    </div>
+  );
+}
+
 function Item({ label, value }: { label: string; value: string }) {
   return (
     <div>

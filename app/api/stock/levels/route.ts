@@ -8,6 +8,7 @@ export async function GET() {
   const { rows } = await query(
     `SELECT p.id AS product_id, p.name AS product_name, p.sku AS product_sku,
             p.unit, p.min_stock::text, p.max_stock::text,
+            p.purchase_price_ht::text, p.sale_price_ttc::text,
             st.id AS store_id, st.name AS store_name,
             sl.quantity::text
        FROM stock_levels sl
