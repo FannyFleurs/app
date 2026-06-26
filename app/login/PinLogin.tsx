@@ -227,9 +227,15 @@ export default function PinLogin() {
                 ✓ Compte créé : <strong>{bootstrapResult.email}</strong> · PIN : <strong>{bootstrapResult.pin}</strong>
               </div>
             ) : (
-              <button onClick={() => void bootstrap()} disabled={bootstrapping} className="btn-primary w-full h-12 text-base">
-                {bootstrapping ? 'Création…' : 'Créer un compte administrateur'}
-              </button>
+              <div className="space-y-2">
+                <a href="/setup" className="btn-primary w-full h-12 text-base">
+                  Configuration guidée (Société, boutique, admin…)
+                </a>
+                <button onClick={() => void bootstrap()} disabled={bootstrapping}
+                        className="btn-ghost w-full h-10 text-sm">
+                  {bootstrapping ? 'Création…' : 'Ou créer un compte démo (admin@florea.test / 1234)'}
+                </button>
+              </div>
             )
           ) : (
             <button

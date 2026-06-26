@@ -1,0 +1,199 @@
+import { NextResponse } from 'next/server';
+import { z } from 'zod';
+import crypto from 'node:crypto';
+import { query } from '@/lib/db/client';
+import { requirePermission } from '@/lib/auth/guards';
+import { parseJson, jsonError } from '@/lib/validation/api';
+import { audit } from '@/lib/audit/log';
+
+export async function GET() {
+  const g = await requirePermission('fiscal.export');
+  if ('response' in g) return g.response;
+  const { rows } = await query(
+    `SELECT e.id, e.period_start::text, e.period_end::text, e.format,
+            e.size_bytes::text, e.sha256, e.created_at,
+            u.full_name AS generated_by
+       FROM accounting_exports e
+       JOIN users u ON u.id = e.generated_by
+      WHERE e.organization_id = $1
+      ORDER BY e.created_at DESC LIMIT 100`,
+    [g.user.organizationId],
+  );
+  return NextResponse.json({ exports: rows });
+}
+
+const schema = z.object({
+  period_start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  period_end:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  format:       z.enum(['sales_csv', 'entries_csv', 'json', 'fec_like']),
+});
+
+/**
+ * Génère un export comptable pour la période donnée et le stocke en base
+ * (file_path = contenu inline base64, file_path / sha256 / size). Renvoie
+ * l'identifiant pour téléchargement via /api/exports/accounting/[id].
+ */
+export async function POST(req: Request) {
+  const g = await requirePermission('fiscal.export');
+  if ('response' in g) return g.response;
+  const parsed = await parseJson(req, schema);
+  if ('response' in parsed) return parsed.response;
+  const { period_start, period_end, format } = parsed.data;
+
+  if (period_end < period_start) return jsonError('INVALID_PERIOD', 400);
+
+  let content = '';
+  let mime = 'text/csv';
+
+  if (format === 'sales_csv') {
+    const sales = await query<{
+      receipt_number: string; validated_at: Date;
+      total_ht: string; total_tva: string; total_ttc: string;
+      total_discount: string;
+      cashier: string;
+      customer: string | null;
+    }>(
+      `SELECT s.receipt_number, s.validated_at,
+              s.total_ht::text, s.total_tva::text, s.total_ttc::text,
+              s.total_discount::text,
+              u.full_name AS cashier,
+              COALESCE(c.company_name,
+                NULLIF(TRIM(CONCAT(c.first_name,' ',c.last_name)), '')) AS customer
+         FROM sales s
+         JOIN users u ON u.id = s.user_id
+         LEFT JOIN customers c ON c.id = s.customer_id
+        WHERE s.organization_id = $1
+          AND s.status = 'validated'
+          AND s.validated_at::date BETWEEN $2::date AND $3::date
+        ORDER BY s.validated_at`,
+      [g.user.organizationId, period_start, period_end],
+    );
+    const header = ['Numéro', 'Date', 'Vendeur', 'Client', 'Total HT', 'TVA', 'Remises', 'Total TTC'];
+    const lines = [header.join(';')].concat(sales.rows.map((s) => [
+      s.receipt_number,
+      new Date(s.validated_at).toISOString(),
+      JSON.stringify(s.cashier),
+      JSON.stringify(s.customer ?? ''),
+      Number(s.total_ht).toFixed(2),
+      Number(s.total_tva).toFixed(2),
+      Number(s.total_discount).toFixed(2),
+      Number(s.total_ttc).toFixed(2),
+    ].join(';')));
+    content = '﻿' + lines.join('\n');
+  } else if (format === 'entries_csv') {
+    // Écritures comptables agrégées par jour : Ventes / TVA / Caisse / CB
+    const rows = await query<{
+      day: Date;
+      total_ttc: string; total_tva: string;
+      cash_total: string; card_total: string;
+    }>(
+      `SELECT s.validated_at::date AS day,
+              SUM(s.total_ttc)::text AS total_ttc,
+              SUM(s.total_tva)::text AS total_tva,
+              COALESCE(SUM(CASE WHEN p.method = 'cash' THEN p.amount ELSE 0 END), 0)::text AS cash_total,
+              COALESCE(SUM(CASE WHEN p.method = 'card' THEN p.amount ELSE 0 END), 0)::text AS card_total
+         FROM sales s
+         LEFT JOIN payments p ON p.sale_id = s.id
+        WHERE s.organization_id = $1
+          AND s.status = 'validated'
+          AND s.validated_at::date BETWEEN $2::date AND $3::date
+        GROUP BY s.validated_at::date
+        ORDER BY day`,
+      [g.user.organizationId, period_start, period_end],
+    );
+    const header = ['Date', 'Compte', 'Libellé', 'Débit', 'Crédit'];
+    const out: string[][] = [];
+    for (const r of rows.rows) {
+      const d = new Date(r.day).toISOString().slice(0, 10);
+      const ht = Number(r.total_ttc) - Number(r.total_tva);
+      const tva = Number(r.total_tva);
+      const cash = Number(r.cash_total);
+      const card = Number(r.card_total);
+      out.push([d, '707000', 'Ventes du jour',       '0.00', ht.toFixed(2)]);
+      out.push([d, '445710', 'TVA collectée',         '0.00', tva.toFixed(2)]);
+      out.push([d, '530000', 'Caisse — espèces',      cash.toFixed(2), '0.00']);
+      out.push([d, '512000', 'Banque — CB',           card.toFixed(2), '0.00']);
+    }
+    content = '﻿' + [header.join(';')].concat(out.map((r) => r.join(';'))).join('\n');
+  } else if (format === 'fec_like') {
+    // Format pseudo-FEC : JournalCode|EcritureNum|EcritureDate|CompteNum|CompteLib|PieceRef|PieceDate|EcritureLib|Debit|Credit
+    const sales = await query<{
+      receipt_number: string; validated_at: Date;
+      total_ttc: string; total_tva: string;
+    }>(
+      `SELECT receipt_number, validated_at, total_ttc::text, total_tva::text
+         FROM sales
+        WHERE organization_id = $1 AND status = 'validated'
+          AND validated_at::date BETWEEN $2::date AND $3::date
+        ORDER BY validated_at`,
+      [g.user.organizationId, period_start, period_end],
+    );
+    const header = [
+      'JournalCode', 'EcritureNum', 'EcritureDate', 'CompteNum', 'CompteLib',
+      'PieceRef', 'PieceDate', 'EcritureLib', 'Debit', 'Credit',
+    ];
+    const out = [header.join('|')];
+    let num = 1;
+    for (const s of sales.rows) {
+      const dRaw = new Date(s.validated_at);
+      const d = dRaw.toISOString().slice(0, 10).replace(/-/g, '');
+      const ht = Number(s.total_ttc) - Number(s.total_tva);
+      const tva = Number(s.total_tva);
+      const ref = s.receipt_number;
+      out.push(['VEN', String(num), d, '707000', 'Ventes', ref, d, `Ticket ${ref}`, '0.00', ht.toFixed(2)].join('|'));
+      out.push(['VEN', String(num), d, '445710', 'TVA',    ref, d, `Ticket ${ref}`, '0.00', tva.toFixed(2)].join('|'));
+      out.push(['VEN', String(num), d, '530000', 'Caisse', ref, d, `Ticket ${ref}`, Number(s.total_ttc).toFixed(2), '0.00'].join('|'));
+      num++;
+    }
+    content = '﻿' + out.join('\n');
+    mime = 'text/plain';
+  } else {
+    // JSON détaillé
+    const data = await query(
+      `SELECT s.id, s.receipt_number, s.validated_at,
+              s.total_ht::text, s.total_tva::text, s.total_ttc::text,
+              s.tva_breakdown,
+              json_agg(json_build_object(
+                'method', p.method, 'amount', p.amount
+              )) AS payments
+         FROM sales s
+         LEFT JOIN payments p ON p.sale_id = s.id
+        WHERE s.organization_id = $1
+          AND s.status = 'validated'
+          AND s.validated_at::date BETWEEN $2::date AND $3::date
+        GROUP BY s.id
+        ORDER BY s.validated_at`,
+      [g.user.organizationId, period_start, period_end],
+    );
+    content = JSON.stringify({
+      period: { start: period_start, end: period_end },
+      sales: data.rows,
+    }, null, 2);
+    mime = 'application/json';
+  }
+
+  const buffer = Buffer.from(content, 'utf8');
+  const sha256 = crypto.createHash('sha256').update(buffer).digest('hex');
+
+  const ins = await query<{ id: string }>(
+    `INSERT INTO accounting_exports
+       (organization_id, period_start, period_end, format, file_path, sha256, size_bytes, generated_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+    [
+      g.user.organizationId, period_start, period_end, format,
+      // Stocke le contenu inline (data URL). À terme, plutôt un object storage.
+      `data:${mime};base64,${buffer.toString('base64')}`,
+      sha256, buffer.byteLength, g.user.id,
+    ],
+  );
+
+  await audit({
+    organizationId: g.user.organizationId, userId: g.user.id,
+    action: 'accounting_export.generate',
+    entityType: 'accounting_export',
+    entityId: ins.rows[0]!.id,
+    payload: { period_start, period_end, format, sha256 },
+  });
+
+  return NextResponse.json({ id: ins.rows[0]!.id, sha256, size: buffer.byteLength });
+}
