@@ -24,7 +24,8 @@ interface Props {
 export default function ReturnModal({ saleId, receiptNumber, lines, onClose, onSuccess }: Props) {
   const [quantities, setQuantities] = useState<Record<number, number>>({});
   const [reason, setReason] = useState('');
-  const [refundMethod, setRefundMethod] = useState<'credit_note' | 'cash'>('credit_note');
+  type RefundMethod = 'credit_note' | 'cash' | 'card' | 'transfer' | 'check' | 'on_account';
+  const [refundMethod, setRefundMethod] = useState<RefundMethod>('credit_note');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -131,18 +132,25 @@ export default function ReturnModal({ saleId, receiptNumber, lines, onClose, onS
         <div className="mt-3">
           <div className="text-sm font-medium text-ink-soft mb-1">Mode de remboursement</div>
           <div className="grid grid-cols-2 gap-2">
-            <label className={`rounded-xl border p-3 cursor-pointer ${refundMethod === 'credit_note' ? 'border-ink bg-accent-soft' : 'border-border'}`}>
-              <input type="radio" name="refund" value="credit_note" className="mr-2"
-                     checked={refundMethod === 'credit_note'} onChange={() => setRefundMethod('credit_note')} />
-              <span className="font-medium">Avoir</span>
-              <div className="text-xs text-ink-soft mt-0.5 ml-5">Utilisable lors d&apos;un prochain achat.</div>
-            </label>
-            <label className={`rounded-xl border p-3 cursor-pointer ${refundMethod === 'cash' ? 'border-ink bg-accent-soft' : 'border-border'}`}>
-              <input type="radio" name="refund" value="cash" className="mr-2"
-                     checked={refundMethod === 'cash'} onChange={() => setRefundMethod('cash')} />
-              <span className="font-medium">Espèces</span>
-              <div className="text-xs text-ink-soft mt-0.5 ml-5">Sortie immédiate du tiroir-caisse.</div>
-            </label>
+            {[
+              { kind: 'credit_note', label: 'Avoir',          desc: 'Utilisable lors d\'un prochain achat.' },
+              { kind: 'cash',        label: 'Espèces',         desc: 'Sortie immédiate du tiroir-caisse.' },
+              { kind: 'card',        label: 'Carte bancaire',  desc: 'Remboursement par CB (TPE séparé).' },
+              { kind: 'transfer',    label: 'Virement',        desc: 'Renseignez le virement plus tard.' },
+              { kind: 'check',       label: 'Chèque',          desc: 'Émission de chèque au client.' },
+              { kind: 'on_account',  label: 'En compte',       desc: 'Crédite le solde du client (à régulariser).' },
+            ].map((m) => (
+              <label key={m.kind}
+                     className={`rounded-xl border p-3 cursor-pointer ${
+                       refundMethod === m.kind ? 'border-ink bg-accent-soft' : 'border-border hover:border-gray-300'
+                     }`}>
+                <input type="radio" name="refund" value={m.kind} className="mr-2"
+                       checked={refundMethod === m.kind}
+                       onChange={() => setRefundMethod(m.kind as RefundMethod)} />
+                <span className="font-medium">{m.label}</span>
+                <div className="text-xs text-ink-soft mt-0.5 ml-5">{m.desc}</div>
+              </label>
+            ))}
           </div>
         </div>
 

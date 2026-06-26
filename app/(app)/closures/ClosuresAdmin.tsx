@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { formatEUR } from '@/lib/services/money';
 import { PAYMENT_LABELS } from '@/components/labels';
 import Badge from '@/components/Badge';
@@ -70,6 +70,11 @@ export default function ClosuresAdmin({ stores, registers }: { stores: Store[]; 
   // qui purge la clé.
   const storageKey = storeId && date ? `florea_closure_draft:${storeId}:${date}` : null;
 
+  // Référence : indique si la restauration depuis localStorage est terminée.
+  // Tant qu'elle ne l'est pas, on ne sauvegarde pas → évite la race
+  // condition qui effaçait l'enregistrement à la première render.
+  const restorePhaseRef = useRef<Record<string, boolean>>({});
+
   // Restaure depuis localStorage à chaque changement (store, date).
   useEffect(() => {
     if (!storageKey || typeof window === 'undefined') return;
@@ -90,17 +95,23 @@ export default function ClosuresAdmin({ stores, registers }: { stores: Store[]; 
         setDenomCount({}); setDeclared({}); setNotes('');
       }
     } catch { /* ignore */ }
+    restorePhaseRef.current[storageKey] = true;
   }, [storageKey]);
 
-  // Sauvegarde à chaque modification.
+  // Sauvegarde à chaque modification — UNIQUEMENT après que la
+  // restauration a été tentée pour cette clé. Sinon on écrasait
+  // le brouillon à la première render (état initial vide).
   useEffect(() => {
     if (!storageKey || typeof window === 'undefined') return;
+    if (!restorePhaseRef.current[storageKey]) return;
     const hasContent =
       Object.values(denomCount).some((v) => v > 0)
       || Object.values(declared).some((v) => v && v !== '')
       || notes.trim() !== '';
     if (!hasContent) {
-      localStorage.removeItem(storageKey);
+      // Comportement : on NE supprime PAS la clé tant que la clôture
+      // n'a pas eu lieu — l'utilisateur veut conserver son comptage
+      // même si tout est temporairement à 0 (typo, effacement…).
       return;
     }
     try {
@@ -306,23 +317,45 @@ export default function ClosuresAdmin({ stores, registers }: { stores: Store[]; 
                           </span>
                         </div>
                         {p.method !== 'cash' && (
-                          <div className="mt-2 flex items-center gap-2">
-                            <label className="text-xs text-ink-soft w-24 shrink-0">Saisie réelle</label>
-                            <input
-                              type="number" step="0.01" min={0}
-                              placeholder="0,00"
-                              className="input h-9 flex-1"
-                              value={declaredVal}
-                              onChange={(e) => setDeclared({ ...declared, [p.method]: e.target.value })}
+                          <>
+                            <div className="mt-2 flex items-center gap-2">
+                              <label className="text-xs text-ink-soft w-24 shrink-0">Saisie réelle</label>
+                              <input
+                                type="number" step="0.01" min={0}
+                                placeholder="0,00"
+                                className="input h-9 flex-1"
+                                value={declaredVal}
+                                onChange={(e) => setDeclared({ ...declared, [p.method]: e.target.value })}
+                                disabled={alreadySealed}
+                              />
+                              {variance !== null && (
+                                <span className={`text-xs whitespace-nowrap font-medium ${
+                                  variance === 0 ? 'text-success' : 'text-warning'}`}>
+                                  Écart {variance >= 0 ? '+' : ''}{formatEUR(variance)}
+                                </span>
+                              )}
+                            </div>
+                            {/* Toggle "Montant conforme" — clic = saisie = total système */}
+                            <button
+                              type="button"
                               disabled={alreadySealed}
-                            />
-                            {variance !== null && (
-                              <span className={`text-xs whitespace-nowrap font-medium ${
-                                variance === 0 ? 'text-success' : 'text-warning'}`}>
-                                Écart {variance >= 0 ? '+' : ''}{formatEUR(variance)}
-                              </span>
-                            )}
-                          </div>
+                              onClick={() => setDeclared({
+                                ...declared,
+                                [p.method]: variance === 0
+                                  ? ''
+                                  : String(p.total.toFixed(2)),
+                              })}
+                              className={`mt-2 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium border transition-colors ${
+                                variance === 0
+                                  ? 'bg-success/10 text-success border-success/30'
+                                  : 'bg-white text-ink-soft border-border hover:border-gray-300'
+                              }`}
+                            >
+                              {variance === 0
+                                ? <>✓ Montant conforme (cliquer pour réinitialiser)</>
+                                : <>Valider le montant attendu : {formatEUR(p.total)}</>}
+                            </button>
+                          </>
                         )}
                       </div>
                     );

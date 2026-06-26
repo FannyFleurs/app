@@ -32,10 +32,19 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
       ORDER BY created_at DESC LIMIT 1`,
     [params.id, g.user.organizationId],
   );
+  // Retours / avoirs liés à cette vente
+  const returns = await query(
+    `SELECT id, number, amount::text, used_amount::text, status, reason, created_at
+       FROM credit_notes
+      WHERE sale_id = $1 AND organization_id = $2
+      ORDER BY created_at DESC`,
+    [params.id, g.user.organizationId],
+  ).catch(() => ({ rows: [] }));
   return NextResponse.json({
     sale: sale.rows[0],
     lines: lines.rows,
     payments: payments.rows,
     invoice: invoice.rows[0] ?? null,
+    returns: returns.rows,
   });
 }

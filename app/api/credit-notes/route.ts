@@ -19,7 +19,21 @@ export async function GET(req: Request) {
                    TRIM(CONCAT(c.first_name,' ',c.last_name)))) LIKE $${params.length})`;
   }
 
-  // Le bénéficiaire de l'avoir = client de la vente d'origine (ou de la facture).
+  // Détection runtime de credit_notes.customer_id (migration 0014).
+  const colCheck = await query<{ exists: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'credit_notes' AND column_name = 'customer_id'
+     ) AS exists`,
+  );
+  const hasCustomerCol = colCheck.rows[0]?.exists ?? false;
+
+  // Le bénéficiaire de l'avoir vient en priorité de credit_notes.customer_id
+  // (migration 0014), sinon retombe sur sale.customer_id / invoice.customer_id.
+  const customerExpr = hasCustomerCol
+    ? `COALESCE(cn.customer_id, s.customer_id, i.customer_id)`
+    : `COALESCE(s.customer_id, i.customer_id)`;
+
   const { rows } = await query<{
     id: string; number: string;
     amount: string; used_amount: string;
@@ -38,13 +52,13 @@ export async function GET(req: Request) {
             cn.reason,
             cn.sale_id,
             s.receipt_number,
-            COALESCE(s.customer_id, i.customer_id) AS customer_id,
+            ${customerExpr} AS customer_id,
             COALESCE(c.company_name,
               NULLIF(TRIM(CONCAT(c.first_name,' ',c.last_name)), '')) AS customer_name
        FROM credit_notes cn
        LEFT JOIN sales s ON s.id = cn.sale_id
        LEFT JOIN invoices i ON i.id = cn.invoice_id
-       LEFT JOIN customers c ON c.id = COALESCE(s.customer_id, i.customer_id)
+       LEFT JOIN customers c ON c.id = ${customerExpr}
       WHERE ${where}
       ORDER BY cn.created_at DESC
       LIMIT 200`,

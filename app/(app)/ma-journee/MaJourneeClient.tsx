@@ -33,6 +33,10 @@ interface SaleDetail {
   }[];
   payments: { method: string; amount: string; reference: string | null }[];
   invoice: { id: string; number: string } | null;
+  returns?: Array<{
+    id: string; number: string; amount: string; used_amount: string;
+    status: string; reason: string; created_at: string;
+  }>;
 }
 
 type SummaryMode = 'simple' | 'complet';
@@ -647,6 +651,39 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
              className="btn-primary text-xs">
             Télécharger l&apos;avoir
           </a>
+        </div>
+      )}
+
+      {/* Historique des retours / avoirs déjà émis pour cette vente */}
+      {detail.returns && detail.returns.length > 0 && (
+        <div className="card overflow-hidden">
+          <div className="px-4 py-3 border-b border-border">
+            <h3 className="font-semibold text-sm">
+              Retours / Avoirs émis ({detail.returns.length})
+            </h3>
+          </div>
+          <ul className="divide-y divide-border">
+            {detail.returns.map((cn) => (
+              <li key={cn.id} className="px-4 py-3 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-baseline gap-2">
+                    <span className="font-mono text-xs font-medium">{cn.number}</span>
+                    <span className="text-xs text-ink-soft">
+                      {new Date(cn.created_at).toLocaleString('fr-FR')}
+                    </span>
+                  </div>
+                  <div className="text-sm">
+                    <span className="font-semibold text-danger">-{formatEUR(Number(cn.amount))}</span>
+                    <span className="text-ink-soft ml-2">· {cn.reason}</span>
+                  </div>
+                </div>
+                <a href={`/api/credit-notes/${cn.id}/pdf`} target="_blank" rel="noreferrer"
+                   className="text-accent-deep text-xs hover:underline shrink-0">
+                  PDF
+                </a>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

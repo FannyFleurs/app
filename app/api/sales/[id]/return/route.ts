@@ -11,7 +11,7 @@ const schema = z.object({
     quantity: z.number().positive(),
   })).min(1),
   reason: z.string().min(1).max(500),
-  refund_method: z.enum(['credit_note', 'cash']),
+  refund_method: z.enum(['credit_note', 'cash', 'card', 'transfer', 'check', 'on_account']),
 });
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {

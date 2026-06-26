@@ -26,7 +26,7 @@ export class ReturnService {
     saleId: string;
     lines: ReturnLineInput[];
     reason: string;
-    refundMethod: 'credit_note' | 'cash';
+    refundMethod: 'credit_note' | 'cash' | 'card' | 'transfer' | 'check' | 'on_account';
   }): Promise<{
     credit_note_id: string;
     number: string;
@@ -142,20 +142,53 @@ export class ReturnService {
       });
 
       // 5. Insertion credit_note (placeholder hash en attendant l'event)
-      const usedAmount = args.refundMethod === 'cash' ? refundAmount : 0;
-      const status = args.refundMethod === 'cash' ? 'used' : 'open';
-      const cnIns = await client.query<{ id: string }>(
-        `INSERT INTO credit_notes
-           (organization_id, sale_id, number, sequence_value, amount, reason,
-            status, used_amount, fiscal_hash)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pending')
-         RETURNING id`,
-        [
-          args.organizationId, sale.id, number, seqValue.toString(),
-          refundAmount, args.reason.trim(),
-          status, usedAmount,
-        ],
+      // Pour credit_note (= avoir) : status='open' → utilisable plus tard
+      // Pour tout autre mode (cash/card/transfer/check/on_account) :
+      //   l'avoir est immédiatement consommé par le remboursement effectif,
+      //   donc status='used' et used_amount = refundAmount.
+      const immediateRefund = args.refundMethod !== 'credit_note';
+      const usedAmount = immediateRefund ? refundAmount : 0;
+      const status = immediateRefund ? 'used' : 'open';
+
+      // Détection runtime des colonnes ajoutées par migration 0014
+      const colsRes = await client.query<{ column_name: string }>(
+        `SELECT column_name FROM information_schema.columns
+          WHERE table_name = 'credit_notes'
+            AND column_name IN ('customer_id', 'refund_method')`,
       );
+      const hasCustomerCol = colsRes.rows.some((r) => r.column_name === 'customer_id');
+      const hasRefundCol   = colsRes.rows.some((r) => r.column_name === 'refund_method');
+
+      let cnIns;
+      if (hasCustomerCol && hasRefundCol) {
+        cnIns = await client.query<{ id: string }>(
+          `INSERT INTO credit_notes
+             (organization_id, sale_id, customer_id, refund_method,
+              number, sequence_value, amount, reason,
+              status, used_amount, fiscal_hash)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'pending')
+           RETURNING id`,
+          [
+            args.organizationId, sale.id, sale.customer_id, args.refundMethod,
+            number, seqValue.toString(),
+            refundAmount, args.reason.trim(),
+            status, usedAmount,
+          ],
+        );
+      } else {
+        cnIns = await client.query<{ id: string }>(
+          `INSERT INTO credit_notes
+             (organization_id, sale_id, number, sequence_value, amount, reason,
+              status, used_amount, fiscal_hash)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pending')
+           RETURNING id`,
+          [
+            args.organizationId, sale.id, number, seqValue.toString(),
+            refundAmount, args.reason.trim(),
+            status, usedAmount,
+          ],
+        );
+      }
       const creditNoteId = cnIns.rows[0]!.id;
 
       // 6. Fiscal event (réduit grand_total_ttc)
@@ -228,8 +261,9 @@ export class ReturnService {
         );
       }
 
-      // 9. Cash refund : sortie de caisse
+      // 9. Effet selon le mode de remboursement
       if (args.refundMethod === 'cash' && sale.cash_session_id) {
+        // Sortie immédiate du tiroir-caisse
         await client.query(
           `INSERT INTO cash_movements
              (organization_id, cash_session_id, movement_type, amount, reason, user_id)
@@ -240,7 +274,23 @@ export class ReturnService {
             args.userId,
           ],
         );
+      } else if (args.refundMethod === 'on_account' && sale.customer_id) {
+        // Crédite le solde "en compte" du client (positif = avoir un crédit)
+        try {
+          await client.query(
+            `UPDATE customers
+                SET account_balance = COALESCE(account_balance, 0) + $2,
+                    updated_at = now()
+              WHERE id = $1`,
+            [sale.customer_id, refundAmount],
+          );
+        } catch {
+          // Migration 0012 pas appliquée : on tracera l'audit, c'est tout.
+        }
       }
+      // Pour 'card', 'transfer', 'check' : aucune écriture automatique
+      // (l'opération physique a lieu hors caisse). L'avoir est marqué
+      // "used" pour qu'il n'apparaisse plus comme disponible.
 
       // 10. Si retour total, marque la vente comme annulée par avoir
       if (isFullReturn) {

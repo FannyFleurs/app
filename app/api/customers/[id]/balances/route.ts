@@ -42,10 +42,27 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
        LEFT JOIN sales s ON s.id = cn.sale_id
        LEFT JOIN invoices i ON i.id = cn.invoice_id
       WHERE cn.organization_id = $1
-        AND COALESCE(s.customer_id, i.customer_id) = $2
+        AND COALESCE(cn.customer_id, s.customer_id, i.customer_id) = $2
         AND cn.status IN ('open','partially_used')`,
     [g.user.organizationId, params.id],
-  ).catch(() => ({ rows: [] as { id: string; number: string; remaining: string }[] }));
+  ).catch((err) => {
+    if (!(err as Error).message?.includes('customer_id')) {
+      // eslint-disable-next-line no-console
+      console.error('[customers.balances] credit_notes échoué :', err);
+    }
+    // Fallback sans cn.customer_id (migration 0014 pas appliquée)
+    return query<{ id: string; number: string; remaining: string }>(
+      `SELECT cn.id, cn.number,
+              (cn.amount - cn.used_amount)::text AS remaining
+         FROM credit_notes cn
+         LEFT JOIN sales s ON s.id = cn.sale_id
+         LEFT JOIN invoices i ON i.id = cn.invoice_id
+        WHERE cn.organization_id = $1
+          AND COALESCE(s.customer_id, i.customer_id) = $2
+          AND cn.status IN ('open','partially_used')`,
+      [g.user.organizationId, params.id],
+    ).catch(() => ({ rows: [] as { id: string; number: string; remaining: string }[] }));
+  });
 
   let accountBalance = 0;
   try {
