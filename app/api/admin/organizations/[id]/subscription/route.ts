@@ -19,6 +19,11 @@ const schema = z.discriminatedUnion('action', [
     reason: z.string().max(200).optional(),
   }),
   z.object({
+    action: z.literal('set_max_devices'),
+    max_devices: z.number().int().min(1).max(50),
+    reason: z.string().max(200).optional(),
+  }),
+  z.object({
     action: z.literal('grant_comp'),
     days: z.number().int().min(1).max(365),
     reason: z.string().max(200),
@@ -148,6 +153,15 @@ export async function POST(req: Request, { params }: { params: { id: string } })
           );
           eventType = 'reactivated';
           payload = { reason: d.reason ?? null };
+          break;
+        }
+        case 'set_max_devices': {
+          await client.query(
+            `UPDATE organizations SET max_devices = $2 WHERE id = $1`,
+            [params.id, d.max_devices],
+          );
+          eventType = 'note';
+          payload = { type: 'max_devices_updated', max_devices: d.max_devices, reason: d.reason ?? null };
           break;
         }
         case 'note': {

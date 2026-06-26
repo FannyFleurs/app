@@ -11,6 +11,7 @@ import CustomerPickerModal, { type PickedCustomer } from './CustomerPickerModal'
 import LineDiscountModal from './LineDiscountModal';
 import JustificationModal from './JustificationModal';
 import CartActionsModal from './CartActionsModal';
+import OrderModal from './OrderModal';
 import { tileMetrics, type PosUiSettings } from '@/lib/settings/pos-ui';
 
 export interface PosProduct {
@@ -109,6 +110,7 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
   >(null);
   const [cartComment, setCartComment] = useState('');
   const [showCartActions, setShowCartActions] = useState(false);
+  const [showOrderModal, setShowOrderModal] = useState(false);
   const [heldCount, setHeldCount] = useState(0);
 
   // Largeur du panier ticket (redimensionnable, persistée en localStorage)
@@ -957,6 +959,13 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
         <div className="p-2.5 border-t border-border space-y-2">
           <button
             disabled={lines.length === 0 || totals.ttc <= 0}
+            className="btn-soft w-full h-11 text-sm font-semibold"
+            onClick={() => setShowOrderModal(true)}
+          >
+            📅 Commande différée (retrait à date)
+          </button>
+          <button
+            disabled={lines.length === 0 || totals.ttc <= 0}
             className="btn-primary w-full h-16 text-xl"
             onClick={async () => { const id = await ensureSale(); if (id) { await syncLines(); setShowPayment(true); } }}
           >
@@ -1039,6 +1048,22 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
           />
         );
       })()}
+      {showOrderModal && (
+        <OrderModal
+          lines={lines}
+          customer={customer}
+          totalTtc={totals.ttc}
+          storeId={storeId}
+          deliveryProduct={products.find((p) => /livraison|delivery/i.test(p.name))}
+          onClose={() => setShowOrderModal(false)}
+          onSaved={() => {
+            setShowOrderModal(false);
+            setLines([]); setSaleId(null); setCustomer(null);
+            setView({ kind: 'categories' });
+          }}
+        />
+      )}
+
       {showCartActions && (
         <CartActionsModal
           cartTotal={totals.ttc}

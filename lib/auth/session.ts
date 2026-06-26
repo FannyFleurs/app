@@ -35,6 +35,12 @@ interface SessionClaims {
   role: Role;
 }
 
+export class DeviceLimitError extends Error {
+  constructor(public limit: number) {
+    super(`DEVICE_LIMIT_REACHED:${limit}`);
+  }
+}
+
 export async function createSession(args: {
   userId: string;
   organizationId: string;
@@ -42,6 +48,38 @@ export async function createSession(args: {
   ip?: string | null;
   userAgent?: string | null;
 }): Promise<string> {
+  // Vérification de la limite multi-appareils.
+  // - super_admin contourne la limite (besoin admin SaaS cross-tenant).
+  // - Sinon : compte les sessions actives de l'organisation et compare
+  //   à organizations.max_devices (par défaut 1 via migration 0015).
+  if (args.role !== 'super_admin') {
+    try {
+      const orgRes = await query<{ max_devices: number }>(
+        `SELECT COALESCE(max_devices, 1) AS max_devices
+           FROM organizations WHERE id = $1`,
+        [args.organizationId],
+      );
+      const limit = Number(orgRes.rows[0]?.max_devices ?? 1);
+      const activeRes = await query<{ c: string }>(
+        `SELECT COUNT(*)::text AS c FROM sessions s
+           JOIN users u ON u.id = s.user_id
+          WHERE u.organization_id = $1
+            AND s.revoked_at IS NULL
+            AND s.expires_at > now()`,
+        [args.organizationId],
+      );
+      const active = Number(activeRes.rows[0]?.c ?? 0);
+      if (active >= limit) {
+        throw new DeviceLimitError(limit);
+      }
+    } catch (err) {
+      if (err instanceof DeviceLimitError) throw err;
+      // Migration 0015 pas appliquée ou autre erreur SQL : on ne bloque pas
+      // eslint-disable-next-line no-console
+      console.warn('[session] device limit check skipped:', (err as Error).message);
+    }
+  }
+
   const sessionId = crypto.randomUUID();
   const raw = randomBytes(32).toString('hex');
   const tokenHash = createHash('sha256').update(raw).digest('hex');

@@ -48,6 +48,7 @@ export default function MaJourneeClient() {
   const [cashSummary, setCashSummary] = useState<{
     cash_sales: number; bank_deposits: number; expected_cash: number;
   }>({ cash_sales: 0, bank_deposits: 0, expected_cash: 0 });
+  const [sealedAt, setSealedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<SaleDetail | null>(null);
@@ -66,6 +67,12 @@ export default function MaJourneeClient() {
         if (j.cash_summary) setCashSummary(j.cash_summary);
       })
       .finally(() => setLoading(false));
+    // Indicateur "journée fermée" : check la clôture du jour
+    setSealedAt(null);
+    void fetch(`/api/closures/daily/today?date=${date}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((j) => { if (j?.sealed_at) setSealedAt(j.sealed_at); })
+      .catch(() => undefined);
   }, [date]);
 
   async function pickSale(id: string) {
@@ -155,12 +162,20 @@ export default function MaJourneeClient() {
           </div>
         </div>
 
-        {/* Total HT mis en avant */}
+        {/* Total HT mis en avant + indicateur journée fermée */}
         <div className="px-5 py-6 text-center">
           <div className="inline-flex items-center gap-1 text-xs text-ink-soft">
             <Icon name="dashboard" size={14} /> CA HT
           </div>
           <div className="mt-1 text-4xl font-semibold tracking-tight">{formatEUR(totals.ht)}</div>
+          {sealedAt && (
+            <div
+              className="mt-3 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold text-white"
+              style={{ backgroundColor: 'var(--primary)' }}
+            >
+              🔒 Journée fermée — {new Date(sealedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+            </div>
+          )}
         </div>
 
         {/* KPI lignes */}

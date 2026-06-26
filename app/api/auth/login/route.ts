@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { cookies, headers } from 'next/headers';
 import { query } from '@/lib/db/client';
 import { verifyPassword } from '@/lib/auth/password';
-import { createSession, SESSION_COOKIE, sessionCookieOptions } from '@/lib/auth/session';
+import { createSession, SESSION_COOKIE, sessionCookieOptions, DeviceLimitError } from '@/lib/auth/session';
 import { setTenantCookie } from '@/lib/auth/tenant';
 import { audit } from '@/lib/audit/log';
 import { parseJson, jsonError } from '@/lib/validation/api';
@@ -98,13 +98,24 @@ async function handleLogin(req: Request) {
     [user.id],
   );
 
-  const token = await createSession({
-    userId: user.id,
-    organizationId: user.organization_id,
-    role: user.role,
-    ip,
-    userAgent: ua,
-  });
+  let token: string;
+  try {
+    token = await createSession({
+      userId: user.id,
+      organizationId: user.organization_id,
+      role: user.role,
+      ip,
+      userAgent: ua,
+    });
+  } catch (err) {
+    if (err instanceof DeviceLimitError) {
+      return jsonError('DEVICE_LIMIT_REACHED', 403, {
+        limit: err.limit,
+        message: `Limite d'appareils atteinte (${err.limit}). Déconnectez-vous d'un autre poste, ou activez l'option Multi-appareils.`,
+      });
+    }
+    throw err;
+  }
 
   cookies().set({
     ...sessionCookieOptions(),

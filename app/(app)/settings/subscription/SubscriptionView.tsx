@@ -15,7 +15,7 @@ interface Data {
 }
 
 interface Plan {
-  key: 'trial' | 'starter' | 'pro' | 'enterprise';
+  key: 'trial' | 'starter' | 'pro';
   label: string;
   price: string;
   features: string[];
@@ -46,16 +46,14 @@ const PLANS: Plan[] = [
       'Support prioritaire',
     ],
   },
+];
+
+const ADDONS: Array<{ key: string; label: string; price: string; description: string }> = [
   {
-    key: 'enterprise',
-    label: 'Enterprise',
-    price: 'Sur devis',
-    features: [
-      'Multi-boutiques illimité',
-      'API & intégrations sur mesure',
-      'SLA + déploiement dédié',
-      'Account manager',
-    ],
+    key: 'multi_device',
+    label: 'Multi-appareils',
+    price: '+9 €/mois',
+    description: 'Connectez Florea POS sur plusieurs iPads / postes simultanément (vendeurs en parallèle).',
   },
 ];
 
@@ -150,7 +148,7 @@ export default function SubscriptionView() {
         <h2 className="text-sm font-semibold uppercase tracking-widest text-ink-soft mb-3">
           Choisir un plan
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {PLANS.map((p) => {
             const isCurrent = p.key === currentPlan;
             return (
@@ -186,6 +184,26 @@ export default function SubscriptionView() {
               </div>
             );
           })}
+        </div>
+        <h2 className="text-sm font-semibold uppercase tracking-widest text-ink-soft mt-6 mb-3">
+          Options
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {ADDONS.map((a) => (
+            <div key={a.key} className="card p-5">
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="font-semibold">{a.label}</div>
+                  <div className="text-lg font-semibold tracking-tight">{a.price}</div>
+                </div>
+              </div>
+              <p className="mt-2 text-sm text-ink-soft">{a.description}</p>
+              <button className="btn-soft mt-3 text-sm w-full" disabled
+                      title="Demandez l'activation à contact@florea-pos.fr">
+                Activer l&apos;option
+              </button>
+            </div>
+          ))}
         </div>
         <p className="mt-3 text-xs text-ink-soft">
           Pour activer votre abonnement, contactez{' '}

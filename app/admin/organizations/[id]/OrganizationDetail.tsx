@@ -11,6 +11,7 @@ interface Data {
     contact: { phone?: string; email?: string } | null;
     plan: string; trial_ends_at: string | null;
     created_at: string;
+    max_devices?: number;
   };
   subscription: {
     plan: string; status: string;
@@ -39,7 +40,10 @@ export default function OrganizationDetail({ id }: { id: string }) {
 
   async function reload() {
     const r = await fetch(`/api/admin/organizations/${id}`);
-    if (r.ok) setData(await r.json());
+    if (r.ok) {
+      const j = await r.json();
+      setData(j);
+    }
     setLoading(false);
   }
   useEffect(() => { void reload(); /* eslint-disable-next-line */ }, [id]);
@@ -111,7 +115,7 @@ export default function OrganizationDetail({ id }: { id: string }) {
         </div>
       </section>
 
-      <AdminActions id={o.id} onChange={() => void reload()} />
+      <AdminActions id={o.id} initialMaxDevices={o.max_devices ?? 1} onChange={() => void reload()} />
 
       <section>
         <h3 className="text-sm font-semibold uppercase tracking-widest text-ink-soft mb-2">
@@ -150,12 +154,15 @@ export default function OrganizationDetail({ id }: { id: string }) {
   );
 }
 
-function AdminActions({ id, onChange }: { id: string; onChange: () => void }) {
+function AdminActions({ id, initialMaxDevices, onChange }: {
+  id: string; initialMaxDevices: number; onChange: () => void;
+}) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [extendDays, setExtendDays] = useState<number>(30);
   const [extendReason, setExtendReason] = useState('');
-  const [newPlan, setNewPlan] = useState<'starter'|'pro'|'enterprise'>('pro');
+  const [newPlan, setNewPlan] = useState<'starter'|'pro'>('pro');
+  const [maxDevices, setMaxDevices] = useState<number>(initialMaxDevices);
   const [note, setNote] = useState('');
 
   async function call(action: Record<string, unknown>) {
@@ -207,12 +214,28 @@ function AdminActions({ id, onChange }: { id: string; onChange: () => void }) {
                   onChange={(e) => setNewPlan(e.target.value as typeof newPlan)}>
             <option value="starter">Starter (29 €/mois)</option>
             <option value="pro">Pro (59 €/mois)</option>
-            <option value="enterprise">Enterprise (sur devis)</option>
           </select>
           <button onClick={() => void call({ action: 'change_plan', plan: newPlan })}
                   disabled={busy !== null} className="btn-soft text-xs w-full mt-2">
             Appliquer le plan
           </button>
+        </div>
+
+        <div className="rounded-xl border border-border p-3">
+          <div className="font-medium text-sm">Limite multi-appareils</div>
+          <p className="text-xs text-ink-soft mt-1">
+            Nombre de sessions simultanées autorisées. 1 = mono-poste, &gt;1 = option payante.
+          </p>
+          <div className="flex items-center gap-2 mt-2">
+            <input type="number" min={1} max={50}
+                   className="input h-9 max-w-[100px]"
+                   value={maxDevices}
+                   onChange={(e) => setMaxDevices(Math.max(1, Math.min(50, Number(e.target.value) || 1)))} />
+            <button onClick={() => void call({ action: 'set_max_devices', max_devices: maxDevices })}
+                    disabled={busy !== null} className="btn-soft text-xs flex-1">
+              Appliquer
+            </button>
+          </div>
         </div>
 
         <div className="rounded-xl border border-border p-3">

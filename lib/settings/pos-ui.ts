@@ -59,8 +59,7 @@ export const HEADER_TABS_DEFAULT: string[] = [
   '/ma-journee',
   '/products',
   '/stock',
-  '/credit-notes',
-  '/gift-cards',
+  '/vouchers',
   '/customers',
 ];
 

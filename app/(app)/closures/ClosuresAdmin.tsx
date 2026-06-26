@@ -246,6 +246,13 @@ export default function ClosuresAdmin({ stores, registers }: { stores: Store[]; 
           <button onClick={() => void openDrawer()} disabled={!registerId} className="btn-soft text-sm h-10">
             ◰ Ouvrir tiroir
           </button>
+          {alreadySealed && (
+            <a href="/caisse" className="btn-soft text-sm h-10"
+               style={{ backgroundColor: 'var(--primary)', color: 'white' }}
+               title="Reprendre les ventes en ouvrant une nouvelle session caisse">
+              ↻ Réouvrir la journée
+            </a>
+          )}
           <button onClick={() => setShowDeposit(true)} disabled={!registerId || alreadySealed} className="btn-soft text-sm h-10">
             ⤓ Remise en banque
           </button>

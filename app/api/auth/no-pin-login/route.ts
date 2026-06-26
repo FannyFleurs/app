@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { cookies, headers } from 'next/headers';
 import { query } from '@/lib/db/client';
-import { createSession, sessionCookieOptions } from '@/lib/auth/session';
+import { createSession, sessionCookieOptions, DeviceLimitError } from '@/lib/auth/session';
 import { audit } from '@/lib/audit/log';
 import { parseJson, jsonError } from '@/lib/validation/api';
 
@@ -36,13 +36,21 @@ export async function POST(req: Request) {
   if (!user || !user.is_active) return jsonError('UNKNOWN_USER', 401);
   if (user.pin_required) return jsonError('PIN_REQUIRED', 403);
 
-  const token = await createSession({
-    userId: user.id,
-    organizationId: user.organization_id,
-    role: user.role,
-    ip,
-    userAgent: ua,
-  });
+  let token: string;
+  try {
+    token = await createSession({
+      userId: user.id,
+      organizationId: user.organization_id,
+      role: user.role,
+      ip,
+      userAgent: ua,
+    });
+  } catch (err) {
+    if (err instanceof DeviceLimitError) {
+      return jsonError('DEVICE_LIMIT_REACHED', 403, { limit: err.limit });
+    }
+    throw err;
+  }
   cookies().set({ ...sessionCookieOptions(), value: token });
 
   await audit({

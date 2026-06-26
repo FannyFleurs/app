@@ -12,7 +12,8 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 
   const orgRes = await query(
     `SELECT id, name, legal_name, slug, siret, vat_number,
-            address, contact, plan, trial_ends_at, created_at
+            address, contact, plan, trial_ends_at, created_at,
+            COALESCE(max_devices, 1) AS max_devices
        FROM organizations WHERE id = $1`,
     [params.id],
   );
