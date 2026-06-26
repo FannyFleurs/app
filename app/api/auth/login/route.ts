@@ -33,7 +33,11 @@ export async function POST(req: Request) {
 async function handleLogin(req: Request) {
   const parsed = await parseJson(req, schema);
   if ('response' in parsed) return parsed.response;
-  const { email, password } = parsed.data;
+  const { email: rawEmail, password } = parsed.data;
+  // Normalisation : email toujours en minuscules (le script create:super-admin
+  // et /setup enregistrent en lowercase). La comparaison reste donc
+  // case-insensitive côté serveur.
+  const email = rawEmail.trim().toLowerCase();
 
   const ua = headers().get('user-agent');
   const ip =
@@ -53,7 +57,7 @@ async function handleLogin(req: Request) {
   }>(
     `SELECT id, organization_id, password_hash, full_name, role,
             is_active, failed_attempts, locked_until
-       FROM users WHERE email = $1`,
+       FROM users WHERE lower(email) = $1`,
     [email],
   );
   const user = userRes.rows[0];
