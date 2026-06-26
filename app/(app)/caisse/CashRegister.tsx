@@ -12,8 +12,11 @@ import LineDiscountModal from './LineDiscountModal';
 import JustificationModal from './JustificationModal';
 import CartActionsModal from './CartActionsModal';
 import OrderModal from './OrderModal';
-import BarcodeScannerModal from './BarcodeScannerModal';
+import dynamic from 'next/dynamic';
 import { tileMetrics, type PosUiSettings } from '@/lib/settings/pos-ui';
+
+// Chargé uniquement à l'ouverture (le bundle ZXing pèse ~200 ko).
+const BarcodeScannerModal = dynamic(() => import('./BarcodeScannerModal'), { ssr: false });
 
 export interface PosProduct {
   id: string;
