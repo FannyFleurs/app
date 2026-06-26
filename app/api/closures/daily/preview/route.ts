@@ -50,21 +50,27 @@ export async function GET(req: Request) {
   );
 
   // Fonds + mouvements espèces du jour pour la boutique
+  // Les ins/outs filtrent par cm.created_at::date pour être cohérents avec
+  // la détection des remises en banque (session ouverte la veille acceptée).
   const cashBd = await query<{
     opening_floats: string; ins: string; outs: string;
   }>(
     `SELECT
         COALESCE(SUM(cs.opening_float), 0)::text AS opening_floats,
-        COALESCE((SELECT SUM(cm.amount) FROM cash_movements cm
-                   WHERE cm.cash_session_id IN (
-                     SELECT id FROM cash_sessions
-                      WHERE store_id = $1 AND opened_at::date = $2::date
-                   ) AND cm.movement_type = 'in'), 0)::text AS ins,
-        COALESCE((SELECT SUM(cm.amount) FROM cash_movements cm
-                   WHERE cm.cash_session_id IN (
-                     SELECT id FROM cash_sessions
-                      WHERE store_id = $1 AND opened_at::date = $2::date
-                   ) AND cm.movement_type = 'out'), 0)::text AS outs
+        COALESCE((
+          SELECT SUM(cm.amount) FROM cash_movements cm
+           JOIN cash_sessions cs2 ON cs2.id = cm.cash_session_id
+          WHERE cs2.store_id = $1
+            AND cm.created_at::date = $2::date
+            AND cm.movement_type = 'in'
+        ), 0)::text AS ins,
+        COALESCE((
+          SELECT SUM(cm.amount) FROM cash_movements cm
+           JOIN cash_sessions cs2 ON cs2.id = cm.cash_session_id
+          WHERE cs2.store_id = $1
+            AND cm.created_at::date = $2::date
+            AND cm.movement_type = 'out'
+        ), 0)::text AS outs
        FROM cash_sessions cs
       WHERE cs.store_id = $1 AND cs.opened_at::date = $2::date`,
     [storeId, date],
@@ -75,11 +81,14 @@ export async function GET(req: Request) {
   const cashSales = Number(payments.rows.find((p) => p.method === 'cash')?.total ?? 0);
 
   // Remises en banque = sorties dont le motif contient "banque" (case-insensitive)
+  // Filtre par date du mouvement (cm.created_at) pour couvrir le cas où la
+  // session a été ouverte la veille mais la remise faite le jour J.
   const depositsRes = await query<{ total: string }>(
     `SELECT COALESCE(SUM(cm.amount), 0)::text AS total
        FROM cash_movements cm
        JOIN cash_sessions cs ON cs.id = cm.cash_session_id
-      WHERE cs.store_id = $1 AND cs.opened_at::date = $2::date
+      WHERE cs.store_id = $1
+        AND cm.created_at::date = $2::date
         AND cm.movement_type = 'out'
         AND cm.reason ILIKE '%banque%'`,
     [storeId, date],

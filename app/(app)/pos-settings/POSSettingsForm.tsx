@@ -12,6 +12,8 @@ import {
   OPENING_FLOAT_MODES,
   OPENING_FLOAT_LABELS,
   COLOR_SCHEMES,
+  HEADER_TABS_DEFAULT,
+  HEADER_TABS_MAX,
   tileMetrics,
   type PosUiSettings,
   type PosTileSize,
@@ -19,6 +21,7 @@ import {
   type ColorScheme,
   type OpeningFloatMode,
 } from '@/lib/settings/pos-ui';
+import { SIDEBAR_ITEMS } from '@/components/Sidebar';
 import Badge from '@/components/Badge';
 
 interface Props {
@@ -312,6 +315,17 @@ export default function POSSettingsForm({ initial, canWrite }: Props) {
         </Section>
 
         <Section
+          title="Onglets du header"
+          description={`Choisissez les pages affichées en onglets dans la barre supérieure (${HEADER_TABS_MAX} max). Les autres restent accessibles via le menu hamburger.`}
+        >
+          <HeaderTabsManager
+            value={settings.header_tabs?.length ? settings.header_tabs : HEADER_TABS_DEFAULT}
+            onChange={(v) => patch('header_tabs', v)}
+            disabled={!canWrite}
+          />
+        </Section>
+
+        <Section
           title="Programme de fidélité"
           description="Les remises de fidélité se déclenchent depuis la fiche client en caisse une fois le seuil atteint."
         >
@@ -601,6 +615,106 @@ function PreviewGrid({ settings }: { settings: PosUiSettings }) {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function HeaderTabsManager({
+  value, onChange, disabled,
+}: {
+  value: string[];
+  onChange: (next: string[]) => void;
+  disabled?: boolean;
+}) {
+  // Tous les items éligibles (sidebar items). On masque /settings (toujours dans
+  // le hamburger) pour éviter la confusion.
+  const candidates = SIDEBAR_ITEMS.filter((i) => i.href !== '/settings');
+  const selected = value;
+  const remaining = HEADER_TABS_MAX - selected.length;
+
+  function toggle(href: string) {
+    if (disabled) return;
+    if (selected.includes(href)) {
+      onChange(selected.filter((h) => h !== href));
+    } else if (selected.length < HEADER_TABS_MAX) {
+      onChange([...selected, href]);
+    }
+  }
+
+  function move(href: string, dir: -1 | 1) {
+    if (disabled) return;
+    const idx = selected.indexOf(href);
+    if (idx < 0) return;
+    const next = [...selected];
+    const target = idx + dir;
+    if (target < 0 || target >= next.length) return;
+    [next[idx], next[target]] = [next[target]!, next[idx]!];
+    onChange(next);
+  }
+
+  function reset() {
+    if (disabled) return;
+    onChange(HEADER_TABS_DEFAULT);
+  }
+
+  const unselected = candidates.filter((c) => !selected.includes(c.href));
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <div className="flex items-baseline justify-between mb-2">
+          <div className="text-xs uppercase tracking-widest text-ink-soft font-semibold">
+            Affichés dans l&apos;ordre ({selected.length}/{HEADER_TABS_MAX})
+          </div>
+          <button onClick={reset} disabled={disabled} className="text-xs text-ink-soft hover:text-ink underline">
+            Réinitialiser
+          </button>
+        </div>
+        {selected.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-ink-soft">
+            Aucun onglet sélectionné — la barre supérieure affichera l&apos;ordre par défaut.
+          </div>
+        ) : (
+          <ul className="space-y-1.5">
+            {selected.map((href, idx) => {
+              const item = SIDEBAR_ITEMS.find((s) => s.href === href);
+              if (!item) return null;
+              return (
+                <li key={href} className="flex items-center gap-2 rounded-xl border border-border bg-white px-3 py-2">
+                  <span className="text-ink-soft text-xs w-6 tabular-nums text-right">{idx + 1}.</span>
+                  <span className="flex-1 text-sm font-medium">{item.label}</span>
+                  <button onClick={() => move(href, -1)} disabled={disabled || idx === 0}
+                          className="h-7 w-7 rounded-lg border border-border text-ink-soft hover:bg-gray-50 disabled:opacity-30">↑</button>
+                  <button onClick={() => move(href, +1)} disabled={disabled || idx === selected.length - 1}
+                          className="h-7 w-7 rounded-lg border border-border text-ink-soft hover:bg-gray-50 disabled:opacity-30">↓</button>
+                  <button onClick={() => toggle(href)} disabled={disabled}
+                          className="h-7 w-7 rounded-lg border border-border text-ink-soft hover:text-danger hover:bg-danger/5">✕</button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+
+      {unselected.length > 0 && (
+        <div>
+          <div className="text-xs uppercase tracking-widest text-ink-soft font-semibold mb-2">
+            Disponibles ({remaining} restant{remaining > 1 ? 's' : ''})
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {unselected.map((item) => (
+              <button
+                key={item.href}
+                onClick={() => toggle(item.href)}
+                disabled={disabled || remaining <= 0}
+                className="rounded-full border border-border bg-white px-3 py-1.5 text-sm hover:border-gray-300 disabled:opacity-40"
+              >
+                + {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

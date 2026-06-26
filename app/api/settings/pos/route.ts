@@ -37,6 +37,7 @@ const schema = z.object({
   hidden_sidebar_paths: z.array(z.string().max(120)).optional(),
   auto_logout_mode: z.enum(['never', 'after_sale', 'timer']).optional(),
   auto_logout_minutes: z.number().int().min(1).max(120).optional(),
+  header_tabs: z.array(z.string().max(120)).max(10).optional(),
 });
 
 export async function GET() {

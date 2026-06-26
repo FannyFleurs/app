@@ -224,9 +224,9 @@ export default function StockAdmin({ canAdjust, stores }: { canAdjust: boolean; 
         )}
 
         {section === 'create' && (
-          <div className="p-6 max-w-xl">
+          <div className="p-6">
             {canAdjust ? (
-              <InlineMovementForm
+              <MovementPicker
                 storeId={stores[0]?.id ?? ''}
                 storeName={stores[0]?.name ?? ''}
                 onSaved={() => { setSection('movements'); }}
@@ -346,17 +346,24 @@ function exportCsv(rows: StockLevel[]) {
   URL.revokeObjectURL(url);
 }
 
-function InlineMovementForm({ storeId, storeName, onSaved }: {
+interface ProductRow { id: string; name: string; sku: string | null; unit?: string }
+
+/**
+ * Sélecteur produit pleine page → modale clavier ± → modale type/motif.
+ * Étape 1 : recherche + liste cliquable.
+ * Étape 2 : clavier pour saisir la quantité (signée).
+ * Étape 3 : type de mouvement + motif (obligatoire si delta < 0 ou perte).
+ */
+function MovementPicker({ storeId, storeName, onSaved }: {
   storeId: string; storeName: string; onSaved: () => void;
 }) {
-  const [products, setProducts] = useState<Array<{ id: string; name: string; sku: string | null }>>([]);
-  const [productId, setProductId] = useState('');
-  const [productSearch, setProductSearch] = useState('');
-  const [type, setType] = useState<'purchase' | 'adjustment' | 'loss' | 'inventory'>('purchase');
-  const [delta, setDelta] = useState<number>(0);
-  const [reason, setReason] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [products, setProducts] = useState<ProductRow[]>([]);
+  const [search, setSearch] = useState('');
+  const [step, setStep] = useState<
+    | { kind: 'pick' }
+    | { kind: 'qty'; product: ProductRow }
+    | { kind: 'type'; product: ProductRow; delta: number }
+  >({ kind: 'pick' });
 
   useEffect(() => {
     void (async () => {
@@ -365,41 +372,228 @@ function InlineMovementForm({ storeId, storeName, onSaved }: {
     })();
   }, []);
 
-  const filteredProducts = useMemo(() => {
-    const needle = productSearch.trim().toLowerCase();
-    if (!needle) return products.slice(0, 20);
-    return products
-      .filter((p) =>
-        p.name.toLowerCase().includes(needle) ||
-        p.sku?.toLowerCase().includes(needle),
-      )
-      .slice(0, 20);
-  }, [products, productSearch]);
+  const filtered = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    if (!needle) return products;
+    return products.filter((p) =>
+      p.name.toLowerCase().includes(needle) ||
+      p.sku?.toLowerCase().includes(needle),
+    );
+  }, [products, search]);
 
-  const selectedProduct = useMemo(
-    () => products.find((p) => p.id === productId) ?? null,
-    [products, productId],
+  return (
+    <div className="space-y-4">
+      <div className="flex items-baseline justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-semibold tracking-tight">Faire un mouvement</h2>
+          <p className="mt-1 text-sm text-ink-soft">
+            Boutique : <span className="font-medium text-ink">{storeName || '—'}</span> ·
+            Sélectionnez un produit dans la liste.
+          </p>
+        </div>
+        <div className="relative w-full max-w-md">
+          <input
+            className="input pr-9"
+            placeholder="Rechercher (nom ou SKU)…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            autoFocus
+          />
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-soft">⌕</span>
+        </div>
+      </div>
+
+      {filtered.length === 0 ? (
+        <EmptyState
+          icon="📦"
+          title="Aucun produit"
+          description="Créez d'abord des produits ou ajustez votre recherche."
+        />
+      ) : (
+        <div className="card overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="text-ink-soft text-[10px] uppercase tracking-widest border-b border-border">
+              <tr>
+                <th className="text-left px-4 py-3 font-semibold">Produit</th>
+                <th className="text-left px-4 py-3 font-semibold">SKU</th>
+                <th className="px-4 py-3"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((p) => (
+                <tr key={p.id} className="border-t border-border hover:bg-gray-50 cursor-pointer"
+                    onClick={() => setStep({ kind: 'qty', product: p })}>
+                  <td className="px-4 py-3 font-medium">{p.name}</td>
+                  <td className="px-4 py-3 text-ink-soft text-xs font-mono">{p.sku ?? '—'}</td>
+                  <td className="px-4 py-3 text-right">
+                    <span className="btn-soft text-xs h-8 px-3">+ / −</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {step.kind === 'qty' && (
+        <QuantityKeypadModal
+          product={step.product}
+          onClose={() => setStep({ kind: 'pick' })}
+          onConfirm={(delta) => setStep({ kind: 'type', product: step.product, delta })}
+        />
+      )}
+
+      {step.kind === 'type' && (
+        <TypeAndReasonModal
+          product={step.product}
+          delta={step.delta}
+          storeId={storeId}
+          onClose={() => setStep({ kind: 'qty', product: step.product })}
+          onSaved={() => { setStep({ kind: 'pick' }); onSaved(); }}
+        />
+      )}
+    </div>
   );
+}
 
-  // Motif obligatoire uniquement pour sortie (delta < 0) ou perte
-  const reasonRequired = delta < 0 || type === 'loss' || type === 'adjustment';
+function QuantityKeypadModal({ product, onClose, onConfirm }: {
+  product: ProductRow;
+  onClose: () => void;
+  onConfirm: (delta: number) => void;
+}) {
+  const [sign, setSign] = useState<'+' | '−'>('+');
+  const [digits, setDigits] = useState('');
+
+  const display = digits === '' ? '0' : digits;
+  const value = Number(digits || '0');
+  const delta = sign === '+' ? value : -value;
+
+  function press(k: string) {
+    setDigits((cur) => {
+      if (k === 'C') return '';
+      if (k === '⌫') return cur.slice(0, -1);
+      if (k === '.') return cur.includes('.') ? cur : (cur === '' ? '0.' : cur + '.');
+      return cur === '0' ? k : cur + k;
+    });
+  }
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key >= '0' && e.key <= '9') { press(e.key); e.preventDefault(); }
+      else if (e.key === '.' || e.key === ',') { press('.'); e.preventDefault(); }
+      else if (e.key === 'Backspace') { press('⌫'); e.preventDefault(); }
+      else if (e.key === 'Escape') { onClose(); }
+      else if (e.key === 'Enter' && value > 0) { onConfirm(delta); }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [delta, value, onClose, onConfirm]);
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-ink/30 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="card max-w-md w-full p-5" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-2">
+          <div>
+            <div className="text-xs uppercase tracking-widest text-ink-soft font-semibold">Quantité</div>
+            <div className="font-semibold text-base truncate max-w-[300px]">{product.name}</div>
+          </div>
+          <button onClick={onClose} className="text-ink-soft hover:text-ink">✕</button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 mb-3">
+          <button
+            onClick={() => setSign('+')}
+            className={`rounded-xl py-3 text-xl font-semibold border ${
+              sign === '+'
+                ? 'border-transparent text-white'
+                : 'bg-white border-border text-ink-soft hover:text-ink'
+            }`}
+            style={sign === '+' ? { backgroundColor: 'var(--success, #16a34a)' } : undefined}
+          >+ Entrée</button>
+          <button
+            onClick={() => setSign('−')}
+            className={`rounded-xl py-3 text-xl font-semibold border ${
+              sign === '−'
+                ? 'border-transparent text-white'
+                : 'bg-white border-border text-ink-soft hover:text-ink'
+            }`}
+            style={sign === '−' ? { backgroundColor: 'var(--danger, #dc2626)' } : undefined}
+          >− Sortie</button>
+        </div>
+
+        <div className="rounded-2xl border border-border p-4 bg-gray-50 flex items-baseline justify-between">
+          <span className="text-sm text-ink-soft">Quantité</span>
+          <span className={`text-4xl font-semibold tabular-nums ${sign === '+' ? 'text-success' : 'text-danger'}`}>
+            {sign}{display}
+          </span>
+        </div>
+
+        <div className="mt-3 grid grid-cols-3 gap-2">
+          {['7','8','9','4','5','6','1','2','3','.','0','⌫'].map((k) => (
+            <button key={k} onClick={() => press(k)}
+                    className="h-14 rounded-xl border border-border bg-white text-2xl font-medium hover:bg-gray-50 active:scale-95">
+              {k}
+            </button>
+          ))}
+        </div>
+
+        <button
+          onClick={() => onConfirm(delta)}
+          disabled={value <= 0}
+          className="btn-primary w-full mt-4 h-12 text-base"
+        >
+          Valider la quantité
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function TypeAndReasonModal({ product, delta, storeId, onClose, onSaved }: {
+  product: ProductRow;
+  delta: number;
+  storeId: string;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const isIn = delta > 0;
+  // Types disponibles selon le sens du delta
+  const types = isIn
+    ? [
+        { key: 'purchase',   label: 'Entrée fournisseur' },
+        { key: 'adjustment', label: 'Ajustement (+)' },
+        { key: 'inventory',  label: 'Inventaire' },
+        { key: 'return',     label: 'Retour client' },
+      ] as const
+    : [
+        { key: 'loss',       label: 'Perte / casse' },
+        { key: 'adjustment', label: 'Ajustement (−)' },
+        { key: 'inventory',  label: 'Inventaire' },
+      ] as const;
+
+  const [type, setType] = useState<typeof types[number]['key']>(types[0].key);
+  const [reason, setReason] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Motif obligatoire seulement pour les sorties (delta négatif).
+  const reasonRequired = delta < 0;
 
   async function submit() {
-    if (!productId) { setError('Sélectionnez un produit.'); return; }
-    if (!storeId) { setError('Aucune boutique configurée.'); return; }
-    if (delta === 0) { setError('La quantité ne peut pas être nulle.'); return; }
     if (reasonRequired && !reason.trim()) {
-      setError('Un motif est requis pour une sortie ou une perte.'); return;
+      setError('Un motif est requis pour une sortie.'); return;
     }
     setSaving(true); setError(null);
+    const finalReason = reason.trim()
+      || (isIn ? 'Entrée stock' : 'Sortie stock');
     const r = await fetch('/api/stock/movement', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         store_id: storeId,
-        product_id: productId,
+        product_id: product.id,
         movement_type: type,
         quantity_delta: delta,
-        reason: reason.trim() || (delta > 0 ? 'Entrée stock' : 'Mouvement stock'),
+        reason: finalReason,
       }),
     });
     setSaving(false);
@@ -412,98 +606,58 @@ function InlineMovementForm({ storeId, storeName, onSaved }: {
   }
 
   return (
-    <div>
-      <h2 className="text-xl font-semibold tracking-tight">Faire un mouvement</h2>
-      <p className="mt-1 text-sm text-ink-soft">
-        Enregistre une entrée, sortie, perte ou ajustement sur la boutique connectée :
-        <span className="ml-1 font-medium text-ink">{storeName || '—'}</span>.
-      </p>
-      <div className="card p-5 mt-4 space-y-3">
-        <div>
-          <label className="text-sm font-medium text-ink-soft">Produit</label>
-          {selectedProduct ? (
-            <div className="mt-1 flex items-center justify-between gap-2 rounded-xl border border-border bg-accent-soft px-3 py-2.5">
-              <div className="min-w-0">
-                <div className="font-medium truncate">{selectedProduct.name}</div>
-                {selectedProduct.sku && (
-                  <div className="text-[11px] text-ink-soft font-mono">{selectedProduct.sku}</div>
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={() => { setProductId(''); setProductSearch(''); }}
-                className="text-ink-soft hover:text-danger text-sm"
-              >
-                ✕
-              </button>
+    <div className="fixed inset-0 z-50 grid place-items-center bg-ink/30 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="card max-w-md w-full p-5" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <div className="text-xs uppercase tracking-widest text-ink-soft font-semibold">Mouvement</div>
+            <div className="font-semibold text-base truncate max-w-[280px]">{product.name}</div>
+            <div className={`text-2xl font-semibold mt-1 ${isIn ? 'text-success' : 'text-danger'}`}>
+              {isIn ? '+' : ''}{delta}
             </div>
-          ) : (
-            <>
-              <div className="relative mt-1">
-                <input
-                  className="input pr-9"
-                  placeholder="Rechercher produit (nom ou SKU)…"
-                  value={productSearch}
-                  onChange={(e) => setProductSearch(e.target.value)}
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-soft">⌕</span>
-              </div>
-              {filteredProducts.length > 0 && (
-                <div className="mt-2 max-h-60 overflow-y-auto rounded-xl border border-border divide-y divide-border">
-                  {filteredProducts.map((p) => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => { setProductId(p.id); setProductSearch(''); }}
-                      className="w-full text-left px-3 py-2 hover:bg-gray-50"
-                    >
-                      <div className="font-medium text-sm">{p.name}</div>
-                      {p.sku && <div className="text-[11px] text-ink-soft font-mono">{p.sku}</div>}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </>
-          )}
+          </div>
+          <button onClick={onClose} className="text-ink-soft hover:text-ink">✕</button>
         </div>
 
-        <div>
-          <label className="text-sm font-medium text-ink-soft">Type</label>
-          <select className="input mt-1 h-11" value={type}
-                  onChange={(e) => setType(e.target.value as typeof type)}>
-            <option value="purchase">Entrée fournisseur</option>
-            <option value="adjustment">Ajustement</option>
-            <option value="loss">Perte / casse</option>
-            <option value="inventory">Inventaire</option>
-          </select>
+        <label className="text-sm font-medium text-ink-soft">Type de mouvement</label>
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          {types.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setType(t.key)}
+              className={`rounded-xl border py-3 text-sm font-medium transition-colors ${
+                type === t.key
+                  ? 'accent-bar text-white border-transparent'
+                  : 'bg-white border-border text-ink hover:border-gray-300'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
         </div>
 
-        <div>
-          <label className="text-sm font-medium text-ink-soft">Quantité (+/−)</label>
-          <input
-            type="number" step="0.001"
-            className="input mt-1 text-xl font-semibold"
-            value={delta || ''}
-            onChange={(e) => setDelta(Number(e.target.value) || 0)}
-            placeholder="ex : 10 ou -2"
-          />
-          <p className="mt-1 text-xs text-ink-soft">Positif pour entrée, négatif pour sortie.</p>
-        </div>
+        <label className="block mt-4 text-sm font-medium text-ink-soft">
+          Motif {reasonRequired
+            ? <span className="text-danger">*</span>
+            : <span className="text-ink-soft/60">(optionnel pour entrée)</span>}
+        </label>
+        <input
+          className="input mt-1"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder={reasonRequired
+            ? 'ex : casse, fleurs fanées, écart inventaire'
+            : 'ex : Livraison Aoki Fleurs'}
+        />
 
-        <div>
-          <label className="text-sm font-medium text-ink-soft">
-            Motif {reasonRequired ? '' : <span className="text-ink-soft/60">(optionnel)</span>}
-          </label>
-          <input className="input mt-1" value={reason} onChange={(e) => setReason(e.target.value)}
-                 placeholder={reasonRequired
-                   ? 'ex : perte fleurs fanées, ajustement après inventaire'
-                   : 'ex : Livraison Aoki Fleurs'} />
-        </div>
+        {error && <div className="mt-3 rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
 
-        {error && <div className="rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
-        <button onClick={() => void submit()} disabled={saving} className="btn-primary w-full h-11">
-          {saving ? 'Enregistrement…' : 'Enregistrer le mouvement'}
-        </button>
+        <div className="mt-4 flex gap-2">
+          <button onClick={onClose} className="btn-ghost flex-1">‹ Retour</button>
+          <button onClick={() => void submit()} disabled={saving} className="btn-primary flex-1">
+            {saving ? 'Enregistrement…' : 'Enregistrer'}
+          </button>
+        </div>
       </div>
     </div>
   );

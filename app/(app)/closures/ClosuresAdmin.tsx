@@ -327,25 +327,36 @@ export default function ClosuresAdmin({ stores, registers }: { stores: Store[]; 
               </div>
 
               <div className="mt-4 space-y-1.5 text-sm rounded-xl bg-gray-50 p-4">
-                <div className="flex justify-between"><span className="text-ink-soft">Fonds de caisse ouverts</span><span>{formatEUR(preview.cash_breakdown.opening_floats)}</span></div>
-                <div className="flex justify-between"><span className="text-ink-soft">+ Ventes espèces</span><span>{formatEUR(preview.cash_breakdown.cash_sales)}</span></div>
+                <div className="flex justify-between">
+                  <span className="text-ink-soft">Fonds de caisse ouverts</span>
+                  <span>{formatEUR(preview.cash_breakdown.opening_floats)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-ink-soft">+ Ventes espèces</span>
+                  <span>{formatEUR(preview.cash_breakdown.cash_sales)}</span>
+                </div>
                 {preview.cash_breakdown.cash_in > 0 && (
-                  <div className="flex justify-between"><span className="text-ink-soft">+ Entrées caisse</span><span>{formatEUR(preview.cash_breakdown.cash_in)}</span></div>
+                  <div className="flex justify-between">
+                    <span className="text-ink-soft">+ Entrées caisse</span>
+                    <span>{formatEUR(preview.cash_breakdown.cash_in)}</span>
+                  </div>
                 )}
-                {preview.cash_breakdown.cash_out > 0
-                  && preview.cash_breakdown.cash_out > preview.cash_breakdown.bank_deposits && (
+                {preview.cash_breakdown.cash_out > preview.cash_breakdown.bank_deposits && (
                   <div className="flex justify-between">
                     <span className="text-ink-soft">- Autres sorties caisse</span>
                     <span>-{formatEUR(preview.cash_breakdown.cash_out - preview.cash_breakdown.bank_deposits)}</span>
                   </div>
                 )}
-                {preview.cash_breakdown.bank_deposits > 0 && (
-                  <div className="flex justify-between text-warning">
-                    <span>⤓ Remise en banque</span>
-                    <span>-{formatEUR(preview.cash_breakdown.bank_deposits)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between pt-2 border-t border-border">
+                {/* Ligne Remise en banque TOUJOURS visible (même à 0) */}
+                <div className="flex justify-between">
+                  <span className="text-ink-soft">⤓ Remise en banque</span>
+                  <span className={preview.cash_breakdown.bank_deposits > 0 ? 'text-warning font-medium' : ''}>
+                    {preview.cash_breakdown.bank_deposits > 0
+                      ? `-${formatEUR(preview.cash_breakdown.bank_deposits)}`
+                      : formatEUR(0)}
+                  </span>
+                </div>
+                <div className="flex justify-between pt-2 mt-1 border-t border-border/70">
                   <span className="font-medium">Espèces attendues</span>
                   <span className="font-medium">{formatEUR(expectedCash)}</span>
                 </div>
@@ -353,7 +364,7 @@ export default function ClosuresAdmin({ stores, registers }: { stores: Store[]; 
                   <span className="text-ink-soft">Espèces comptées</span>
                   <span className="font-medium">{formatEUR(countedCash)}</span>
                 </div>
-                <div className="flex items-baseline justify-between pt-2 border-t border-border">
+                <div className="flex items-baseline justify-between pt-2 mt-1 border-t border-border/70">
                   <span className="font-semibold">Écart</span>
                   <span className={`text-lg font-semibold ${
                     cashVariance === 0 ? 'text-success' :

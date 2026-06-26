@@ -26,6 +26,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       hiddenPaths={ui.hidden_sidebar_paths ?? []}
       autoLogoutMode={ui.auto_logout_mode}
       autoLogoutMinutes={ui.auto_logout_minutes}
+      headerTabs={ui.header_tabs ?? []}
     >
       {children}
     </AppShell>

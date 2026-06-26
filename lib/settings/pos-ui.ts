@@ -45,7 +45,24 @@ export interface PosUiSettings {
   hidden_sidebar_paths: string[];
   auto_logout_mode: AutoLogoutMode;
   auto_logout_minutes: number;
+  /** Onglets affichés dans la barre supérieure (max 10). Si vide → défaut. */
+  header_tabs: string[];
 }
+
+/** Limite dure d'onglets dans le header (au-delà ça déborde visuellement). */
+export const HEADER_TABS_MAX = 10;
+
+/** Onglets par défaut affichés dans la barre supérieure. */
+export const HEADER_TABS_DEFAULT: string[] = [
+  '/caisse',
+  '/orders',
+  '/ma-journee',
+  '/products',
+  '/stock',
+  '/credit-notes',
+  '/gift-cards',
+  '/customers',
+];
 
 export const OPENING_FLOAT_LABELS: Record<OpeningFloatMode, { label: string; description: string }> = {
   manual: {
@@ -85,6 +102,7 @@ export const POS_UI_DEFAULTS: PosUiSettings = {
   hidden_sidebar_paths: [],
   auto_logout_mode: 'never',
   auto_logout_minutes: 10,
+  header_tabs: HEADER_TABS_DEFAULT,
 };
 
 export const POS_THEME_COLOR_VALUES: Record<PosThemeColor, { label: string; main: string; deep: string; soft: string }> = {

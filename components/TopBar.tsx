@@ -4,22 +4,8 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { SIDEBAR_ITEMS, type SidebarItem } from './Sidebar';
 import { hasPermission, type Role } from '@/lib/auth/rbac';
+import { HEADER_TABS_DEFAULT, HEADER_TABS_MAX } from '@/lib/settings/pos-ui';
 import Icon from './Icon';
-
-/**
- * Identifiants (href) des items affichés comme onglets dans la barre supérieure.
- * Les autres restent accessibles via le menu hamburger (toutes les pages).
- */
-const TOP_TABS_ORDER: string[] = [
-  '/caisse',
-  '/orders',
-  '/ma-journee',
-  '/products',
-  '/stock',
-  '/credit-notes',
-  '/gift-cards',
-  '/customers',
-];
 
 export interface TopBarUser {
   fullName: string;
@@ -29,14 +15,19 @@ export interface TopBarUser {
 interface Props {
   user: TopBarUser;
   hiddenPaths: string[];
+  headerTabs: string[];
   onOpenMenu: () => void;
   onLogout: () => void;
 }
 
-export default function TopBar({ user, hiddenPaths, onOpenMenu, onLogout }: Props) {
+export default function TopBar({ user, hiddenPaths, headerTabs, onOpenMenu, onLogout }: Props) {
   const path = usePathname();
 
-  const tabs = TOP_TABS_ORDER
+  // Liste effective des onglets : configuration utilisateur (max 10), filtrée
+  // par permissions + paths masqués. Vide → on retombe sur la liste par défaut.
+  const order = (headerTabs && headerTabs.length > 0 ? headerTabs : HEADER_TABS_DEFAULT)
+    .slice(0, HEADER_TABS_MAX);
+  const tabs = order
     .map((href) => SIDEBAR_ITEMS.find((i) => i.href === href))
     .filter((i): i is SidebarItem => !!i)
     .filter((i) => !i.perm || hasPermission(user.role, i.perm))
@@ -54,27 +45,22 @@ export default function TopBar({ user, hiddenPaths, onOpenMenu, onLogout }: Prop
         <span className="font-semibold tracking-tight hidden sm:inline text-ink">Florea POS</span>
       </Link>
 
-      {/* Onglets */}
-      <nav className="flex items-stretch gap-0 overflow-x-auto no-scrollbar flex-1">
+      {/* Onglets — style "tab" : actif sur fond accent, sinon ghost */}
+      <nav className="flex items-center gap-1 px-2 overflow-x-auto no-scrollbar flex-1">
         {tabs.map((t) => {
           const active = path === t.href || path?.startsWith(t.href + '/');
           return (
             <Link
               key={t.href}
               href={t.href}
-              className={`relative flex items-center gap-2 px-4 text-sm font-medium whitespace-nowrap transition-colors ${
+              className={`relative flex items-center h-10 px-4 rounded-xl text-sm font-medium whitespace-nowrap transition-colors ${
                 active
-                  ? 'text-accent-deep'
+                  ? 'text-white shadow-sm'
                   : 'text-ink-soft hover:text-ink hover:bg-gray-50'
               }`}
+              style={active ? { backgroundColor: 'var(--primary)' } : undefined}
             >
               {t.label}
-              {active && (
-                <span
-                  className="absolute left-3 right-3 bottom-0 h-[3px] rounded-t-full"
-                  style={{ backgroundColor: 'var(--primary)' }}
-                />
-              )}
             </Link>
           );
         })}

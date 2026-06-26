@@ -16,11 +16,12 @@ interface Props {
   hiddenPaths: string[];
   autoLogoutMode: AutoLogoutMode;
   autoLogoutMinutes: number;
+  headerTabs: string[];
   children: React.ReactNode;
 }
 
 export default function AppShell({
-  user, themeColor, colorScheme, hiddenPaths, autoLogoutMode, autoLogoutMinutes, children,
+  user, themeColor, colorScheme, hiddenPaths, autoLogoutMode, autoLogoutMinutes, headerTabs, children,
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
   const router = useRouter();
@@ -83,6 +84,7 @@ export default function AppShell({
       <TopBar
         user={{ fullName: user.fullName, role: user.role }}
         hiddenPaths={hiddenPaths}
+        headerTabs={headerTabs}
         onOpenMenu={() => setMenuOpen(true)}
         onLogout={() => void logout()}
       />

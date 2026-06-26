@@ -274,7 +274,6 @@ function CustomerDetailContent({ tab, detail, canWrite, onEdit }: {
               Modifier client
             </button>
           )}
-          <button className="btn-soft text-sm">Changer la date</button>
         </div>
       </div>
 
