@@ -32,7 +32,7 @@ export const SIDEBAR_ITEMS: SidebarItem[] = [
   // Pilotage (en bas — pas en haut)
   { href: '/dashboard',    label: 'Tableau de bord',      icon: 'dashboard',    group: 'Pilotage' },
   // Système
-  { href: '/users',        label: 'Utilisateurs',         icon: 'users',        group: 'Système',  perm: 'users.read' },
+  { href: '/settings/users', label: 'Utilisateurs',       icon: 'users',        group: 'Système',  perm: 'users.read' },
   { href: '/settings',     label: 'Paramètres',           icon: 'settings',     group: 'Système',  perm: 'settings.read', required: true },
 ];
 

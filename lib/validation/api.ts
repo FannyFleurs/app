@@ -17,9 +17,18 @@ export async function parseJson<T extends z.ZodTypeAny>(
   }
   const parsed = schema.safeParse(raw);
   if (!parsed.success) {
+    const flat = parsed.error.flatten();
+    // Construit un message lisible : "field: message"
+    const fieldErrors = Object.entries(flat.fieldErrors)
+      .map(([k, v]) => `${k}: ${(v as string[])[0] ?? 'invalide'}`)
+      .slice(0, 3)
+      .join(' · ');
+    const formErrors = flat.formErrors.join(' · ');
+    const message = [fieldErrors, formErrors].filter(Boolean).join(' — ') || 'Données invalides';
     return {
       response: jsonError('VALIDATION_ERROR', 422, {
-        issues: parsed.error.flatten(),
+        issues: flat,
+        message,
       }),
     };
   }

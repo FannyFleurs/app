@@ -7,8 +7,8 @@ import { audit } from '@/lib/audit/log';
 
 const productSchema = z.object({
   name: z.string().min(1).max(200),
-  short_description: z.string().max(500).optional(),
-  long_description: z.string().max(5000).optional(),
+  short_description: z.string().max(500).optional().nullable(),
+  long_description: z.string().max(5000).optional().nullable(),
   category_id: z.string().uuid().optional().nullable(),
   sku: z.string().max(80).optional().nullable(),
   barcode: z.string().max(80).optional().nullable(),

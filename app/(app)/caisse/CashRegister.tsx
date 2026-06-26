@@ -102,6 +102,7 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
     | { kind: 'remove'; key: string }
     | { kind: 'lineDiscount'; key: string; amount: number }
     | { kind: 'cartDiscount'; amount: number; mode: 'percent' | 'amount' }
+    | { kind: 'cancelTicket' }
     | null
   >(null);
   const [cartComment, setCartComment] = useState('');
@@ -883,6 +884,7 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
         <CartActionsModal
           cartTotal={totals.ttc}
           currentComment={cartComment}
+          hasLines={lines.length > 0}
           onClose={() => setShowCartActions(false)}
           onCartDiscount={(mode, value) => {
             const computed = mode === 'percent'
@@ -893,6 +895,10 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
             setJustifyAction({ kind: 'cartDiscount', amount: computed, mode });
           }}
           onCommentSave={(c) => { setCartComment(c); setShowCartActions(false); }}
+          onCancelTicket={() => {
+            setShowCartActions(false);
+            setJustifyAction({ kind: 'cancelTicket' });
+          }}
         />
       )}
       {justifyAction && (() => {
@@ -902,14 +908,16 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
             title={
               a.kind === 'remove' ? 'Sortie d\'un produit'
               : a.kind === 'lineDiscount' ? 'Remise sur ligne'
+              : a.kind === 'cancelTicket' ? 'Annulation du ticket'
               : 'Remise globale panier'
             }
             description={
               a.kind === 'remove' ? 'Indiquez la raison du retrait de l\'article du panier.'
+              : a.kind === 'cancelTicket' ? 'Indiquez le motif d\'annulation du ticket complet.'
               : 'Toute remise manuelle doit être justifiée.'
             }
             onClose={() => setJustifyAction(null)}
-            onConfirm={(reason) => {
+            onConfirm={async (reason) => {
               if (a.kind === 'remove') {
                 removeLine(a.key);
               } else if (a.kind === 'lineDiscount') {
@@ -917,7 +925,6 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
                   ? { ...l, discount_amount: a.amount, metadata: { ...l.metadata, manual_discount_reason: reason } }
                   : l));
               } else if (a.kind === 'cartDiscount') {
-                // Répartit la remise au prorata sur les lignes
                 const subtotal = lines.reduce((s, l) => s + round2(l.unit_price_ttc * l.quantity - l.discount_amount), 0);
                 if (subtotal > 0) {
                   const ratio = a.amount / subtotal;
@@ -930,6 +937,21 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
                     };
                   }));
                 }
+              } else if (a.kind === 'cancelTicket') {
+                // Détache le client puis vide tout localement.
+                // La vente brouillon côté serveur peut être laissée en l'état
+                // (jamais validée → aucun impact fiscal). On audit côté client par
+                // l'événement de remise locale + reset complet.
+                if (saleId) {
+                  await fetch(`/api/sales/${saleId}/customer`, {
+                    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ customer_id: null }),
+                  }).catch(() => undefined);
+                }
+                setLines([]); setSaleId(null); setCustomer(null);
+                setLoyalty({ enabled: false, balance_euros: 0, min_redeem: 0, used: 0 });
+                setCartComment('');
+                setView({ kind: 'categories' }); setSearch('');
               }
               setJustifyAction(null);
             }}
