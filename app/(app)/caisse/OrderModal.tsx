@@ -42,8 +42,10 @@ export default function OrderModal({
   const [addrZip, setAddrZip] = useState('');
   const [addrCity, setAddrCity] = useState('');
   const [notes, setNotes] = useState('');
+  const [paymentMode, setPaymentMode] = useState<'on_pickup' | 'payment_link'>('on_pickup');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [paymentLinkSent, setPaymentLinkSent] = useState<string | null>(null);
 
   async function submit() {
     if (!date || !time) { setError('Date et heure obligatoires.'); return; }
@@ -78,12 +80,36 @@ export default function OrderModal({
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    setSaving(false);
     if (!r.ok) {
+      setSaving(false);
       const j = await r.json().catch(() => ({}));
       setError(j.message ?? j.error ?? 'Erreur');
       return;
     }
+    const orderRes = await r.json();
+
+    // Si lien de paiement choisi → crée la session Stripe et l'envoie au client
+    if (paymentMode === 'payment_link') {
+      const linkRes = await fetch(`/api/orders/${orderRes.id}/payment-link`, {
+        method: 'POST',
+      });
+      if (!linkRes.ok) {
+        setSaving(false);
+        const j = await linkRes.json().catch(() => ({}));
+        setError(j.message ?? j.error ?? 'Stripe non configuré.');
+        return;
+      }
+      const j = await linkRes.json();
+      if (j.email_sent_to) {
+        setPaymentLinkSent(j.email_sent_to);
+      } else {
+        setPaymentLinkSent(j.url);
+      }
+      setSaving(false);
+      // On laisse la modale ouverte pour montrer la confirmation
+      return;
+    }
+    setSaving(false);
     onSaved();
   }
 
@@ -169,16 +195,71 @@ export default function OrderModal({
             <span className="text-sm text-ink-soft">{lines.length} article(s)</span>
             <span className="text-xl font-semibold">{formatEUR(totalTtc)}</span>
           </div>
+
+          {/* Mode de règlement (réservé aux commandes différées) */}
+          <Field label="Règlement">
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setPaymentMode('on_pickup')}
+                className={`rounded-xl border py-2.5 text-sm font-semibold ${
+                  paymentMode === 'on_pickup'
+                    ? 'accent-bar text-white border-transparent'
+                    : 'bg-white border-border text-ink'
+                }`}
+              >
+                À régler {type === 'pickup' ? 'au retrait' : 'à la livraison'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setPaymentMode('payment_link')}
+                className={`rounded-xl border py-2.5 text-sm font-semibold ${
+                  paymentMode === 'payment_link'
+                    ? 'accent-bar text-white border-transparent'
+                    : 'bg-white border-border text-ink'
+                }`}
+                disabled={!customer?.email}
+                title={!customer?.email ? 'Le client doit avoir un email enregistré.' : ''}
+              >
+                💳 Lien de paiement Stripe
+              </button>
+            </div>
+            {paymentMode === 'payment_link' && (
+              <p className="mt-2 text-xs text-ink-soft">
+                Un lien sécurisé Stripe sera envoyé à <strong>{customer?.email}</strong>.
+                Dès paiement, la commande passera en « payée » automatiquement.
+              </p>
+            )}
+            {paymentMode === 'payment_link' && !customer?.email && (
+              <p className="mt-2 text-xs text-danger">
+                ⚠ Aucun email sur la fiche client. Modifiez-la ou choisissez un autre mode.
+              </p>
+            )}
+          </Field>
         </div>
 
         {error && <div className="mt-3 rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
 
-        <div className="mt-4 flex justify-end gap-2">
-          <button onClick={onClose} className="btn-ghost">Annuler</button>
-          <button onClick={() => void submit()} disabled={saving} className="btn-primary">
-            {saving ? 'Création…' : 'Créer la commande'}
-          </button>
-        </div>
+        {paymentLinkSent && (
+          <div className="mt-3 rounded-xl bg-success/10 px-4 py-3 text-sm text-success">
+            ✓ Lien de paiement envoyé à <strong>{paymentLinkSent}</strong>.
+            <p className="mt-1 text-xs">
+              Vous serez notifié dès que le client aura payé.
+            </p>
+            <button onClick={onSaved} className="btn-primary mt-3 text-sm h-9">
+              Terminer
+            </button>
+          </div>
+        )}
+
+        {!paymentLinkSent && (
+          <div className="mt-4 flex justify-end gap-2">
+            <button onClick={onClose} className="btn-ghost">Annuler</button>
+            <button onClick={() => void submit()} disabled={saving} className="btn-primary">
+              {saving ? 'Création…' : 'Créer la commande'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
