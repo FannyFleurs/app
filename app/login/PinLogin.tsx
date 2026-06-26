@@ -33,9 +33,15 @@ export default function PinLogin() {
   const [bootstrapping, setBootstrapping] = useState(false);
   const [bootstrapResult, setBootstrapResult] = useState<{ email: string; pin: string } | null>(null);
 
+  const [migrationRequired, setMigrationRequired] = useState<string | null>(null);
+
   async function loadUsers() {
     const r = await fetch('/api/users/select');
-    if (r.ok) setUsers((await r.json()).users);
+    if (r.ok) {
+      const j = await r.json();
+      setUsers(j.users);
+      setMigrationRequired(j.migration_required ?? null);
+    }
   }
 
   useEffect(() => {
@@ -121,6 +127,21 @@ export default function PinLogin() {
             <div className="text-xs text-ink-soft">Sélectionnez votre profil</div>
           </div>
         </div>
+
+        {migrationRequired && (
+          <div className="card p-4 max-w-2xl mb-4 bg-warning/10 border-warning/30">
+            <div className="font-semibold text-warning">⚠ Migration manquante</div>
+            <p className="mt-1 text-sm text-ink-soft">
+              La connexion par PIN nécessite la migration <code className="text-xs bg-white px-1 rounded">{migrationRequired}</code>.
+              Lancez dans votre terminal :
+            </p>
+            <pre className="mt-2 text-xs bg-white border border-border rounded-lg px-3 py-2 overflow-auto">npm run db:migrate
+npm run user:test</pre>
+            <p className="mt-2 text-xs text-ink-soft">
+              Le premier ajoute la colonne PIN, le second attribue le PIN <strong>1234</strong> à vos utilisateurs existants.
+            </p>
+          </div>
+        )}
 
         {loading ? (
           <div className="text-sm text-ink-soft">Chargement…</div>
