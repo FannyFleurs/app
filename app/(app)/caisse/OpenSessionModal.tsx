@@ -1,12 +1,14 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { formatEUR } from '@/lib/services/money';
 
 export default function OpenSessionModal({
   storeId, registerId, onClose, onOpened,
 }: { storeId: string; registerId: string; onClose: () => void; onOpened: () => void }) {
-  const [openingFloat, setOpeningFloat] = useState(0);
+  const router = useRouter();
+  const [openingFloatStr, setOpeningFloatStr] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [suggestion, setSuggestion] = useState<{
@@ -15,29 +17,82 @@ export default function OpenSessionModal({
     fallback?: number;
   } | null>(null);
 
-  // Charge la suggestion serveur dès l'ouverture
   useEffect(() => {
     void (async () => {
       const r = await fetch(`/api/cash-sessions/suggest-float?register_id=${registerId}`);
       if (!r.ok) return;
       const j = await r.json();
       setSuggestion(j);
-      if (j.mode === 'fixed') setOpeningFloat(Number(j.amount ?? 0));
-      else if (j.mode === 'previous_close' && j.amount != null) setOpeningFloat(Number(j.amount));
+      // Pré-remplit uniquement si une valeur a été configurée
+      if (j.mode === 'fixed' && j.amount > 0) setOpeningFloatStr(String(j.amount));
+      else if (j.mode === 'previous_close' && j.amount != null) setOpeningFloatStr(String(j.amount));
+      // 'manual' → reste vide pour saisie libre
     })();
   }, [registerId]);
 
-  async function submit() {
-    setLoading(true); setError(null);
-    const res = await fetch('/api/cash-sessions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ store_id: storeId, register_id: registerId, opening_float: openingFloat }),
+  function press(key: string) {
+    setError(null);
+    setOpeningFloatStr((cur) => {
+      if (key === 'C') return '';
+      if (key === '⌫') return cur.slice(0, -1);
+      if (key === '.') {
+        if (cur.includes('.') || cur.length === 0) return cur || '0.';
+        return cur + '.';
+      }
+      // chiffres : le 0 initial est remplacé
+      if (cur === '0') return key;
+      return cur + key;
     });
+  }
+
+  // Clavier physique
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const target = e.target as HTMLElement;
+      if (target?.tagName === 'INPUT') return; // l'input gère lui-même
+      if (e.key >= '0' && e.key <= '9') { press(e.key); e.preventDefault(); }
+      else if (e.key === '.' || e.key === ',') { press('.'); e.preventDefault(); }
+      else if (e.key === 'Backspace') { press('⌫'); e.preventDefault(); }
+      else if (e.key === 'Escape') { onClose(); }
+      else if (e.key === 'Enter') { void submit(); }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openingFloatStr]);
+
+  async function submit() {
+    const openingFloat = Number(openingFloatStr || '0');
+    if (openingFloat < 0) { setError('Montant invalide'); return; }
+    setLoading(true); setError(null);
+    let res: Response;
+    try {
+      res = await fetch('/api/cash-sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ store_id: storeId, register_id: registerId, opening_float: openingFloat }),
+      });
+    } catch {
+      setLoading(false);
+      setError('Réseau indisponible');
+      return;
+    }
     setLoading(false);
-    if (!res.ok) { setError((await res.json()).error ?? 'Erreur'); return; }
+    if (res.status === 401) {
+      // Session expirée : on renvoie vers la page de connexion
+      router.push('/login');
+      router.refresh();
+      return;
+    }
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      setError(j.message ?? j.error ?? 'Erreur d\'ouverture');
+      return;
+    }
     onOpened();
   }
+
+  const value = openingFloatStr === '' ? 0 : Number(openingFloatStr);
 
   const suggestionLabel = (() => {
     if (!suggestion) return null;
@@ -50,15 +105,15 @@ export default function OpenSessionModal({
   })();
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-ink/30 backdrop-blur-sm p-4">
-      <div className="card max-w-md w-full p-6">
+    <div className="fixed inset-0 z-50 grid place-items-center bg-ink/30 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="card max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Ouverture caisse</h2>
           <button onClick={onClose} className="text-ink-soft hover:text-ink">✕</button>
         </div>
 
-        <p className="mt-2 text-sm text-ink-soft">
-          Bonjour ! Confirmez le fond de caisse présent dans le tiroir avant de démarrer la journée.
+        <p className="mt-1 text-sm text-ink-soft">
+          Confirmez le fond de caisse présent dans le tiroir avant de démarrer.
         </p>
 
         {suggestionLabel && (
@@ -67,24 +122,43 @@ export default function OpenSessionModal({
           </div>
         )}
 
-        <label className="block mt-4 text-sm font-medium text-ink-soft">Fond de caisse (€)</label>
-        <input
-          type="number" step="0.01" min={0}
-          className="input mt-1 text-2xl font-semibold"
-          value={openingFloat}
-          onChange={(e) => setOpeningFloat(Number(e.target.value))}
-          autoFocus
-        />
+        <div className="mt-4 rounded-2xl border border-border p-4 bg-gray-50">
+          <div className="text-xs uppercase tracking-wider text-ink-soft">Fond de caisse</div>
+          <div className="mt-1 flex items-baseline justify-between">
+            <span className="text-4xl font-semibold tabular-nums">
+              {openingFloatStr === '' ? '—' : formatEUR(value)}
+            </span>
+            <button onClick={() => setOpeningFloatStr('')} className="text-xs text-ink-soft hover:text-ink">
+              Effacer
+            </button>
+          </div>
+        </div>
+
+        {/* Pavé numérique */}
+        <div className="mt-3 grid grid-cols-3 gap-2">
+          {['7','8','9','4','5','6','1','2','3','.','0','⌫'].map((k) => (
+            <button
+              key={k}
+              onClick={() => press(k)}
+              className="h-12 rounded-xl border border-border bg-white text-xl font-medium hover:bg-gray-50 active:scale-95 transition"
+            >
+              {k}
+            </button>
+          ))}
+        </div>
 
         {error && <div className="mt-3 rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
 
-        <button disabled={loading} onClick={() => void submit()} className="btn-primary w-full mt-4 h-11">
-          {loading ? 'Ouverture…' : `Ouvrir la caisse avec ${formatEUR(openingFloat)}`}
+        <button
+          disabled={loading}
+          onClick={() => void submit()}
+          className="btn-primary w-full mt-4 h-12 text-base"
+        >
+          {loading ? 'Ouverture…' : `Ouvrir la caisse · ${formatEUR(value)}`}
         </button>
 
         <p className="mt-3 text-xs text-ink-soft">
-          Vous pouvez changer le mode d&apos;ouverture (manuel / montant fixe / solde de la veille) dans
-          les Paramètres caisse.
+          Mode d&apos;ouverture (manuel / fixe / solde de la veille) configurable dans les paramètres.
         </p>
       </div>
     </div>

@@ -523,21 +523,23 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
   }
 
   if (!sessionId) {
+    const currentStore = stores.find((s) => s.id === storeId) ?? stores[0];
     return (
       <>
-        <div className="p-8">
-          <div className="card p-6 max-w-xl">
-            <h1 className="text-xl font-semibold">Ouvrir la caisse</h1>
-            <p className="mt-2 text-sm text-ink-soft">
-              Aucune session active. Ouvrez la caisse en saisissant le fond.
-            </p>
-            <div className="mt-4 flex items-center gap-2">
-              <label className="text-sm text-ink-soft">Boutique :</label>
-              <select className="input max-w-xs" value={storeId} onChange={(e) => setStoreId(e.target.value)}>
-                {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
+        <div className="h-[calc(100vh-56px)] grid place-items-center px-4">
+          <div className="card p-8 max-w-md w-full text-center">
+            <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl accent-bar text-white text-2xl">
+              ◆
             </div>
-            <button className="btn-primary mt-4" onClick={() => setShowOpenSession(true)}>
+            <h1 className="text-2xl font-semibold tracking-tight">Caisse fermée</h1>
+            <p className="mt-2 text-sm text-ink-soft">
+              {currentStore?.name ? `${currentStore.name} — ` : ''}
+              Ouvrez la caisse pour commencer la journée.
+            </p>
+            <button
+              className="btn-primary mt-6 w-full h-12 text-base"
+              onClick={() => setShowOpenSession(true)}
+            >
               Ouvrir la caisse
             </button>
           </div>
