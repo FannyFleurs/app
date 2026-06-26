@@ -20,6 +20,7 @@ const patchSchema = z.object({
   price_is_free: z.boolean().optional(),
   track_stock: z.boolean().optional(),
   is_seasonal: z.boolean().optional(),
+  is_top_product: z.boolean().optional(),
   is_customizable: z.boolean().optional(),
   visible_in_pos: z.boolean().optional(),
   is_active: z.boolean().optional(),

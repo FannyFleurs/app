@@ -10,6 +10,7 @@ interface Product {
   tax_rate_id: string; category_id: string | null;
   visible_in_pos: boolean; is_active: boolean;
   is_seasonal: boolean; is_customizable: boolean;
+  is_top_product?: boolean;
 }
 
 export default function ProductFormModal({
@@ -44,6 +45,7 @@ export default function ProductFormModal({
     is_active: product?.is_active ?? true,
     is_seasonal: product?.is_seasonal ?? false,
     is_customizable: product?.is_customizable ?? false,
+    is_top_product: product?.is_top_product ?? false,
     price_change_reason: '',
   });
   const [error, setError] = useState<string | null>(null);
@@ -64,6 +66,7 @@ export default function ProductFormModal({
       is_active: form.is_active,
       is_seasonal: form.is_seasonal,
       is_customizable: form.is_customizable,
+      is_top_product: form.is_top_product,
     };
     if (product && form.price_change_reason) payload.price_change_reason = form.price_change_reason;
     const res = product
@@ -121,41 +124,57 @@ export default function ProductFormModal({
               </button>
             </div>
           </Field>
-          <Field label="Catégorie">
-            <select className="input" value={form.category_id ?? ''}
-                    onChange={(e) => setForm({ ...form, category_id: e.target.value })}>
-              <option value="">— Aucune —</option>
+          <Field label="Catégorie" full>
+            <select
+              className="input h-11 text-base"
+              value={form.category_id ?? ''}
+              onChange={(e) => setForm({ ...form, category_id: e.target.value })}
+            >
+              <option value="">— Aucune catégorie —</option>
               {liveCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </Field>
           <Field label="Taux TVA">
-            <select className="input" value={form.tax_rate_id}
-                    onChange={(e) => setForm({ ...form, tax_rate_id: e.target.value })}>
-              {taxRates.map((t) => <option key={t.id} value={t.id}>{t.code} — {t.rate}%</option>)}
+            <select
+              className="input h-11 text-base"
+              value={form.tax_rate_id}
+              onChange={(e) => setForm({ ...form, tax_rate_id: e.target.value })}
+            >
+              {taxRates.map((t) => (
+                <option key={t.id} value={t.id}>{t.rate}%</option>
+              ))}
             </select>
           </Field>
           <Field label="Prix TTC (€)">
             <input
               type="number" step="0.01" min={0}
-              className="input"
+              className="input h-11 text-base"
               value={form.sale_price_ttc}
               onChange={(e) => setForm({ ...form, sale_price_ttc: Number(e.target.value) })}
               disabled={form.price_is_free}
             />
           </Field>
-          <Field label="Options">
-            <div className="space-y-1 mt-2">
+          <Field label="Options" full>
+            <div className="grid grid-cols-2 gap-y-1.5 gap-x-4 mt-2">
               <Check label="Prix libre (bouquet)" checked={form.price_is_free}
                      onChange={(v) => setForm({ ...form, price_is_free: v, sale_price_ttc: v ? 0 : form.sale_price_ttc })} />
+              <Check label="Top produit (épinglé en grille)" checked={form.is_top_product}
+                     onChange={(v) => setForm({ ...form, is_top_product: v })} />
               <Check label="Visible en caisse" checked={form.visible_in_pos}
                      onChange={(v) => setForm({ ...form, visible_in_pos: v })} />
-              <Check label="Actif" checked={form.is_active}
-                     onChange={(v) => setForm({ ...form, is_active: v })} />
               <Check label="Saisonnier" checked={form.is_seasonal}
                      onChange={(v) => setForm({ ...form, is_seasonal: v })} />
+              <Check label="Actif" checked={form.is_active}
+                     onChange={(v) => setForm({ ...form, is_active: v })} />
               <Check label="Personnalisable" checked={form.is_customizable}
                      onChange={(v) => setForm({ ...form, is_customizable: v })} />
             </div>
+            {form.is_top_product && (
+              <p className="mt-2 text-xs text-ink-soft">
+                Les produits Top sont affichés en première ligne de la grille catégories
+                (4 maximum). Au-delà, seuls les 4 premiers sont retenus.
+              </p>
+            )}
           </Field>
           {product && (
             <Field label="Raison du changement de prix" full>

@@ -26,6 +26,7 @@ const productSchema = z.object({
   is_customizable: z.boolean().default(false),
   visible_in_pos: z.boolean().default(true),
   is_active: z.boolean().default(true),
+  is_top_product: z.boolean().default(false),
   tags: z.array(z.string()).default([]),
 });
 
@@ -50,6 +51,7 @@ export async function GET(req: Request) {
   const { rows } = await query(
     `SELECT p.id, p.name, p.short_description, p.sku, p.barcode, p.image_url, p.unit,
             p.sale_price_ttc, p.price_is_free, p.category_id, p.visible_in_pos, p.is_active,
+            COALESCE(p.is_top_product, FALSE) AS is_top_product,
             p.tags, p.is_seasonal, p.is_customizable,
             t.rate AS tax_rate, t.id AS tax_rate_id, t.code AS tax_rate_code, t.label AS tax_rate_label,
             c.name AS category_name, c.color AS category_color
@@ -84,16 +86,16 @@ export async function POST(req: Request) {
         (organization_id, name, short_description, long_description, category_id,
          sku, barcode, supplier_ref, image_url, unit, tax_rate_id, purchase_price_ht,
          sale_price_ttc, price_is_free, track_stock, min_stock, max_stock,
-         is_seasonal, is_customizable, visible_in_pos, is_active, tags,
+         is_seasonal, is_customizable, visible_in_pos, is_active, is_top_product, tags,
          created_by, updated_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$23)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$24)
        RETURNING id`,
       [
         g.user.organizationId, p.name, p.short_description ?? null, p.long_description ?? null,
         p.category_id ?? null, p.sku ?? null, p.barcode ?? null, p.supplier_ref ?? null,
         p.image_url ?? null, p.unit, p.tax_rate_id, p.purchase_price_ht ?? null,
         p.sale_price_ttc, p.price_is_free, p.track_stock, p.min_stock ?? null, p.max_stock ?? null,
-        p.is_seasonal, p.is_customizable, p.visible_in_pos, p.is_active, p.tags,
+        p.is_seasonal, p.is_customizable, p.visible_in_pos, p.is_active, p.is_top_product, p.tags,
         g.user.id,
       ],
     );

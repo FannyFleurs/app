@@ -6,17 +6,15 @@ import { formatEUR } from '@/lib/services/money';
 interface Props {
   cartTotal: number;
   currentComment: string;
-  hasLines: boolean;
   onClose: () => void;
   onCartDiscount: (mode: 'percent' | 'amount', value: number) => void;
   onCommentSave: (comment: string) => void;
-  onCancelTicket: () => void;
 }
 
 export default function CartActionsModal({
-  cartTotal, currentComment, hasLines, onClose, onCartDiscount, onCommentSave, onCancelTicket,
+  cartTotal, currentComment, onClose, onCartDiscount, onCommentSave,
 }: Props) {
-  const [tab, setTab] = useState<'discount' | 'comment' | 'cancel'>('discount');
+  const [tab, setTab] = useState<'discount' | 'comment'>('discount');
   const [mode, setMode] = useState<'percent' | 'amount'>('percent');
   const [percent, setPercent] = useState<number>(0);
   const [amount, setAmount] = useState<number>(0);
@@ -47,14 +45,6 @@ export default function CartActionsModal({
                   }`}>
             Commentaire
           </button>
-          {hasLines && (
-            <button onClick={() => setTab('cancel')}
-                    className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px ${
-                      tab === 'cancel' ? 'border-danger text-danger' : 'border-transparent text-ink-soft'
-                    }`}>
-              Annuler ticket
-            </button>
-          )}
         </div>
 
         {tab === 'discount' ? (
@@ -124,25 +114,6 @@ export default function CartActionsModal({
               Enregistrer le commentaire
             </button>
           </>
-        )}
-
-        {tab === 'cancel' && (
-          <div>
-            <div className="rounded-xl bg-danger/10 p-4">
-              <div className="font-semibold text-danger">Annuler le ticket en cours</div>
-              <p className="mt-1 text-sm text-ink-soft">
-                Le panier sera vidé, le client détaché et le panier serveur supprimé.
-                Une justification sera demandée. Aucune écriture fiscale n&apos;est créée
-                (la vente n&apos;a pas encore été validée).
-              </p>
-            </div>
-            <button
-              onClick={onCancelTicket}
-              className="btn w-full mt-4 h-11 bg-danger text-white hover:opacity-90"
-            >
-              ⊘ Annuler le ticket
-            </button>
-          </div>
         )}
       </div>
     </div>

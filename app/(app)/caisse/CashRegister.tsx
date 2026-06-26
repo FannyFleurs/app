@@ -29,6 +29,7 @@ export interface PosProduct {
   image_url: string | null;
   short_description: string | null;
   is_customizable: boolean;
+  is_top_product: boolean;
   tags: string[];
 }
 
@@ -102,7 +103,6 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
     | { kind: 'remove'; key: string }
     | { kind: 'lineDiscount'; key: string; amount: number }
     | { kind: 'cartDiscount'; amount: number; mode: 'percent' | 'amount' }
-    | { kind: 'cancelTicket' }
     | null
   >(null);
   const [cartComment, setCartComment] = useState('');
@@ -246,6 +246,12 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
     } finally { setSavingLines(false); }
   }
 
+  // Top produits épinglés (max 4) affichés sur la première ligne de la grille catégories
+  const topProducts = useMemo(
+    () => products.filter((p) => p.is_top_product).slice(0, 4),
+    [products],
+  );
+
   // Catégories effectivement présentes (au moins 1 produit) + bucket "sans catégorie"
   const categoriesWithCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -386,6 +392,24 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
   }
   function setLineDiscount(key: string, amount: number) {
     setLines((cur) => cur.map((l) => l.key === key ? { ...l, discount_amount: Math.max(0, amount) } : l));
+  }
+
+  async function cancelTicket() {
+    // Suppression directe (sans justification) du panier en cours.
+    // - Si une vente brouillon existe côté serveur, on la supprime via /api/sales/[id]/cancel
+    //   pour qu'elle n'apparaisse plus dans les paniers en attente.
+    // - Reset complet du state local.
+    if (saleId) {
+      await fetch(`/api/sales/${saleId}/cancel`, { method: 'POST' }).catch(() => undefined);
+    }
+    setLines([]);
+    setSaleId(null);
+    setCustomer(null);
+    setLoyalty({ enabled: false, balance_euros: 0, min_redeem: 0, used: 0 });
+    setCartComment('');
+    setView({ kind: 'categories' });
+    setSearch('');
+    void refreshHeldCount();
   }
 
   async function holdSale() {
@@ -589,9 +613,6 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
             }}
           />
           <div className="flex-1" />
-          <button className="btn-soft" onClick={() => setShowFreePrice({})} title="F2">
-            ✿ Bouquet prix libre
-          </button>
           <button className="btn-ghost" onClick={() => setShowHeld(true)} title="F4">
             Panier en attente
             {heldCount > 0 && (
@@ -654,12 +675,16 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
               ))}
             </div>
           ) : (
-            // VUE CATÉGORIES
+            // VUE CATÉGORIES (avec top produits en première ligne, 4 max)
             <CategoryGrid
               categories={categoriesWithCounts.cats}
               uncategorizedCount={categoriesWithCounts.uncategorized}
+              topProducts={topProducts}
               onPick={(id) => setView({ kind: 'products', categoryId: id })}
+              onPickProduct={(p) => addProduct(p)}
               metrics={metrics}
+              showImage={posUi.show_product_image}
+              showPrice={posUi.show_price}
             />
           )}
         </div>
@@ -700,6 +725,14 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
               className="btn-ghost text-xs"
             >
               Vider
+            </button>
+            <button
+              disabled={lines.length === 0 && !saleId}
+              onClick={() => void cancelTicket()}
+              className="btn-ghost text-xs text-danger hover:bg-danger/10"
+              title="Annuler ce ticket"
+            >
+              Annuler
             </button>
           </div>
         </div>
@@ -884,7 +917,6 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
         <CartActionsModal
           cartTotal={totals.ttc}
           currentComment={cartComment}
-          hasLines={lines.length > 0}
           onClose={() => setShowCartActions(false)}
           onCartDiscount={(mode, value) => {
             const computed = mode === 'percent'
@@ -895,10 +927,6 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
             setJustifyAction({ kind: 'cartDiscount', amount: computed, mode });
           }}
           onCommentSave={(c) => { setCartComment(c); setShowCartActions(false); }}
-          onCancelTicket={() => {
-            setShowCartActions(false);
-            setJustifyAction({ kind: 'cancelTicket' });
-          }}
         />
       )}
       {justifyAction && (() => {
@@ -908,16 +936,14 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
             title={
               a.kind === 'remove' ? 'Sortie d\'un produit'
               : a.kind === 'lineDiscount' ? 'Remise sur ligne'
-              : a.kind === 'cancelTicket' ? 'Annulation du ticket'
               : 'Remise globale panier'
             }
             description={
               a.kind === 'remove' ? 'Indiquez la raison du retrait de l\'article du panier.'
-              : a.kind === 'cancelTicket' ? 'Indiquez le motif d\'annulation du ticket complet.'
               : 'Toute remise manuelle doit être justifiée.'
             }
             onClose={() => setJustifyAction(null)}
-            onConfirm={async (reason) => {
+            onConfirm={(reason) => {
               if (a.kind === 'remove') {
                 removeLine(a.key);
               } else if (a.kind === 'lineDiscount') {
@@ -937,21 +963,6 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
                     };
                   }));
                 }
-              } else if (a.kind === 'cancelTicket') {
-                // Détache le client puis vide tout localement.
-                // La vente brouillon côté serveur peut être laissée en l'état
-                // (jamais validée → aucun impact fiscal). On audit côté client par
-                // l'événement de remise locale + reset complet.
-                if (saleId) {
-                  await fetch(`/api/sales/${saleId}/customer`, {
-                    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ customer_id: null }),
-                  }).catch(() => undefined);
-                }
-                setLines([]); setSaleId(null); setCustomer(null);
-                setLoyalty({ enabled: false, balance_euros: 0, min_redeem: 0, used: 0 });
-                setCartComment('');
-                setView({ kind: 'categories' }); setSearch('');
               }
               setJustifyAction(null);
             }}
@@ -963,14 +974,18 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
 }
 
 function CategoryGrid({
-  categories, uncategorizedCount, onPick, metrics,
+  categories, uncategorizedCount, topProducts, onPick, onPickProduct, metrics, showImage, showPrice,
 }: {
   categories: (Category & { count: number })[];
   uncategorizedCount: number;
+  topProducts: PosProduct[];
   onPick: (id: string | 'uncategorized') => void;
+  onPickProduct: (p: PosProduct) => void;
   metrics: ReturnType<typeof tileMetrics>;
+  showImage: boolean;
+  showPrice: boolean;
 }) {
-  if (categories.length === 0 && uncategorizedCount === 0) {
+  if (categories.length === 0 && uncategorizedCount === 0 && topProducts.length === 0) {
     return (
       <div className="text-center text-ink-soft mt-12">
         Aucun produit. Ajoutez-en dans <a className="underline" href="/products">Produits</a>.
@@ -979,6 +994,16 @@ function CategoryGrid({
   }
   return (
     <div className={`grid ${metrics.grid} ${metrics.gap}`}>
+      {topProducts.map((p) => (
+        <TopProductTile
+          key={`top-${p.id}`}
+          product={p}
+          onPick={() => onPickProduct(p)}
+          metrics={metrics}
+          showImage={showImage}
+          showPrice={showPrice}
+        />
+      ))}
       {categories.map((c) => (
         <CategoryTile key={c.id} category={c} onPick={() => onPick(c.id)} metrics={metrics} />
       ))}
@@ -990,6 +1015,45 @@ function CategoryGrid({
         />
       )}
     </div>
+  );
+}
+
+function TopProductTile({
+  product: p, onPick, metrics, showImage, showPrice,
+}: {
+  product: PosProduct;
+  onPick: () => void;
+  metrics: ReturnType<typeof tileMetrics>;
+  showImage: boolean;
+  showPrice: boolean;
+}) {
+  return (
+    <button
+      onClick={onPick}
+      className={`card ${metrics.padding} text-left hover:shadow-md hover:border-gray-300 transition-all active:scale-[0.98] aspect-[5/3] flex flex-col relative ring-2 ring-accent-deep/40`}
+      title="Top produit"
+    >
+      <span className="absolute top-2 right-2 chip bg-accent-deep text-white border-transparent text-[10px] px-1.5 py-0.5">
+        ★
+      </span>
+      {showImage && (
+        <div className="mb-2 h-14 w-full rounded-lg bg-gray-50 grid place-items-center text-ink-soft overflow-hidden">
+          {p.image_url
+            ? <img src={p.image_url} alt="" className="h-full w-full object-cover" />
+            : <span>✿</span>}
+        </div>
+      )}
+      <div className={`${metrics.titleFontSize} ${metrics.titleMinHeight} font-medium line-clamp-2 leading-tight`}>
+        {p.name}
+      </div>
+      {showPrice && (
+        <div className="mt-2 flex items-center justify-between gap-1">
+          <span className={`${metrics.priceFontSize} font-semibold`}>
+            {p.price_is_free ? 'libre' : formatEUR(p.sale_price_ttc)}
+          </span>
+        </div>
+      )}
+    </button>
   );
 }
 
