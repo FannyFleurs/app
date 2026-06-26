@@ -17,6 +17,7 @@ export default async function SettingsLayout({ children }: { children: React.Rea
     { href: '/settings/access',           label: 'Gestion d\'accès',      icon: 'users' as const,        perm: 'settings.write' as const },
     { href: '/settings/users',            label: 'Gestion utilisateurs',  icon: 'users' as const,        perm: 'users.read' as const },
     { href: '/settings/company',          label: 'Société & boutiques',   icon: 'settings' as const,     perm: 'settings.read' as const },
+    { href: '/settings/subscription',     label: 'Abonnement',            icon: 'invoices' as const,     perm: 'settings.read' as const },
     { href: '/settings/exports',          label: 'Exports comptables',    icon: 'exports' as const,      perm: 'fiscal.export' as const },
     { href: '/settings/fiscal',           label: 'Conformité fiscale',    icon: 'fiscal' as const,       perm: 'fiscal.audit' as const },
   ].filter((i) => !i.perm || hasPermission(user.role, i.perm));

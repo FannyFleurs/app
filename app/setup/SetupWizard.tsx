@@ -48,8 +48,6 @@ const DEFAULT_TAXES: TaxRow[] = [
 export default function SetupWizard() {
   const router = useRouter();
   const [step, setStep] = useState<typeof STEPS[number]['key']>('company');
-  const [checking, setChecking] = useState(true);
-  const [setupDone, setSetupDone] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<{ email: string } | null>(null);
@@ -74,17 +72,7 @@ export default function SetupWizard() {
     admin_pin: '',
   });
 
-  useEffect(() => {
-    void (async () => {
-      try {
-        const r = await fetch('/api/auth/setup');
-        const j = await r.json();
-        setSetupDone(!!j.setup_done);
-      } finally {
-        setChecking(false);
-      }
-    })();
-  }, []);
+  // Mode multi-tenant : pas de check global, on autorise toujours la création.
 
   function patch<K extends keyof FormState>(k: K, v: FormState[K]) {
     setF((s) => ({ ...s, [k]: v }));
@@ -170,46 +158,25 @@ export default function SetupWizard() {
     setSuccess({ email: j.email });
   }
 
-  if (checking) {
-    return <main className="h-screen grid place-items-center bg-white">
-      <div className="text-sm text-ink-soft">Vérification…</div>
-    </main>;
-  }
-
-  if (setupDone && !success) {
-    return (
-      <main className="h-screen grid place-items-center bg-white p-6">
-        <div className="card max-w-md w-full p-6 text-center">
-          <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-warning/10 text-warning text-xl">⚠</div>
-          <h1 className="text-xl font-semibold">Système déjà configuré</h1>
-          <p className="mt-2 text-sm text-ink-soft">
-            Une organisation existe déjà. Pour recommencer un setup, contactez
-            votre administrateur.
-          </p>
-          <button onClick={() => router.push('/login')} className="btn-primary mt-4 w-full">
-            Aller à la connexion
-          </button>
-        </div>
-      </main>
-    );
-  }
-
   if (success) {
     return (
       <main className="h-screen grid place-items-center bg-white p-6">
         <div className="card max-w-md w-full p-6 text-center">
           <div className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-success/10 text-success text-2xl">✓</div>
-          <h1 className="text-2xl font-semibold">Florea POS est prêt</h1>
+          <h1 className="text-2xl font-semibold">Bienvenue sur Florea POS !</h1>
           <p className="mt-2 text-sm text-ink-soft">
-            Votre compte administrateur a été créé. Vous pouvez maintenant vous
-            connecter avec votre PIN.
+            Votre boutique est créée et vous êtes déjà connecté. 14 jours
+            d&apos;essai gratuit pour tester la solution.
           </p>
           <div className="mt-4 rounded-xl bg-gray-50 px-4 py-3 text-sm">
             <div className="text-ink-soft text-xs">Email administrateur</div>
             <div className="font-medium">{success.email}</div>
           </div>
-          <button onClick={() => router.push('/login')} className="btn-primary mt-4 w-full">
-            Accéder à la caisse
+          <button onClick={() => router.push('/caisse')} className="btn-primary mt-4 w-full">
+            Accéder à ma caisse
+          </button>
+          <button onClick={() => router.push('/settings/company')} className="btn-ghost mt-2 w-full text-sm">
+            Configurer mon profil
           </button>
         </div>
       </main>

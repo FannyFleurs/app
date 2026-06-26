@@ -4,6 +4,7 @@ import { cookies, headers } from 'next/headers';
 import { query } from '@/lib/db/client';
 import { verifyPassword } from '@/lib/auth/password';
 import { createSession, SESSION_COOKIE, sessionCookieOptions } from '@/lib/auth/session';
+import { setTenantCookie } from '@/lib/auth/tenant';
 import { audit } from '@/lib/audit/log';
 import { parseJson, jsonError } from '@/lib/validation/api';
 
@@ -105,6 +106,9 @@ async function handleLogin(req: Request) {
     ...sessionCookieOptions(),
     value: token,
   });
+  // Cookie tenant : permet à l'écran PIN-login de pré-sélectionner ce
+  // tenant pour les futures connexions sur ce poste.
+  setTenantCookie(user.organization_id);
 
   await audit({
     organizationId: user.organization_id, userId: user.id, action: 'auth.login.ok',

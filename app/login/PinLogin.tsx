@@ -45,6 +45,7 @@ export default function PinLogin() {
   const [migrationRequired, setMigrationRequired] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [showAdminLogin, setShowAdminLogin] = useState(false);
+  const [tenantRequired, setTenantRequired] = useState(false);
 
   async function loadUsers() {
     const r = await fetch('/api/users/select');
@@ -52,6 +53,7 @@ export default function PinLogin() {
       const j = await r.json();
       setUsers(j.users);
       setMigrationRequired(j.migration_required ?? null);
+      setTenantRequired(!!j.tenant_required);
     }
   }
 
@@ -166,7 +168,14 @@ export default function PinLogin() {
             <div className="text-center text-sm text-ink-soft py-6">Chargement…</div>
           ) : filtered.length === 0 ? (
             <div className="text-center text-sm text-ink-soft py-6">
-              {users.length === 0 ? 'Aucun utilisateur configuré.' : 'Aucun résultat.'}
+              {tenantRequired
+                ? <>
+                    Aucune boutique sur ce poste.<br />
+                    <span className="text-xs">
+                      Connectez-vous avec votre email ou créez une boutique.
+                    </span>
+                  </>
+                : users.length === 0 ? 'Aucun utilisateur configuré.' : 'Aucun résultat.'}
             </div>
           ) : (
             filtered.map((u) => {
@@ -219,39 +228,32 @@ export default function PinLogin() {
           )}
         </div>
 
-        {/* Bouton bas — Accès admin et autres */}
-        <div className="border-t border-border p-4 shrink-0 bg-white">
-          {users.length === 0 && !loading ? (
-            bootstrapResult ? (
-              <div className="rounded-xl bg-success/10 px-3 py-3 text-sm text-success text-center">
-                ✓ Compte créé : <strong>{bootstrapResult.email}</strong> · PIN : <strong>{bootstrapResult.pin}</strong>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <a href="/setup" className="btn-primary w-full h-12 text-base">
-                  Configuration guidée (Société, boutique, admin…)
-                </a>
-                <button onClick={() => void bootstrap()} disabled={bootstrapping}
-                        className="btn-ghost w-full h-10 text-sm">
-                  {bootstrapping ? 'Création…' : 'Ou créer un compte démo (admin@florea.test / 1234)'}
-                </button>
-              </div>
-            )
-          ) : (
-            <button
-              onClick={() => setShowAdminLogin(true)}
-              className="btn-primary w-full h-12 text-base"
-            >
-              <span className="inline-flex items-center gap-2">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                     strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <circle cx="9" cy="7" r="4" />
-                  <path d="M16 11l2 2 4-4" />
-                  <path d="M2 21v-1a7 7 0 0 1 14 0v1" />
-                </svg>
-                Accès admin et autres
-              </span>
-            </button>
+        {/* Bouton bas — Accès / Inscription */}
+        <div className="border-t border-border p-4 shrink-0 bg-white space-y-2">
+          <button
+            onClick={() => setShowAdminLogin(true)}
+            className="btn-primary w-full h-12 text-base"
+          >
+            <span className="inline-flex items-center gap-2">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="9" cy="7" r="4" />
+                <path d="M16 11l2 2 4-4" />
+                <path d="M2 21v-1a7 7 0 0 1 14 0v1" />
+              </svg>
+              {tenantRequired ? 'Me connecter (email)' : 'Accès admin et autres'}
+            </span>
+          </button>
+          <a
+            href="/setup"
+            className="btn-ghost w-full h-10 text-sm text-center inline-flex items-center justify-center"
+          >
+            + Créer ma boutique (essai 14 jours)
+          </a>
+          {bootstrapResult && (
+            <div className="rounded-xl bg-success/10 px-3 py-2 text-xs text-success text-center">
+              ✓ Démo créée : <strong>{bootstrapResult.email}</strong> · PIN <strong>{bootstrapResult.pin}</strong>
+            </div>
           )}
         </div>
       </aside>
