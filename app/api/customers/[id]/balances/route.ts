@@ -29,7 +29,11 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
         AND (expires_at IS NULL OR expires_at > now())
       ORDER BY issued_at DESC`,
     [g.user.organizationId, params.id],
-  ).catch(() => ({ rows: [] as { id: string; code: string; balance: string }[] }));
+  ).catch((err) => {
+    // eslint-disable-next-line no-console
+    console.error('[customers.balances] gift_cards échoué :', err);
+    return { rows: [] as { id: string; code: string; balance: string }[] };
+  });
 
   const creditNotes = await query<{ id: string; number: string; remaining: string }>(
     `SELECT cn.id, cn.number,
