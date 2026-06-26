@@ -12,6 +12,7 @@ import LineDiscountModal from './LineDiscountModal';
 import JustificationModal from './JustificationModal';
 import CartActionsModal from './CartActionsModal';
 import OrderModal from './OrderModal';
+import BarcodeScannerModal from './BarcodeScannerModal';
 import { tileMetrics, type PosUiSettings } from '@/lib/settings/pos-ui';
 
 export interface PosProduct {
@@ -112,6 +113,10 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
   const [showCartActions, setShowCartActions] = useState(false);
   const [showOrderModal, setShowOrderModal] = useState(false);
   const [heldCount, setHeldCount] = useState(0);
+  const [showScanner, setShowScanner] = useState(false);
+  // Panier slide-up en mode mobile : toujours fermé au load, ouvert via le
+  // bouton "Panier" fixé en bas de l'écran.
+  const [mobileCartOpen, setMobileCartOpen] = useState(false);
 
   // Largeur du panier ticket (redimensionnable, persistée en localStorage)
   const DEFAULT_TICKET_WIDTH = 360; // 300 * 1.2
@@ -471,6 +476,26 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
     setLines((cur) => cur.map((l) => l.key === key ? { ...l, discount_amount: Math.max(0, amount) } : l));
   }
 
+  /** Tente d'ajouter un produit à partir d'un code-barres ou SKU scanné. */
+  function addByCode(raw: string) {
+    const code = raw.trim();
+    if (!code) return;
+    const match = products.find(
+      (p) =>
+        p.barcode === code ||
+        p.barcode === code.toUpperCase() ||
+        p.sku === code ||
+        p.sku === code.toUpperCase(),
+    );
+    if (match) {
+      addProduct(match);
+      setShowScanner(false);
+    } else {
+      // Code inconnu : laisse la modale ouverte mais affiche dans la barre de recherche
+      setSearch(code);
+    }
+  }
+
   async function cancelTicket() {
     // Suppression directe (sans justification) du panier en cours.
     // - Si une vente brouillon existe côté serveur, on la supprime via /api/sales/[id]/cancel
@@ -542,6 +567,7 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
     setLoyalty({ enabled: false, balance_euros: 0, min_redeem: 0, used: 0 });
     setCustomerBalances({ gift_card_balance: 0, account_balance: 0, credit_notes_balance: 0 });
     setCartComment('');
+    setMobileCartOpen(false);
     // Retour à la vue catégories
     setView({ kind: 'categories' });
     setSearch('');
@@ -693,15 +719,15 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
 
   return (
     <div
-      className="grid h-full"
+      className="md:grid h-full flex flex-col"
       style={{ gridTemplateColumns: `1fr 6px ${ticketWidth}px` }}
     >
       {/* Gauche : catalogue */}
-      <div className="flex flex-col bg-white min-w-0">
-        <div className="flex items-center gap-3 px-5 py-3 border-b border-border bg-white">
+      <div className="flex flex-col bg-white min-w-0 flex-1 md:flex-none">
+        <div className="flex items-center gap-2 px-3 md:px-5 py-3 border-b border-border bg-white">
           <input
             ref={searchRef}
-            className="input max-w-[16rem]"
+            className="input flex-1 md:max-w-[16rem]"
             placeholder="Rechercher / scanner…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -712,9 +738,19 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
               }
             }}
           />
-          <div className="flex-1" />
-          <button className="btn-ghost" onClick={() => setShowHeld(true)} title="F4">
-            Panier en attente
+          <button
+            className="btn-ghost px-3"
+            onClick={() => setShowScanner(true)}
+            title="Scanner code-barres / QR"
+            aria-label="Scanner"
+          >
+            <span className="text-lg">📷</span>
+            <span className="hidden md:inline ml-1">Scanner</span>
+          </button>
+          <div className="hidden md:block flex-1" />
+          <button className="btn-ghost px-3" onClick={() => setShowHeld(true)} title="F4">
+            <span className="hidden md:inline">Panier en attente</span>
+            <span className="md:hidden">⏸</span>
             {heldCount > 0 && (
               <span className="ml-1.5 inline-flex items-center justify-center h-5 min-w-[1.25rem] px-1.5 rounded-full text-[11px] font-semibold accent-bar text-white">
                 {heldCount}
@@ -725,7 +761,7 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
 
         {/* Plus de fil d'Ariane — la grille des produits a son bouton "Retour" en première tuile */}
 
-        <div className="flex-1 overflow-auto p-5 bg-white">
+        <div className="flex-1 overflow-auto p-3 md:p-5 bg-white pb-24 md:pb-5">
           {showingProducts ? (
             <div className={`grid ${metrics.grid} ${metrics.gap}`}>
               {/* Bouton retour TOUJOURS en première position en vue produits, hors recherche */}
@@ -785,24 +821,63 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
         </div>
       </div>
 
-      {/* Splitter pour redimensionner le ticket */}
+      {/* Splitter pour redimensionner le ticket (desktop uniquement) */}
       <div
         onMouseDown={() => { dragging.current = true; document.body.style.cursor = 'col-resize'; }}
         onDoubleClick={() => { setTicketWidth(DEFAULT_TICKET_WIDTH); localStorage.setItem('florea_ticket_width', String(DEFAULT_TICKET_WIDTH)); }}
-        className="cursor-col-resize hover:bg-accent-soft transition-colors flex items-center justify-center group"
+        className="hidden md:flex cursor-col-resize hover:bg-accent-soft transition-colors items-center justify-center group"
         title="Glisser pour redimensionner · Double-clic pour reset"
       >
         <div className="w-0.5 h-12 bg-border group-hover:bg-accent-deep rounded-full" />
       </div>
 
-      {/* Droite : panier (toujours visible) */}
-      <aside className="flex flex-col bg-white border-l border-border min-w-0">
+      {/* Barre panier flottante en bas (mobile) — toujours visible quand des
+          articles sont au panier, sinon visible mais grisée. Au clic, ouvre
+          la feuille panier glissée du bas (mobileCartOpen). */}
+      <div className="md:hidden fixed bottom-0 inset-x-0 z-30 border-t border-border bg-white shadow-[0_-6px_18px_rgba(0,0,0,0.06)]"
+           style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+        <button
+          onClick={() => setMobileCartOpen(true)}
+          className="w-full flex items-center justify-between gap-3 px-4 py-3"
+        >
+          <span className="flex items-center gap-2 text-sm font-medium">
+            🛒 Panier
+            <span className="inline-flex items-center justify-center h-6 min-w-[1.5rem] px-2 rounded-full text-xs font-semibold accent-bar text-white">
+              {lines.length}
+            </span>
+          </span>
+          <span className="text-lg font-semibold">{formatEUR(totals.ttc)}</span>
+          <span className="rounded-xl accent-bar text-white px-4 py-2 text-sm font-semibold">
+            Voir
+          </span>
+        </button>
+      </div>
+
+      {/* Droite : panier. En desktop, colonne fixe à droite. En mobile,
+          feuille glissée du bas pleine hauteur. */}
+      <aside
+        className={`
+          flex flex-col bg-white min-w-0
+          md:border-l md:border-border md:static md:translate-y-0 md:visible md:opacity-100
+          fixed inset-0 z-40 transition-transform duration-300
+          ${mobileCartOpen ? 'translate-y-0' : 'translate-y-full md:translate-y-0'}
+        `}
+      >
         <div className="px-5 py-3 border-b border-border flex items-center justify-between gap-2">
-          <div>
-            <div className="text-xs uppercase tracking-wider text-ink-soft">Ticket en cours</div>
-            <div className="text-sm font-medium">
-              {lines.length} ligne(s){savingLines ? ' · sync…' : ''}
-              {cartComment && <span className="ml-1 text-xs text-ink-soft" title={cartComment}>· 💬</span>}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setMobileCartOpen(false)}
+              className="md:hidden -ml-2 px-2 py-1 text-ink-soft hover:text-ink"
+              aria-label="Fermer le panier"
+            >
+              ↓
+            </button>
+            <div>
+              <div className="text-xs uppercase tracking-wider text-ink-soft">Ticket en cours</div>
+              <div className="text-sm font-medium">
+                {lines.length} ligne(s){savingLines ? ' · sync…' : ''}
+                {cartComment && <span className="ml-1 text-xs text-ink-soft" title={cartComment}>· 💬</span>}
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-1">
@@ -1061,6 +1136,13 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
             setLines([]); setSaleId(null); setCustomer(null);
             setView({ kind: 'categories' });
           }}
+        />
+      )}
+
+      {showScanner && (
+        <BarcodeScannerModal
+          onClose={() => setShowScanner(false)}
+          onScan={addByCode}
         />
       )}
 

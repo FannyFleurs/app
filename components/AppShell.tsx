@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import TopBar from './TopBar';
 import AllPagesOverlay from './AllPagesOverlay';
 import WakeLockKeeper from './WakeLockKeeper';
+import PaidOrderNotifier from './PaidOrderNotifier';
 import type { Role } from '@/lib/auth/rbac';
 import type { PosThemeColor, ColorScheme, AutoLogoutMode } from '@/lib/settings/pos-ui';
 
@@ -113,6 +114,9 @@ export default function AppShell({
 
       {/* Maintient l'écran allumé tant que l'app est ouverte (iPad PWA) */}
       <WakeLockKeeper />
+
+      {/* Notifications temps réel : paiement Stripe validé */}
+      <PaidOrderNotifier />
     </div>
   );
 }
