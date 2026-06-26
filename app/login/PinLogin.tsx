@@ -11,7 +11,7 @@ interface User {
   pin_required?: boolean;
 }
 
-const APP_NAME = 'Webpos POS';
+const APP_NAME = 'Webpos';
 
 const ROLE_LABELS: Record<string, string> = {
   super_admin: 'Super Admin',

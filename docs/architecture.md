@@ -1,4 +1,4 @@
-# Architecture Webpos POS
+# Architecture Webpos
 
 ## Couches
 

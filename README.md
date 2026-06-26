@@ -1,4 +1,4 @@
-# Webpos POS
+# Webpos
 
 **Caisse SaaS moderne pour fleuristes, magasins de plantes et commerces végétaux.**
 Conçue *certification-ready* par rapport aux exigences françaises applicables aux

@@ -12,7 +12,7 @@ function makePool(): Pool {
     connectionString: url,
     max: 10,
     idleTimeoutMillis: 30_000,
-    application_name: 'webpos-pos',
+    application_name: 'webpos',
   });
 }
 

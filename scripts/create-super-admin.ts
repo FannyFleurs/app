@@ -5,7 +5,7 @@ import { randomBytes } from 'node:crypto';
 
 /**
  * Crée (ou promeut) un compte super_admin pour le gestionnaire de la
- * plateforme Webpos POS SaaS.
+ * plateforme Webpos SaaS.
  *
  * Le super_admin a un accès cross-tenant à la console /admin (liste des
  * organisations, abonnements, paiements, octroi de périodes offertes…).
@@ -113,7 +113,7 @@ async function main() {
 
     console.log(``);
     console.log(`╭───────────────────────────────────────────────────────╮`);
-    console.log(`│  ✓ Super admin Webpos POS créé                        │`);
+    console.log(`│  ✓ Super admin Webpos créé                        │`);
     console.log(`├───────────────────────────────────────────────────────┤`);
     console.log(`│  Email           : ${email.padEnd(35)}│`);
     console.log(`│  Mot de passe    : ${password.padEnd(35)}│`);

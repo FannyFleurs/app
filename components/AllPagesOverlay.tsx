@@ -37,7 +37,7 @@ export default function AllPagesOverlay({ role, hiddenPaths, onClose, onLogout }
       <div className="h-14 flex items-center px-4 shrink-0 border-b border-border bg-white">
         <div className="flex items-center gap-2.5">
           <span className="grid h-9 w-9 place-items-center rounded-xl accent-bar text-white font-semibold">F</span>
-          <span className="font-semibold tracking-tight text-ink">Webpos POS</span>
+          <span className="font-semibold tracking-tight text-ink">Webpos</span>
         </div>
         <div className="ml-auto flex items-center gap-2">
           <button onClick={onLogout} className="btn-ghost text-sm text-danger">

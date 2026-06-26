@@ -1,5 +1,5 @@
 -- =========================================================================
--- Webpos POS — migration initiale
+-- Webpos — migration initiale
 -- =========================================================================
 -- Conventions :
 --   * Toutes les tables ont id UUID PK

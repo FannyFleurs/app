@@ -3,7 +3,7 @@
 import { useEffect, useRef } from 'react';
 
 /**
- * Maintient l'écran allumé tant que l'app Webpos POS est active.
+ * Maintient l'écran allumé tant que l'app Webpos est active.
  *
  * Utilise l'API Screen Wake Lock (HTTPS requis, supportée Safari iOS 16.4+,
  * Chrome 84+). Si l'utilisateur change d'onglet ou met l'iPad en veille,

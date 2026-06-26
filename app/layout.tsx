@@ -3,14 +3,14 @@ import type { Metadata, Viewport } from 'next';
 import InstallPrompt from '@/components/InstallPrompt';
 
 export const metadata: Metadata = {
-  title: 'Webpos POS',
+  title: 'Webpos',
   description:
     'Caisse SaaS pour fleuristes — conforme by design aux exigences françaises de l\'article 286, I, 3°bis du CGI.',
-  applicationName: 'Webpos POS',
+  applicationName: 'Webpos',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
-    title: 'Webpos POS',
+    title: 'Webpos',
     statusBarStyle: 'black-translucent',
   },
   formatDetection: {
@@ -45,7 +45,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         {/* iOS PWA — barre de statut transparente, plein écran */}
         <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-title" content="Webpos POS" />
+        <meta name="apple-mobile-web-app-title" content="Webpos" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="mobile-web-app-capable" content="yes" />
         {/* Évite l'auto-zoom iOS sur les inputs (taille de police >= 16px) */}

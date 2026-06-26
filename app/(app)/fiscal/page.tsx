@@ -138,7 +138,7 @@ export default async function FiscalPage() {
       <section className="card p-5 bg-sage-soft/40">
         <h2 className="font-semibold">À noter</h2>
         <p className="mt-2 text-sm text-ink-soft">
-          Webpos POS est conçu <em>certification-ready</em> mais n&apos;est pas certifié par cette
+          Webpos est conçu <em>certification-ready</em> mais n&apos;est pas certifié par cette
           implémentation seule. Une attestation individuelle éditeur ou une démarche
           NF525 / LNE reste à effectuer par un organisme habilité. Le dossier technique
           détaillé est disponible dans <code className="bg-white px-1 rounded">docs/conformite.md</code>.
