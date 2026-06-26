@@ -30,6 +30,22 @@ const productSchema = z.object({
   tags: z.array(z.string()).default([]),
 });
 
+// Cache d'introspection : indique si la colonne products.is_top_product
+// existe (migration 0008 appliquée). Évite de planter si la migration n'a
+// pas encore tourné sur la base.
+let _hasTopColumn: boolean | null = null;
+async function hasTopColumn(): Promise<boolean> {
+  if (_hasTopColumn !== null) return _hasTopColumn;
+  const r = await query<{ exists: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'products' AND column_name = 'is_top_product'
+     ) AS exists`,
+  );
+  _hasTopColumn = !!r.rows[0]?.exists;
+  return _hasTopColumn;
+}
+
 export async function GET(req: Request) {
   const g = await requirePermission('products.read');
   if ('response' in g) return g.response;
@@ -48,10 +64,14 @@ export async function GET(req: Request) {
     where += ` AND (lower(p.name) LIKE $${params.length - 1} OR p.barcode = $${params.length} OR p.sku = $${params.length})`;
   }
 
+  const topCol = (await hasTopColumn())
+    ? `COALESCE(p.is_top_product, FALSE) AS is_top_product`
+    : `FALSE AS is_top_product`;
+
   const { rows } = await query(
     `SELECT p.id, p.name, p.short_description, p.sku, p.barcode, p.image_url, p.unit,
             p.sale_price_ttc, p.price_is_free, p.category_id, p.visible_in_pos, p.is_active,
-            COALESCE(p.is_top_product, FALSE) AS is_top_product,
+            ${topCol},
             p.tags, p.is_seasonal, p.is_customizable,
             t.rate AS tax_rate, t.id AS tax_rate_id, t.code AS tax_rate_code, t.label AS tax_rate_label,
             c.name AS category_name, c.color AS category_color
@@ -80,24 +100,43 @@ export async function POST(req: Request) {
   );
   if (tax.rowCount === 0) return jsonError('TAX_RATE_NOT_FOUND', 404);
 
+  const withTop = await hasTopColumn();
+
   try {
+    const cols = [
+      'organization_id', 'name', 'short_description', 'long_description', 'category_id',
+      'sku', 'barcode', 'supplier_ref', 'image_url', 'unit', 'tax_rate_id', 'purchase_price_ht',
+      'sale_price_ttc', 'price_is_free', 'track_stock', 'min_stock', 'max_stock',
+      'is_seasonal', 'is_customizable', 'visible_in_pos', 'is_active', 'tags',
+    ];
+    const values: unknown[] = [
+      g.user.organizationId, p.name, p.short_description ?? null, p.long_description ?? null,
+      p.category_id ?? null, p.sku ?? null, p.barcode ?? null, p.supplier_ref ?? null,
+      p.image_url ?? null, p.unit, p.tax_rate_id, p.purchase_price_ht ?? null,
+      p.sale_price_ttc, p.price_is_free, p.track_stock, p.min_stock ?? null, p.max_stock ?? null,
+      p.is_seasonal, p.is_customizable, p.visible_in_pos, p.is_active, p.tags,
+    ];
+    if (withTop) {
+      cols.push('is_top_product');
+      values.push(p.is_top_product);
+    }
+    // created_by + updated_by partagent la même valeur
+    cols.push('created_by', 'updated_by');
+    const userIdx = values.length + 1; // index $N de g.user.id
+    values.push(g.user.id);
+
+    const placeholders = cols
+      .map((c, i) => {
+        if (c === 'created_by' || c === 'updated_by') return `$${userIdx}`;
+        return `$${i + 1}`;
+      })
+      .join(',');
+
     const ins = await query<{ id: string }>(
-      `INSERT INTO products
-        (organization_id, name, short_description, long_description, category_id,
-         sku, barcode, supplier_ref, image_url, unit, tax_rate_id, purchase_price_ht,
-         sale_price_ttc, price_is_free, track_stock, min_stock, max_stock,
-         is_seasonal, is_customizable, visible_in_pos, is_active, is_top_product, tags,
-         created_by, updated_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$24)
+      `INSERT INTO products (${cols.join(', ')})
+       VALUES (${placeholders})
        RETURNING id`,
-      [
-        g.user.organizationId, p.name, p.short_description ?? null, p.long_description ?? null,
-        p.category_id ?? null, p.sku ?? null, p.barcode ?? null, p.supplier_ref ?? null,
-        p.image_url ?? null, p.unit, p.tax_rate_id, p.purchase_price_ht ?? null,
-        p.sale_price_ttc, p.price_is_free, p.track_stock, p.min_stock ?? null, p.max_stock ?? null,
-        p.is_seasonal, p.is_customizable, p.visible_in_pos, p.is_active, p.is_top_product, p.tags,
-        g.user.id,
-      ],
+      values,
     );
 
     await audit({

@@ -65,11 +65,25 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       );
     }
 
+    // Si la migration 0008 n'a pas été appliquée, ignore is_top_product
+    // silencieusement pour ne pas planter la mise à jour.
+    let hasTopCol = true;
+    if (patch.is_top_product != null) {
+      const colCheck = await client.query<{ exists: boolean }>(
+        `SELECT EXISTS (
+           SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'products' AND column_name = 'is_top_product'
+         ) AS exists`,
+      );
+      hasTopCol = !!colCheck.rows[0]?.exists;
+    }
+
     const setParts: string[] = ['updated_by = $1', 'updated_at = now()'];
     const values: unknown[] = [g.user.id];
     let i = 2;
     for (const [k, v] of Object.entries(patch)) {
       if (k === 'price_change_reason') continue;
+      if (k === 'is_top_product' && !hasTopCol) continue;
       setParts.push(`${k} = $${i++}`);
       values.push(v);
     }
