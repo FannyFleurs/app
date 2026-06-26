@@ -2,8 +2,6 @@
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
-  // Force la transpilation des libs ZXing (ESM) pour le bundler Next.
-  transpilePackages: ['@zxing/browser', '@zxing/library'],
   experimental: {
     serverActions: { bodySizeLimit: '2mb' },
     serverComponentsExternalPackages: ['pdfkit', 'fontkit', 'bwip-js'],
