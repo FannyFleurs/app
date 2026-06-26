@@ -23,6 +23,14 @@ export interface ZReportData {
     denomination_count?: Record<string, number>;
     bank_deposits?: number;
   };
+  margin?: {
+    revenue_ht: number;
+    cost_ht: number;
+    gross: number;
+    percent: number;
+    lines_with_cost: number;
+    total_lines: number;
+  };
 }
 
 export interface OrgInfoMinimal {
@@ -173,6 +181,27 @@ export async function renderZReportPdf(data: ZReportData, org: OrgInfoMinimal): 
         const total = Number(denom) * qty;
         const label = DENOMINATION_LABELS[denom] ?? `${denom} €`;
         kv(doc, `${label} × ${qty}`, formatEUR(total), { faded: true });
+      }
+    }
+
+    // Marge brute (si dispo)
+    if (data.margin && data.margin.lines_with_cost > 0) {
+      doc.moveDown(0.7);
+      drawHr(doc);
+      doc.moveDown(0.3);
+      doc.font('Helvetica-Bold').fontSize(11).text('Marge brute');
+      doc.moveDown(0.3);
+      doc.font('Helvetica').fontSize(10);
+      kv(doc, 'Chiffre d\'affaires HT (lignes avec coût)', formatEUR(data.margin.revenue_ht));
+      kv(doc, 'Coût d\'achat HT', formatEUR(data.margin.cost_ht));
+      doc.font('Helvetica-Bold');
+      kv(doc, 'Marge brute', `${formatEUR(data.margin.gross)} (${data.margin.percent.toFixed(1)}%)`);
+      doc.font('Helvetica');
+      if (data.margin.lines_with_cost < data.margin.total_lines) {
+        doc.moveDown(0.2);
+        doc.font('Helvetica-Oblique').fontSize(8).fillColor('#666')
+           .text(`Calcul sur ${data.margin.lines_with_cost}/${data.margin.total_lines} lignes — prix d'achat manquant pour le reste.`);
+        doc.fillColor('#000');
       }
     }
 

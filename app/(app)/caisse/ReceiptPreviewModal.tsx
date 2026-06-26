@@ -10,7 +10,7 @@ interface Props {
   onClose: () => void;
 }
 
-const AUTO_CLOSE_MS = 5000;
+const AUTO_CLOSE_MS = 60_000;
 
 export default function ReceiptPreviewModal({ receipt, onClose }: Props) {
   const pdfUrl = `/api/receipts/${receipt.id}/pdf`;
@@ -24,23 +24,24 @@ export default function ReceiptPreviewModal({ receipt, onClose }: Props) {
   const timerRef = useRef<number | null>(null);
   const [paused, setPaused] = useState(false);
 
-  // Auto-fermeture après 5s. Pause si on ouvre un sous-modal ou survol.
+  // Auto-fermeture après 60s. Pause si on ouvre un sous-modal, survol carte,
+  // ou facture en cours de génération.
   useEffect(() => {
-    if (paused || showEmailModal) return;
+    if (paused || showEmailModal || generating) return;
     const start = Date.now();
     timerRef.current = window.setInterval(() => {
       const elapsed = Date.now() - start;
       const left = AUTO_CLOSE_MS - elapsed;
       if (left <= 0) { onClose(); return; }
       setTimeLeft(left);
-    }, 100);
+    }, 250);
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [paused, showEmailModal, onClose]);
+  }, [paused, showEmailModal, generating, onClose]);
 
-  // Click hors carte → ferme
-  function onBackdropClick(e: React.MouseEvent) {
-    if (!cardRef.current) return;
-    if (!cardRef.current.contains(e.target as Node)) onClose();
+  // Le clic hors carte NE FERME PAS — l'utilisateur doit fermer explicitement
+  // (sinon, fermeture intempestive en cliquant à côté pour viser un bouton).
+  function onBackdropClick(_e: React.MouseEvent) {
+    // no-op : seul le bouton ✕ ou "Nouvelle vente" ferme la modale
   }
 
   async function generateInvoice() {

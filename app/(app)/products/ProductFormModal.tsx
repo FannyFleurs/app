@@ -7,6 +7,7 @@ interface Product {
   id: string; name: string; short_description: string | null;
   sku: string | null; barcode: string | null;
   sale_price_ttc: number; price_is_free: boolean;
+  purchase_price_ht?: number | null;
   tax_rate_id: string; category_id: string | null;
   visible_in_pos: boolean; is_active: boolean;
   is_seasonal: boolean; is_customizable: boolean;
@@ -38,6 +39,7 @@ export default function ProductFormModal({
     sku: product?.sku ?? '',
     barcode: product?.barcode ?? '',
     sale_price_ttc: product?.sale_price_ttc ?? 0,
+    purchase_price_ht: product?.purchase_price_ht ?? 0,
     price_is_free: product?.price_is_free ?? false,
     tax_rate_id: product?.tax_rate_id ?? (defaultTax?.id ?? ''),
     category_id: product?.category_id ?? '',
@@ -59,6 +61,7 @@ export default function ProductFormModal({
       sku: form.sku || null,
       barcode: form.barcode || null,
       sale_price_ttc: Number(form.sale_price_ttc),
+      purchase_price_ht: form.purchase_price_ht > 0 ? Number(form.purchase_price_ht) : null,
       price_is_free: form.price_is_free,
       tax_rate_id: form.tax_rate_id,
       category_id: form.category_id || null,
@@ -154,6 +157,38 @@ export default function ProductFormModal({
               disabled={form.price_is_free}
             />
           </Field>
+          <Field label="Prix d'achat HT (€)">
+            <input
+              type="number" step="0.01" min={0}
+              className="input h-11 text-base"
+              value={form.purchase_price_ht}
+              onChange={(e) => setForm({ ...form, purchase_price_ht: Number(e.target.value) })}
+              placeholder="0.00"
+            />
+          </Field>
+          <Field label="Marge calculée" full>
+            {(() => {
+              const purchase = Number(form.purchase_price_ht);
+              const sellTtc = Number(form.sale_price_ttc);
+              const taxRate = taxRates.find((t) => t.id === form.tax_rate_id)?.rate ?? 0;
+              const sellHt = sellTtc / (1 + taxRate / 100);
+              if (purchase <= 0 || sellHt <= 0) {
+                return <div className="text-sm text-ink-soft italic">
+                  Renseignez prix d&apos;achat HT + prix de vente TTC pour voir la marge.
+                </div>;
+              }
+              const margin = sellHt - purchase;
+              const marginPct = (margin / sellHt) * 100;
+              const coeff = sellHt / purchase;
+              return (
+                <div className="grid grid-cols-3 gap-3">
+                  <Stat label="Marge brute" value={`${margin.toFixed(2)} €`} tone={margin > 0 ? 'success' : 'danger'} />
+                  <Stat label="Taux de marge" value={`${marginPct.toFixed(1)} %`} tone={marginPct >= 50 ? 'success' : marginPct >= 30 ? 'warning' : 'danger'} />
+                  <Stat label="Coefficient" value={`× ${coeff.toFixed(2)}`} />
+                </div>
+              );
+            })()}
+          </Field>
           <Field label="Options" full>
             <div className="grid grid-cols-2 gap-y-1.5 gap-x-4 mt-2">
               <Check label="Prix libre (bouquet)" checked={form.price_is_free}
@@ -213,5 +248,17 @@ function Check({ label, checked, onChange }: { label: string; checked: boolean; 
       <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
       {label}
     </label>
+  );
+}
+function Stat({ label, value, tone }: { label: string; value: string; tone?: 'success' | 'warning' | 'danger' }) {
+  const cls = tone === 'success' ? 'text-success'
+    : tone === 'warning' ? 'text-warning'
+    : tone === 'danger' ? 'text-danger'
+    : 'text-ink';
+  return (
+    <div className="rounded-xl border border-border bg-gray-50 px-3 py-2">
+      <div className="text-[10px] uppercase tracking-widest text-ink-soft font-semibold">{label}</div>
+      <div className={`mt-0.5 text-base font-semibold ${cls}`}>{value}</div>
+    </div>
   );
 }

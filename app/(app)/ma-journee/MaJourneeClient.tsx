@@ -29,6 +29,7 @@ interface SaleDetail {
     unit_price_ttc: string; quantity: string;
     discount_amount: string; tax_rate: string;
     line_ht: string; line_tva: string; line_ttc: string;
+    product_purchase_price_ht?: string | null;
   }[];
   payments: { method: string; amount: string; reference: string | null }[];
   invoice: { id: string; number: string } | null;
@@ -40,6 +41,9 @@ export default function MaJourneeClient() {
   const today = new Date().toISOString().slice(0, 10);
   const [date, setDate] = useState(today);
   const [sales, setSales] = useState<Sale[]>([]);
+  const [cashSummary, setCashSummary] = useState<{
+    cash_sales: number; bank_deposits: number; expected_cash: number;
+  }>({ cash_sales: 0, bank_deposits: 0, expected_cash: 0 });
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<SaleDetail | null>(null);
@@ -53,7 +57,10 @@ export default function MaJourneeClient() {
     setDetail(null);
     fetch(`/api/sales/today?date=${date}`)
       .then((r) => r.json())
-      .then((j) => setSales(j.sales ?? []))
+      .then((j) => {
+        setSales(j.sales ?? []);
+        if (j.cash_summary) setCashSummary(j.cash_summary);
+      })
       .finally(() => setLoading(false));
   }, [date]);
 
@@ -163,6 +170,25 @@ export default function MaJourneeClient() {
               <KpiRow label="Remises" value={formatEUR(totals.discount)} tone="warning" />
             </>
           )}
+          {/* Trésorerie : ventes espèces / remise banque / espèces attendues */}
+          <div className="pt-2 border-t border-border space-y-2">
+            <div className="text-[10px] uppercase tracking-widest text-ink-soft font-semibold">
+              Trésorerie espèces
+            </div>
+            <KpiRow label="Ventes espèces" value={formatEUR(cashSummary.cash_sales)} />
+            {cashSummary.bank_deposits > 0 && (
+              <KpiRow
+                label="Remise en banque"
+                value={`-${formatEUR(cashSummary.bank_deposits)}`}
+                tone="warning"
+              />
+            )}
+            <KpiRow
+              label="Espèces attendues"
+              value={formatEUR(cashSummary.expected_cash)}
+              tone="accent"
+            />
+          </div>
         </div>
 
         <div className="flex-1" />
@@ -367,14 +393,18 @@ function InlineEmailModal({ invoiceNumber, busy, onClose, onSend }: {
   );
 }
 
-function KpiRow({ label, value, tone }: { label: string; value: string; tone?: 'warning' }) {
+function KpiRow({ label, value, tone }: {
+  label: string;
+  value: string;
+  tone?: 'warning' | 'accent';
+}) {
+  const cls = tone === 'warning' ? 'text-warning'
+    : tone === 'accent' ? 'text-accent-deep'
+    : '';
   return (
-    <div className="flex items-center justify-between py-2 border-b border-border/60 last:border-0">
-      <span className="inline-flex items-center gap-1.5 text-sm text-ink-soft">
-        <span className="text-ink-soft/60">?</span>
-        {label}
-      </span>
-      <span className={`text-base font-semibold ${tone === 'warning' ? 'text-warning' : ''}`}>{value}</span>
+    <div className="flex items-center justify-between py-1.5">
+      <span className="text-sm text-ink-soft">{label}</span>
+      <span className={`text-base font-semibold ${cls}`}>{value}</span>
     </div>
   );
 }
@@ -401,6 +431,23 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
       .filter(([, v]) => Math.abs(v) > 0.005)
       .map(([method, amount]) => ({ method, amount: Number(amount.toFixed(2)) }));
   }, [detail.payments]);
+
+  // Marge sur les lignes ayant un product_purchase_price_ht connu.
+  const marginInfo = useMemo(() => {
+    let costHt = 0, revenueHt = 0, withCost = 0, total = detail.lines.length;
+    for (const l of detail.lines) {
+      const purchase = Number(l.product_purchase_price_ht ?? 0);
+      if (purchase > 0) {
+        withCost += 1;
+        costHt += purchase * Number(l.quantity);
+        revenueHt += Number(l.line_ht);
+      }
+    }
+    if (withCost === 0) return null;
+    const margin = revenueHt - costHt;
+    const pct = revenueHt > 0 ? (margin / revenueHt) * 100 : 0;
+    return { margin, costHt, revenueHt, pct, withCost, total };
+  }, [detail.lines]);
 
   async function generateInvoice() {
     setGenerating(true); setError(null);
@@ -538,6 +585,25 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
               <span className="font-semibold">Total TTC</span>
               <span className="text-xl font-semibold">{formatEUR(Number(s.total_ttc))}</span>
             </div>
+            {marginInfo && (
+              <div className="pt-2 mt-2 border-t border-border space-y-1">
+                <div className="flex justify-between text-xs text-ink-soft">
+                  <span>Coût d&apos;achat</span><span>{formatEUR(marginInfo.costHt)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="font-medium">Marge brute</span>
+                  <span className={`font-semibold ${marginInfo.margin > 0 ? 'text-success' : 'text-danger'}`}>
+                    {formatEUR(marginInfo.margin)} ({marginInfo.pct.toFixed(1)}%)
+                  </span>
+                </div>
+                {marginInfo.withCost < marginInfo.total && (
+                  <div className="text-[11px] text-ink-soft italic">
+                    Marge calculée sur {marginInfo.withCost}/{marginInfo.total} ligne(s)
+                    (prix d&apos;achat manquant pour le reste).
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 

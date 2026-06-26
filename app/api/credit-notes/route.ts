@@ -19,12 +19,13 @@ export async function GET(req: Request) {
                    TRIM(CONCAT(c.first_name,' ',c.last_name)))) LIKE $${params.length})`;
   }
 
+  // Le bénéficiaire de l'avoir = client de la vente d'origine (ou de la facture).
   const { rows } = await query<{
     id: string; number: string;
     amount: string; used_amount: string;
     status: string;
     issued_at: string;
-    expires_at: string | null;
+    reason: string;
     sale_id: string | null;
     receipt_number: string | null;
     customer_id: string | null;
@@ -33,18 +34,19 @@ export async function GET(req: Request) {
     `SELECT cn.id, cn.number,
             cn.amount::text, cn.used_amount::text,
             cn.status,
-            cn.issued_at,
-            cn.expires_at,
+            cn.created_at AS issued_at,
+            cn.reason,
             cn.sale_id,
             s.receipt_number,
-            cn.beneficiary_id AS customer_id,
+            COALESCE(s.customer_id, i.customer_id) AS customer_id,
             COALESCE(c.company_name,
               NULLIF(TRIM(CONCAT(c.first_name,' ',c.last_name)), '')) AS customer_name
        FROM credit_notes cn
        LEFT JOIN sales s ON s.id = cn.sale_id
-       LEFT JOIN customers c ON c.id = cn.beneficiary_id
+       LEFT JOIN invoices i ON i.id = cn.invoice_id
+       LEFT JOIN customers c ON c.id = COALESCE(s.customer_id, i.customer_id)
       WHERE ${where}
-      ORDER BY cn.issued_at DESC
+      ORDER BY cn.created_at DESC
       LIMIT 200`,
     params,
   );

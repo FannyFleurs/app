@@ -16,6 +16,7 @@ const patchSchema = z.object({
   unit: z.string().max(20).optional(),
   tax_rate_id: z.string().uuid().optional(),
   sale_price_ttc: z.number().min(0).optional(),
+  purchase_price_ht: z.number().min(0).nullable().optional(),
   price_change_reason: z.string().max(200).optional(),
   price_is_free: z.boolean().optional(),
   track_stock: z.boolean().optional(),

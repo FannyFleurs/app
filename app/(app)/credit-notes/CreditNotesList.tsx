@@ -12,7 +12,7 @@ interface CreditNote {
   used_amount: string;
   status: string;
   issued_at: string;
-  expires_at: string | null;
+  reason: string;
   sale_id: string | null;
   receipt_number: string | null;
   customer_id: string | null;
@@ -20,10 +20,9 @@ interface CreditNote {
 }
 
 const STATUS_LABEL: Record<string, { label: string; tone: 'success' | 'warning' | 'danger' | 'neutral' | 'soft' }> = {
-  active:          { label: 'Disponible',     tone: 'success' },
+  open:            { label: 'Disponible',     tone: 'success' },
   partially_used:  { label: 'Partiel',        tone: 'soft' },
   used:            { label: 'Utilisé',        tone: 'neutral' },
-  expired:         { label: 'Expiré',         tone: 'warning' },
   cancelled:       { label: 'Annulé',         tone: 'danger' },
 };
 
@@ -31,7 +30,7 @@ export default function CreditNotesList() {
   const [items, setItems] = useState<CreditNote[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'used' | 'expired'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'used' | 'cancelled'>('all');
 
   useEffect(() => {
     setLoading(true);
@@ -46,8 +45,8 @@ export default function CreditNotesList() {
     return items.filter((c) => {
       if (statusFilter !== 'all') {
         if (statusFilter === 'used' && c.status !== 'used') return false;
-        if (statusFilter === 'expired' && c.status !== 'expired') return false;
-        if (statusFilter === 'active' && c.status !== 'active' && c.status !== 'partially_used') return false;
+        if (statusFilter === 'cancelled' && c.status !== 'cancelled') return false;
+        if (statusFilter === 'open' && c.status !== 'open' && c.status !== 'partially_used') return false;
       }
       if (!needle) return true;
       return (
@@ -62,7 +61,7 @@ export default function CreditNotesList() {
     let issued = 0, remaining = 0;
     for (const c of items) {
       issued += Number(c.amount);
-      if (c.status === 'active' || c.status === 'partially_used') {
+      if (c.status === 'open' || c.status === 'partially_used') {
         remaining += Number(c.amount) - Number(c.used_amount);
       }
     }
@@ -95,7 +94,7 @@ export default function CreditNotesList() {
           <span className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-soft">⌕</span>
         </div>
         <div className="flex gap-1 flex-wrap">
-          {(['all', 'active', 'used', 'expired'] as const).map((f) => (
+          {(['all', 'open', 'used', 'cancelled'] as const).map((f) => (
             <button
               key={f}
               onClick={() => setStatusFilter(f)}
@@ -103,7 +102,7 @@ export default function CreditNotesList() {
                 statusFilter === f ? 'accent-bar text-white border-transparent' : 'bg-white text-ink border-border hover:border-gray-300'
               }`}
             >
-              {f === 'all' ? 'Tous' : f === 'active' ? 'Disponibles' : f === 'used' ? 'Utilisés' : 'Expirés'}
+              {f === 'all' ? 'Tous' : f === 'open' ? 'Disponibles' : f === 'used' ? 'Utilisés' : 'Annulés'}
             </button>
           ))}
         </div>

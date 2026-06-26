@@ -70,7 +70,8 @@ export async function GET(req: Request) {
 
   const { rows } = await query(
     `SELECT p.id, p.name, p.short_description, p.sku, p.barcode, p.image_url, p.unit,
-            p.sale_price_ttc, p.price_is_free, p.category_id, p.visible_in_pos, p.is_active,
+            p.sale_price_ttc, p.purchase_price_ht, p.price_is_free,
+            p.category_id, p.visible_in_pos, p.is_active,
             ${topCol},
             p.tags, p.is_seasonal, p.is_customizable,
             t.rate AS tax_rate, t.id AS tax_rate_id, t.code AS tax_rate_code, t.label AS tax_rate_label,

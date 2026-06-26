@@ -11,8 +11,14 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     [params.id, g.user.organizationId],
   );
   if (sale.rowCount === 0) return jsonError('NOT_FOUND', 404);
+  // Marge calculée live à partir du purchase_price_ht courant du produit.
+  // (Pas figée à la vente : si le coût change, les marges historiques
+  // suivent. Acceptable V1 — sinon il faudrait snapshotter dans sale_lines.)
   const lines = await query(
-    `SELECT * FROM sale_lines WHERE sale_id = $1 ORDER BY line_index`,
+    `SELECT sl.*, p.purchase_price_ht::text AS product_purchase_price_ht
+       FROM sale_lines sl
+       LEFT JOIN products p ON p.id = sl.product_id
+      WHERE sl.sale_id = $1 ORDER BY sl.line_index`,
     [params.id],
   );
   const payments = await query(

@@ -66,6 +66,29 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   );
   const bankDeposits = Number(depositsRes.rows[0]?.total ?? 0);
 
+  // Marge brute du jour : Σ(line_ht) - Σ(quantity × purchase_price_ht)
+  // Calcul live à partir du purchase_price_ht courant (V1).
+  const marginRes = await query<{ revenue: string; cost: string; lines_with_cost: string; total_lines: string }>(
+    `SELECT
+        COALESCE(SUM(CASE WHEN p.purchase_price_ht IS NOT NULL AND p.purchase_price_ht > 0
+                          THEN sl.line_ht ELSE 0 END), 0)::text AS revenue,
+        COALESCE(SUM(CASE WHEN p.purchase_price_ht IS NOT NULL AND p.purchase_price_ht > 0
+                          THEN p.purchase_price_ht * sl.quantity ELSE 0 END), 0)::text AS cost,
+        COUNT(*) FILTER (WHERE p.purchase_price_ht IS NOT NULL AND p.purchase_price_ht > 0)::text AS lines_with_cost,
+        COUNT(*)::text AS total_lines
+       FROM sale_lines sl
+       JOIN sales s ON s.id = sl.sale_id
+       LEFT JOIN products p ON p.id = sl.product_id
+      WHERE s.organization_id = $1
+        AND s.status = 'validated'
+        AND s.validated_at::date = $2::date`,
+    [g.user.organizationId, c.business_date],
+  );
+  const revenueHt = Number(marginRes.rows[0]?.revenue ?? 0);
+  const costHt = Number(marginRes.rows[0]?.cost ?? 0);
+  const linesWithCost = Number(marginRes.rows[0]?.lines_with_cost ?? 0);
+  const totalLines = Number(marginRes.rows[0]?.total_lines ?? 0);
+
   const data: ZReportData = {
     business_date: c.business_date,
     store_name: c.store_name,
@@ -88,6 +111,14 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
       denomination_count: denom,
       bank_deposits: bankDeposits,
     },
+    margin: linesWithCost > 0 ? {
+      revenue_ht: revenueHt,
+      cost_ht: costHt,
+      gross: revenueHt - costHt,
+      percent: revenueHt > 0 ? ((revenueHt - costHt) / revenueHt) * 100 : 0,
+      lines_with_cost: linesWithCost,
+      total_lines: totalLines,
+    } : undefined,
   };
 
   const buf = await renderZReportPdf(data, {

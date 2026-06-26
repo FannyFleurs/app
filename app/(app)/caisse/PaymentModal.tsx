@@ -395,6 +395,27 @@ function ReferencePaymentModal({
       .map((c) => ({ ...c, balance: Number(c.balance) })));
   }
 
+  async function searchCreditNotes(q: string) {
+    if (kind !== 'credit_note' || q.length < 2) { setResults([]); return; }
+    const r = await fetch(`/api/credit-notes?q=${encodeURIComponent(q)}`);
+    if (!r.ok) return;
+    const j = await r.json();
+    setResults(
+      (j.credit_notes as Array<{
+        id: string; number: string; amount: string; used_amount: string;
+        status: string; customer_name: string | null;
+      }>)
+        .filter((c) => c.status === 'open' || c.status === 'partially_used')
+        .map((c) => ({
+          id: c.id,
+          code: c.number,
+          balance: Number(c.amount) - Number(c.used_amount),
+          buyer_name: c.customer_name,
+          buyer_phone: null,
+        })),
+    );
+  }
+
   return (
     <div className="fixed inset-0 z-[60] grid place-items-center bg-ink/40 p-4">
       <div className="card max-w-lg w-full p-5">
@@ -404,7 +425,7 @@ function ReferencePaymentModal({
         </div>
         <p className="text-xs text-ink-soft mt-1">
           {kind === 'credit_note'
-            ? "Saisissez le numéro d'avoir (ex : A-2026-000001)."
+            ? "Scannez le numéro d'avoir ou cherchez par numéro / client."
             : 'Scannez ou saisissez le code de la carte cadeau, ou recherchez par nom / téléphone.'}
         </p>
 
@@ -412,11 +433,12 @@ function ReferencePaymentModal({
           <input
             autoFocus
             className="input flex-1"
-            placeholder={kind === 'credit_note' ? 'A-2026-000001' : '29… ou nom / téléphone'}
+            placeholder={kind === 'credit_note' ? 'A-2026-… ou nom client' : '29… ou nom / téléphone'}
             value={search}
             onChange={(e) => {
               setSearch(e.target.value);
               if (kind === 'gift_card') void searchGiftCards(e.target.value);
+              else void searchCreditNotes(e.target.value);
             }}
             onKeyDown={(e) => { if (e.key === 'Enter') void lookup(search); }}
           />
