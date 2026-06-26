@@ -12,15 +12,25 @@ export interface TopBarUser {
   role: Role;
 }
 
+export interface TopBarSubscription {
+  plan: string;
+  status: string;
+  period_end: string | null;
+  cancel_at_period_end: boolean;
+}
+
 interface Props {
   user: TopBarUser;
   hiddenPaths: string[];
   headerTabs: string[];
+  subscription: TopBarSubscription | null;
   onOpenMenu: () => void;
   onLogout: () => void;
 }
 
-export default function TopBar({ user, hiddenPaths, headerTabs, onOpenMenu, onLogout }: Props) {
+export default function TopBar({
+  user, hiddenPaths, headerTabs, subscription, onOpenMenu, onLogout,
+}: Props) {
   const path = usePathname();
 
   // Liste effective des onglets : configuration utilisateur (max 10), filtrée
@@ -66,6 +76,11 @@ export default function TopBar({ user, hiddenPaths, headerTabs, onOpenMenu, onLo
         })}
       </nav>
 
+      {/* Pastille abonnement */}
+      {subscription && (
+        <SubscriptionChip subscription={subscription} />
+      )}
+
       {/* Hamburger */}
       <button
         onClick={onOpenMenu}
@@ -95,4 +110,41 @@ export default function TopBar({ user, hiddenPaths, headerTabs, onOpenMenu, onLo
       </button>
     </header>
   );
+}
+
+function SubscriptionChip({ subscription }: { subscription: TopBarSubscription }) {
+  const days = subscription.period_end
+    ? Math.ceil((new Date(subscription.period_end).getTime() - Date.now()) / 86_400_000)
+    : null;
+
+  const isTrial = subscription.plan === 'trial';
+  const expiringSoon = days !== null && days >= 0 && days <= 7;
+  const expired = days !== null && days < 0;
+
+  const tone =
+    expired ? { bg: 'bg-danger/10',  fg: 'text-danger',  bar: '#b42318' }
+    : expiringSoon ? { bg: 'bg-warning/10', fg: 'text-warning', bar: '#b7791f' }
+    : isTrial ? { bg: 'bg-warning/10', fg: 'text-warning', bar: '#b7791f' }
+    : { bg: 'bg-success/10', fg: 'text-success', bar: '#2f6b3f' };
+
+  const label = expired ? 'Abonnement expiré'
+    : isTrial ? `Essai · ${days ?? '—'}j`
+    : `${capitalize(subscription.plan)}${days !== null ? ` · ${days}j` : ''}`;
+
+  return (
+    <Link
+      href="/settings/subscription"
+      className={`hidden md:flex items-center gap-2 px-3 mx-2 my-2 rounded-xl border border-transparent ${tone.bg} ${tone.fg} hover:opacity-90 transition-opacity`}
+      title={subscription.period_end
+        ? `Échéance : ${new Date(subscription.period_end).toLocaleDateString('fr-FR')}`
+        : 'Voir mon abonnement'}
+    >
+      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: tone.bar }} />
+      <span className="text-xs font-semibold whitespace-nowrap">{label}</span>
+    </Link>
+  );
+}
+
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }

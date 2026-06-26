@@ -9,6 +9,13 @@ import type { PosThemeColor, ColorScheme, AutoLogoutMode } from '@/lib/settings/
 
 interface User { id: string; fullName: string; role: Role; email: string }
 
+export interface SubscriptionInfo {
+  plan: string;
+  status: string;
+  period_end: string | null;
+  cancel_at_period_end: boolean;
+}
+
 interface Props {
   user: User;
   themeColor: PosThemeColor;
@@ -17,11 +24,13 @@ interface Props {
   autoLogoutMode: AutoLogoutMode;
   autoLogoutMinutes: number;
   headerTabs: string[];
+  subscription: SubscriptionInfo | null;
   children: React.ReactNode;
 }
 
 export default function AppShell({
-  user, themeColor, colorScheme, hiddenPaths, autoLogoutMode, autoLogoutMinutes, headerTabs, children,
+  user, themeColor, colorScheme, hiddenPaths, autoLogoutMode, autoLogoutMinutes, headerTabs,
+  subscription, children,
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
   const router = useRouter();
@@ -85,6 +94,7 @@ export default function AppShell({
         user={{ fullName: user.fullName, role: user.role }}
         hiddenPaths={hiddenPaths}
         headerTabs={headerTabs}
+        subscription={subscription}
         onOpenMenu={() => setMenuOpen(true)}
         onLogout={() => void logout()}
       />

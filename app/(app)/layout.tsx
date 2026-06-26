@@ -6,7 +6,7 @@ import {
   POS_UI_KEY,
   type PosUiSettings,
 } from '@/lib/settings/pos-ui';
-import AppShell from '@/components/AppShell';
+import AppShell, { type SubscriptionInfo } from '@/components/AppShell';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await readSessionFromCookie();
@@ -18,6 +18,35 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   );
   const ui = mergeWithDefaults(rows[0]?.value ?? null);
 
+  // Charge le plan / la date d'échéance (silencieux si migration 0010 absente).
+  let subscription: SubscriptionInfo | null = null;
+  try {
+    const subRes = await query<{
+      plan: string; trial_ends_at: string | null;
+      sub_plan: string | null; sub_status: string | null;
+      sub_period_end: string | null;
+      cancel_at_period_end: boolean | null;
+    }>(
+      `SELECT o.plan, o.trial_ends_at,
+              s.plan AS sub_plan, s.status AS sub_status,
+              s.current_period_end AS sub_period_end,
+              s.cancel_at_period_end
+         FROM organizations o
+         LEFT JOIN subscriptions s ON s.organization_id = o.id
+        WHERE o.id = $1`,
+      [user.organizationId],
+    );
+    const r = subRes.rows[0];
+    if (r) {
+      subscription = {
+        plan: r.sub_plan ?? r.plan ?? 'trial',
+        status: r.sub_status ?? 'active',
+        period_end: r.sub_period_end ?? r.trial_ends_at,
+        cancel_at_period_end: r.cancel_at_period_end ?? false,
+      };
+    }
+  } catch { /* migration 0010 absente : on n'affiche pas la pastille */ }
+
   return (
     <AppShell
       user={{ id: user.id, fullName: user.fullName, role: user.role, email: user.email }}
@@ -27,6 +56,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       autoLogoutMode={ui.auto_logout_mode}
       autoLogoutMinutes={ui.auto_logout_minutes}
       headerTabs={ui.header_tabs ?? []}
+      subscription={subscription}
     >
       {children}
     </AppShell>

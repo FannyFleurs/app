@@ -35,3 +35,20 @@ export async function requirePermission(
   }
   return { user: r.user };
 }
+
+/**
+ * Garde réservée aux opérateurs SaaS de Florea POS (super_admin).
+ * Permet d'accéder aux endpoints cross-tenant (/admin/*).
+ */
+export async function requireSuperAdmin(): Promise<
+  { user: AuthUser } | { response: NextResponse }
+> {
+  const r = await requireSession();
+  if ('response' in r) return r;
+  if (r.user.role !== 'super_admin') {
+    return {
+      response: NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 }),
+    };
+  }
+  return { user: r.user };
+}
