@@ -48,6 +48,21 @@ button, [role="button"] {
   user-select: none;
 }
 
+/* Retire les flèches up/down des inputs nombre pour une unité visuelle */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+
+/* Calendrier natif : on retire l'indicateur (icône) du picker */
+input[type=date]::-webkit-calendar-picker-indicator,
+input[type=time]::-webkit-calendar-picker-indicator {
+  opacity: 0.6;
+  cursor: pointer;
+}
+
 @layer components {
   .card {
     border-radius: 18px;

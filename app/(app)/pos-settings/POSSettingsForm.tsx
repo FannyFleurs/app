@@ -220,6 +220,48 @@ export default function POSSettingsForm({ initial, canWrite }: Props) {
         </Section>
 
         <Section
+          title="Déconnexion automatique"
+          description="Comportement de fermeture de la session utilisateur."
+        >
+          <div className="space-y-2">
+            {[
+              { value: 'never', label: 'Jamais', desc: 'L\'utilisateur reste connecté tant qu\'il ne se déconnecte pas manuellement.' },
+              { value: 'after_sale', label: 'Après chaque vente', desc: 'Renvoie sur l\'écran de connexion après chaque ticket validé.' },
+              { value: 'timer', label: 'Après inactivité', desc: 'Déconnexion auto après X minutes sans action.' },
+            ].map((opt) => (
+              <label key={opt.value}
+                     className={`flex items-start gap-3 rounded-xl border p-3 cursor-pointer ${
+                       settings.auto_logout_mode === opt.value ? 'border-ink bg-accent-soft' : 'border-border bg-white'
+                     } ${!canWrite ? 'opacity-60 cursor-not-allowed' : ''}`}>
+                <input
+                  type="radio" name="auto_logout_mode" value={opt.value}
+                  checked={settings.auto_logout_mode === opt.value}
+                  onChange={() => patch('auto_logout_mode', opt.value as typeof settings.auto_logout_mode)}
+                  disabled={!canWrite}
+                  className="mt-1"
+                />
+                <div className="flex-1">
+                  <div className="font-medium text-sm">{opt.label}</div>
+                  <div className="text-xs text-ink-soft mt-0.5">{opt.desc}</div>
+                </div>
+              </label>
+            ))}
+            {settings.auto_logout_mode === 'timer' && (
+              <div className="rounded-xl border border-border bg-white p-3 ml-7">
+                <label className="text-xs font-medium text-ink-soft">Délai d&apos;inactivité (minutes)</label>
+                <input
+                  type="number" min={1} max={120}
+                  className="input mt-1 max-w-[120px]"
+                  value={settings.auto_logout_minutes}
+                  onChange={(e) => patch('auto_logout_minutes', Math.max(1, Math.min(120, Number(e.target.value) || 1)))}
+                  disabled={!canWrite}
+                />
+              </div>
+            )}
+          </div>
+        </Section>
+
+        <Section
           title="Ouverture de la caisse"
           description="Comment pré-remplir le fond de caisse à l'ouverture chaque matin."
         >

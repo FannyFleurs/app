@@ -437,9 +437,12 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
     setShowPayment(false);
     setSaleId(null); setLines([]); setCustomer(null);
     setLoyalty({ enabled: false, balance_euros: 0, min_redeem: 0, used: 0 });
+    setCartComment('');
     // Retour à la vue catégories
     setView({ kind: 'categories' });
     setSearch('');
+    // Signal pour l'auto-logout 'after_sale'
+    window.dispatchEvent(new CustomEvent('florea:sale_validated'));
   }
 
   async function pickCustomer(c: PickedCustomer) {
@@ -573,8 +576,8 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
         <div className="flex items-center gap-3 px-5 py-3 border-b border-border bg-white">
           <input
             ref={searchRef}
-            className="input flex-1"
-            placeholder="Rechercher un produit (/) ou scanner…"
+            className="input max-w-[16rem]"
+            placeholder="Rechercher / scanner…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={(e) => {
@@ -584,6 +587,7 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
               }
             }}
           />
+          <div className="flex-1" />
           <button className="btn-soft" onClick={() => setShowFreePrice({})} title="F2">
             ✿ Bouquet prix libre
           </button>
@@ -597,19 +601,7 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
           </button>
         </div>
 
-        {/* Fil d'Ariane minimal pour la vue produits */}
-        {showingProducts && !searchQ && (
-          <div className="px-5 py-2 border-b border-border bg-white text-sm text-ink-soft flex items-center gap-2">
-            <button onClick={() => setView({ kind: 'categories' })} className="hover:text-ink">Catégories</button>
-            <span>›</span>
-            <span className="text-ink font-medium">{currentCategoryName}</span>
-          </div>
-        )}
-        {searchQ && (
-          <div className="px-5 py-2 border-b border-border bg-white text-sm text-ink-soft">
-            Résultats pour <span className="font-medium text-ink">« {search} »</span>
-          </div>
-        )}
+        {/* Plus de fil d'Ariane — la grille des produits a son bouton "Retour" en première tuile */}
 
         <div className="flex-1 overflow-auto p-5 bg-white">
           {showingProducts ? (

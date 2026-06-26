@@ -16,6 +16,9 @@ export type PosThemeColor = (typeof POS_THEME_COLORS)[number];
 export const OPENING_FLOAT_MODES = ['manual', 'fixed', 'previous_close'] as const;
 export type OpeningFloatMode = (typeof OPENING_FLOAT_MODES)[number];
 
+export const AUTO_LOGOUT_MODES = ['never', 'after_sale', 'timer'] as const;
+export type AutoLogoutMode = (typeof AUTO_LOGOUT_MODES)[number];
+
 export const COLOR_SCHEMES = ['light', 'dark', 'system'] as const;
 export type ColorScheme = (typeof COLOR_SCHEMES)[number];
 
@@ -40,6 +43,8 @@ export interface PosUiSettings {
   opening_float_amount: number;
   loyalty: LoyaltySettings;
   hidden_sidebar_paths: string[];
+  auto_logout_mode: AutoLogoutMode;
+  auto_logout_minutes: number;
 }
 
 export const OPENING_FLOAT_LABELS: Record<OpeningFloatMode, { label: string; description: string }> = {
@@ -78,6 +83,8 @@ export const POS_UI_DEFAULTS: PosUiSettings = {
     on_excluded_categories: [],
   },
   hidden_sidebar_paths: [],
+  auto_logout_mode: 'never',
+  auto_logout_minutes: 10,
 };
 
 export const POS_THEME_COLOR_VALUES: Record<PosThemeColor, { label: string; main: string; deep: string; soft: string }> = {

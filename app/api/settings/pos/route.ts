@@ -35,6 +35,8 @@ const schema = z.object({
   opening_float_amount: z.number().min(0).max(100000).optional(),
   loyalty: loyaltySchema.optional(),
   hidden_sidebar_paths: z.array(z.string().max(120)).optional(),
+  auto_logout_mode: z.enum(['never', 'after_sale', 'timer']).optional(),
+  auto_logout_minutes: z.number().int().min(1).max(120).optional(),
 });
 
 export async function GET() {

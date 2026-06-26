@@ -7,7 +7,7 @@ import Sidebar from './Sidebar';
 import { ROLE_LABELS } from './labels';
 import Icon from './Icon';
 import type { Role } from '@/lib/auth/rbac';
-import type { PosThemeColor, ColorScheme } from '@/lib/settings/pos-ui';
+import type { PosThemeColor, ColorScheme, AutoLogoutMode } from '@/lib/settings/pos-ui';
 
 interface User { id: string; fullName: string; role: Role; email: string }
 
@@ -16,10 +16,14 @@ interface Props {
   themeColor: PosThemeColor;
   colorScheme: ColorScheme;
   hiddenPaths: string[];
+  autoLogoutMode: AutoLogoutMode;
+  autoLogoutMinutes: number;
   children: React.ReactNode;
 }
 
-export default function AppShell({ user, themeColor, colorScheme, hiddenPaths, children }: Props) {
+export default function AppShell({
+  user, themeColor, colorScheme, hiddenPaths, autoLogoutMode, autoLogoutMinutes, children,
+}: Props) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const path = usePathname();
   const router = useRouter();
@@ -51,6 +55,34 @@ export default function AppShell({ user, themeColor, colorScheme, hiddenPaths, c
     router.refresh();
   }
 
+  // Auto-logout par inactivité (mode 'timer')
+  useEffect(() => {
+    if (autoLogoutMode !== 'timer' || autoLogoutMinutes <= 0) return;
+    let lastActivity = Date.now();
+    const events = ['mousedown', 'keydown', 'touchstart'];
+    function tick() { lastActivity = Date.now(); }
+    events.forEach((e) => window.addEventListener(e, tick));
+    const interval = window.setInterval(() => {
+      if (Date.now() - lastActivity > autoLogoutMinutes * 60_000) {
+        void logout();
+      }
+    }, 30_000);
+    return () => {
+      events.forEach((e) => window.removeEventListener(e, tick));
+      clearInterval(interval);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoLogoutMode, autoLogoutMinutes]);
+
+  // Auto-logout après chaque vente : émis par un événement personnalisé
+  useEffect(() => {
+    if (autoLogoutMode !== 'after_sale') return;
+    function onSale() { void logout(); }
+    window.addEventListener('florea:sale_validated', onSale);
+    return () => window.removeEventListener('florea:sale_validated', onSale);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoLogoutMode]);
+
   const onCaisse = path === '/caisse' || path?.startsWith('/caisse/');
 
   return (
@@ -70,16 +102,18 @@ export default function AppShell({ user, themeColor, colorScheme, hiddenPaths, c
           </div>
         </button>
 
-        {/* Bouton flottant centré : Retour caisse OU Déconnexion sur /caisse */}
+        {/* Bouton flottant centré : Retour caisse OU prénom utilisateur (déconnexion) sur /caisse */}
         <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
           {onCaisse ? (
             <button
               onClick={() => void logout()}
-              className="pointer-events-auto flex items-center gap-2 rounded-full px-5 py-2 text-sm font-medium shadow-md border border-border bg-white hover:bg-gray-50"
-              title="Déconnexion / changement d'utilisateur"
+              className="pointer-events-auto flex items-center gap-2 rounded-full pl-2 pr-4 py-1.5 text-sm font-medium shadow-md border border-border bg-white hover:bg-gray-50"
+              title="Cliquer pour changer d'utilisateur"
             >
-              <span className="text-danger">⏏</span>
-              Déconnexion
+              <span className="grid h-7 w-7 place-items-center rounded-full accent-bar text-white text-xs font-semibold">
+                {user.fullName.split(/\s+/).map((s) => s[0]).filter(Boolean).slice(0, 2).join('').toUpperCase()}
+              </span>
+              {user.fullName.split(/\s+/)[0]}
             </button>
           ) : (
             <Link

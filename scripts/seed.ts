@@ -76,6 +76,8 @@ async function main() {
 
     // Utilisateurs
     const pwd = await hashPassword('Florea2026!');
+    // PIN par défaut "1234" pour tous les comptes seedés
+    const pinHash = await hashPassword('1234');
     const users: Array<[string, string, string]> = [
       ['owner@florea.test', 'Camille Dupont', 'owner'],
       ['manager@florea.test', 'Léa Martin', 'manager'],
@@ -85,9 +87,9 @@ async function main() {
     const userIds: Record<string, string> = {};
     for (const [email, name, role] of users) {
       const r = await client.query<{ id: string }>(
-        `INSERT INTO users (organization_id, email, password_hash, full_name, role)
-         VALUES ($1,$2,$3,$4,$5) RETURNING id`,
-        [orgId, email, pwd, name, role],
+        `INSERT INTO users (organization_id, email, password_hash, full_name, role, pin_code_hash)
+         VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+        [orgId, email, pwd, name, role, pinHash],
       );
       userIds[email] = r.rows[0]!.id;
     }

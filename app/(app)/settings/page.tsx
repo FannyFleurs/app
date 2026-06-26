@@ -11,7 +11,7 @@ interface Tile {
   label: string;
   description: string;
   icon: IconName;
-  perm?: 'pos.use' | 'fiscal.export' | 'fiscal.audit' | 'settings.write' | 'settings.read';
+  perm?: 'pos.use' | 'fiscal.export' | 'fiscal.audit' | 'settings.write' | 'settings.read' | 'users.read';
 }
 
 const TILES: Tile[] = [
@@ -28,6 +28,13 @@ const TILES: Tile[] = [
     description: 'Activer ou masquer chaque entrée de la sidebar pour cette organisation.',
     icon: 'users',
     perm: 'settings.write',
+  },
+  {
+    href: '/users',
+    label: 'Gestion utilisateurs',
+    description: 'Comptes, rôles (Admin / Responsable / Vendeur) et codes PIN de connexion.',
+    icon: 'users',
+    perm: 'users.read',
   },
   {
     href: '/settings/company',
