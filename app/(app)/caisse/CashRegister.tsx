@@ -738,14 +738,15 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
               }
             }}
           />
+          {/* Scanner caméra : uniquement sur mobile/tablette (BarcodeDetector
+              n'est pas disponible sur la plupart des navigateurs desktop). */}
           <button
-            className="btn-ghost px-3"
+            className="btn-ghost px-3 md:hidden"
             onClick={() => setShowScanner(true)}
             title="Scanner code-barres / QR"
             aria-label="Scanner"
           >
             <span className="text-lg">📷</span>
-            <span className="hidden md:inline ml-1">Scanner</span>
           </button>
           <div className="hidden md:block flex-1" />
           <button className="btn-ghost px-3" onClick={() => setShowHeld(true)} title="F4">

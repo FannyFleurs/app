@@ -29,6 +29,7 @@ export default function BarcodeScannerModal({ onClose, onScan }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [supported, setSupported] = useState<boolean>(true);
   const [lastCode, setLastCode] = useState<string | null>(null);
+  const [manualCode, setManualCode] = useState('');
 
   useEffect(() => {
     let stream: MediaStream | null = null;
@@ -104,7 +105,14 @@ export default function BarcodeScannerModal({ onClose, onScan }: Props) {
             />
           ) : (
             <div className="absolute inset-0 grid place-items-center text-white p-6 text-center text-sm">
-              Votre navigateur ne supporte pas le scan caméra. Utilisez la recherche manuelle ou un scanner USB.
+              <div>
+                <div className="text-3xl mb-3">📷</div>
+                <div className="font-medium mb-1">Scan caméra indisponible sur ce navigateur</div>
+                <div className="text-xs opacity-80">
+                  Disponible sur iOS 17+, Chrome / Edge Android.
+                  Saisissez le code à la main ci-dessous.
+                </div>
+              </div>
             </div>
           )}
           {/* Cadre de mire */}
@@ -119,14 +127,42 @@ export default function BarcodeScannerModal({ onClose, onScan }: Props) {
             </div>
           )}
         </div>
-        <div className="mt-3 flex items-center justify-between gap-3">
-          <div className="text-white text-sm">
-            {lastCode ? <>Détecté : <span className="font-mono">{lastCode}</span></> : 'Visez un code-barres ou QR…'}
-          </div>
-          <button onClick={onClose} className="rounded-xl bg-white text-ink px-4 py-2 text-sm font-semibold">
+        <div className="mt-3 text-white text-sm">
+          {lastCode ? <>Détecté : <span className="font-mono">{lastCode}</span></> : (supported ? 'Visez un code-barres ou QR…' : 'Saisie manuelle')}
+        </div>
+
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            const v = manualCode.trim();
+            if (v) onScan(v);
+            setManualCode('');
+          }}
+          className="mt-3 flex items-center gap-2"
+        >
+          <input
+            autoFocus={!supported}
+            value={manualCode}
+            onChange={(e) => setManualCode(e.target.value)}
+            placeholder="Code-barres / SKU"
+            className="flex-1 rounded-xl bg-white px-3 py-2 text-sm text-ink"
+            inputMode="text"
+          />
+          <button
+            type="submit"
+            disabled={!manualCode.trim()}
+            className="rounded-xl accent-bar text-white px-4 py-2 text-sm font-semibold disabled:opacity-50"
+          >
+            Ajouter
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl bg-white text-ink px-4 py-2 text-sm font-semibold"
+          >
             Fermer
           </button>
-        </div>
+        </form>
       </div>
     </div>
   );
