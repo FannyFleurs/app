@@ -1,22 +1,60 @@
 import './globals.css';
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
+import InstallPrompt from '@/components/InstallPrompt';
 
 export const metadata: Metadata = {
   title: 'Florea POS',
   description:
     'Caisse SaaS pour fleuristes — conforme by design aux exigences françaises de l\'article 286, I, 3°bis du CGI.',
+  applicationName: 'Florea POS',
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    title: 'Florea POS',
+    statusBarStyle: 'black-translucent',
+  },
+  formatDetection: {
+    telephone: false,
+    email: false,
+    address: false,
+  },
+  icons: {
+    icon: [
+      { url: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
+    ],
+    apple: [
+      { url: '/icons/apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
+    ],
+  },
 };
 
-export const viewport = {
+export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
+  minimumScale: 1,
+  userScalable: false,
+  viewportFit: 'cover',
+  themeColor: '#556B3E',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="fr">
-      <body className="min-h-screen bg-bg text-ink antialiased">{children}</body>
+      <head>
+        {/* iOS PWA — barre de statut transparente, plein écran */}
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-title" content="Florea POS" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        {/* Évite l'auto-zoom iOS sur les inputs (taille de police >= 16px) */}
+        <meta name="format-detection" content="telephone=no,email=no,address=no" />
+      </head>
+      <body className="min-h-screen bg-bg text-ink antialiased select-none touch-manipulation">
+        {children}
+        <InstallPrompt />
+      </body>
     </html>
   );
 }

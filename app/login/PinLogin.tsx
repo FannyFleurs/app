@@ -137,7 +137,7 @@ export default function PinLogin() {
   }, [selectedId]);
 
   return (
-    <main className="h-screen overflow-hidden bg-white grid grid-cols-1 lg:grid-cols-[440px_1fr]">
+    <main className="h-screen overflow-hidden bg-white grid grid-cols-1 lg:grid-cols-[440px_1fr] pt-safe pb-safe pl-safe pr-safe">
       {/* COLONNE GAUCHE — sélection utilisateur */}
       <aside className="flex flex-col border-r border-border bg-white overflow-hidden">
         {/* Header */}

@@ -55,7 +55,38 @@ body[data-mode="dark"] {
   --primary-soft: color-mix(in srgb, var(--primary) 18%, #1A1D22);
 }
 
-html, body { height: 100%; background: var(--bg); color: var(--ink); }
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  /* Évite l'auto-zoom iOS sur les inputs */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  /* Pas de pull-to-refresh / bounce iOS en mode standalone */
+  overscroll-behavior: none;
+}
+
+/* Safe-areas iOS (notch / Dynamic Island / home indicator).
+   On applique sur les éléments fixes en haut (topbar) et bas via les
+   classes utilitaires .pt-safe et .pb-safe. */
+.pt-safe { padding-top:    env(safe-area-inset-top, 0px); }
+.pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+.pl-safe { padding-left:   env(safe-area-inset-left, 0px); }
+.pr-safe { padding-right:  env(safe-area-inset-right, 0px); }
+.h-safe-screen {
+  height: calc(100vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+}
+
+/* Désactive le menu contextuel (copier/coller forcé) sur iOS POS */
+* {
+  -webkit-touch-callout: none;
+}
+/* …mais on garde la sélection texte sur les inputs / textarea */
+input, textarea, [contenteditable] {
+  -webkit-touch-callout: default;
+  -webkit-user-select: text;
+  user-select: text;
+}
 
 button, [role="button"] {
   -webkit-tap-highlight-color: transparent;
