@@ -99,7 +99,7 @@ export default function AppShell({
         onLogout={() => void logout()}
       />
 
-      <main className="flex-1 overflow-auto bg-white">{children}</main>
+      <main className="flex-1 overflow-hidden bg-white relative">{children}</main>
 
       {menuOpen && (
         <AllPagesOverlay

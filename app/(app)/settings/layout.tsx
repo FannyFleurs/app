@@ -23,7 +23,7 @@ export default async function SettingsLayout({ children }: { children: React.Rea
   ].filter((i) => !i.perm || hasPermission(user.role, i.perm));
 
   return (
-    <div className="grid grid-cols-[260px_1fr] h-[calc(100vh-56px)] overflow-hidden">
+    <div className="grid grid-cols-[260px_1fr] h-full overflow-hidden">
       <aside className="border-r border-border overflow-y-auto bg-white">
         <div className="px-5 py-4 border-b border-border">
           <div className="text-[10px] uppercase tracking-widest text-ink-soft font-semibold">Section</div>

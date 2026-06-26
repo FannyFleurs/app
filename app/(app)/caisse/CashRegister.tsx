@@ -652,7 +652,7 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
     const currentStore = stores.find((s) => s.id === storeId) ?? stores[0];
     return (
       <>
-        <div className="h-[calc(100vh-56px)] grid place-items-center px-4">
+        <div className="h-full grid place-items-center px-4">
           <div className="card p-8 max-w-md w-full text-center">
             <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl accent-bar text-white text-2xl">
               ◆
@@ -691,7 +691,7 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
 
   return (
     <div
-      className="grid h-[calc(100vh-56px)]"
+      className="grid h-full"
       style={{ gridTemplateColumns: `1fr 6px ${ticketWidth}px` }}
     >
       {/* Gauche : catalogue */}
