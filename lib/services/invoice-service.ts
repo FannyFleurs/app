@@ -73,7 +73,9 @@ export class InvoiceService {
       });
 
       const issueDate = new Date().toISOString().slice(0, 10);
-      const serviceDate = s.validated_at.slice(0, 10);
+      // validated_at est renvoyé par node-postgres comme un Date (TIMESTAMPTZ),
+      // pas une string — d'où le passage par new Date(...).toISOString().
+      const serviceDate = new Date(s.validated_at).toISOString().slice(0, 10);
 
       // Insertion de la facture (status=paid car la vente est encaissée)
       const inv = await client.query<{ id: string }>(

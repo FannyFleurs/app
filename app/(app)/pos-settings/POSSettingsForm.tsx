@@ -9,17 +9,12 @@ import {
   POS_THEME_COLORS,
   POS_THEME_COLOR_VALUES,
   POS_UI_DEFAULTS,
-  OPENING_FLOAT_MODES,
-  OPENING_FLOAT_LABELS,
   COLOR_SCHEMES,
   HEADER_TABS_DEFAULT,
   HEADER_TABS_MAX,
   tileMetrics,
   type PosUiSettings,
   type PosTileSize,
-  type PosThemeColor,
-  type ColorScheme,
-  type OpeningFloatMode,
 } from '@/lib/settings/pos-ui';
 import { SIDEBAR_ITEMS } from '@/components/Sidebar';
 import Badge from '@/components/Badge';
@@ -265,56 +260,6 @@ export default function POSSettingsForm({ initial, canWrite }: Props) {
         </Section>
 
         <Section
-          title="Ouverture de la caisse"
-          description="Comment pré-remplir le fond de caisse à l'ouverture chaque matin."
-        >
-          <div className="space-y-2">
-            {OPENING_FLOAT_MODES.map((mode) => {
-              const meta = OPENING_FLOAT_LABELS[mode];
-              const active = settings.opening_float_mode === mode;
-              return (
-                <label
-                  key={mode}
-                  className={`flex items-start gap-3 rounded-xl border p-3 cursor-pointer transition-all ${
-                    active ? 'border-ink bg-accent-soft' : 'border-border bg-white hover:border-gray-300'
-                  } ${!canWrite ? 'opacity-60 cursor-not-allowed' : ''}`}
-                >
-                  <input
-                    type="radio"
-                    name="opening_float_mode"
-                    value={mode}
-                    checked={active}
-                    onChange={() => patch('opening_float_mode', mode)}
-                    disabled={!canWrite}
-                    className="mt-1"
-                  />
-                  <div className="flex-1">
-                    <div className="font-medium text-sm">{meta.label}</div>
-                    <div className="text-xs text-ink-soft mt-0.5">{meta.description}</div>
-                  </div>
-                </label>
-              );
-            })}
-
-            {settings.opening_float_mode === 'fixed' && (
-              <div className="rounded-xl border border-border bg-white p-3 ml-7 mt-2">
-                <label className="text-xs font-medium text-ink-soft">Montant du fond fixe (€)</label>
-                <input
-                  type="number" step="0.01" min={0}
-                  className="input mt-1 max-w-xs"
-                  value={settings.opening_float_amount}
-                  onChange={(e) => patch('opening_float_amount', Number(e.target.value || 0))}
-                  disabled={!canWrite}
-                />
-                <p className="mt-1 text-xs text-ink-soft">
-                  Aperçu : {formatEUR(settings.opening_float_amount)}
-                </p>
-              </div>
-            )}
-          </div>
-        </Section>
-
-        <Section
           title="Onglets du header"
           description={`Choisissez les pages affichées en onglets dans la barre supérieure (${HEADER_TABS_MAX} max). Les autres restent accessibles via le menu hamburger.`}
         >
@@ -325,69 +270,27 @@ export default function POSSettingsForm({ initial, canWrite }: Props) {
           />
         </Section>
 
-        <Section
-          title="Programme de fidélité"
-          description="Les remises de fidélité se déclenchent depuis la fiche client en caisse une fois le seuil atteint."
-        >
-          <label className="flex items-center justify-between gap-3 py-2 border-b border-border/60">
-            <span className="text-sm font-medium">Programme activé</span>
-            <input
-              type="checkbox" className="h-5 w-5"
-              checked={settings.loyalty.enabled}
-              disabled={!canWrite}
-              onChange={(e) => patch('loyalty', { ...settings.loyalty, enabled: e.target.checked })}
-            />
-          </label>
-          <div className="mt-3 grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium text-ink-soft">€ de fidélité gagnés</label>
-              <input type="number" step="0.5" min={0}
-                     className="input mt-1"
-                     value={settings.loyalty.euros_earned}
-                     disabled={!canWrite || !settings.loyalty.enabled}
-                     onChange={(e) => patch('loyalty', { ...settings.loyalty, euros_earned: Number(e.target.value) || 0 })} />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-ink-soft">… tous les € dépensés</label>
-              <input type="number" step="1" min={1}
-                     className="input mt-1"
-                     value={settings.loyalty.per_euros_spent}
-                     disabled={!canWrite || !settings.loyalty.enabled}
-                     onChange={(e) => patch('loyalty', { ...settings.loyalty, per_euros_spent: Number(e.target.value) || 1 })} />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-ink-soft">Seuil d&apos;utilisation minimum (€)</label>
-              <input type="number" step="0.5" min={0}
-                     className="input mt-1"
-                     value={settings.loyalty.min_redeem}
-                     disabled={!canWrite || !settings.loyalty.enabled}
-                     onChange={(e) => patch('loyalty', { ...settings.loyalty, min_redeem: Number(e.target.value) || 0 })} />
-            </div>
-            <div className="flex items-end">
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox"
-                       checked={settings.loyalty.stackable}
-                       disabled={!canWrite || !settings.loyalty.enabled}
-                       onChange={(e) => patch('loyalty', { ...settings.loyalty, stackable: e.target.checked })} />
-                Cumulable avec d&apos;autres remises
-              </label>
-            </div>
-          </div>
-          {settings.loyalty.enabled && (
-            <p className="mt-3 text-xs text-ink-soft">
-              Règle actuelle : {settings.loyalty.euros_earned} € de fidélité gagnés tous les{' '}
-              {settings.loyalty.per_euros_spent} € dépensés. Utilisable à partir de{' '}
-              {settings.loyalty.min_redeem} € cumulés.
-              {settings.loyalty.stackable ? ' Cumulable avec d\'autres remises.' : ' Non cumulable avec une autre remise.'}
-            </p>
-          )}
-        </Section>
-
-        <Section
-          title="Modes de règlement"
-          description="Activer/désactiver et libellés des moyens de paiement disponibles en caisse."
-        >
-          <PaymentMethodsManager canWrite={canWrite} />
+        <Section title="Voir aussi" description="Autres réglages disponibles dans leur propre page.">
+          <ul className="space-y-1.5 text-sm">
+            <li>
+              <a href="/settings/opening-float" className="text-accent-deep hover:underline">
+                Fond de caisse
+              </a>
+              <span className="text-ink-soft"> — comment pré-remplir le fond à l&apos;ouverture.</span>
+            </li>
+            <li>
+              <a href="/settings/payment-methods" className="text-accent-deep hover:underline">
+                Modes de règlement
+              </a>
+              <span className="text-ink-soft"> — activer / renommer les moyens de paiement.</span>
+            </li>
+            <li>
+              <a href="/settings/loyalty" className="text-accent-deep hover:underline">
+                Fidélité
+              </a>
+              <span className="text-ink-soft"> — programme de points et remises automatiques.</span>
+            </li>
+          </ul>
         </Section>
 
         <div className="flex items-center justify-between gap-3 pt-2">
@@ -460,106 +363,6 @@ function Toggle({ label, checked, onChange, disabled }: {
         />
       </button>
     </label>
-  );
-}
-
-interface PaymentMethod {
-  id: string;
-  code: string;
-  kind: string;
-  label: string;
-  is_active: boolean;
-  position: number;
-}
-
-const PM_KIND_OPTIONS = [
-  { value: 'cash', label: 'Espèces' },
-  { value: 'card', label: 'Carte bancaire' },
-  { value: 'check', label: 'Chèque' },
-  { value: 'transfer', label: 'Virement' },
-  { value: 'gift_card', label: 'Carte cadeau' },
-  { value: 'credit_note', label: 'Avoir' },
-  { value: 'deferred', label: 'Différé client' },
-  { value: 'other', label: 'Autre' },
-];
-
-function PaymentMethodsManager({ canWrite }: { canWrite: boolean }) {
-  const [items, setItems] = useState<PaymentMethod[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [newLabel, setNewLabel] = useState('');
-  const [newKind, setNewKind] = useState('other');
-
-  async function load() {
-    setLoading(true);
-    const r = await fetch('/api/payment-methods');
-    if (r.ok) setItems((await r.json()).methods);
-    setLoading(false);
-  }
-  useEffect(() => { void load(); }, []);
-
-  async function toggle(id: string, is_active: boolean) {
-    await fetch(`/api/payment-methods/${id}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ is_active }),
-    });
-    void load();
-  }
-  async function rename(id: string, label: string) {
-    await fetch(`/api/payment-methods/${id}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ label }),
-    });
-    void load();
-  }
-  async function add() {
-    if (!newLabel.trim()) return;
-    await fetch('/api/payment-methods', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ label: newLabel.trim(), kind: newKind }),
-    });
-    setNewLabel('');
-    void load();
-  }
-
-  return (
-    <div>
-      {loading ? (
-        <p className="text-sm text-ink-soft">Chargement…</p>
-      ) : (
-        <ul className="space-y-1.5">
-          {items.map((m) => (
-            <li key={m.id} className="flex items-center gap-2 rounded-xl border border-border p-2">
-              <span className="text-xs uppercase tracking-wider w-20 text-ink-soft">{m.kind}</span>
-              <input
-                className="input h-9 flex-1"
-                defaultValue={m.label}
-                disabled={!canWrite}
-                onBlur={(e) => e.target.value !== m.label && void rename(m.id, e.target.value)}
-              />
-              <label className="flex items-center gap-1 text-xs">
-                <input type="checkbox" checked={m.is_active}
-                       disabled={!canWrite}
-                       onChange={(e) => void toggle(m.id, e.target.checked)} />
-                Actif
-              </label>
-            </li>
-          ))}
-        </ul>
-      )}
-      {canWrite && (
-        <div className="mt-3 flex items-center gap-2">
-          <input className="input h-9 flex-1" placeholder="Nouveau libellé"
-                 value={newLabel} onChange={(e) => setNewLabel(e.target.value)} />
-          <select className="input h-9 max-w-[160px]" value={newKind}
-                  onChange={(e) => setNewKind(e.target.value)}>
-            {PM_KIND_OPTIONS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
-          </select>
-          <button className="btn-soft text-sm" onClick={() => void add()} disabled={!newLabel.trim()}>
-            + Ajouter
-          </button>
-        </div>
-      )}
-    </div>
   );
 }
 
