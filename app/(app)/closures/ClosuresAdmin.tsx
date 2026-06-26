@@ -76,9 +76,19 @@ export default function ClosuresAdmin({ stores, registers }: { stores: Store[]; 
   const restorePhaseRef = useRef<Record<string, boolean>>({});
 
   // Restaure depuis localStorage à chaque changement (store, date).
+  // Si la journée est DÉJÀ clôturée (sealed), on n'ouvre PAS l'historique :
+  // on part d'un brouillon vide et on purge l'éventuel localStorage —
+  // une journée scellée ne se re-clôture pas.
   useEffect(() => {
     if (!storageKey || typeof window === 'undefined') return;
     setRestored(false);
+    const alreadyClosedToday = preview?.sealed != null;
+    if (alreadyClosedToday) {
+      setDenomCount({}); setDeclared({}); setNotes('');
+      try { localStorage.removeItem(storageKey); } catch { /* ignore */ }
+      restorePhaseRef.current[storageKey] = true;
+      return;
+    }
     try {
       const raw = localStorage.getItem(storageKey);
       if (raw) {
@@ -96,7 +106,7 @@ export default function ClosuresAdmin({ stores, registers }: { stores: Store[]; 
       }
     } catch { /* ignore */ }
     restorePhaseRef.current[storageKey] = true;
-  }, [storageKey]);
+  }, [storageKey, preview?.sealed]);
 
   // Sauvegarde à chaque modification — UNIQUEMENT après que la
   // restauration a été tentée pour cette clé. Sinon on écrasait

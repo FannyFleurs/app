@@ -242,6 +242,31 @@ export class ClosingService {
         ],
       );
 
+      // 7. Ferme automatiquement les sessions caisse encore ouvertes pour
+      //    cette boutique sur ce jour. Le caissier devra ROUVRIR la caisse
+      //    (avec un nouveau fonds) pour reprendre la vente — pas de
+      //    réutilisation accidentelle d'une session déjà clôturée.
+      await client.query(
+        `UPDATE cash_sessions
+            SET status = 'closed',
+                closed_by = $3,
+                closed_at = now(),
+                counted_cash = COALESCE(counted_cash, $4),
+                expected_cash = COALESCE(expected_cash, $5),
+                cash_variance = COALESCE(cash_variance, $6)
+          WHERE organization_id = $1
+            AND store_id = $2
+            AND status = 'open'
+            AND opened_at::date <= $7::date`,
+        [
+          args.organizationId, args.storeId, args.userId,
+          args.countedCash ?? null,
+          cashExpected,
+          cashVariance,
+          args.businessDate,
+        ],
+      );
+
       return {
         daily_closure_id: insertRes.rows[0]!.id,
         fiscal_event_id: event.id,

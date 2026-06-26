@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import TopBar from './TopBar';
 import AllPagesOverlay from './AllPagesOverlay';
+import WakeLockKeeper from './WakeLockKeeper';
 import type { Role } from '@/lib/auth/rbac';
 import type { PosThemeColor, ColorScheme, AutoLogoutMode } from '@/lib/settings/pos-ui';
 
@@ -109,6 +110,9 @@ export default function AppShell({
           onLogout={() => void logout()}
         />
       )}
+
+      {/* Maintient l'écran allumé tant que l'app est ouverte (iPad PWA) */}
+      <WakeLockKeeper />
     </div>
   );
 }
