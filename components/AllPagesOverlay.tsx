@@ -59,29 +59,31 @@ export default function AllPagesOverlay({ role, hiddenPaths, onClose, onLogout }
           Sélectionnez une section. Échap ou ✕ pour revenir.
         </p>
 
-        <div className="mt-8 space-y-10">
+        <div className="mt-6 space-y-6">
           {GROUP_ORDER.map((group) => {
             const items = visible.filter((i) => i.group === group);
             if (items.length === 0) return null;
             return (
               <section key={group}>
-                <div className="text-[11px] uppercase tracking-widest text-ink-soft font-semibold mb-3">
+                <div className="text-[10px] uppercase tracking-widest text-ink-soft font-semibold mb-2">
                   {group}
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+                <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-2">
                   {items.map((item) => (
                     <Link
                       key={item.href}
                       href={item.href}
                       onClick={onClose}
-                      className="group card p-4 flex flex-col items-center justify-center text-center aspect-[5/4] hover:shadow-md hover:border-gray-300 transition-all"
+                      className="group card p-2 flex flex-col items-center justify-center text-center aspect-square hover:shadow-md hover:border-gray-300 transition-all"
                     >
                       <span
-                        className="grid h-12 w-12 place-items-center rounded-xl mb-2 bg-accent-soft text-accent-deep group-hover:scale-105 transition-transform"
+                        className="grid h-8 w-8 place-items-center rounded-lg mb-1 bg-accent-soft text-accent-deep group-hover:scale-105 transition-transform"
                       >
-                        <Icon name={item.icon} size={26} />
+                        <Icon name={item.icon} size={18} />
                       </span>
-                      <span className="text-sm font-medium leading-tight text-ink">{item.label}</span>
+                      <span className="text-[11px] font-medium leading-tight text-ink line-clamp-2">
+                        {item.label}
+                      </span>
                     </Link>
                   ))}
                 </div>
