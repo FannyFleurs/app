@@ -1027,32 +1027,25 @@ function TopProductTile({
   showImage: boolean;
   showPrice: boolean;
 }) {
+  // Même apparence que les tuiles catégorie : tuile pleine couleur claire,
+  // nom du produit centré, prix optionnel en bas.
   return (
     <button
       onClick={onPick}
-      className={`card ${metrics.padding} text-left hover:shadow-md hover:border-gray-300 transition-all active:scale-[0.98] aspect-[5/3] flex flex-col relative ring-2 ring-accent-deep/40`}
+      className="rounded-2xl border border-border overflow-hidden hover:shadow-md hover:border-gray-300 transition-all active:scale-[0.98] aspect-[5/3] grid place-items-center px-3 bg-accent-soft"
       title="Top produit"
     >
-      <span className="absolute top-2 right-2 chip bg-accent-deep text-white border-transparent text-[10px] px-1.5 py-0.5">
-        ★
-      </span>
-      {showImage && (
-        <div className="mb-2 h-14 w-full rounded-lg bg-gray-50 grid place-items-center text-ink-soft overflow-hidden">
-          {p.image_url
-            ? <img src={p.image_url} alt="" className="h-full w-full object-cover" />
-            : <span>✿</span>}
-        </div>
-      )}
-      <div className={`${metrics.titleFontSize} ${metrics.titleMinHeight} font-medium line-clamp-2 leading-tight`}>
-        {p.name}
+      <div className="flex flex-col items-center justify-center gap-1 text-center">
+        {showImage && p.image_url && (
+          <img src={p.image_url} alt="" className="h-10 w-10 rounded-md object-cover mb-1" />
+        )}
+        <span className={`${metrics.titleFontSize} font-semibold text-ink leading-tight line-clamp-2`}>
+          {p.name}
+        </span>
+        {showPrice && !p.price_is_free && (
+          <span className="text-xs text-ink-soft">{formatEUR(p.sale_price_ttc)}</span>
+        )}
       </div>
-      {showPrice && (
-        <div className="mt-2 flex items-center justify-between gap-1">
-          <span className={`${metrics.priceFontSize} font-semibold`}>
-            {p.price_is_free ? 'libre' : formatEUR(p.sale_price_ttc)}
-          </span>
-        </div>
-      )}
     </button>
   );
 }
