@@ -117,9 +117,30 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
   const [showOrderModal, setShowOrderModal] = useState(false);
   const [heldCount, setHeldCount] = useState(0);
   const [showScanner, setShowScanner] = useState(false);
-  // Panier slide-up en mode mobile : toujours fermé au load, ouvert via le
-  // bouton "Panier" fixé en bas de l'écran.
+  // Panier glissé en mode mobile : ouvert via le bouton flottant OU via
+  // un swipe horizontal (gauche = ouvrir, droite = fermer).
   const [mobileCartOpen, setMobileCartOpen] = useState(false);
+
+  // Détection swipe horizontal sur mobile pour basculer entre catalogue
+  // et panier. Seuil : ≥ 60 px horizontaux, vertical < 60 px.
+  const swipeRef = useRef<{ x: number; y: number; t: number } | null>(null);
+  function onTouchStart(e: React.TouchEvent) {
+    const t = e.touches[0];
+    if (!t) return;
+    swipeRef.current = { x: t.clientX, y: t.clientY, t: Date.now() };
+  }
+  function onTouchEnd(e: React.TouchEvent, intent: 'open' | 'close') {
+    const start = swipeRef.current;
+    swipeRef.current = null;
+    const end = e.changedTouches[0];
+    if (!start || !end) return;
+    const dx = end.clientX - start.x;
+    const dy = end.clientY - start.y;
+    if (Math.abs(dy) > 60) return;
+    if (Date.now() - start.t > 600) return;
+    if (intent === 'open' && dx < -60) setMobileCartOpen(true);
+    else if (intent === 'close' && dx > 60) setMobileCartOpen(false);
+  }
 
   // Largeur du panier ticket (redimensionnable, persistée en localStorage)
   const DEFAULT_TICKET_WIDTH = 360; // 300 * 1.2
@@ -738,8 +759,12 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
       className="md:grid h-full flex flex-col"
       style={{ gridTemplateColumns: `1fr 6px ${ticketWidth}px` }}
     >
-      {/* Gauche : catalogue */}
-      <div className="flex flex-col bg-white min-w-0 flex-1 md:flex-none">
+      {/* Gauche : catalogue. Sur mobile, écouter les swipes (gauche → ouvre panier). */}
+      <div
+        className="flex flex-col bg-white min-w-0 flex-1 md:flex-none"
+        onTouchStart={onTouchStart}
+        onTouchEnd={(e) => onTouchEnd(e, 'open')}
+      >
         <div className="flex items-center gap-2 px-3 md:px-5 py-3 border-b border-border bg-white">
           <input
             ref={searchRef}
@@ -848,9 +873,8 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
         <div className="w-0.5 h-12 bg-border group-hover:bg-accent-deep rounded-full" />
       </div>
 
-      {/* Barre panier flottante en bas (mobile) — toujours visible quand des
-          articles sont au panier, sinon visible mais grisée. Au clic, ouvre
-          la feuille panier glissée du bas (mobileCartOpen). */}
+      {/* Barre panier flottante en bas (mobile) — alternative au swipe :
+          un clic ouvre la feuille panier glissée depuis la droite. */}
       <div className="md:hidden fixed bottom-0 inset-x-0 z-30 border-t border-border bg-white shadow-[0_-6px_18px_rgba(0,0,0,0.06)]"
            style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
         <button
@@ -865,31 +889,33 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
           </span>
           <span className="text-lg font-semibold">{formatEUR(totals.ttc)}</span>
           <span className="rounded-xl accent-bar text-white px-4 py-2 text-sm font-semibold">
-            Voir
+            Voir →
           </span>
         </button>
       </div>
 
       {/* Droite : panier. En desktop, colonne fixe à droite. En mobile,
-          feuille glissée du bas pleine hauteur. pt-safe / pb-safe pour
-          respecter les zones safe-area iOS (notch en haut, home indicator
-          en bas). */}
+          feuille glissée DEPUIS LA DROITE pleine hauteur — cohérent
+          avec le geste de swipe horizontal (← ouvre, → ferme).
+          pt-safe / pb-safe pour respecter les zones safe-area iOS. */}
       <aside
+        onTouchStart={onTouchStart}
+        onTouchEnd={(e) => onTouchEnd(e, 'close')}
         className={`
           flex flex-col bg-white min-w-0
-          md:border-l md:border-border md:static md:translate-y-0 md:visible md:opacity-100 md:p-0
+          md:border-l md:border-border md:static md:translate-x-0 md:visible md:opacity-100 md:p-0
           fixed inset-0 z-40 transition-transform duration-300 pt-safe pb-safe
-          ${mobileCartOpen ? 'translate-y-0' : 'translate-y-full md:translate-y-0'}
+          ${mobileCartOpen ? 'translate-x-0' : 'translate-x-full md:translate-x-0'}
         `}
       >
         <div className="px-5 py-3 border-b border-border flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <button
               onClick={() => setMobileCartOpen(false)}
-              className="md:hidden -ml-2 px-2 py-1 text-ink-soft hover:text-ink"
-              aria-label="Fermer le panier"
+              className="md:hidden -ml-2 px-2 py-1 text-ink-soft hover:text-ink text-xl"
+              aria-label="Retour aux articles (glissez à droite)"
             >
-              ↓
+              ←
             </button>
             <div>
               <div className="text-xs uppercase tracking-wider text-ink-soft">Ticket en cours</div>
