@@ -871,12 +871,14 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
       </div>
 
       {/* Droite : panier. En desktop, colonne fixe à droite. En mobile,
-          feuille glissée du bas pleine hauteur. */}
+          feuille glissée du bas pleine hauteur. pt-safe / pb-safe pour
+          respecter les zones safe-area iOS (notch en haut, home indicator
+          en bas). */}
       <aside
         className={`
           flex flex-col bg-white min-w-0
-          md:border-l md:border-border md:static md:translate-y-0 md:visible md:opacity-100
-          fixed inset-0 z-40 transition-transform duration-300
+          md:border-l md:border-border md:static md:translate-y-0 md:visible md:opacity-100 md:p-0
+          fixed inset-0 z-40 transition-transform duration-300 pt-safe pb-safe
           ${mobileCartOpen ? 'translate-y-0' : 'translate-y-full md:translate-y-0'}
         `}
       >

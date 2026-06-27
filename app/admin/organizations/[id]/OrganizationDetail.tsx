@@ -233,7 +233,9 @@ function AdminActions({ id, maxDevicesFromServer, onChange }: {
         </div>
 
         <div className="rounded-xl border border-border p-3">
-          <div className="font-medium text-sm">Limite multi-appareils</div>
+          <div className="font-medium text-sm">
+            Limite multi-appareils <span className="text-ink-soft font-normal">· actuel : <strong>{maxDevicesFromServer}</strong></span>
+          </div>
           <p className="text-xs text-ink-soft mt-1">
             Nombre de sessions simultanées autorisées. 1 = mono-poste, &gt;1 = option payante.
           </p>
@@ -242,11 +244,21 @@ function AdminActions({ id, maxDevicesFromServer, onChange }: {
                    className="input h-9 max-w-[100px]"
                    value={maxDevices}
                    onChange={(e) => setMaxDevices(Math.max(1, Math.min(50, Number(e.target.value) || 1)))} />
-            <button onClick={() => void call({ action: 'set_max_devices', max_devices: maxDevices })}
-                    disabled={busy !== null} className="btn-soft text-xs flex-1">
-              Appliquer
+            <button
+              onClick={() => void call({ action: 'set_max_devices', max_devices: maxDevices })}
+              disabled={busy !== null || maxDevices === maxDevicesFromServer}
+              className={`text-xs flex-1 ${
+                maxDevices !== maxDevicesFromServer ? 'btn-primary' : 'btn-soft opacity-60'
+              }`}
+            >
+              {busy === '"set_max_devices"' ? '…' : maxDevices === maxDevicesFromServer ? 'Aucun changement' : `Appliquer ${maxDevices}`}
             </button>
           </div>
+          {maxDevices !== maxDevicesFromServer && (
+            <p className="mt-2 text-xs text-warning">
+              ⚠ Valeur tapée non encore enregistrée. Cliquez sur « Appliquer {maxDevices} » pour valider.
+            </p>
+          )}
         </div>
 
         <div className="rounded-xl border border-border p-3">
@@ -302,6 +314,8 @@ function ActiveSessions({ id, version, onChange }: {
   }
   const [sessions, setSessions] = useState<SessionRow[]>([]);
   const [maxDevices, setMaxDevices] = useState<number>(1);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [viewerOtherOrg, setViewerOtherOrg] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -312,6 +326,8 @@ function ActiveSessions({ id, version, onChange }: {
       const j = await r.json();
       setSessions(j.sessions ?? []);
       setMaxDevices(Number(j.max_devices) || 1);
+      setCurrentSessionId(j.current_session_id ?? null);
+      setViewerOtherOrg(j.viewer_in_other_org ?? null);
     }
     setLoading(false);
   }
@@ -389,37 +405,47 @@ function ActiveSessions({ id, version, onChange }: {
         <div className="text-sm text-ink-soft py-2">Chargement…</div>
       ) : sessions.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border p-4 text-sm text-ink-soft text-center">
-          Aucun appareil connecté.
-          <div className="text-xs mt-1">
-            Si le client est connecté mais n&apos;apparaît pas ici : sa session est probablement
-            attachée à un autre tenant (super_admin cross-orga).
-          </div>
+          Aucun appareil connecté à cette organisation.
+          {viewerOtherOrg && (
+            <div className="text-xs mt-2 text-warning">
+              ℹ Votre propre session est rattachée à <strong>{viewerOtherOrg}</strong> (super_admin
+              cross-orga), c&apos;est pourquoi elle n&apos;apparaît pas ici.
+            </div>
+          )}
         </div>
       ) : (
         <div className="rounded-xl border border-border divide-y divide-border overflow-hidden">
-          {sessions.map((s) => (
-            <div key={s.id} className="flex items-center gap-3 px-4 py-2.5">
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium truncate">
-                  {s.user_full_name} <span className="text-ink-soft font-normal">· {s.user_email}</span>
+          {sessions.map((s) => {
+            const isMe = s.id === currentSessionId;
+            return (
+              <div key={s.id} className={`flex items-center gap-3 px-4 py-2.5 ${isMe ? 'bg-accent-soft' : ''}`}>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium truncate flex items-center gap-2">
+                    {s.user_full_name} <span className="text-ink-soft font-normal">· {s.user_email}</span>
+                    {isMe && (
+                      <span className="rounded-full bg-accent-deep text-white text-[10px] px-2 py-0.5 font-semibold">
+                        cet appareil
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-xs text-ink-soft mt-0.5">
+                    {deviceLabel(s.user_agent)}
+                    {browserLabel(s.user_agent) && ` · ${browserLabel(s.user_agent)}`}
+                    {s.ip && ` · IP ${s.ip}`}
+                    {' · ouverte le '}{new Date(s.created_at).toLocaleString('fr-FR')}
+                  </div>
                 </div>
-                <div className="text-xs text-ink-soft mt-0.5">
-                  {deviceLabel(s.user_agent)}
-                  {browserLabel(s.user_agent) && ` · ${browserLabel(s.user_agent)}`}
-                  {s.ip && ` · IP ${s.ip}`}
-                  {' · ouverte le '}{new Date(s.created_at).toLocaleString('fr-FR')}
-                </div>
+                <button
+                  onClick={() => void revoke(s.id)}
+                  disabled={busy === s.id}
+                  className="btn-ghost text-xs text-danger hover:bg-danger/10 disabled:opacity-50"
+                  title={isMe ? 'Vous serez déconnecté' : 'Forcer la déconnexion / libérer la place'}
+                >
+                  {busy === s.id ? '…' : 'Libérer'}
+                </button>
               </div>
-              <button
-                onClick={() => void revoke(s.id)}
-                disabled={busy === s.id}
-                className="btn-ghost text-xs text-danger hover:bg-danger/10 disabled:opacity-50"
-                title="Forcer la déconnexion / libérer la place"
-              >
-                {busy === s.id ? '…' : 'Libérer'}
-              </button>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </section>

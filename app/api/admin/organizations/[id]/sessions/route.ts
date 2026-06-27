@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
+import { jwtVerify } from 'jose';
 import { query } from '@/lib/db/client';
 import { requireSuperAdmin } from '@/lib/auth/guards';
+import { SESSION_COOKIE } from '@/lib/auth/session';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,13 +40,38 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 
   // Compte aussi la limite multi-appareils pour permettre l'affichage
   // "3 / 5 appareils utilisés".
-  const orgRes = await query<{ max_devices: number }>(
-    `SELECT COALESCE(max_devices, 1) AS max_devices FROM organizations WHERE id = $1`,
+  const orgRes = await query<{ max_devices: number; name: string }>(
+    `SELECT COALESCE(max_devices, 1) AS max_devices, name FROM organizations WHERE id = $1`,
     [params.id],
   );
+
+  // Identifie la session du visiteur (utile pour afficher "(cet appareil)").
+  let currentSessionId: string | null = null;
+  let viewerOrgName: string | null = null;
+  try {
+    const cookie = cookies().get(SESSION_COOKIE);
+    if (cookie && process.env.SESSION_SECRET) {
+      const { payload } = await jwtVerify(
+        cookie.value,
+        Buffer.from(process.env.SESSION_SECRET, 'hex'),
+        { algorithms: ['HS256'] },
+      );
+      currentSessionId = (payload.jti as string) ?? null;
+      const viewerOrgId = payload.org as string | undefined;
+      if (viewerOrgId && viewerOrgId !== params.id) {
+        const vo = await query<{ name: string }>(
+          `SELECT name FROM organizations WHERE id = $1`, [viewerOrgId],
+        );
+        viewerOrgName = vo.rows[0]?.name ?? null;
+      }
+    }
+  } catch { /* cookie absent ou JWT invalide */ }
 
   return NextResponse.json({
     sessions: rows,
     max_devices: Number(orgRes.rows[0]?.max_devices ?? 1),
+    organization_name: orgRes.rows[0]?.name ?? null,
+    current_session_id: currentSessionId,
+    viewer_in_other_org: viewerOrgName,
   });
 }
