@@ -28,7 +28,6 @@ const schema = z.object({
   port: z.number().int().min(1).max(65535),
   paper_width: z.union([z.literal(58), z.literal(80)]),
   brand: z.string().max(120),
-  auto_print: z.boolean(),
 });
 
 export async function PATCH(req: Request) {

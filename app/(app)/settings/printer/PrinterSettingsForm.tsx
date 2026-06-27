@@ -10,7 +10,6 @@ interface Settings {
   port: number;
   paper_width: 58 | 80;
   brand: string;
-  auto_print: boolean;
 }
 
 const DEFAULTS: Settings = {
@@ -19,7 +18,6 @@ const DEFAULTS: Settings = {
   port: 9100,
   paper_width: 80,
   brand: '',
-  auto_print: false,
 };
 
 export default function PrinterSettingsForm({ canWrite }: { canWrite: boolean }) {
@@ -153,19 +151,10 @@ export default function PrinterSettingsForm({ canWrite }: { canWrite: boolean })
           </div>
         </Field>
 
-        <div className="flex items-center justify-between gap-3 pt-3 border-t border-border">
-          <div>
-            <div className="font-medium text-sm">Imprimer automatiquement</div>
-            <p className="text-xs text-ink-soft mt-0.5">
-              Après chaque vente validée, envoyer le ticket directement à l&apos;imprimante.
-            </p>
-          </div>
-          <Toggle
-            checked={s.auto_print}
-            disabled={!canWrite || !s.enabled}
-            onChange={(v) => patch('auto_print', v)}
-          />
-        </div>
+        <p className="text-xs text-ink-soft pt-3 border-t border-border">
+          ℹ Les options « Imprimer auto après vente » et « Imprimer auto le Z »
+          se règlent dans <strong>Paramétrage ticket</strong>.
+        </p>
 
         <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-border">
           <button

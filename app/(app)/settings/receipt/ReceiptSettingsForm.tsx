@@ -128,6 +128,22 @@ export default function ReceiptSettingsForm({ initial, canEdit }: {
                    checked={form.show_tax_breakdown} disabled={!canEdit}
                    onChange={(v) => setForm({ ...form, show_tax_breakdown: v })} />
           </div>
+
+          <div className="card p-5 space-y-3">
+            <h2 className="font-semibold">Impression automatique</h2>
+            <p className="text-xs text-ink-soft">
+              Nécessite qu&apos;une imprimante soit configurée dans{' '}
+              <strong>Imprimante ticket (IP)</strong>. Sur iPad, l&apos;impression
+              passe par AirPrint — utile aussi si vous avez ajouté l&apos;imprimante
+              à votre Mac / PC en imprimante par défaut.
+            </p>
+            <Check label="Imprimer le ticket automatiquement après chaque vente"
+                   checked={form.auto_print_receipt} disabled={!canEdit}
+                   onChange={(v) => setForm({ ...form, auto_print_receipt: v })} />
+            <Check label="Imprimer le Z automatiquement à la clôture journalière"
+                   checked={form.auto_print_z} disabled={!canEdit}
+                   onChange={(v) => setForm({ ...form, auto_print_z: v })} />
+          </div>
         </div>
 
         {/* Prévisualisation */}

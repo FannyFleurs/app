@@ -17,7 +17,6 @@ export interface PrinterSettings {
   port: number;
   paper_width: 58 | 80;
   brand: string;          // ex : "Epson TM-T20III"
-  auto_print: boolean;    // imprimer automatiquement le ticket après vente
 }
 
 export const PRINTER_KEY = 'printer';
@@ -28,7 +27,6 @@ export const PRINTER_DEFAULTS: PrinterSettings = {
   port: 9100,
   paper_width: 80,
   brand: '',
-  auto_print: false,
 };
 
 export function mergePrinterDefaults(partial: Partial<PrinterSettings> | null): PrinterSettings {

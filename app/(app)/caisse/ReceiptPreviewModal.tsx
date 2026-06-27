@@ -24,6 +24,40 @@ export default function ReceiptPreviewModal({ receipt, onClose }: Props) {
   const [timeLeft, setTimeLeft] = useState(AUTO_CLOSE_MS);
   const timerRef = useRef<number | null>(null);
   const [paused, setPaused] = useState(false);
+  const autoPrintFiredRef = useRef(false);
+
+  // Auto-impression : si auto_print_receipt + printer.enabled, on ouvre
+  // le PDF dans un onglet qui déclenche le dialogue d'impression natif
+  // (compatible AirPrint sur iPad et imprimante par défaut sur Mac/PC).
+  useEffect(() => {
+    if (isSchool || autoPrintFiredRef.current) return;
+    autoPrintFiredRef.current = true;
+    void (async () => {
+      try {
+        const [rR, rP] = await Promise.all([
+          fetch('/api/settings/receipt'),
+          fetch('/api/settings/printer'),
+        ]);
+        if (!rR.ok || !rP.ok) return;
+        const recv = (await rR.json()).settings;
+        const printer = (await rP.json()).settings;
+        if (recv?.auto_print_receipt && printer?.enabled) {
+          // window.open en background tab puis print : sur mobile, l'utilisateur
+          // confirmera dans le menu Partager → Imprimer.
+          const w = window.open(pdfUrl, '_blank');
+          if (w) {
+            // Tentative d'impression auto au load. Échoue silencieusement
+            // si le PDF est dans un onglet bloqué — au moins l'onglet est
+            // ouvert et l'utilisateur peut imprimer en 1 geste.
+            w.addEventListener('load', () => {
+              try { w.print(); } catch { /* iOS bloque souvent print() */ }
+            });
+          }
+        }
+      } catch { /* ignore */ }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Auto-fermeture après 60s. Pause si on ouvre un sous-modal, survol carte,
   // ou facture en cours de génération.

@@ -18,6 +18,8 @@ const schema = z.object({
   footer_message: z.string().max(500).optional(),
   show_barcode: z.boolean().optional(),
   show_tax_breakdown: z.boolean().optional(),
+  auto_print_receipt: z.boolean().optional(),
+  auto_print_z: z.boolean().optional(),
 });
 
 export async function GET() {

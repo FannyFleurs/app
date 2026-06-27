@@ -28,6 +28,10 @@ export interface ReceiptSettings {
   show_barcode: boolean;
   /** Imprime le détail de TVA. */
   show_tax_breakdown: boolean;
+  /** Après chaque vente validée, ouvre le PDF du ticket en impression directe. */
+  auto_print_receipt: boolean;
+  /** À la clôture journalière (Z), imprime automatiquement le Z. */
+  auto_print_z: boolean;
 }
 
 export const RECEIPT_DEFAULTS: ReceiptSettings = {
@@ -42,6 +46,8 @@ export const RECEIPT_DEFAULTS: ReceiptSettings = {
   footer_message: 'À bientôt !',
   show_barcode: true,
   show_tax_breakdown: true,
+  auto_print_receipt: false,
+  auto_print_z: false,
 };
 
 export function mergeReceiptDefaults(partial: Partial<ReceiptSettings> | null | undefined): ReceiptSettings {

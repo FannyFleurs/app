@@ -197,6 +197,27 @@ export default function ClosuresAdmin({ stores, registers }: { stores: Store[]; 
     if (storageKey && typeof window !== 'undefined') {
       try { localStorage.removeItem(storageKey); } catch { /* ignore */ }
     }
+    // Auto-impression du Z si configurée.
+    void (async () => {
+      try {
+        const [rR, rP] = await Promise.all([
+          fetch('/api/settings/receipt'),
+          fetch('/api/settings/printer'),
+        ]);
+        if (!rR.ok || !rP.ok) return;
+        const recv = (await rR.json()).settings;
+        const printer = (await rP.json()).settings;
+        if (recv?.auto_print_z && printer?.enabled) {
+          const url = `/api/closures/daily/${j.daily_closure_id}/pdf`;
+          const w = window.open(url, '_blank');
+          if (w) {
+            w.addEventListener('load', () => {
+              try { w.print(); } catch { /* iOS bloque souvent print() */ }
+            });
+          }
+        }
+      } catch { /* ignore */ }
+    })();
     await loadPreview();
   }
 
