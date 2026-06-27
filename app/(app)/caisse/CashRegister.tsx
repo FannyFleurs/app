@@ -774,62 +774,90 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
     return () => window.removeEventListener('keydown', onKey);
   }, [lines.length, view, searchQ]);
 
+  // Refs pour que le listener global n'ait pas besoin d'être re-attaché
+  // à chaque mise à jour de products / état modal.
+  const productsRef = useRef<PosProduct[]>([]);
+  useEffect(() => { productsRef.current = products; }, [products]);
+  const modalOpenRef = useRef(false);
+  useEffect(() => {
+    modalOpenRef.current =
+      showPayment || showOpenSession || showHeld || showFreePrice !== null ||
+      showPicker || discountLineKey !== null || justifyAction !== null ||
+      showCartActions || showOrderModal || showScanner || receipt !== null;
+  });
+
   // Scanner USB / douchette global : capture les caractères tapés
-  // n'importe où sur la page caisse (hors champs texte) et tente un
-  // ajout au panier quand on reçoit Entrée. Plus de filtrage temporel
-  // strict : on accepte tout ce qui ressemble à un code-barres
-  // (≥ 3 caractères alphanumériques) terminé par Entrée. Si plus de
-  // 2 secondes sans saisie, on purge le buffer (utilisateur humain
-  // qui hésite, pas un scan).
+  // n'importe où sur la page caisse (hors champs texte ET hors modale
+  // ouverte) et déclenche l'ajout au panier quand on reçoit Entrée.
+  // Utilise document + capture phase + preventDefault pour intercepter
+  // les frappes AVANT qu'elles n'atteignent les boutons (sinon un bouton
+  // qui a le focus avalerait l'Entrée du scan et déclencherait un clic).
   useEffect(() => {
     const buf: { key: string; t: number }[] = [];
     const MIN_LEN = 3;
-    const PURGE_MS = 2000;
+    const PURGE_MS = 500;
 
     function flush() { buf.length = 0; }
 
+    function tryAddByCode(code: string) {
+      const products = productsRef.current;
+      const c = code.trim();
+      if (!c) return;
+      const match = products.find(
+        (p) => p.barcode === c || p.barcode === c.toUpperCase() ||
+               p.sku === c || p.sku === c.toUpperCase(),
+      );
+      if (match) addProduct(match);
+      else setSearch(c);
+    }
+
     function onKey(e: KeyboardEvent) {
-      // Ignore quand le focus est sur un champ de saisie (le champ
-      // recherche a son propre handler).
+      // Ne pas interférer si une modale est ouverte (chaque modale gère
+      // son propre clavier — Escape, Entrée pour valider, etc.).
+      if (modalOpenRef.current) return;
+
+      // Le champ recherche a son propre handler ; on laisse les autres
+      // inputs (numpad PIN, etc.) recevoir leurs frappes normalement.
       const tgt = e.target as HTMLElement | null;
       const inField = tgt && (tgt.tagName === 'INPUT' || tgt.tagName === 'TEXTAREA' || tgt.tagName === 'SELECT' || tgt.isContentEditable);
       if (inField) return;
 
       const now = Date.now();
-      // Purge si la dernière frappe est trop ancienne
       if (buf.length && now - buf[buf.length - 1]!.t > PURGE_MS) flush();
 
-      if (e.key === 'Enter') {
+      // Fin de séquence : Entrée OU Tab (certains scanners).
+      if (e.key === 'Enter' || e.key === 'Tab') {
         if (buf.length >= MIN_LEN) {
           const code = buf.map((k) => k.key).join('');
           flush();
+          // Bloque le comportement par défaut du focused button qui
+          // déclencherait un clic non voulu.
           e.preventDefault();
-          addByCode(code);
+          e.stopPropagation();
+          tryAddByCode(code);
         } else {
           flush();
         }
         return;
       }
-      // Tab est souvent envoyé par certains scanners comme séparateur
-      if (e.key === 'Tab' && buf.length >= MIN_LEN) {
-        const code = buf.map((k) => k.key).join('');
-        flush();
-        e.preventDefault();
-        addByCode(code);
-        return;
-      }
-      // Caractères acceptés : alphanumériques + tiret / point / slash
-      if (/^[0-9a-zA-Z\-._/]$/.test(e.key)) {
+
+      // Caractères acceptés : alphanumériques + - . _ /
+      if (e.key.length === 1 && /^[0-9a-zA-Z\-._/]$/.test(e.key)) {
         buf.push({ key: e.key, t: now });
+        // Empêche le bouton focused d'avaler la touche ou de scroller.
+        e.preventDefault();
+        e.stopPropagation();
         return;
       }
-      // Toute autre touche casse la séquence
-      if (e.key.length > 1) flush();
+      // Toute autre touche multi-caractère (Shift, Ctrl, Escape, F-keys…)
+      // n'invalide pas le buffer (Shift est précédé par les digits).
     }
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+
+    // capture: true → on est appelé AVANT les listeners sur les boutons.
+    document.addEventListener('keydown', onKey, true);
+    return () => document.removeEventListener('keydown', onKey, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [products]);
+  }, []);
 
   if (sessionLoading) {
     return <div className="p-8 text-ink-soft">Chargement caisse…</div>;
