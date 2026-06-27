@@ -28,6 +28,7 @@ interface FormState {
   admin_name: string;
   admin_email: string;
   admin_pin: string;
+  admin_password: string;
 }
 
 const STEPS = [
@@ -70,6 +71,7 @@ export default function SetupWizard() {
     admin_name: '',
     admin_email: '',
     admin_pin: '',
+    admin_password: '',
   });
 
   // Mode multi-tenant : pas de check global, on autorise toujours la création.
@@ -103,7 +105,8 @@ export default function SetupWizard() {
       case 'tax':      return f.taxes.length > 0 && f.taxes.every((t) => t.code && t.label && t.rate >= 0);
       case 'admin':    return f.admin_name.trim().length > 0
                             && /^[^@]+@[^@]+\.[^@]+$/.test(f.admin_email)
-                            && /^\d{4}$/.test(f.admin_pin);
+                            && /^\d{4}$/.test(f.admin_pin)
+                            && f.admin_password.length >= 8;
       default:         return true;
     }
   }
@@ -139,6 +142,7 @@ export default function SetupWizard() {
           email: f.admin_email.trim().toLowerCase(),
           full_name: f.admin_name.trim(),
           pin: f.admin_pin,
+          password: f.admin_password,
         },
         tax_rates: f.taxes.map((t) => ({
           code: t.code.toUpperCase(),
@@ -349,7 +353,19 @@ export default function SetupWizard() {
                   <input type="email" className="input" value={f.admin_email}
                          onChange={(e) => patch('admin_email', e.target.value)} />
                 </Field>
-                <Field label="PIN (4 chiffres) *" full>
+                <Field label="Mot de passe (8 caractères min.) *">
+                  <input
+                    type="password"
+                    className="input"
+                    value={f.admin_password}
+                    onChange={(e) => patch('admin_password', e.target.value)}
+                    autoComplete="new-password"
+                  />
+                  <p className="mt-1 text-xs text-ink-soft">
+                    Sert à la connexion via email + mot de passe (Accès admin).
+                  </p>
+                </Field>
+                <Field label="PIN (4 chiffres) *">
                   <input
                     inputMode="numeric"
                     className="input max-w-[160px] text-2xl tracking-[0.5em] tabular-nums"
@@ -358,7 +374,7 @@ export default function SetupWizard() {
                     onChange={(e) => patch('admin_pin', e.target.value.replace(/\D/g, '').slice(0, 4))}
                   />
                   <p className="mt-1 text-xs text-ink-soft">
-                    Le PIN permet la connexion rapide en caisse. Vous pourrez le modifier ensuite.
+                    Connexion rapide en caisse. Modifiable ensuite.
                   </p>
                 </Field>
               </div>
@@ -381,7 +397,9 @@ export default function SetupWizard() {
                 t.label + (t.is_default ? ' · défaut' : ''),
               ])} />
               <RecapBlock title="Administrateur" items={[
-                ['Nom', f.admin_name], ['Email', f.admin_email], ['PIN', '••••'],
+                ['Nom', f.admin_name], ['Email', f.admin_email],
+                ['Mot de passe', '•'.repeat(Math.min(f.admin_password.length, 12))],
+                ['PIN', '••••'],
               ]} />
               {error && <div className="rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
             </div>
