@@ -13,6 +13,7 @@ const patch = z.object({
   email: z.string().email().max(160).optional(),
   role: z.enum(ROLES).optional(),
   pin: z.string().regex(/^\d{4}$/).optional(),
+  password: z.string().min(8).max(120).optional(),
   pin_required: z.boolean().optional(),
   is_active: z.boolean().optional(),
 });
@@ -35,6 +36,12 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   if (d.pin !== undefined) {
     const h = await hashPassword(d.pin);
     sets.push(`pin_code_hash = $${i++}`); vals.push(h);
+    // ⚠ ne touche PLUS au password_hash : le mot de passe est géré
+    // indépendamment via le champ "password" pour ne pas écraser un
+    // vrai mot de passe sécurisé par un hash du PIN (4 chiffres).
+  }
+  if (d.password !== undefined) {
+    const h = await hashPassword(d.password);
     sets.push(`password_hash = $${i++}`); vals.push(h);
   }
   if (sets.length === 0) return NextResponse.json({ ok: true });
@@ -51,7 +58,10 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   await audit({
     organizationId: g.user.organizationId, userId: g.user.id,
     action: 'users.update', entityType: 'user', entityId: params.id,
-    payload: Object.keys(d).reduce((acc, k) => ({ ...acc, [k]: k === 'pin' ? '****' : (d as Record<string, unknown>)[k] }), {}),
+    payload: Object.keys(d).reduce((acc, k) => ({
+      ...acc,
+      [k]: (k === 'pin' || k === 'password') ? '****' : (d as Record<string, unknown>)[k],
+    }), {}),
   });
   return NextResponse.json({ ok: true });
 }

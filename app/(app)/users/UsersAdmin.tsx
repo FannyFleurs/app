@@ -139,6 +139,8 @@ function UserFormModal({ user, onClose, onSaved }: {
   const [email, setEmail] = useState(user?.email ?? '');
   const [role, setRole] = useState<string>(user?.role ?? 'vendeur');
   const [pin, setPin] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [isActive, setIsActive] = useState(user?.is_active ?? true);
   const [pinRequired, setPinRequired] = useState(user?.pin_required ?? true);
   const [saving, setSaving] = useState(false);
@@ -150,6 +152,9 @@ function UserFormModal({ user, onClose, onSaved }: {
       setError('Le PIN doit faire 4 chiffres.'); return;
     }
     if (pin && !/^\d{4}$/.test(pin)) { setError('Le PIN doit faire 4 chiffres.'); return; }
+    if (password && password.length < 8) {
+      setError('Mot de passe : 8 caractères minimum.'); return;
+    }
     setSaving(true); setError(null);
     const payload: Record<string, unknown> = {
       full_name: fullName.trim(),
@@ -159,6 +164,7 @@ function UserFormModal({ user, onClose, onSaved }: {
       pin_required: pinRequired,
     };
     if (pin) payload.pin = pin;
+    if (password) payload.password = password;
     const url = user ? `/api/users/${user.id}` : '/api/users';
     const method = user ? 'PATCH' : 'POST';
     const r = await fetch(url, {
@@ -217,6 +223,34 @@ function UserFormModal({ user, onClose, onSaved }: {
               ))}
             </div>
             <p className="mt-1 text-xs text-ink-soft">{ROLE_DESC[role]}</p>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-ink-soft">
+              Mot de passe (8 caractères min.)
+              {user && <span className="text-xs"> — laisser vide pour ne pas changer</span>}
+            </label>
+            <div className="mt-1 flex gap-2">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                className="input flex-1"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder={user ? 'Nouveau mot de passe' : 'Mot de passe'}
+                autoComplete="new-password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((s) => !s)}
+                className="btn-ghost text-xs px-3"
+                tabIndex={-1}
+              >
+                {showPassword ? 'Masquer' : 'Afficher'}
+              </button>
+            </div>
+            <p className="mt-1 text-xs text-ink-soft">
+              Sert à la connexion via « Accès admin et autres » (email + mot de passe).
+            </p>
           </div>
 
           <div>

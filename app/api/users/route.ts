@@ -13,6 +13,7 @@ const schema = z.object({
   email: z.string().email().max(160),
   role: z.enum(ROLES),
   pin: z.string().regex(/^\d{4}$/, 'PIN doit être 4 chiffres').optional(),
+  password: z.string().min(8).max(120).optional(),
   pin_required: z.boolean().optional(),
   is_active: z.boolean().optional(),
 }).refine(
@@ -55,8 +56,14 @@ export async function POST(req: Request) {
     if (exists.rowCount && exists.rowCount > 0) return jsonError('EMAIL_ALREADY_EXISTS', 409);
 
     const pinHash = d.pin ? await hashPassword(d.pin) : null;
-    // Mot de passe applicatif (NOT NULL) : hash du PIN, sinon hash aléatoire
-    const passwordHash = pinHash ?? await hashPassword(crypto.randomUUID());
+    // Mot de passe applicatif (NOT NULL) :
+    //   password fourni → hash du password (recommandé)
+    //   sinon hash du PIN si fourni
+    //   sinon hash aléatoire (compte non connectable par email/password
+    //   tant qu'on n'aura pas reset, mais le PIN suffira pour la caisse)
+    const passwordHash = d.password
+      ? await hashPassword(d.password)
+      : (pinHash ?? await hashPassword(crypto.randomUUID()));
 
     const ins = await query<{ id: string }>(
       `INSERT INTO users
