@@ -55,8 +55,8 @@ export default function TopBar({
         <span className="font-semibold tracking-tight hidden sm:inline text-ink">Webpos</span>
       </Link>
 
-      {/* Onglets — centrés horizontalement dans la barre */}
-      <nav className="flex items-center justify-center gap-1 px-2 overflow-x-auto no-scrollbar flex-1">
+      {/* Onglets — masqués sur mobile, centrés sur ≥ md */}
+      <nav className="hidden md:flex items-center justify-center gap-1 px-2 overflow-x-auto no-scrollbar flex-1">
         {tabs.map((t) => {
           const active = path === t.href || path?.startsWith(t.href + '/');
           return (

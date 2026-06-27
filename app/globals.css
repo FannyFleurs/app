@@ -45,6 +45,9 @@ body[data-mode="dark"] {
 }
 .animate-slide-in { animation: slide-in 220ms ease-out; }
 
+@keyframes spin-slow { to { transform: rotate(360deg); } }
+.animate-spin-slow { animation: spin-slow 1.6s linear infinite; }
+
 .no-scrollbar { scrollbar-width: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 

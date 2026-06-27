@@ -13,6 +13,7 @@ import JustificationModal from './JustificationModal';
 import CartActionsModal from './CartActionsModal';
 import OrderModal from './OrderModal';
 import dynamic from 'next/dynamic';
+import Icon from '@/components/Icon';
 import { tileMetrics, type PosUiSettings } from '@/lib/settings/pos-ui';
 
 // Chargé uniquement à l'ouverture (le bundle ZXing pèse ~200 ko).
@@ -37,6 +38,8 @@ export interface PosProduct {
   is_top_product: boolean;
   /** Si true, AUCUNE remise (client ou globale) n'est appliquée. Cartes cadeaux. */
   no_discount?: boolean;
+  /** Couleur de fond #RRGGBB pour la tuile caisse (migration 0018). */
+  color?: string | null;
   tags: string[];
 }
 
@@ -902,12 +905,12 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
             title="Scanner code-barres / QR"
             aria-label="Scanner"
           >
-            <span className="text-lg">📷</span>
+            <Icon name="camera" size={18} />
           </button>
           <div className="hidden md:block flex-1" />
-          <button className="btn-ghost px-3" onClick={() => setShowHeld(true)} title="F4">
+          <button className="btn-ghost px-3 inline-flex items-center gap-1" onClick={() => setShowHeld(true)} title="F4">
             <span className="hidden md:inline">Panier en attente</span>
-            <span className="md:hidden">⏸</span>
+            <span className="md:hidden"><Icon name="pause" size={18} /></span>
             {heldCount > 0 && (
               <span className="ml-1.5 inline-flex items-center justify-center h-5 min-w-[1.25rem] px-1.5 rounded-full text-[11px] font-semibold accent-bar text-white">
                 {heldCount}
@@ -922,7 +925,7 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
             <div className="text-xs uppercase tracking-widest text-ink-soft font-semibold">
               {searchQ ? `Résultats pour « ${searchQ} »`
                 : view.kind === 'products' ? currentCategoryName
-                : '★ Top articles'}
+                : 'Top articles'}
             </div>
           </div>
 
@@ -937,6 +940,7 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
                   key={p.id}
                   onClick={() => addProduct(p)}
                   className={`card ${metrics.padding} hover:shadow-md hover:border-gray-300 transition-all active:scale-[0.98] aspect-[5/3] grid place-items-center text-center`}
+                  style={p.color ? { backgroundColor: p.color } : undefined}
                 >
                   <div className="flex flex-col items-center justify-center gap-1.5 max-w-full">
                     {posUi.show_product_image && p.image_url && (
@@ -970,6 +974,7 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
                   key={p.id}
                   onClick={() => addProduct(p)}
                   className={`card ${metrics.padding} hover:shadow-md hover:border-gray-300 transition-all active:scale-[0.98] aspect-[5/3] grid place-items-center text-center`}
+                  style={p.color ? { backgroundColor: p.color } : undefined}
                 >
                   <div className="flex flex-col items-center justify-center gap-1.5 max-w-full">
                     {posUi.show_product_image && p.image_url && (
@@ -1003,26 +1008,35 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
                 {/* Bouton "Top" pour revenir à la vue par défaut */}
                 <button
                   onClick={() => setView({ kind: 'categories' })}
-                  className={`rounded-lg border h-14 md:h-16 px-2 text-xs md:text-sm font-medium leading-tight line-clamp-2 transition-all active:scale-95 ${
+                  className={`rounded-lg border h-14 md:h-16 px-2 text-xs md:text-sm font-medium leading-tight transition-all active:scale-95 inline-flex flex-col items-center justify-center gap-1 ${
                     view.kind === 'categories'
                       ? 'accent-bar text-white border-transparent shadow-sm'
                       : 'bg-white border-border text-ink hover:border-gray-300'
                   }`}
                 >
-                  ★ Top
+                  <Icon name="star" size={16} />
+                  Top
                 </button>
                 {categoriesWithCounts.cats.map((c) => {
                   const isActive = view.kind === 'products' && view.categoryId === c.id;
+                  // Couleur catégorie : appliquée en background pleine teinte
+                  // pour les tuiles inactives (avec texte ink). Si la couleur
+                  // est sombre, le contraste reste OK grâce au libellé centré
+                  // sur fond légèrement teinté.
+                  const bg = c.color ?? '#F5F5F5';
                   return (
                     <button
                       key={c.id}
                       onClick={() => setView({ kind: 'products', categoryId: c.id })}
-                      className={`rounded-lg border h-14 md:h-16 px-2 text-xs md:text-sm font-medium leading-tight line-clamp-2 transition-all active:scale-95 ${
+                      className={`rounded-lg border h-14 md:h-16 px-2 text-xs md:text-sm font-semibold leading-tight line-clamp-2 transition-all active:scale-95 ${
                         isActive
-                          ? 'accent-bar text-white border-transparent shadow-sm'
-                          : 'bg-white border-border text-ink hover:border-gray-300'
-                      }`}
-                      style={!isActive && c.color ? { backgroundColor: c.color + '20' } : undefined}
+                          ? 'ring-2 shadow-sm border-transparent'
+                          : 'border-border hover:shadow-md'
+                      } text-ink`}
+                      style={{
+                        background: bg,
+                        ...(isActive ? { ['--tw-ring-color' as string]: 'var(--primary)' } : {}),
+                      }}
                     >
                       {c.name}
                     </button>
@@ -1046,6 +1060,20 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
         </div>
       </div>
 
+      {/* Badge sync flottant : apparaît brièvement en haut à droite quand
+          on persiste un changement vers le serveur (debounce ~250 ms).
+          Non persistant, opacity-0 quand idle. */}
+      <div
+        className={`fixed top-3 right-3 z-30 inline-flex items-center gap-1.5 rounded-full bg-white shadow-md border border-border px-3 py-1.5 text-xs text-ink-soft transition-opacity duration-300 pointer-events-none ${
+          savingLines ? 'opacity-100' : 'opacity-0'
+        }`}
+        aria-hidden={!savingLines}
+        role="status"
+      >
+        <Icon name="sync" size={12} className="animate-spin-slow" />
+        <span>Sync…</span>
+      </div>
+
       {/* Splitter pour redimensionner le ticket (desktop uniquement) */}
       <div
         onMouseDown={() => { dragging.current = true; document.body.style.cursor = 'col-resize'; }}
@@ -1065,14 +1093,16 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
           className="w-full flex items-center justify-between gap-3 px-4 py-3"
         >
           <span className="flex items-center gap-2 text-sm font-medium">
-            🛒 Panier
+            <Icon name="cart" size={18} />
+            Panier
             <span className="inline-flex items-center justify-center h-6 min-w-[1.5rem] px-2 rounded-full text-xs font-semibold accent-bar text-white">
               {lines.length}
             </span>
           </span>
           <span className="text-lg font-semibold">{formatEUR(totals.ttc)}</span>
-          <span className="rounded-xl accent-bar text-white px-4 py-2 text-sm font-semibold">
-            Voir →
+          <span className="rounded-xl accent-bar text-white px-4 py-2 text-sm font-semibold inline-flex items-center gap-1">
+            Voir
+            <Icon name="chevron-right" size={14} />
           </span>
         </button>
       </div>
@@ -1102,9 +1132,13 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
             </button>
             <div>
               <div className="text-xs uppercase tracking-wider text-ink-soft">Ticket en cours</div>
-              <div className="text-sm font-medium">
-                {lines.length} ligne(s){savingLines ? ' · sync…' : ''}
-                {cartComment && <span className="ml-1 text-xs text-ink-soft" title={cartComment}>· 💬</span>}
+              <div className="text-sm font-medium flex items-center gap-1.5">
+                {lines.length} ligne(s)
+                {cartComment && (
+                  <span className="text-ink-soft" title={cartComment}>
+                    <Icon name="comment" size={12} />
+                  </span>
+                )}
               </div>
             </div>
           </div>

@@ -23,6 +23,7 @@ const patchSchema = z.object({
   is_seasonal: z.boolean().optional(),
   is_top_product: z.boolean().optional(),
   no_discount: z.boolean().optional(),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable().optional(),
   is_customizable: z.boolean().optional(),
   visible_in_pos: z.boolean().optional(),
   is_active: z.boolean().optional(),
@@ -72,15 +73,17 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     // silencieusement si la migration n'a pas encore été appliquée.
     let hasTopCol = true;
     let hasNdCol = true;
-    if (patch.is_top_product != null || patch.no_discount != null) {
+    let hasColorCol = true;
+    if (patch.is_top_product != null || patch.no_discount != null || patch.color !== undefined) {
       const colCheck = await client.query<{ column_name: string }>(
         `SELECT column_name FROM information_schema.columns
           WHERE table_name = 'products'
-            AND column_name IN ('is_top_product','no_discount')`,
+            AND column_name IN ('is_top_product','no_discount','color')`,
       );
       const set = new Set(colCheck.rows.map((r) => r.column_name));
       hasTopCol = set.has('is_top_product');
       hasNdCol = set.has('no_discount');
+      hasColorCol = set.has('color');
     }
 
     const setParts: string[] = ['updated_by = $1', 'updated_at = now()'];
@@ -90,6 +93,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       if (k === 'price_change_reason') continue;
       if (k === 'is_top_product' && !hasTopCol) continue;
       if (k === 'no_discount' && !hasNdCol) continue;
+      if (k === 'color' && !hasColorCol) continue;
       setParts.push(`${k} = $${i++}`);
       values.push(v);
     }

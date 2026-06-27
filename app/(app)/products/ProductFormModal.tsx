@@ -13,7 +13,24 @@ interface Product {
   is_seasonal: boolean; is_customizable: boolean;
   is_top_product?: boolean;
   no_discount?: boolean;
+  color?: string | null;
 }
+
+// Palette de couleurs pré-définies pour les tuiles caisse — cohérente
+// avec celle utilisée pour les catégories.
+const PRODUCT_COLORS = [
+  { value: null,      label: 'Aucune' },
+  { value: '#F4D7D7', label: 'Rose pâle' },
+  { value: '#F8E0CC', label: 'Pêche' },
+  { value: '#F6E6B8', label: 'Crème' },
+  { value: '#D9E7C1', label: 'Vert clair' },
+  { value: '#C7E5DD', label: 'Menthe' },
+  { value: '#C6D8E8', label: 'Bleu ciel' },
+  { value: '#DCD2E6', label: 'Lavande' },
+  { value: '#F0CFD5', label: 'Vieux rose' },
+  { value: '#E8E0D0', label: 'Beige' },
+  { value: '#D6D6D6', label: 'Gris clair' },
+];
 
 export default function ProductFormModal({
   product, taxRates, categories, onClose, onSaved,
@@ -50,6 +67,7 @@ export default function ProductFormModal({
     is_customizable: product?.is_customizable ?? false,
     is_top_product: product?.is_top_product ?? false,
     no_discount: product?.no_discount ?? false,
+    color: product?.color ?? null,
     price_change_reason: '',
   });
   const [error, setError] = useState<string | null>(null);
@@ -73,6 +91,7 @@ export default function ProductFormModal({
       is_customizable: form.is_customizable,
       is_top_product: form.is_top_product,
       no_discount: form.no_discount,
+      color: form.color,
     };
     if (product && form.price_change_reason) payload.price_change_reason = form.price_change_reason;
     const res = product
@@ -215,6 +234,36 @@ export default function ProductFormModal({
                 (4 maximum). Au-delà, seuls les 4 premiers sont retenus.
               </p>
             )}
+          </Field>
+
+          <Field label="Couleur de la tuile (caisse)" full>
+            <div className="flex flex-wrap gap-2 mt-1">
+              {PRODUCT_COLORS.map((c) => {
+                const isSelected = form.color === c.value;
+                return (
+                  <button
+                    key={c.label}
+                    type="button"
+                    onClick={() => setForm({ ...form, color: c.value })}
+                    title={c.label}
+                    className={`h-9 w-9 rounded-lg border transition-all ${
+                      isSelected ? 'ring-2 shadow-sm' : 'hover:scale-105'
+                    } ${c.value === null ? 'border-dashed border-border bg-white' : 'border-border'}`}
+                    style={{
+                      backgroundColor: c.value ?? '#fff',
+                      ...(isSelected ? { ['--tw-ring-color' as string]: 'var(--primary)' } : {}),
+                    }}
+                  >
+                    {c.value === null && (
+                      <span className="text-xs text-ink-soft">—</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-1 text-xs text-ink-soft">
+              Couleur de fond appliquée à la tuile article sur la grille caisse.
+            </p>
           </Field>
           {product && (
             <Field label="Raison du changement de prix" full>

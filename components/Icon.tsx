@@ -26,7 +26,24 @@ export type IconName =
   | 'back'
   | 'check'
   | 'lock'
-  | 'print';
+  | 'print'
+  | 'cart'
+  | 'star'
+  | 'sync'
+  | 'comment'
+  | 'camera'
+  | 'package'
+  | 'truck'
+  | 'pause'
+  | 'card'
+  | 'gift'
+  | 'calendar'
+  | 'menu'
+  | 'plus'
+  | 'minus'
+  | 'close'
+  | 'warning'
+  | 'sparkle';
 
 const ICONS: Record<IconName, React.ReactNode> = {
   dashboard: (
@@ -150,6 +167,95 @@ const ICONS: Record<IconName, React.ReactNode> = {
       <path d="M6 9V3h12v6" />
       <rect x="3" y="9" width="18" height="8" rx="2" />
       <path d="M6 14h12v7H6z" />
+    </>
+  ),
+  cart: (
+    <>
+      <circle cx="9" cy="20" r="1.5" />
+      <circle cx="17" cy="20" r="1.5" />
+      <path d="M3 4h2l2.4 12.3a2 2 0 0 0 2 1.7h8.2a2 2 0 0 0 2-1.6L21 8H6" />
+    </>
+  ),
+  star: (
+    <path d="M12 2.5l2.95 6 6.62.95-4.79 4.66 1.13 6.58L12 17.6l-5.91 3.1 1.13-6.58L2.43 9.45l6.62-.95L12 2.5Z" />
+  ),
+  sync: (
+    <>
+      <path d="M21 12a9 9 0 0 1-15.6 6.2L3 16" />
+      <path d="M3 12a9 9 0 0 1 15.6-6.2L21 8" />
+      <path d="M21 3v5h-5" />
+      <path d="M3 21v-5h5" />
+    </>
+  ),
+  comment: (
+    <path d="M21 11.5a8.4 8.4 0 0 1-1 4 8.5 8.5 0 0 1-7.6 4.5 8.4 8.4 0 0 1-3.9-.9L3 20.5l1.4-5.5a8.4 8.4 0 0 1-.9-3.9 8.5 8.5 0 0 1 4.5-7.6 8.4 8.4 0 0 1 4-1h.5a8.5 8.5 0 0 1 8 8v.5Z" />
+  ),
+  camera: (
+    <>
+      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2v11Z" />
+      <circle cx="12" cy="13" r="4" />
+    </>
+  ),
+  package: (
+    <>
+      <path d="M16.5 9.4 7.5 4.21" />
+      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
+      <path d="m3.27 6.96 8.73 5.05 8.73-5.05" />
+      <path d="M12 22.08V12" />
+    </>
+  ),
+  truck: (
+    <>
+      <path d="M14 18V6H1v12h13Z" />
+      <path d="M14 8h5l3 3v7h-8" />
+      <circle cx="5.5" cy="18.5" r="1.5" />
+      <circle cx="18.5" cy="18.5" r="1.5" />
+    </>
+  ),
+  pause: (
+    <>
+      <rect x="6" y="4" width="4" height="16" rx="1" />
+      <rect x="14" y="4" width="4" height="16" rx="1" />
+    </>
+  ),
+  card: (
+    <>
+      <rect x="2" y="5" width="20" height="14" rx="2" />
+      <path d="M2 10h20" />
+      <path d="M6 15h4" />
+    </>
+  ),
+  gift: (
+    <>
+      <rect x="3" y="8" width="18" height="13" rx="1" />
+      <path d="M12 8v13" />
+      <path d="M3 12h18" />
+      <path d="M12 8c0-2 1.5-5 4-5s2 3-1 5h-3Z" />
+      <path d="M12 8c0-2-1.5-5-4-5s-2 3 1 5h3Z" />
+    </>
+  ),
+  calendar: (
+    <>
+      <rect x="3" y="4" width="18" height="17" rx="2" />
+      <path d="M3 10h18" />
+      <path d="M8 2v4M16 2v4" />
+    </>
+  ),
+  menu:    <path d="M4 7h16M4 12h16M4 17h16" />,
+  plus:    <path d="M12 5v14M5 12h14" />,
+  minus:   <path d="M5 12h14" />,
+  close:   <path d="M6 6l12 12M6 18L18 6" />,
+  warning: (
+    <>
+      <path d="M10.3 3.86 1.82 18a2 2 0 0 0 1.73 3h16.9a2 2 0 0 0 1.73-3L13.7 3.86a2 2 0 0 0-3.4 0Z" />
+      <path d="M12 9v4" />
+      <path d="M12 17h.01" />
+    </>
+  ),
+  sparkle: (
+    <>
+      <path d="M12 3v3M12 18v3M3 12h3M18 12h3" />
+      <path d="m5.6 5.6 2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1" />
     </>
   ),
 };
