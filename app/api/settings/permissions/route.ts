@@ -92,7 +92,9 @@ export async function PUT(req: Request) {
     await audit({
       organizationId: g.user.organizationId, userId: g.user.id,
       action: 'permissions.role.update',
-      entityType: 'role', entityId: role,
+      // entity_id est UUID dans la BDD ; on ne peut pas y mettre le nom
+      // du rôle. Tout va dans payload.
+      entityType: 'role', entityId: null,
       payload: { role, permission, granted },
     });
     return NextResponse.json({ ok: true });
