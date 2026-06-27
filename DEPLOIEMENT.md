@@ -132,19 +132,33 @@ Va sur `https://webpos-xxx.vercel.app/setup` et remplis le wizard :
 Tu seras directement connecté en tant qu'admin de Fanny Fleurs.
 
 ### Option B — Créer un super-admin SaaS (pour gérer plusieurs clients)
-Depuis ton terminal local :
 
-```bash
-# Tire la DATABASE_URL prod depuis Vercel
-vercel env pull .env.production
-# Crée le super-admin
-DATABASE_URL=$(grep DATABASE_URL .env.production | cut -d= -f2-) \
-  npm run create:super-admin contact@swebio.fr
-```
+**Procédure simplifiée via la page `/init-admin`** :
 
-Puis va sur `https://webpos-xxx.vercel.app/login`, clique « Accès admin
-et autres », connecte-toi avec `contact@swebio.fr`. Tu accèdes à
-`/admin` pour gérer toutes les organisations clientes.
+1. Sur ton Mac, génère un secret aléatoire :
+   ```bash
+   openssl rand -hex 24
+   ```
+2. Va sur Vercel → Settings → Environment Variables, ajoute :
+   - `INIT_SECRET` = la valeur générée ci-dessus
+3. Vercel → Deployments → onglet le plus récent → **« Redeploy »** (pour que la nouvelle variable soit prise en compte)
+4. Une fois le redeploy fini, ouvre :
+   `https://webpos-xxx.vercel.app/init-admin`
+5. Remplis le formulaire :
+   - Nom complet : `Jonathan` (par exemple)
+   - Email : `contact@swebio.fr`
+   - Mot de passe : choisis-en un fort (note-le dans ton gestionnaire)
+   - Secret d'initialisation : colle la valeur de `INIT_SECRET`
+6. Clique **« Créer le super-admin »** → confirmation
+7. Va sur `https://webpos-xxx.vercel.app/login`, clique **« Accès admin et autres »**, connecte-toi avec ton email + mot de passe.
+8. Tu accèdes à `/admin` pour gérer toutes les organisations clientes.
+
+⚠ Une fois ton compte créé, la page `/init-admin` refuse toute nouvelle
+création (`SUPER_ADMIN_ALREADY_EXISTS`). Pour ajouter d'autres super-admin
+par la suite, utilise `/admin` ou le script `npm run create:super-admin`.
+
+Tu peux ensuite **supprimer la variable `INIT_SECRET`** dans Vercel
+(plus utile) et redéployer.
 
 ---
 

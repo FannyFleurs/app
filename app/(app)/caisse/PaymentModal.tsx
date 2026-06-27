@@ -27,11 +27,13 @@ interface Props {
   saleId: string;
   totalTtc: number;
   loyaltyRedemption?: number;
+  /** Si true, on génère un faux ticket localement sans appel serveur. */
+  schoolMode?: boolean;
   onClose: () => void;
   onValidated: (receiptId: string, receiptNumber: string, loyalty?: { earned: number; redeemed: number; new_balance: number } | null) => void;
 }
 
-export default function PaymentModal({ saleId, totalTtc, loyaltyRedemption, onClose, onValidated }: Props) {
+export default function PaymentModal({ saleId, totalTtc, loyaltyRedemption, schoolMode, onClose, onValidated }: Props) {
   const [methods, setMethods] = useState<Array<{ kind: Method; label: string }>>(FALLBACK_METHODS);
   const [amountStr, setAmountStr] = useState<string>('');
   const [payments, setPayments] = useState<RegisteredPayment[]>([]);
@@ -168,6 +170,14 @@ export default function PaymentModal({ saleId, totalTtc, loyaltyRedemption, onCl
   async function validate() {
     if (Math.abs(paidAllocated - totalTtc) > 0.005) {
       setError('Le total payé doit être égal au total dû.');
+      return;
+    }
+    // Mode école : on génère un faux ticket localement, pas d'appel
+    // serveur, pas de hash chain fiscal, pas de débit de stock.
+    if (schoolMode) {
+      const fakeId = `school-receipt-${Date.now()}`;
+      const fakeNumber = `ECOLE-${new Date().toISOString().slice(11, 19).replace(/:/g, '')}`;
+      onValidated(fakeId, fakeNumber, null);
       return;
     }
     setLoading(true); setError(null);

@@ -14,6 +14,7 @@ import CartActionsModal from './CartActionsModal';
 import OrderModal from './OrderModal';
 import dynamic from 'next/dynamic';
 import Icon from '@/components/Icon';
+import { useSchoolMode } from '@/lib/school-mode';
 import { tileMetrics, type PosUiSettings } from '@/lib/settings/pos-ui';
 
 // Chargé uniquement à l'ouverture (le bundle ZXing pèse ~200 ko).
@@ -79,6 +80,11 @@ const FREE_PRICE_TAX_CODE_DEFAULT = 'TVA20';
 
 export default function CashRegister({ stores, registers, taxRates, currentUser, posUi }: Props) {
   const metrics = useMemo(() => tileMetrics(posUi.tile_size), [posUi.tile_size]);
+  // Mode école : quand actif, on ne fait AUCUN appel mutant côté serveur.
+  // La caisse a une session fictive auto-ouverte, les lignes restent en
+  // local, "encaisser" génère un faux ticket. Toutes les données sont
+  // détruites au passage en mode normal.
+  const schoolMode = useSchoolMode();
 
   const [storeId, setStoreId] = useState<string>(stores[0]!.id);
   const registersForStore = useMemo(
@@ -215,13 +221,19 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
   const refreshSession = useCallback(async () => {
     if (!registerId) return;
     setSessionLoading(true);
+    // Mode école : on simule une session ouverte sans appeler le serveur.
+    if (schoolMode) {
+      setSessionId('school-session');
+      setSessionLoading(false);
+      return;
+    }
     const res = await fetch(`/api/cash-sessions?register_id=${registerId}`);
     if (res.ok) {
       const j = await res.json();
       setSessionId(j.session?.id ?? null);
     }
     setSessionLoading(false);
-  }, [registerId]);
+  }, [registerId, schoolMode]);
 
   useEffect(() => { void refreshSession(); }, [refreshSession]);
 
@@ -322,6 +334,12 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
   const ensureSale = useCallback(async (): Promise<string | null> => {
     if (saleId) return saleId;
     if (!sessionId) { setError('Aucune session caisse ouverte.'); return null; }
+    // Mode école : on génère un faux saleId, pas d'appel serveur
+    if (schoolMode) {
+      const fake = `school-${cryptoKey()}`;
+      setSaleId(fake);
+      return fake;
+    }
     const res = await fetch('/api/sales', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -335,10 +353,11 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
     const { id } = await res.json();
     setSaleId(id);
     return id;
-  }, [saleId, sessionId, storeId, registerId]);
+  }, [saleId, sessionId, storeId, registerId, schoolMode]);
 
   async function syncLines() {
     if (!saleId) return;
+    if (schoolMode) return; // pas de persistance en mode école
     setSavingLines(true);
     setError(null);
     try {
@@ -541,7 +560,7 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
     // - Si une vente brouillon existe côté serveur, on la supprime via /api/sales/[id]/cancel
     //   pour qu'elle n'apparaisse plus dans les paniers en attente.
     // - Reset complet du state local.
-    if (saleId) {
+    if (saleId && !schoolMode) {
       await fetch(`/api/sales/${saleId}/cancel`, { method: 'POST' }).catch(() => undefined);
     }
     setLines([]);
@@ -1286,6 +1305,7 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
           saleId={saleId}
           totalTtc={totals.ttc}
           loyaltyRedemption={loyalty.used > 0 ? loyalty.used : undefined}
+          schoolMode={schoolMode}
           onClose={() => setShowPayment(false)}
           onValidated={onValidated}
         />

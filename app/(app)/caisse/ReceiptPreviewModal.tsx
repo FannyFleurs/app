@@ -13,7 +13,8 @@ interface Props {
 const AUTO_CLOSE_MS = 5_000;
 
 export default function ReceiptPreviewModal({ receipt, onClose }: Props) {
-  const pdfUrl = `/api/receipts/${receipt.id}/pdf`;
+  const isSchool = receipt.id.startsWith('school-receipt-');
+  const pdfUrl = isSchool ? '' : `/api/receipts/${receipt.id}/pdf`;
   const [invoice, setInvoice] = useState<{ id: string; number: string } | null>(null);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -92,11 +93,23 @@ export default function ReceiptPreviewModal({ receipt, onClose }: Props) {
         </div>
         <div className="flex-1 overflow-y-auto p-4 md:p-6 pt-3">
 
-        <div className="mt-4 grid grid-cols-3 gap-3">
-          <a href={pdfUrl} target="_blank" rel="noreferrer" className="btn-primary">Imprimer / PDF</a>
-          <button onClick={() => setShowEmailModal(true)} className="btn-soft">Envoyer par mail</button>
-          <button onClick={onClose} className="btn-ghost">Nouvelle vente</button>
-        </div>
+        {isSchool ? (
+          <div className="mt-4 rounded-xl border border-warning bg-warning/10 p-4 text-center">
+            <div className="font-medium text-warning">Ticket fictif — mode école</div>
+            <p className="text-xs text-ink-soft mt-1">
+              Aucune impression possible. La vente n&apos;est pas enregistrée.
+            </p>
+            <button onClick={onClose} className="btn-primary mt-3 h-10 px-4 text-sm">
+              Nouvelle vente
+            </button>
+          </div>
+        ) : (
+          <div className="mt-4 grid grid-cols-3 gap-3">
+            <a href={pdfUrl} target="_blank" rel="noreferrer" className="btn-primary">Imprimer / PDF</a>
+            <button onClick={() => setShowEmailModal(true)} className="btn-soft">Envoyer par mail</button>
+            <button onClick={onClose} className="btn-ghost">Nouvelle vente</button>
+          </div>
+        )}
 
         {emailToast && (
           <div className="mt-3 rounded-xl bg-success/10 px-3 py-2 text-sm text-success">
@@ -115,7 +128,7 @@ export default function ReceiptPreviewModal({ receipt, onClose }: Props) {
           </div>
         )}
 
-        <div className="mt-4 rounded-xl border border-border p-4 bg-gray-50">
+        <div className={`mt-4 rounded-xl border border-border p-4 bg-gray-50 ${isSchool ? 'hidden' : ''}`}>
           {invoice ? (
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -150,9 +163,11 @@ export default function ReceiptPreviewModal({ receipt, onClose }: Props) {
           {error && <div className="mt-2 text-xs text-danger">{error}</div>}
         </div>
 
-        <div className="mt-4 h-[300px] rounded-xl border border-border overflow-hidden">
-          <iframe src={pdfUrl} className="w-full h-full" title="Ticket" />
-        </div>
+        {!isSchool && (
+          <div className="mt-4 h-[300px] rounded-xl border border-border overflow-hidden">
+            <iframe src={pdfUrl} className="w-full h-full" title="Ticket" />
+          </div>
+        )}
         </div>
       </div>
 

@@ -6,6 +6,7 @@ import TopBar from './TopBar';
 import AllPagesOverlay from './AllPagesOverlay';
 import WakeLockKeeper from './WakeLockKeeper';
 import PaidOrderNotifier from './PaidOrderNotifier';
+import SchoolModeBanner from './SchoolModeBanner';
 import type { Role } from '@/lib/auth/rbac';
 import type { PosThemeColor, ColorScheme, AutoLogoutMode } from '@/lib/settings/pos-ui';
 
@@ -92,6 +93,7 @@ export default function AppShell({
 
   return (
     <div className="h-screen overflow-hidden flex flex-col bg-white">
+      <SchoolModeBanner />
       <TopBar
         user={{ fullName: user.fullName, role: user.role }}
         hiddenPaths={hiddenPaths}
