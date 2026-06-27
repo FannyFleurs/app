@@ -1,5 +1,5 @@
 -- =========================================================================
--- Webpos — migration initiale
+-- Florea — migration initiale
 -- =========================================================================
 -- Conventions :
 --   * Toutes les tables ont id UUID PK
