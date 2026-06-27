@@ -37,6 +37,9 @@ interface Data {
 export default function OrganizationDetail({ id }: { id: string }) {
   const [data, setData] = useState<Data | null>(null);
   const [loading, setLoading] = useState(true);
+  // Compteur incrémenté à chaque action — force le re-fetch d'ActiveSessions
+  // et synchronise le state local d'AdminActions (max_devices).
+  const [version, setVersion] = useState(0);
 
   async function reload() {
     const r = await fetch(`/api/admin/organizations/${id}`);
@@ -45,6 +48,7 @@ export default function OrganizationDetail({ id }: { id: string }) {
       setData(j);
     }
     setLoading(false);
+    setVersion((v) => v + 1);
   }
   useEffect(() => { void reload(); /* eslint-disable-next-line */ }, [id]);
 
@@ -115,9 +119,9 @@ export default function OrganizationDetail({ id }: { id: string }) {
         </div>
       </section>
 
-      <AdminActions id={o.id} initialMaxDevices={o.max_devices ?? 1} onChange={() => void reload()} />
+      <AdminActions id={o.id} maxDevicesFromServer={o.max_devices ?? 1} onChange={() => void reload()} />
 
-      <ActiveSessions id={o.id} />
+      <ActiveSessions id={o.id} version={version} onChange={() => void reload()} />
 
       <section>
         <h3 className="text-sm font-semibold uppercase tracking-widest text-ink-soft mb-2">
@@ -156,16 +160,21 @@ export default function OrganizationDetail({ id }: { id: string }) {
   );
 }
 
-function AdminActions({ id, initialMaxDevices, onChange }: {
-  id: string; initialMaxDevices: number; onChange: () => void;
+function AdminActions({ id, maxDevicesFromServer, onChange }: {
+  id: string; maxDevicesFromServer: number; onChange: () => void;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [extendDays, setExtendDays] = useState<number>(30);
   const [extendReason, setExtendReason] = useState('');
   const [newPlan, setNewPlan] = useState<'starter'|'pro'>('pro');
-  const [maxDevices, setMaxDevices] = useState<number>(initialMaxDevices);
+  const [maxDevices, setMaxDevices] = useState<number>(maxDevicesFromServer);
   const [note, setNote] = useState('');
+
+  // Resync l'input quand la valeur serveur change (après reload du parent).
+  useEffect(() => {
+    setMaxDevices(maxDevicesFromServer);
+  }, [maxDevicesFromServer]);
 
   async function call(action: Record<string, unknown>) {
     setBusy(JSON.stringify(action.action));
@@ -278,7 +287,9 @@ function AdminActions({ id, initialMaxDevices, onChange }: {
   );
 }
 
-function ActiveSessions({ id }: { id: string }) {
+function ActiveSessions({ id, version, onChange }: {
+  id: string; version: number; onChange: () => void;
+}) {
   interface SessionRow {
     id: string;
     user_id: string;
@@ -296,7 +307,7 @@ function ActiveSessions({ id }: { id: string }) {
 
   async function reload() {
     setLoading(true);
-    const r = await fetch(`/api/admin/organizations/${id}/sessions`);
+    const r = await fetch(`/api/admin/organizations/${id}/sessions`, { cache: 'no-store' });
     if (r.ok) {
       const j = await r.json();
       setSessions(j.sessions ?? []);
@@ -304,14 +315,25 @@ function ActiveSessions({ id }: { id: string }) {
     }
     setLoading(false);
   }
-  useEffect(() => { void reload(); /* eslint-disable-next-line */ }, [id]);
+  useEffect(() => { void reload(); /* eslint-disable-next-line */ }, [id, version]);
 
   async function revoke(sid: string) {
     if (!confirm('Libérer cette place ? L\'utilisateur sera déconnecté.')) return;
     setBusy(sid);
     const r = await fetch(`/api/admin/organizations/${id}/sessions/${sid}`, { method: 'DELETE' });
     setBusy(null);
-    if (r.ok) void reload();
+    if (r.ok) { void reload(); onChange(); }
+  }
+
+  async function revokeAll() {
+    if (!confirm(`Forcer la déconnexion des ${sessions.length} appareil(s) connecté(s) ? Tout le monde devra se reconnecter.`)) return;
+    setBusy('all');
+    for (const s of sessions) {
+      await fetch(`/api/admin/organizations/${id}/sessions/${s.id}`, { method: 'DELETE' });
+    }
+    setBusy(null);
+    void reload();
+    onChange();
   }
 
   function deviceLabel(ua: string | null): string {
@@ -333,19 +355,34 @@ function ActiveSessions({ id }: { id: string }) {
     return '';
   }
 
+  const used = sessions.length;
+  const fullUsage = used >= maxDevices;
+
   return (
     <section className="card p-5 space-y-3">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h3 className="font-semibold">Appareils connectés</h3>
-          <p className="text-xs text-ink-soft mt-0.5">
+          <p className={`text-xs mt-0.5 ${fullUsage ? 'text-danger font-medium' : 'text-ink-soft'}`}>
             Sessions actives en ce moment.
-            {' '}<strong>{sessions.length}</strong> / {maxDevices} place(s) utilisée(s).
+            {' '}<strong>{used}</strong> / {maxDevices} place(s) utilisée(s).
+            {fullUsage && ' — Limite atteinte, libérez une place pour autoriser un nouvel appareil.'}
           </p>
         </div>
-        <button onClick={() => void reload()} className="btn-ghost text-xs">
-          Rafraîchir
-        </button>
+        <div className="flex gap-2">
+          {sessions.length > 0 && (
+            <button
+              onClick={() => void revokeAll()}
+              disabled={busy !== null}
+              className="btn-ghost text-xs text-danger hover:bg-danger/10"
+            >
+              {busy === 'all' ? '…' : 'Tout libérer'}
+            </button>
+          )}
+          <button onClick={() => void reload()} className="btn-ghost text-xs">
+            Rafraîchir
+          </button>
+        </div>
       </div>
 
       {loading ? (
@@ -353,6 +390,10 @@ function ActiveSessions({ id }: { id: string }) {
       ) : sessions.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border p-4 text-sm text-ink-soft text-center">
           Aucun appareil connecté.
+          <div className="text-xs mt-1">
+            Si le client est connecté mais n&apos;apparaît pas ici : sa session est probablement
+            attachée à un autre tenant (super_admin cross-orga).
+          </div>
         </div>
       ) : (
         <div className="rounded-xl border border-border divide-y divide-border overflow-hidden">
