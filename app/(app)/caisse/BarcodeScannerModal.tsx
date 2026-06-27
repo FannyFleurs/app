@@ -13,29 +13,23 @@ interface BarcodeDetectorCtor {
 }
 
 /**
- * Scanner code-barres / QR via l'API native `BarcodeDetector`.
+ * Scanner code-barres / QR mobile.
  *
  * Compatibilité :
- *  - iOS 17+ (Safari, Chrome iOS)
- *  - Chrome / Edge Android
- *  - Chrome / Edge desktop (rarement utile mais ça marche)
+ *  - Chrome / Edge Android → API native BarcodeDetector (rapide, légère)
+ *  - iOS Safari / Chrome iOS / Firefox → fallback ZXing en pur JS
+ *  - Tous les autres → saisie manuelle dans le champ texte
  *
- * Pour les navigateurs sans BarcodeDetector (iOS < 17, Firefox), la modale
- * propose une saisie manuelle directement (utile aussi pour les scanners
- * USB en mode HID qui « tapent » le code dans le champ).
- *
- * Pré-requis : la page doit être servie en HTTPS (ou localhost) — sinon
- * `getUserMedia` est refusé par le navigateur.
+ * Pré-requis : HTTPS pour autoriser getUserMedia (auto sur Vercel).
  */
 export default function BarcodeScannerModal({ onClose, onScan }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState<string | null>(null);
-  const [hasDetector, setHasDetector] = useState<boolean>(true);
   const [lastCode, setLastCode] = useState<string | null>(null);
   const [manualCode, setManualCode] = useState('');
+  const [engine, setEngine] = useState<'loading' | 'native' | 'zxing' | 'manual'>('loading');
 
-  // Anti-doublon : un même code détecté plusieurs fois en < 1,5 s ne
-  // déclenche qu'un seul onScan.
+  // Anti-doublon
   const lastReportedRef = useRef<{ code: string; at: number }>({ code: '', at: 0 });
   function report(raw: string) {
     const code = raw.trim();
@@ -53,27 +47,21 @@ export default function BarcodeScannerModal({ onClose, onScan }: Props) {
     let stopped = false;
     let stream: MediaStream | null = null;
     let rafId = 0;
+    let zxingControls: { stop: () => void } | null = null;
 
     async function start() {
-      // Vérification HTTPS
+      // Vérif HTTPS
       if (typeof window !== 'undefined'
           && window.location.protocol !== 'https:'
           && window.location.hostname !== 'localhost'
           && !window.location.hostname.startsWith('127.0.0.1')) {
-        setError('Le scan caméra requiert HTTPS. Servez l\'application en HTTPS pour autoriser l\'accès caméra.');
+        setError('Le scan caméra requiert HTTPS.');
+        setEngine('manual');
         return;
       }
-
-      const NativeCtor =
-        (window as unknown as { BarcodeDetector?: BarcodeDetectorCtor }).BarcodeDetector;
-      if (!NativeCtor) {
-        setHasDetector(false);
-        // Pas de scanner caméra dispo : on passe en saisie manuelle uniquement.
-        return;
-      }
-
       if (!navigator.mediaDevices?.getUserMedia) {
-        setError('Ce navigateur ne supporte pas l\'accès caméra. Saisissez le code à la main.');
+        setError('Ce navigateur ne supporte pas l\'accès caméra.');
+        setEngine('manual');
         return;
       }
 
@@ -83,11 +71,10 @@ export default function BarcodeScannerModal({ onClose, onScan }: Props) {
           audio: false,
         });
       } catch (e) {
-        setError(
-          (e as Error).name === 'NotAllowedError'
-            ? 'Accès caméra refusé. Autorisez la caméra dans les réglages du navigateur.'
-            : 'Caméra indisponible : ' + ((e as Error).message ?? 'erreur inconnue'),
-        );
+        setError((e as Error).name === 'NotAllowedError'
+          ? 'Accès caméra refusé.'
+          : 'Caméra indisponible.');
+        setEngine('manual');
         return;
       }
 
@@ -98,64 +85,93 @@ export default function BarcodeScannerModal({ onClose, onScan }: Props) {
       video.setAttribute('playsinline', 'true');
       await video.play().catch(() => undefined);
 
-      const detector = new NativeCtor({
-        formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'qr_code', 'data_matrix', 'itf'],
-      });
+      const NativeCtor =
+        (window as unknown as { BarcodeDetector?: BarcodeDetectorCtor }).BarcodeDetector;
 
-      async function loop() {
-        if (stopped || !videoRef.current) return;
-        try {
-          const codes = await detector.detect(videoRef.current);
-          if (codes.length) report(codes[0]!.rawValue);
-        } catch { /* ignore frame errors */ }
-        rafId = window.requestAnimationFrame(() => void loop());
+      if (NativeCtor) {
+        setEngine('native');
+        const detector = new NativeCtor({
+          formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'qr_code', 'data_matrix', 'itf'],
+        });
+        async function loop() {
+          if (stopped || !videoRef.current) return;
+          try {
+            const codes = await detector.detect(videoRef.current);
+            if (codes.length) report(codes[0]!.rawValue);
+          } catch { /* ignore */ }
+          rafId = window.requestAnimationFrame(() => void loop());
+        }
+        void loop();
+        return;
       }
-      void loop();
+
+      // Fallback ZXing (chargement dynamique pour ne pas pénaliser desktop)
+      try {
+        const [{ BrowserMultiFormatReader }, { BarcodeFormat, DecodeHintType }] = await Promise.all([
+          import('@zxing/browser'),
+          import('@zxing/library'),
+        ]);
+        setEngine('zxing');
+        const hints = new Map();
+        hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+          BarcodeFormat.EAN_13, BarcodeFormat.EAN_8,
+          BarcodeFormat.UPC_A, BarcodeFormat.UPC_E,
+          BarcodeFormat.CODE_128, BarcodeFormat.CODE_39,
+          BarcodeFormat.QR_CODE, BarcodeFormat.DATA_MATRIX,
+          BarcodeFormat.ITF,
+        ]);
+        hints.set(DecodeHintType.TRY_HARDER, true);
+        const reader = new BrowserMultiFormatReader(hints);
+        zxingControls = await reader.decodeFromVideoElement(
+          video,
+          (result) => { if (result) report(result.getText()); },
+        );
+      } catch (e) {
+        setError('Initialisation scanner échouée : ' + ((e as Error).message ?? ''));
+        setEngine('manual');
+      }
     }
     void start();
 
     return () => {
       stopped = true;
       if (rafId) cancelAnimationFrame(rafId);
+      try { zxingControls?.stop(); } catch {}
       stream?.getTracks().forEach((t) => t.stop());
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const engineLabel =
+    engine === 'loading' ? 'Démarrage…'
+    : engine === 'native' ? 'Scan natif'
+    : engine === 'zxing' ? 'Scan ZXing'
+    : 'Saisie manuelle';
+
   return (
     <div className="fixed inset-0 z-[100] bg-black/90 grid place-items-center p-4" onClick={onClose}>
       <div className="relative w-full max-w-md" onClick={(e) => e.stopPropagation()}>
         <div className="rounded-2xl overflow-hidden bg-black aspect-[3/4] relative">
-          {hasDetector ? (
-            <video
-              ref={videoRef}
-              playsInline
-              muted
-              autoPlay
-              className="w-full h-full object-cover"
-            />
-          ) : (
-            <div className="absolute inset-0 grid place-items-center text-white text-center p-6 text-sm">
-              <div>
-                <div className="text-3xl mb-3">⌨️</div>
-                <div className="font-medium mb-2">Scan caméra non supporté</div>
-                <div className="text-xs opacity-80">
-                  Votre navigateur n&apos;expose pas l&apos;API BarcodeDetector
-                  (iOS 17+, Chrome / Edge Android requis).
-                  Saisissez le code à la main, ou utilisez un scanner USB.
-                </div>
-              </div>
-            </div>
-          )}
-          {hasDetector && !error && (
+          <video
+            ref={videoRef}
+            playsInline
+            muted
+            autoPlay
+            className="w-full h-full object-cover"
+          />
+          {/* Cadre de mire */}
+          {!error && engine !== 'manual' && (
             <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
               <div className="w-3/4 aspect-[4/3] border-2 border-white/80 rounded-2xl shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]" />
             </div>
           )}
+          {/* Badge moteur */}
+          <div className="absolute top-2 right-2 rounded-full bg-black/60 text-white text-[10px] px-2 py-0.5">
+            {engineLabel}
+          </div>
           {error && (
             <div className="absolute inset-0 grid place-items-center bg-black/80 text-white text-center p-6 text-sm">
               <div>
-                <div className="text-3xl mb-3">📷</div>
                 <div className="font-medium mb-2">{error}</div>
                 <div className="text-xs opacity-80">Saisissez le code à la main ci-dessous.</div>
               </div>
@@ -164,7 +180,7 @@ export default function BarcodeScannerModal({ onClose, onScan }: Props) {
         </div>
 
         <div className="mt-3 text-white text-sm">
-          {lastCode ? <>Détecté : <span className="font-mono">{lastCode}</span></> : (hasDetector ? 'Visez un code-barres ou QR…' : 'Saisie manuelle')}
+          {lastCode ? <>Détecté : <span className="font-mono">{lastCode}</span></> : 'Visez un code-barres ou QR…'}
         </div>
 
         <form
@@ -176,7 +192,7 @@ export default function BarcodeScannerModal({ onClose, onScan }: Props) {
           className="mt-3 flex items-center gap-2"
         >
           <input
-            autoFocus={!hasDetector || !!error}
+            autoFocus={engine === 'manual'}
             value={manualCode}
             onChange={(e) => setManualCode(e.target.value)}
             placeholder="Code-barres / SKU"
