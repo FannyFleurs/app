@@ -198,37 +198,40 @@ export default function PaymentModal({ saleId, totalTtc, loyaltyRedemption, onCl
   const canValidate = Math.abs(paidAllocated - totalTtc) < 0.005;
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-ink/30 backdrop-blur-sm p-4">
-      <div className="card w-full max-w-5xl p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">Encaissement</h2>
-          <button onClick={onClose} className="text-ink-soft hover:text-ink">✕</button>
+    <div className="fixed inset-0 z-50 lg:grid lg:place-items-center bg-ink/30 backdrop-blur-sm lg:p-4 flex flex-col">
+      {/* Mobile : plein écran scrollable + bouton Valider sticky en bas.
+          Desktop : carte centrée 3 colonnes. */}
+      <div className="card w-full max-w-5xl flex flex-col lg:p-6 p-0 lg:rounded-2xl rounded-none flex-1 lg:flex-none lg:max-h-[90vh] overflow-hidden pt-safe">
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 lg:p-0 lg:mb-4 border-b border-border lg:border-0 shrink-0">
+          <h2 className="text-base lg:text-lg font-semibold">Encaissement</h2>
+          <button onClick={onClose} className="text-ink-soft hover:text-ink p-1 -m-1">✕</button>
         </div>
 
-        {/* 3 colonnes : numpad | méthodes | récap */}
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_240px_280px] gap-5">
+        {/* Zone scrollable (mobile) / grille (desktop) */}
+        <div className="lg:grid lg:grid-cols-[1fr_240px_280px] lg:gap-5 flex-1 overflow-y-auto px-3 py-3 lg:p-0">
           {/* Colonne 1 : montant + numpad */}
           <div>
-            <div className="rounded-2xl border border-border p-4 bg-gray-50">
-              <div className="text-xs uppercase tracking-wider text-ink-soft">Montant à saisir</div>
-              <div className="mt-1 flex items-baseline justify-between">
-                <span className="text-4xl font-semibold tabular-nums">
+            <div className="rounded-xl border border-border p-3 lg:p-4 bg-gray-50">
+              <div className="text-[10px] lg:text-xs uppercase tracking-wider text-ink-soft">Montant à saisir</div>
+              <div className="mt-0.5 flex items-baseline justify-between">
+                <span className="text-2xl lg:text-4xl font-semibold tabular-nums">
                   {amountStr === '' ? '—' : formatEUR(Number(amountStr) || 0)}
                 </span>
                 <button onClick={() => setAmountStr('')}
                         className="text-xs text-ink-soft hover:text-ink">Effacer</button>
               </div>
-              <div className="mt-1 text-xs text-ink-soft">
-                Tapez au clavier ou utilisez le pavé. Vide = la méthode prendra le restant ({formatEUR(remaining)}).
+              <div className="mt-0.5 text-[11px] lg:text-xs text-ink-soft leading-tight">
+                Vide = la méthode prendra le restant ({formatEUR(remaining)}).
               </div>
             </div>
 
-            <div className="mt-3 grid grid-cols-3 gap-2">
+            <div className="mt-2 lg:mt-3 grid grid-cols-3 gap-1.5 lg:gap-2">
               {['7','8','9','4','5','6','1','2','3','.','0','⌫'].map((k) => (
                 <button
                   key={k}
                   onClick={() => press(k)}
-                  className="h-16 rounded-xl border border-border bg-white text-2xl font-medium hover:bg-gray-50 active:scale-95 transition"
+                  className="h-11 lg:h-16 rounded-lg lg:rounded-xl border border-border bg-white text-lg lg:text-2xl font-medium hover:bg-gray-50 active:scale-95 transition"
                 >
                   {k}
                 </button>
@@ -236,18 +239,19 @@ export default function PaymentModal({ saleId, totalTtc, loyaltyRedemption, onCl
             </div>
           </div>
 
-          {/* Colonne 2 : méthodes (à droite du clavier, en pile verticale) */}
-          <div>
-            <div className="text-xs uppercase tracking-wider text-ink-soft mb-2">
+          {/* Colonne 2 : méthodes */}
+          <div className="mt-3 lg:mt-0">
+            <div className="text-[10px] lg:text-xs uppercase tracking-wider text-ink-soft mb-1.5">
               Mode de règlement
             </div>
-            <div className="grid grid-cols-1 gap-2">
+            {/* Mobile : grille 2 colonnes pour gagner de la place. Desktop : pile verticale. */}
+            <div className="grid grid-cols-2 lg:grid-cols-1 gap-1.5 lg:gap-2">
               {methods.map((m) => (
                 <button
                   key={m.kind + m.label}
                   onClick={() => tapMethod(m)}
                   disabled={remaining <= 0 && Number(amountStr || '0') <= 0}
-                  className="btn-soft h-14 text-base"
+                  className="btn-soft h-10 lg:h-14 text-xs lg:text-base px-2"
                 >
                   {m.label}
                 </button>
@@ -255,60 +259,61 @@ export default function PaymentModal({ saleId, totalTtc, loyaltyRedemption, onCl
             </div>
           </div>
 
-          {/* Colonne 3 : récap + valider */}
-          <div className="flex flex-col">
-            <div className="rounded-2xl border border-border p-4 bg-white space-y-1.5 text-sm">
+          {/* Colonne 3 : récap + paiements */}
+          <div className="flex flex-col mt-3 lg:mt-0">
+            <div className="rounded-xl border border-border p-2.5 lg:p-4 bg-white space-y-1 text-sm">
               <div className="flex justify-between">
-                <span className="text-ink-soft">Total dû</span>
+                <span className="text-ink-soft text-xs lg:text-sm">Total dû</span>
                 <span className="font-semibold">{formatEUR(totalTtc)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-ink-soft">Payé</span>
+                <span className="text-ink-soft text-xs lg:text-sm">Payé</span>
                 <span>{formatEUR(paidAllocated)}</span>
               </div>
-              <div className="flex justify-between border-t border-border pt-1.5">
-                <span className="font-medium">Reste</span>
+              <div className="flex justify-between border-t border-border pt-1">
+                <span className="font-medium text-xs lg:text-sm">Reste</span>
                 <span className={`font-semibold ${remaining === 0 ? 'text-success' : 'text-warning'}`}>
                   {formatEUR(remaining)}
                 </span>
               </div>
               {change > 0 && (
-                <div className="mt-2 rounded-xl bg-success/10 px-3 py-2 flex items-baseline justify-between">
-                  <span className="text-success font-medium">Rendu monnaie</span>
-                  <span className="text-2xl font-semibold text-success">{formatEUR(change)}</span>
+                <div className="mt-2 rounded-lg bg-success/10 px-2.5 py-1.5 flex items-baseline justify-between">
+                  <span className="text-success font-medium text-xs lg:text-sm">Rendu monnaie</span>
+                  <span className="text-lg lg:text-2xl font-semibold text-success">{formatEUR(change)}</span>
                 </div>
               )}
             </div>
 
-            <div className="mt-3 flex-1 min-h-[80px]">
-              <div className="text-xs uppercase tracking-wider text-ink-soft mb-2">Paiements</div>
-              {payments.length === 0 ? (
-                <div className="text-sm text-ink-soft italic">Aucun paiement.</div>
-              ) : (
-                <ul className="space-y-1.5">
+            {payments.length > 0 && (
+              <div className="mt-2 lg:mt-3 flex-1">
+                <div className="text-[10px] lg:text-xs uppercase tracking-wider text-ink-soft mb-1.5">Paiements</div>
+                <ul className="space-y-1">
                   {payments.map((p) => (
-                    <li key={p.key} className="flex items-center justify-between gap-2 rounded-xl border border-border px-2.5 py-1.5 text-sm">
+                    <li key={p.key} className="flex items-center justify-between gap-2 rounded-lg border border-border px-2 py-1 text-xs lg:text-sm">
                       <span className="font-medium truncate">{p.label}</span>
                       <span className="tabular-nums whitespace-nowrap">{formatEUR(p.amount)}</span>
                       <button onClick={() => removePayment(p.key)} className="text-ink-soft hover:text-danger shrink-0">✕</button>
                     </li>
                   ))}
                 </ul>
-              )}
-            </div>
-
-            {error && (
-              <div className="mt-2 rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>
+              </div>
             )}
 
-            <button
-              disabled={loading || !canValidate}
-              onClick={() => void validate()}
-              className="btn-primary mt-3 w-full h-14 text-lg"
-            >
-              {loading ? 'Validation…' : canValidate ? `✓ Valider · ${formatEUR(totalTtc)}` : `Reste ${formatEUR(remaining)}`}
-            </button>
+            {error && (
+              <div className="mt-2 rounded-lg bg-danger/10 px-3 py-2 text-xs lg:text-sm text-danger">{error}</div>
+            )}
           </div>
+        </div>
+
+        {/* Footer Valider — sticky en bas sur mobile, intégré sur desktop */}
+        <div className="border-t border-border lg:border-0 px-3 py-2.5 lg:p-0 lg:mt-3 bg-white pb-safe shrink-0">
+          <button
+            disabled={loading || !canValidate}
+            onClick={() => void validate()}
+            className="btn-primary w-full h-12 lg:h-14 text-base lg:text-lg"
+          >
+            {loading ? 'Validation…' : canValidate ? `✓ Valider · ${formatEUR(totalTtc)}` : `Reste ${formatEUR(remaining)}`}
+          </button>
         </div>
       </div>
 
