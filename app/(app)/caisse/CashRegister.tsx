@@ -924,146 +924,68 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
         </div>
 
         <div className="flex-1 overflow-auto p-3 md:p-5 bg-white pb-24 md:pb-5">
-          {/* En-tête contextuel : Top articles / nom catégorie / recherche */}
-          <div className="flex items-center justify-between mb-3">
-            <div className="text-xs uppercase tracking-widest text-ink-soft font-semibold">
-              {searchQ ? `Résultats pour « ${searchQ} »`
-                : view.kind === 'products' ? currentCategoryName
-                : 'Top articles'}
-            </div>
-          </div>
-
           {showingProducts ? (
-            <div className={`grid ${metrics.grid} ${metrics.gap}`}>
-              {visibleProducts.length === 0 ? (
-                <div className="col-span-full text-center text-ink-soft mt-8">
-                  {searchQ ? 'Aucun produit trouvé pour cette recherche.' : 'Aucun produit dans cette catégorie.'}
-                </div>
-              ) : visibleProducts.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => addProduct(p)}
-                  className={`card ${metrics.padding} hover:shadow-md hover:border-gray-300 transition-all active:scale-[0.98] aspect-[5/3] grid place-items-center text-center`}
-                  style={p.color ? { backgroundColor: p.color } : undefined}
-                >
-                  <div className="flex flex-col items-center justify-center gap-1.5 max-w-full">
-                    {posUi.show_product_image && p.image_url && (
-                      <img src={p.image_url} alt="" className="h-12 w-12 rounded-md object-cover mb-1" />
-                    )}
-                    <span className={`${metrics.titleFontSize} font-semibold text-ink leading-tight line-clamp-2`}>
-                      {p.name}
-                    </span>
-                    {posUi.show_price && (
-                      <span className="text-sm font-medium text-ink-soft">
-                        {p.price_is_free ? 'prix libre' : formatEUR(p.sale_price_ttc)}
-                      </span>
-                    )}
-                    {posUi.show_tax_badge && (
-                      <span className="chip text-[10px] px-1.5 py-0">{p.tax_rate}%</span>
-                    )}
-                  </div>
-                </button>
-              ))}
-            </div>
-          ) : (
-            // Vue par défaut : top articles (tuiles articles classiques)
-            <div className={`grid ${metrics.grid} ${metrics.gap}`}>
-              {topProducts.length === 0 ? (
-                <div className="col-span-full text-center text-ink-soft mt-4 text-sm">
-                  Aucun top article configuré. Marquez vos articles favoris dans
-                  Produits → « Top produit » pour les afficher ici.
-                </div>
-              ) : topProducts.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => addProduct(p)}
-                  className={`card ${metrics.padding} hover:shadow-md hover:border-gray-300 transition-all active:scale-[0.98] aspect-[5/3] grid place-items-center text-center`}
-                  style={p.color ? { backgroundColor: p.color } : undefined}
-                >
-                  <div className="flex flex-col items-center justify-center gap-1.5 max-w-full">
-                    {posUi.show_product_image && p.image_url && (
-                      <img src={p.image_url} alt="" className="h-12 w-12 rounded-md object-cover mb-1" />
-                    )}
-                    <span className={`${metrics.titleFontSize} font-semibold text-ink leading-tight line-clamp-2`}>
-                      {p.name}
-                    </span>
-                    {posUi.show_price && (
-                      <span className="text-sm font-medium text-ink-soft">
-                        {p.price_is_free ? 'prix libre' : formatEUR(p.sale_price_ttc)}
-                      </span>
-                    )}
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Bande catégories en bas du catalogue, sur 2 lignes, tuiles
-            compactes (hauteur ~ 1/2 des tuiles articles), scroll horizontal.
-            Padding vertical p-3 pour que le ring (sélection) ne soit pas
-            tronqué en haut/bas. Wrapper flex justify-center pour centrer
-            quand peu de catégories. */}
-        <div className="border-t border-border bg-gray-50 px-2 py-3 shrink-0">
-          <div className="grid grid-rows-2 grid-flow-col auto-cols-[110px] md:auto-cols-[130px] gap-1.5 overflow-x-auto no-scrollbar justify-center">
-            {categoriesWithCounts.cats.length === 0 && categoriesWithCounts.uncategorized === 0 ? (
-              <div className="row-span-2 col-span-2 text-xs text-ink-soft text-center self-center">
-                Aucune catégorie.
-              </div>
-            ) : (
-              <>
-                {/* Bouton "Top" pour revenir à la vue par défaut */}
-                <button
-                  onClick={() => setView({ kind: 'categories' })}
-                  className={`rounded-lg border h-14 md:h-16 px-2 text-xs md:text-sm font-medium leading-tight transition-all active:scale-95 inline-flex flex-col items-center justify-center gap-1 ${
-                    view.kind === 'categories'
-                      ? 'accent-bar text-white border-transparent shadow-sm'
-                      : 'bg-white border-border text-ink hover:border-gray-300'
-                  }`}
-                >
-                  <Icon name="star" size={16} />
-                  Top
-                </button>
-                {categoriesWithCounts.cats.map((c) => {
-                  const isActive = view.kind === 'products' && view.categoryId === c.id;
-                  // Couleur catégorie : appliquée en background pleine teinte
-                  // pour les tuiles inactives (avec texte ink). Si la couleur
-                  // est sombre, le contraste reste OK grâce au libellé centré
-                  // sur fond légèrement teinté.
-                  const bg = c.color ?? '#F5F5F5';
-                  return (
-                    <button
-                      key={c.id}
-                      onClick={() => setView({ kind: 'products', categoryId: c.id })}
-                      className={`rounded-lg border h-14 md:h-16 px-2 text-xs md:text-sm font-semibold leading-tight line-clamp-2 transition-all active:scale-95 ${
-                        isActive
-                          ? 'ring-2 shadow-sm border-transparent'
-                          : 'border-border hover:shadow-md'
-                      } text-ink`}
-                      style={{
-                        background: bg,
-                        ...(isActive ? { ['--tw-ring-color' as string]: 'var(--primary)' } : {}),
-                      }}
-                    >
-                      {c.name}
-                    </button>
-                  );
-                })}
-                {categoriesWithCounts.uncategorized > 0 && (
+            <>
+              {/* Bouton retour en haut à gauche + libellé contextuel */}
+              <div className="flex items-center gap-3 mb-3">
+                {!searchQ && (
                   <button
-                    onClick={() => setView({ kind: 'products', categoryId: 'uncategorized' })}
-                    className={`rounded-lg border h-14 md:h-16 px-2 text-xs md:text-sm font-medium leading-tight line-clamp-2 transition-all active:scale-95 ${
-                      view.kind === 'products' && view.categoryId === 'uncategorized'
-                        ? 'accent-bar text-white border-transparent shadow-sm'
-                        : 'bg-white border-border text-ink hover:border-gray-300'
-                    }`}
+                    onClick={() => setView({ kind: 'categories' })}
+                    className="btn-soft inline-flex items-center gap-1.5 text-sm"
                   >
-                    Sans catégorie
+                    <Icon name="chevron-left" size={14} /> Retour
                   </button>
                 )}
-              </>
-            )}
-          </div>
+                <div className="text-sm font-semibold text-ink">
+                  {searchQ ? `Résultats pour « ${searchQ} »` : currentCategoryName}
+                </div>
+              </div>
+
+              <div className={`grid ${metrics.grid} ${metrics.gap}`}>
+                {visibleProducts.length === 0 ? (
+                  <div className="col-span-full text-center text-ink-soft mt-8">
+                    {searchQ ? 'Aucun produit trouvé pour cette recherche.' : 'Aucun produit dans cette catégorie.'}
+                  </div>
+                ) : visibleProducts.map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => addProduct(p)}
+                    className={`card ${metrics.padding} hover:shadow-md hover:border-gray-300 transition-all active:scale-[0.98] aspect-[5/3] grid place-items-center text-center`}
+                    style={p.color ? { backgroundColor: p.color } : undefined}
+                  >
+                    <div className="flex flex-col items-center justify-center gap-1.5 max-w-full">
+                      {posUi.show_product_image && p.image_url && (
+                        <img src={p.image_url} alt="" className="h-12 w-12 rounded-md object-cover mb-1" />
+                      )}
+                      <span className={`${metrics.titleFontSize} font-semibold text-ink leading-tight line-clamp-2`}>
+                        {p.name}
+                      </span>
+                      {posUi.show_price && (
+                        <span className="text-sm font-medium text-ink-soft">
+                          {p.price_is_free ? 'prix libre' : formatEUR(p.sale_price_ttc)}
+                        </span>
+                      )}
+                      {posUi.show_tax_badge && (
+                        <span className="chip text-[10px] px-1.5 py-0">{p.tax_rate}%</span>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : (
+            // Vue par défaut : top articles + catégories dans la même grille
+            <CategoryGrid
+              categories={categoriesWithCounts.cats}
+              uncategorizedCount={categoriesWithCounts.uncategorized}
+              topProducts={topProducts}
+              onPick={(id) => setView({ kind: 'products', categoryId: id })}
+              onPickProduct={(p) => addProduct(p)}
+              metrics={metrics}
+              showImage={posUi.show_product_image}
+              showPrice={posUi.show_price}
+            />
+          )}
         </div>
       </div>
 
