@@ -568,6 +568,66 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
     }
   }
 
+  /**
+   * Recharge le client attaché à une vente (et son solde fidélité +
+   * balances cartes cadeau / avoir / compte). Utilisé au mount-restore
+   * et au recall d'une vente en attente, pour ne pas perdre les infos
+   * client lors d'un changement de device.
+   */
+  async function restoreCustomerForSale(customerId: string | null) {
+    if (!customerId) {
+      setCustomer(null);
+      setLoyalty({ enabled: false, balance_euros: 0, min_redeem: 0, used: 0 });
+      setCustomerBalances({ gift_card_balance: 0, account_balance: 0, credit_notes_balance: 0 });
+      return;
+    }
+    try {
+      const cr = await fetch(`/api/customers/${customerId}`);
+      if (cr.ok) {
+        const cj = await cr.json();
+        const cu = cj.customer;
+        if (cu) {
+          setCustomer({
+            id: cu.id,
+            display_name: cu.company_name
+              || [cu.first_name, cu.last_name].filter(Boolean).join(' ')
+              || 'Client',
+            type: cu.type ?? 'particulier',
+            email: cu.email ?? null,
+            phone: cu.phone ?? null,
+            company_name: cu.company_name ?? null,
+            default_discount_pct: Number(cu.default_discount_pct ?? 0),
+          });
+        }
+      }
+    } catch { /* ignore */ }
+    try {
+      const lr = await fetch(`/api/customers/${customerId}/loyalty`);
+      if (lr.ok) {
+        const lj = await lr.json();
+        if (lj.loyalty?.enabled) {
+          setLoyalty({
+            enabled: true,
+            balance_euros: Number(lj.balance_euros) || 0,
+            min_redeem: Number(lj.loyalty.min_redeem) || 0,
+            used: 0,
+          });
+        }
+      }
+    } catch { /* ignore */ }
+    try {
+      const br = await fetch(`/api/customers/${customerId}/balances`);
+      if (br.ok) {
+        const bj = await br.json();
+        setCustomerBalances({
+          gift_card_balance: Number(bj.gift_card_balance) || 0,
+          account_balance: Number(bj.account_balance) || 0,
+          credit_notes_balance: Number(bj.credit_notes_balance) || 0,
+        });
+      }
+    } catch { /* ignore */ }
+  }
+
   async function recallSale(id: string) {
     const res = await fetch(`/api/sales/${id}`);
     if (!res.ok) return;
@@ -585,6 +645,8 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
       tax_rate_code: l.tax_rate_code as string,
       metadata: (l.metadata as Record<string, unknown>) ?? {},
     })));
+    // Restaure le client attaché (sinon perdu lors d'un recall cross-device).
+    await restoreCustomerForSale(j.sale?.customer_id ?? null);
     setShowHeld(false);
   }
 
