@@ -55,8 +55,11 @@ export default function TopBar({
         <span className="font-semibold tracking-tight hidden sm:inline text-ink">Webpos</span>
       </Link>
 
-      {/* Onglets — masqués sur mobile, centrés sur ≥ md */}
-      <nav className="hidden md:flex items-center justify-center gap-1 px-2 overflow-x-auto no-scrollbar flex-1">
+      {/* Onglets — masqués sur mobile, alignés à gauche sur ≥ md (justify-start
+          évite que la première tuile glisse sous le logo quand la liste est
+          courte ; flex-1 + min-w-0 permet le scroll horizontal sans casser
+          le layout). */}
+      <nav className="hidden md:flex items-center justify-start gap-1 px-2 overflow-x-auto no-scrollbar flex-1 min-w-0">
         {tabs.map((t) => {
           const active = path === t.href || path?.startsWith(t.href + '/');
           return (
@@ -76,7 +79,11 @@ export default function TopBar({
         })}
       </nav>
 
-      {/* Pastille abonnement */}
+      {/* Spacer mobile : pousse hamburger + user vers la droite quand la
+          nav est masquée. Sur desktop, la nav (flex-1) joue déjà ce rôle. */}
+      <div className="md:hidden flex-1" />
+
+      {/* Pastille abonnement (sans le compteur de jours) */}
       {subscription && (
         <SubscriptionChip subscription={subscription} />
       )}
@@ -127,9 +134,11 @@ function SubscriptionChip({ subscription }: { subscription: TopBarSubscription }
     : isTrial ? { bg: 'bg-warning/10', fg: 'text-warning', bar: '#b7791f' }
     : { bg: 'bg-success/10', fg: 'text-success', bar: '#2f6b3f' };
 
+  // Plus de "N jours restants" : on affiche seulement le statut /
+  // type d'abonnement. La date d'échéance reste accessible au survol.
   const label = expired ? 'Abonnement expiré'
-    : isTrial ? `Essai · ${days ?? '—'}j`
-    : `${capitalize(subscription.plan)}${days !== null ? ` · ${days}j` : ''}`;
+    : isTrial ? 'Essai'
+    : capitalize(subscription.plan);
 
   return (
     <Link

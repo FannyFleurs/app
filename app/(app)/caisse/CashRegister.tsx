@@ -774,53 +774,57 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
     return () => window.removeEventListener('keydown', onKey);
   }, [lines.length, view, searchQ]);
 
-  // Scanner USB / douchette global : capture les frappes rapides
-  // alphanumériques se terminant par Entrée même quand aucun champ
-  // n'a le focus. Une vraie douchette tape > 20 caractères en moins
-  // de 100 ms, ce qu'un humain ne peut pas reproduire.
+  // Scanner USB / douchette global : capture les caractères tapés
+  // n'importe où sur la page caisse (hors champs texte) et tente un
+  // ajout au panier quand on reçoit Entrée. Plus de filtrage temporel
+  // strict : on accepte tout ce qui ressemble à un code-barres
+  // (≥ 3 caractères alphanumériques) terminé par Entrée. Si plus de
+  // 2 secondes sans saisie, on purge le buffer (utilisateur humain
+  // qui hésite, pas un scan).
   useEffect(() => {
     const buf: { key: string; t: number }[] = [];
-    const MIN_LEN = 4;            // codes-barres font 4+ caractères
-    const MAX_INTERVAL_MS = 50;   // > 50 ms entre touches → frappe humaine, on ignore
-    const MAX_TOTAL_MS = 800;     // garde-fou : on ne garde pas un buffer trop ancien
+    const MIN_LEN = 3;
+    const PURGE_MS = 2000;
 
     function flush() { buf.length = 0; }
-    function tryEmitOnEnter() {
-      if (buf.length < MIN_LEN) { flush(); return false; }
-      // Tous les intervalles doivent être < MAX_INTERVAL_MS pour qu'on parle de scan
-      for (let i = 1; i < buf.length; i++) {
-        if (buf[i]!.t - buf[i - 1]!.t > MAX_INTERVAL_MS) { flush(); return false; }
-      }
-      const code = buf.map((k) => k.key).join('');
-      flush();
-      addByCode(code);
-      return true;
-    }
 
     function onKey(e: KeyboardEvent) {
-      // Ignore quand on tape dans un input texte / textarea / select : le
-      // champ recherche gère déjà le scan via son onKeyDown.
+      // Ignore quand le focus est sur un champ de saisie (le champ
+      // recherche a son propre handler).
       const tgt = e.target as HTMLElement | null;
       const inField = tgt && (tgt.tagName === 'INPUT' || tgt.tagName === 'TEXTAREA' || tgt.tagName === 'SELECT' || tgt.isContentEditable);
       if (inField) return;
 
       const now = Date.now();
-      // Purge les frappes trop anciennes
-      if (buf.length && now - buf[0]!.t > MAX_TOTAL_MS) flush();
+      // Purge si la dernière frappe est trop ancienne
+      if (buf.length && now - buf[buf.length - 1]!.t > PURGE_MS) flush();
 
       if (e.key === 'Enter') {
-        const handled = tryEmitOnEnter();
-        if (handled) e.preventDefault();
+        if (buf.length >= MIN_LEN) {
+          const code = buf.map((k) => k.key).join('');
+          flush();
+          e.preventDefault();
+          addByCode(code);
+        } else {
+          flush();
+        }
         return;
       }
-      // Caractères acceptés : chiffres, lettres, tiret, point (codes-barres
-      // classiques EAN, UPC, CODE-128).
+      // Tab est souvent envoyé par certains scanners comme séparateur
+      if (e.key === 'Tab' && buf.length >= MIN_LEN) {
+        const code = buf.map((k) => k.key).join('');
+        flush();
+        e.preventDefault();
+        addByCode(code);
+        return;
+      }
+      // Caractères acceptés : alphanumériques + tiret / point / slash
       if (/^[0-9a-zA-Z\-._/]$/.test(e.key)) {
         buf.push({ key: e.key, t: now });
         return;
       }
       // Toute autre touche casse la séquence
-      flush();
+      if (e.key.length > 1) flush();
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -996,9 +1000,12 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
         </div>
 
         {/* Bande catégories en bas du catalogue, sur 2 lignes, tuiles
-            compactes (hauteur ~ 1/2 des tuiles articles), scroll horizontal. */}
-        <div className="border-t border-border bg-gray-50 px-2 py-2 shrink-0">
-          <div className="grid grid-rows-2 grid-flow-col auto-cols-[110px] md:auto-cols-[130px] gap-1.5 overflow-x-auto no-scrollbar">
+            compactes (hauteur ~ 1/2 des tuiles articles), scroll horizontal.
+            Padding vertical p-3 pour que le ring (sélection) ne soit pas
+            tronqué en haut/bas. Wrapper flex justify-center pour centrer
+            quand peu de catégories. */}
+        <div className="border-t border-border bg-gray-50 px-2 py-3 shrink-0">
+          <div className="grid grid-rows-2 grid-flow-col auto-cols-[110px] md:auto-cols-[130px] gap-1.5 overflow-x-auto no-scrollbar justify-center">
             {categoriesWithCounts.cats.length === 0 && categoriesWithCounts.uncategorized === 0 ? (
               <div className="row-span-2 col-span-2 text-xs text-ink-soft text-center self-center">
                 Aucune catégorie.

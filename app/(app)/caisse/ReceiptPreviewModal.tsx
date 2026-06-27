@@ -62,27 +62,35 @@ export default function ReceiptPreviewModal({ receipt, onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-ink/30 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-50 grid place-items-center bg-ink/30 backdrop-blur-sm p-2 md:p-4"
       onClick={onBackdropClick}
     >
       <div
         ref={cardRef}
-        className="card max-w-2xl w-full p-6"
+        className="card max-w-2xl w-full max-h-[95vh] flex flex-col overflow-hidden"
         onMouseEnter={() => setPaused(true)}
         onMouseLeave={() => setPaused(false)}
       >
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-semibold">Ticket {receipt.number}</h2>
-            <p className="text-sm text-ink-soft">Vente validée et scellée fiscalement.</p>
+        {/* Header sticky avec bouton fermer toujours visible */}
+        <div className="flex items-center justify-between p-4 md:p-6 pb-3 border-b border-border shrink-0">
+          <div className="min-w-0">
+            <h2 className="text-base md:text-lg font-semibold truncate">Ticket {receipt.number}</h2>
+            <p className="text-xs md:text-sm text-ink-soft">Vente validée et scellée fiscalement.</p>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-ink-soft tabular-nums">
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="hidden md:inline text-xs text-ink-soft tabular-nums">
               Fermeture auto dans {Math.ceil(timeLeft / 1000)}s
             </span>
-            <button onClick={onClose} className="text-ink-soft hover:text-ink">✕</button>
+            <button
+              onClick={onClose}
+              className="grid place-items-center h-10 w-10 rounded-full border border-border text-ink-soft hover:text-ink hover:bg-gray-50 text-lg"
+              aria-label="Fermer"
+            >
+              ✕
+            </button>
           </div>
         </div>
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 pt-3">
 
         <div className="mt-4 grid grid-cols-3 gap-3">
           <a href={pdfUrl} target="_blank" rel="noreferrer" className="btn-primary">Imprimer / PDF</a>
@@ -144,6 +152,7 @@ export default function ReceiptPreviewModal({ receipt, onClose }: Props) {
 
         <div className="mt-4 h-[300px] rounded-xl border border-border overflow-hidden">
           <iframe src={pdfUrl} className="w-full h-full" title="Ticket" />
+        </div>
         </div>
       </div>
 
