@@ -226,7 +226,7 @@ export default function ClosuresAdmin({ stores, registers }: { stores: Store[]; 
   const alreadySealed = preview?.sealed != null;
 
   return (
-    <div className="p-6 flex flex-col gap-3 h-full overflow-hidden">
+    <div className="p-4 md:p-6 flex flex-col gap-3 md:h-full md:overflow-hidden">
       {/* Header : titre + boutons à droite sur la même ligne */}
       <div className="flex items-center justify-between gap-3">
         <div>

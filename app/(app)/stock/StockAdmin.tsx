@@ -99,7 +99,7 @@ export default function StockAdmin({ canAdjust, stores }: { canAdjust: boolean; 
   }, {} as Record<string, typeof NAV>);
 
   return (
-    <div className="grid grid-cols-[260px_1fr] h-full overflow-hidden">
+    <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] md:h-full md:overflow-hidden">
       {/* SIDEBAR */}
       <aside className="border-r border-border bg-white overflow-y-auto">
         <div className="px-5 py-4 border-b border-border">

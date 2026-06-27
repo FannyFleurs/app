@@ -93,11 +93,11 @@ export default function TopBar({
         </svg>
       </button>
 
-      {/* Carte utilisateur */}
+      {/* Carte utilisateur — sur mobile, juste l'icône bonhomme */}
       <button
         onClick={onLogout}
         title="Se déconnecter"
-        className="relative flex items-center gap-3 px-5 border-l border-border hover:bg-gray-50 transition-colors min-w-[140px]"
+        className="relative flex items-center gap-3 px-3 sm:px-5 border-l border-border hover:bg-gray-50 transition-colors sm:min-w-[140px]"
       >
         <span
           className="absolute left-0 top-2 bottom-2 w-1 rounded-r-full"
@@ -106,7 +106,7 @@ export default function TopBar({
         <span className="text-accent-deep">
           <Icon name="users" size={20} />
         </span>
-        <span className="text-sm font-medium text-ink">{firstName}</span>
+        <span className="hidden sm:inline text-sm font-medium text-ink">{firstName}</span>
       </button>
     </header>
   );

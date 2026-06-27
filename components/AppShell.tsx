@@ -101,7 +101,10 @@ export default function AppShell({
         onLogout={() => void logout()}
       />
 
-      <main className="flex-1 overflow-hidden bg-white relative">{children}</main>
+      {/* Scroll vertical autorisé par défaut sur toutes les pages.
+          Les pages à mise en page fixe (CAISSE) appliquent leur propre
+          overflow-hidden + h-full pour ne pas scroller. */}
+      <main className="flex-1 overflow-y-auto overflow-x-hidden bg-white relative">{children}</main>
 
       {menuOpen && (
         <AllPagesOverlay

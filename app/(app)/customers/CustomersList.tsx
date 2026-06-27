@@ -105,7 +105,7 @@ export default function CustomersList({ customers: initialCustomers, canWrite }:
 
   return (
     <>
-      <div className="grid grid-cols-[320px_240px_1fr] h-full overflow-hidden">
+      <div className="grid grid-cols-1 md:grid-cols-[320px_240px_1fr] md:h-full md:overflow-hidden">
         {/* COLONNE 1 — Liste clients */}
         <aside className="border-r border-border bg-white flex flex-col overflow-hidden">
           <div className="px-5 py-3 border-b border-border flex items-center justify-between">

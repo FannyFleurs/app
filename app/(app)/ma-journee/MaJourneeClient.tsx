@@ -112,7 +112,7 @@ export default function MaJourneeClient() {
   });
 
   return (
-    <div className="grid grid-cols-[360px_1fr] h-full overflow-hidden">
+    <div className="grid grid-cols-1 md:grid-cols-[360px_1fr] md:h-full md:overflow-hidden min-h-full">
       {/* SIDEBAR GAUCHE — synthèse journée */}
       <aside className="border-r border-border bg-white overflow-y-auto flex flex-col">
         <div className="px-5 py-4 border-b border-border">
