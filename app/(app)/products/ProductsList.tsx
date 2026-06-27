@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { formatEUR } from '@/lib/services/money';
 import ProductFormModal from './ProductFormModal';
+import ProductImportModal from './ProductImportModal';
 import PageHeader from '@/components/PageHeader';
 import Badge from '@/components/Badge';
 import EmptyState from '@/components/EmptyState';
@@ -30,6 +31,7 @@ export default function ProductsList({
   const [editing, setEditing] = useState<Product | null | undefined>(undefined);
   const [filterCat, setFilterCat] = useState<string>('all');
   const [showInactive, setShowInactive] = useState(false);
+  const [showImport, setShowImport] = useState(false);
 
   async function reload() {
     setLoading(true);
@@ -65,7 +67,12 @@ export default function ProductsList({
         title="Produits"
         subtitle="Catalogue complet : bouquets, plantes, cache-pots, bougies, services, cartes cadeaux."
         actions={canEdit ? (
-          <button className="btn-primary" onClick={() => setEditing(null)}>+ Nouveau produit</button>
+          <div className="flex gap-2">
+            <button className="btn-soft" onClick={() => setShowImport(true)}>
+              ⬆ Importer
+            </button>
+            <button className="btn-primary" onClick={() => setEditing(null)}>+ Nouveau produit</button>
+          </div>
         ) : null}
       />
 
@@ -171,6 +178,13 @@ export default function ProductsList({
           categories={categories}
           onClose={() => setEditing(undefined)}
           onSaved={() => { setEditing(undefined); void reload(); }}
+        />
+      )}
+
+      {showImport && (
+        <ProductImportModal
+          onClose={() => setShowImport(false)}
+          onCompleted={() => { setShowImport(false); void reload(); }}
         />
       )}
     </div>
