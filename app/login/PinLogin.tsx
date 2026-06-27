@@ -43,7 +43,6 @@ export default function PinLogin() {
   const [bootstrapping, setBootstrapping] = useState(false);
   const [bootstrapResult, setBootstrapResult] = useState<{ email: string; pin: string } | null>(null);
   const [migrationRequired, setMigrationRequired] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [tenantRequired, setTenantRequired] = useState(false);
 
@@ -82,15 +81,6 @@ export default function PinLogin() {
     () => users.find((u) => u.id === selectedId) ?? null,
     [users, selectedId],
   );
-
-  const filtered = useMemo(() => {
-    const needle = search.trim().toLowerCase();
-    if (!needle) return users;
-    return users.filter((u) =>
-      u.full_name.toLowerCase().includes(needle) ||
-      ROLE_LABELS[u.role]?.toLowerCase().includes(needle),
-    );
-  }, [users, search]);
 
   async function submit(forUser: string, pinValue: string) {
     setSubmitting(true); setError(null);
@@ -138,8 +128,9 @@ export default function PinLogin() {
 
   return (
     <main className="h-screen overflow-hidden bg-white grid grid-cols-1 lg:grid-cols-[440px_1fr] pt-safe pb-safe pl-safe pr-safe">
-      {/* COLONNE GAUCHE — sélection utilisateur */}
-      <aside className="flex flex-col border-r border-border bg-white overflow-hidden">
+      {/* COLONNE GAUCHE — sélection utilisateur. Sur mobile, on masque la
+          liste quand un user est sélectionné, pour laisser place au PIN. */}
+      <aside className={`${selected ? 'hidden lg:flex' : 'flex'} flex-col border-r border-border bg-white overflow-hidden`}>
         {/* Header */}
         <div className="px-6 py-5 border-b border-border flex items-center gap-3 shrink-0">
           <div className="grid h-11 w-11 place-items-center rounded-2xl accent-bar text-white text-lg font-semibold">F</div>
@@ -149,24 +140,11 @@ export default function PinLogin() {
           </div>
         </div>
 
-        {/* Recherche */}
-        <div className="p-4 shrink-0">
-          <div className="relative">
-            <input
-              className="input h-12 pr-10 text-base"
-              placeholder="Rechercher"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-soft">⌕</span>
-          </div>
-        </div>
-
-        {/* Liste users */}
-        <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-2">
+        {/* Liste users (scrollable) */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-2 min-h-0">
           {loading ? (
             <div className="text-center text-sm text-ink-soft py-6">Chargement…</div>
-          ) : filtered.length === 0 ? (
+          ) : users.length === 0 ? (
             <div className="text-center text-sm text-ink-soft py-6">
               {tenantRequired
                 ? <>
@@ -175,10 +153,10 @@ export default function PinLogin() {
                       Connectez-vous avec votre email ou créez une boutique.
                     </span>
                   </>
-                : users.length === 0 ? 'Aucun utilisateur configuré.' : 'Aucun résultat.'}
+                : 'Aucun utilisateur configuré.'}
             </div>
           ) : (
-            filtered.map((u) => {
+            users.map((u) => {
               const isSelected = u.id === selectedId;
               const c = userColor(u.full_name);
               return (
@@ -228,7 +206,8 @@ export default function PinLogin() {
           )}
         </div>
 
-        {/* Bouton bas — Accès / Inscription */}
+        {/* Bouton bas — Accès / Inscription. "+ Créer ma boutique" n'apparaît
+            que si aucun utilisateur n'est encore configuré sur ce poste. */}
         <div className="border-t border-border p-4 shrink-0 bg-white space-y-2">
           <button
             onClick={() => setShowAdminLogin(true)}
@@ -244,12 +223,14 @@ export default function PinLogin() {
               {tenantRequired ? 'Me connecter (email)' : 'Accès admin et autres'}
             </span>
           </button>
-          <a
-            href="/setup"
-            className="btn-ghost w-full h-10 text-sm text-center inline-flex items-center justify-center"
-          >
-            + Créer ma boutique (essai 14 jours)
-          </a>
+          {users.length === 0 && (
+            <a
+              href="/setup"
+              className="btn-ghost w-full h-10 text-sm text-center inline-flex items-center justify-center"
+            >
+              + Créer ma boutique (essai 14 jours)
+            </a>
+          )}
           {bootstrapResult && (
             <div className="rounded-xl bg-success/10 px-3 py-2 text-xs text-success text-center">
               ✓ Démo créée : <strong>{bootstrapResult.email}</strong> · PIN <strong>{bootstrapResult.pin}</strong>
@@ -258,11 +239,21 @@ export default function PinLogin() {
         </div>
       </aside>
 
-      {/* COLONNE DROITE — affichage / pavé PIN */}
-      <section className="flex flex-col overflow-hidden">
-        {/* En-tête à droite : logo */}
-        <div className="px-8 py-6 flex items-center justify-end shrink-0">
-          <div className="flex items-center gap-2.5">
+      {/* COLONNE DROITE — affichage / pavé PIN. Sur mobile, visible
+          uniquement quand un user est sélectionné. */}
+      <section className={`${selected ? 'flex' : 'hidden lg:flex'} flex-col overflow-hidden`}>
+        {/* En-tête à droite : logo + bouton retour mobile */}
+        <div className="px-4 lg:px-8 py-4 lg:py-6 flex items-center justify-between shrink-0">
+          {selected && (
+            <button
+              onClick={() => { setSelectedId(null); setPin(''); setError(null); }}
+              className="lg:hidden btn-ghost text-sm"
+              aria-label="Retour à la liste des utilisateurs"
+            >
+              ← Retour
+            </button>
+          )}
+          <div className="flex items-center gap-2.5 ml-auto">
             <div className="grid h-9 w-9 place-items-center rounded-xl accent-bar text-white font-semibold">F</div>
             <span className="font-semibold tracking-tight text-ink">{APP_NAME}</span>
           </div>
@@ -270,7 +261,7 @@ export default function PinLogin() {
 
         {/* Bandeau migration manquante éventuel */}
         {migrationRequired && (
-          <div className="mx-8 card p-4 bg-warning/10 border-warning/30 shrink-0">
+          <div className="mx-4 lg:mx-8 card p-4 bg-warning/10 border-warning/30 shrink-0">
             <div className="font-semibold text-warning">⚠ Migration manquante</div>
             <p className="mt-1 text-sm text-ink-soft">
               La connexion par PIN nécessite la migration{' '}
@@ -282,7 +273,7 @@ npm run user:test</pre>
         )}
 
         {/* Centre : illustration OU pavé PIN */}
-        <div className="flex-1 grid place-items-center px-8 pb-10 min-h-0">
+        <div className="flex-1 grid place-items-center px-4 lg:px-8 pb-4 lg:pb-10 min-h-0">
           {!selected ? (
             <div className="text-center">
               <div className="mx-auto grid h-48 w-48 place-items-center rounded-full bg-accent-soft text-accent-deep mb-6">

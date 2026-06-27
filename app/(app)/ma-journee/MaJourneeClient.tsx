@@ -162,12 +162,12 @@ export default function MaJourneeClient() {
           </div>
         </div>
 
-        {/* Total HT mis en avant + indicateur journée fermée */}
+        {/* Total TTC mis en avant + indicateur journée fermée */}
         <div className="px-5 py-6 text-center">
           <div className="inline-flex items-center gap-1 text-xs text-ink-soft">
-            <Icon name="dashboard" size={14} /> CA HT
+            <Icon name="dashboard" size={14} /> CA TTC
           </div>
-          <div className="mt-1 text-4xl font-semibold tracking-tight">{formatEUR(totals.ht)}</div>
+          <div className="mt-1 text-4xl font-semibold tracking-tight">{formatEUR(totals.ttc)}</div>
           {sealedAt && (
             <div
               className="mt-3 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold text-white"
@@ -180,7 +180,7 @@ export default function MaJourneeClient() {
 
         {/* KPI lignes */}
         <div className="px-5 pb-4 space-y-3">
-          <KpiRow label="CA Total TTC" value={formatEUR(totals.ttc)} />
+          <KpiRow label="CA HT" value={formatEUR(totals.ht)} />
           <KpiRow label="Ventes" value={totals.count.toString()} />
           <KpiRow label="Panier moyen" value={formatEUR(totals.avg)} />
           {mode === 'complet' && (

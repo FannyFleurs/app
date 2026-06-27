@@ -128,7 +128,11 @@ export default function ProductsList({
             </thead>
             <tbody>
               {filtered.map((p) => (
-                <tr key={p.id} className="border-t border-border hover:bg-bg/60">
+                <tr
+                  key={p.id}
+                  onClick={() => canEdit && setEditing(p)}
+                  className={`border-t border-border hover:bg-bg/60 ${canEdit ? 'cursor-pointer' : ''}`}
+                >
                   <td className="px-4 py-3">
                     <div className="font-medium">{p.name}</div>
                     <div className="flex flex-wrap gap-1 mt-1">
@@ -150,9 +154,7 @@ export default function ProductsList({
                   </td>
                   {canEdit && (
                     <td className="px-4 py-3 text-right">
-                      <button className="text-sage-deep hover:underline text-sm" onClick={() => setEditing(p)}>
-                        Modifier
-                      </button>
+                      <span className="text-sage-deep text-sm">Modifier ›</span>
                     </td>
                   )}
                 </tr>
