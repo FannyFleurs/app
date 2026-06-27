@@ -117,6 +117,8 @@ export default function OrganizationDetail({ id }: { id: string }) {
 
       <AdminActions id={o.id} initialMaxDevices={o.max_devices ?? 1} onChange={() => void reload()} />
 
+      <ActiveSessions id={o.id} />
+
       <section>
         <h3 className="text-sm font-semibold uppercase tracking-widest text-ink-soft mb-2">
           Historique des actions
@@ -272,6 +274,113 @@ function AdminActions({ id, initialMaxDevices, onChange }: {
       </div>
 
       {error && <div className="rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
+    </section>
+  );
+}
+
+function ActiveSessions({ id }: { id: string }) {
+  interface SessionRow {
+    id: string;
+    user_id: string;
+    user_email: string;
+    user_full_name: string;
+    ip: string | null;
+    user_agent: string | null;
+    created_at: string;
+    expires_at: string;
+  }
+  const [sessions, setSessions] = useState<SessionRow[]>([]);
+  const [maxDevices, setMaxDevices] = useState<number>(1);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  async function reload() {
+    setLoading(true);
+    const r = await fetch(`/api/admin/organizations/${id}/sessions`);
+    if (r.ok) {
+      const j = await r.json();
+      setSessions(j.sessions ?? []);
+      setMaxDevices(Number(j.max_devices) || 1);
+    }
+    setLoading(false);
+  }
+  useEffect(() => { void reload(); /* eslint-disable-next-line */ }, [id]);
+
+  async function revoke(sid: string) {
+    if (!confirm('Libérer cette place ? L\'utilisateur sera déconnecté.')) return;
+    setBusy(sid);
+    const r = await fetch(`/api/admin/organizations/${id}/sessions/${sid}`, { method: 'DELETE' });
+    setBusy(null);
+    if (r.ok) void reload();
+  }
+
+  function deviceLabel(ua: string | null): string {
+    if (!ua) return 'Appareil inconnu';
+    if (/iPad/i.test(ua)) return 'iPad';
+    if (/iPhone/i.test(ua)) return 'iPhone';
+    if (/Android/i.test(ua)) return 'Android';
+    if (/Macintosh|Mac OS X/i.test(ua)) return 'Mac';
+    if (/Windows/i.test(ua)) return 'Windows';
+    if (/Linux/i.test(ua)) return 'Linux';
+    return 'Navigateur';
+  }
+  function browserLabel(ua: string | null): string {
+    if (!ua) return '';
+    if (/Edg\//i.test(ua)) return 'Edge';
+    if (/Chrome\//i.test(ua) && !/Edg\//i.test(ua)) return 'Chrome';
+    if (/Firefox\//i.test(ua)) return 'Firefox';
+    if (/Safari\//i.test(ua)) return 'Safari';
+    return '';
+  }
+
+  return (
+    <section className="card p-5 space-y-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="font-semibold">Appareils connectés</h3>
+          <p className="text-xs text-ink-soft mt-0.5">
+            Sessions actives en ce moment.
+            {' '}<strong>{sessions.length}</strong> / {maxDevices} place(s) utilisée(s).
+          </p>
+        </div>
+        <button onClick={() => void reload()} className="btn-ghost text-xs">
+          Rafraîchir
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="text-sm text-ink-soft py-2">Chargement…</div>
+      ) : sessions.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-border p-4 text-sm text-ink-soft text-center">
+          Aucun appareil connecté.
+        </div>
+      ) : (
+        <div className="rounded-xl border border-border divide-y divide-border overflow-hidden">
+          {sessions.map((s) => (
+            <div key={s.id} className="flex items-center gap-3 px-4 py-2.5">
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium truncate">
+                  {s.user_full_name} <span className="text-ink-soft font-normal">· {s.user_email}</span>
+                </div>
+                <div className="text-xs text-ink-soft mt-0.5">
+                  {deviceLabel(s.user_agent)}
+                  {browserLabel(s.user_agent) && ` · ${browserLabel(s.user_agent)}`}
+                  {s.ip && ` · IP ${s.ip}`}
+                  {' · ouverte le '}{new Date(s.created_at).toLocaleString('fr-FR')}
+                </div>
+              </div>
+              <button
+                onClick={() => void revoke(s.id)}
+                disabled={busy === s.id}
+                className="btn-ghost text-xs text-danger hover:bg-danger/10 disabled:opacity-50"
+                title="Forcer la déconnexion / libérer la place"
+              >
+                {busy === s.id ? '…' : 'Libérer'}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 }

@@ -201,6 +201,19 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
 
   useEffect(() => { void refreshSession(); }, [refreshSession]);
 
+  // Première arrivée du jour sans session ouverte : on déclenche
+  // automatiquement la modale "Ouvrir la caisse" pour pousser le
+  // commerçant à démarrer la journée. Ne se redéclenche pas après
+  // une fermeture manuelle de la modale.
+  const autoPromptOnceRef = useRef(false);
+  useEffect(() => {
+    if (sessionLoading) return;
+    if (sessionId) return;
+    if (autoPromptOnceRef.current) return;
+    autoPromptOnceRef.current = true;
+    setShowOpenSession(true);
+  }, [sessionLoading, sessionId]);
+
   const refreshHeldCount = useCallback(async () => {
     if (!registerId) return;
     const r = await fetch(`/api/sales/held?register_id=${registerId}`);
