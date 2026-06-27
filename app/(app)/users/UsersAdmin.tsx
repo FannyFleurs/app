@@ -269,6 +269,10 @@ function UserFormModal({ user, onClose, onSaved }: {
               </label>
             )}
           </div>
+
+          {user && (
+            <UserPermissionOverrides userId={user.id} />
+          )}
         </div>
 
         {error && <div className="mt-3 rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
@@ -289,4 +293,152 @@ function prettyError(code?: string): string {
     case 'EMAIL_ALREADY_EXISTS': return 'Cet email est déjà utilisé.';
     default: return code ?? 'Erreur';
   }
+}
+
+interface PermOverride { permission: string; granted: boolean }
+
+/**
+ * Permissions individuelles : permet d'accorder ou révoquer une
+ * permission pour CET utilisateur seulement, indépendamment de son rôle.
+ * Exemple : un vendeur dont le profil n'a pas l'accès stock, mais qu'on
+ * autorise quand même à ajuster le stock.
+ */
+function UserPermissionOverrides({ userId }: { userId: string }) {
+  const PERMISSION_LABELS: Record<string, string> = {
+    'pos.use': 'Accéder à la caisse',
+    'pos.override_price': 'Forcer un prix libre',
+    'pos.discount_line': 'Remise sur ligne',
+    'pos.discount_cart': 'Remise sur ticket',
+    'pos.refund': 'Remboursement / retour',
+    'pos.settings.write': 'Modifier paramètres caisse',
+    'products.read': 'Voir le catalogue',
+    'products.write': 'Créer / modifier produits',
+    'categories.write': 'Gérer les catégories',
+    'stock.adjust': 'Ajuster le stock',
+    'customers.read': 'Voir les clients',
+    'customers.write': 'Créer / modifier clients',
+    'invoices.create': 'Créer une facture',
+    'invoices.validate': 'Valider une facture',
+    'closures.daily': 'Clôture journalière',
+    'closures.monthly': 'Clôture mensuelle',
+    'closures.yearly': 'Clôture annuelle',
+    'fiscal.audit': 'Audit fiscal',
+    'fiscal.export': 'Exports comptables',
+    'users.read': 'Voir les utilisateurs',
+    'users.write': 'Gérer les utilisateurs',
+    'settings.read': 'Voir les paramètres',
+    'settings.write': 'Modifier les paramètres',
+  };
+  const [overrides, setOverrides] = useState<PermOverride[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    void (async () => {
+      const r = await fetch(`/api/users/${userId}/permissions`);
+      if (r.ok) {
+        const j = await r.json();
+        setOverrides(j.overrides ?? []);
+      }
+      setLoading(false);
+    })();
+  }, [userId]);
+
+  async function apply(permission: string, granted: boolean | null) {
+    setBusy(permission);
+    const r = await fetch(`/api/users/${userId}/permissions`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ permission, granted }),
+    });
+    setBusy(null);
+    if (!r.ok) return;
+    setOverrides((cur) => {
+      const filtered = cur.filter((o) => o.permission !== permission);
+      return granted === null ? filtered : [...filtered, { permission, granted }];
+    });
+  }
+
+  function getOverride(p: string): boolean | null {
+    return overrides.find((o) => o.permission === p)?.granted ?? null;
+  }
+
+  if (loading) return null;
+
+  return (
+    <div className="pt-3 border-t border-border">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="text-sm font-medium text-accent-deep hover:underline"
+      >
+        {open ? '▾' : '▸'} Permissions individuelles
+        {overrides.length > 0 && (
+          <span className="ml-1.5 inline-flex items-center justify-center h-5 min-w-[1.25rem] px-1.5 rounded-full text-[10px] font-semibold accent-bar text-white">
+            {overrides.length}
+          </span>
+        )}
+      </button>
+      {open && (
+        <>
+          <p className="mt-1 text-xs text-ink-soft">
+            Surcharge le rôle pour CET utilisateur uniquement. Les autres
+            utilisateurs du même rôle ne sont pas affectés.
+          </p>
+          <ul className="mt-2 space-y-1 max-h-64 overflow-y-auto pr-1">
+            {Object.entries(PERMISSION_LABELS).map(([p, label]) => {
+              const ov = getOverride(p);
+              const isBusy = busy === p;
+              return (
+                <li key={p} className="flex items-center justify-between gap-2 text-sm">
+                  <span className="flex-1 truncate">{label}</span>
+                  <div className="flex gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => void apply(p, ov === false ? null : false)}
+                      disabled={isBusy}
+                      className={`h-7 px-2 rounded-md text-[11px] font-medium transition-colors ${
+                        ov === false
+                          ? 'bg-danger text-white'
+                          : 'bg-white border border-border text-ink-soft hover:bg-gray-50'
+                      }`}
+                      title="Refuser pour cet utilisateur"
+                    >
+                      ✗
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void apply(p, null)}
+                      disabled={isBusy}
+                      className={`h-7 px-2 rounded-md text-[11px] font-medium transition-colors ${
+                        ov === null
+                          ? 'bg-gray-200 text-ink'
+                          : 'bg-white border border-border text-ink-soft hover:bg-gray-50'
+                      }`}
+                      title="Hérite du rôle"
+                    >
+                      Défaut
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void apply(p, ov === true ? null : true)}
+                      disabled={isBusy}
+                      className={`h-7 px-2 rounded-md text-[11px] font-medium transition-colors ${
+                        ov === true
+                          ? 'bg-success text-white'
+                          : 'bg-white border border-border text-ink-soft hover:bg-gray-50'
+                      }`}
+                      title="Accorder à cet utilisateur"
+                    >
+                      ✓
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      )}
+    </div>
+  );
 }

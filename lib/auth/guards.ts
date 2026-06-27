@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { readSessionFromCookie, type AuthUser } from './session';
 import { hasPermission, type Permission } from './rbac';
+import { hasEffectivePermission } from './permissions';
 
 /**
  * À utiliser dans les API routes : renvoie soit { user }, soit une Response 401/403.
@@ -25,7 +26,13 @@ export async function requirePermission(
 ): Promise<{ user: AuthUser } | { response: NextResponse }> {
   const r = await requireSession();
   if ('response' in r) return r;
-  if (!hasPermission(r.user.role, permission)) {
+  // hasEffectivePermission combine déjà : défauts du rôle + overrides
+  // org-level + overrides user-level. Si la migration 0017 n'est pas
+  // appliquée, on tombe gracieusement sur les défauts seuls.
+  const ok = await hasEffectivePermission(
+    r.user.id, r.user.role, r.user.organizationId, permission,
+  );
+  if (!ok) {
     return {
       response: NextResponse.json(
         { error: 'FORBIDDEN', permission },
