@@ -771,6 +771,59 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
     return () => window.removeEventListener('keydown', onKey);
   }, [lines.length, view, searchQ]);
 
+  // Scanner USB / douchette global : capture les frappes rapides
+  // alphanumériques se terminant par Entrée même quand aucun champ
+  // n'a le focus. Une vraie douchette tape > 20 caractères en moins
+  // de 100 ms, ce qu'un humain ne peut pas reproduire.
+  useEffect(() => {
+    const buf: { key: string; t: number }[] = [];
+    const MIN_LEN = 4;            // codes-barres font 4+ caractères
+    const MAX_INTERVAL_MS = 50;   // > 50 ms entre touches → frappe humaine, on ignore
+    const MAX_TOTAL_MS = 800;     // garde-fou : on ne garde pas un buffer trop ancien
+
+    function flush() { buf.length = 0; }
+    function tryEmitOnEnter() {
+      if (buf.length < MIN_LEN) { flush(); return false; }
+      // Tous les intervalles doivent être < MAX_INTERVAL_MS pour qu'on parle de scan
+      for (let i = 1; i < buf.length; i++) {
+        if (buf[i]!.t - buf[i - 1]!.t > MAX_INTERVAL_MS) { flush(); return false; }
+      }
+      const code = buf.map((k) => k.key).join('');
+      flush();
+      addByCode(code);
+      return true;
+    }
+
+    function onKey(e: KeyboardEvent) {
+      // Ignore quand on tape dans un input texte / textarea / select : le
+      // champ recherche gère déjà le scan via son onKeyDown.
+      const tgt = e.target as HTMLElement | null;
+      const inField = tgt && (tgt.tagName === 'INPUT' || tgt.tagName === 'TEXTAREA' || tgt.tagName === 'SELECT' || tgt.isContentEditable);
+      if (inField) return;
+
+      const now = Date.now();
+      // Purge les frappes trop anciennes
+      if (buf.length && now - buf[0]!.t > MAX_TOTAL_MS) flush();
+
+      if (e.key === 'Enter') {
+        const handled = tryEmitOnEnter();
+        if (handled) e.preventDefault();
+        return;
+      }
+      // Caractères acceptés : chiffres, lettres, tiret, point (codes-barres
+      // classiques EAN, UPC, CODE-128).
+      if (/^[0-9a-zA-Z\-._/]$/.test(e.key)) {
+        buf.push({ key: e.key, t: now });
+        return;
+      }
+      // Toute autre touche casse la séquence
+      flush();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [products]);
+
   if (sessionLoading) {
     return <div className="p-8 text-ink-soft">Chargement caisse…</div>;
   }
@@ -863,23 +916,18 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
           </button>
         </div>
 
-        {/* Plus de fil d'Ariane — la grille des produits a son bouton "Retour" en première tuile */}
-
         <div className="flex-1 overflow-auto p-3 md:p-5 bg-white pb-24 md:pb-5">
+          {/* En-tête contextuel : Top articles / nom catégorie / recherche */}
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-xs uppercase tracking-widest text-ink-soft font-semibold">
+              {searchQ ? `Résultats pour « ${searchQ} »`
+                : view.kind === 'products' ? currentCategoryName
+                : '★ Top articles'}
+            </div>
+          </div>
+
           {showingProducts ? (
             <div className={`grid ${metrics.grid} ${metrics.gap}`}>
-              {/* Bouton retour TOUJOURS en première position en vue produits, hors recherche */}
-              {!searchQ && (
-                <button
-                  onClick={() => setView({ kind: 'categories' })}
-                  className="rounded-2xl border border-border overflow-hidden hover:shadow-md hover:opacity-90 transition-all active:scale-[0.98] aspect-[5/3] grid place-items-center px-3 accent-bar text-white"
-                >
-                  <div className="text-center leading-tight">
-                    <div className="text-3xl">‹</div>
-                    <div className={`${metrics.titleFontSize} font-semibold`}>Retour</div>
-                  </div>
-                </button>
-              )}
               {visibleProducts.length === 0 ? (
                 <div className="col-span-full text-center text-ink-soft mt-8">
                   {searchQ ? 'Aucun produit trouvé pour cette recherche.' : 'Aucun produit dans cette catégorie.'}
@@ -910,18 +958,91 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
               ))}
             </div>
           ) : (
-            // VUE CATÉGORIES (avec top produits en première ligne, 4 max)
-            <CategoryGrid
-              categories={categoriesWithCounts.cats}
-              uncategorizedCount={categoriesWithCounts.uncategorized}
-              topProducts={topProducts}
-              onPick={(id) => setView({ kind: 'products', categoryId: id })}
-              onPickProduct={(p) => addProduct(p)}
-              metrics={metrics}
-              showImage={posUi.show_product_image}
-              showPrice={posUi.show_price}
-            />
+            // Vue par défaut : top articles (tuiles articles classiques)
+            <div className={`grid ${metrics.grid} ${metrics.gap}`}>
+              {topProducts.length === 0 ? (
+                <div className="col-span-full text-center text-ink-soft mt-4 text-sm">
+                  Aucun top article configuré. Marquez vos articles favoris dans
+                  Produits → « Top produit » pour les afficher ici.
+                </div>
+              ) : topProducts.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => addProduct(p)}
+                  className={`card ${metrics.padding} hover:shadow-md hover:border-gray-300 transition-all active:scale-[0.98] aspect-[5/3] grid place-items-center text-center`}
+                >
+                  <div className="flex flex-col items-center justify-center gap-1.5 max-w-full">
+                    {posUi.show_product_image && p.image_url && (
+                      <img src={p.image_url} alt="" className="h-12 w-12 rounded-md object-cover mb-1" />
+                    )}
+                    <span className={`${metrics.titleFontSize} font-semibold text-ink leading-tight line-clamp-2`}>
+                      {p.name}
+                    </span>
+                    {posUi.show_price && (
+                      <span className="text-sm font-medium text-ink-soft">
+                        {p.price_is_free ? 'prix libre' : formatEUR(p.sale_price_ttc)}
+                      </span>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
           )}
+        </div>
+
+        {/* Bande catégories en bas du catalogue, sur 2 lignes, tuiles
+            compactes (hauteur ~ 1/2 des tuiles articles), scroll horizontal. */}
+        <div className="border-t border-border bg-gray-50 px-2 py-2 shrink-0">
+          <div className="grid grid-rows-2 grid-flow-col auto-cols-[110px] md:auto-cols-[130px] gap-1.5 overflow-x-auto no-scrollbar">
+            {categoriesWithCounts.cats.length === 0 && categoriesWithCounts.uncategorized === 0 ? (
+              <div className="row-span-2 col-span-2 text-xs text-ink-soft text-center self-center">
+                Aucune catégorie.
+              </div>
+            ) : (
+              <>
+                {/* Bouton "Top" pour revenir à la vue par défaut */}
+                <button
+                  onClick={() => setView({ kind: 'categories' })}
+                  className={`rounded-lg border h-14 md:h-16 px-2 text-xs md:text-sm font-medium leading-tight line-clamp-2 transition-all active:scale-95 ${
+                    view.kind === 'categories'
+                      ? 'accent-bar text-white border-transparent shadow-sm'
+                      : 'bg-white border-border text-ink hover:border-gray-300'
+                  }`}
+                >
+                  ★ Top
+                </button>
+                {categoriesWithCounts.cats.map((c) => {
+                  const isActive = view.kind === 'products' && view.categoryId === c.id;
+                  return (
+                    <button
+                      key={c.id}
+                      onClick={() => setView({ kind: 'products', categoryId: c.id })}
+                      className={`rounded-lg border h-14 md:h-16 px-2 text-xs md:text-sm font-medium leading-tight line-clamp-2 transition-all active:scale-95 ${
+                        isActive
+                          ? 'accent-bar text-white border-transparent shadow-sm'
+                          : 'bg-white border-border text-ink hover:border-gray-300'
+                      }`}
+                      style={!isActive && c.color ? { backgroundColor: c.color + '20' } : undefined}
+                    >
+                      {c.name}
+                    </button>
+                  );
+                })}
+                {categoriesWithCounts.uncategorized > 0 && (
+                  <button
+                    onClick={() => setView({ kind: 'products', categoryId: 'uncategorized' })}
+                    className={`rounded-lg border h-14 md:h-16 px-2 text-xs md:text-sm font-medium leading-tight line-clamp-2 transition-all active:scale-95 ${
+                      view.kind === 'products' && view.categoryId === 'uncategorized'
+                        ? 'accent-bar text-white border-transparent shadow-sm'
+                        : 'bg-white border-border text-ink hover:border-gray-300'
+                    }`}
+                  >
+                    Sans catégorie
+                  </button>
+                )}
+              </>
+            )}
+          </div>
         </div>
       </div>
 
