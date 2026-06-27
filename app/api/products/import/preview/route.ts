@@ -94,6 +94,9 @@ export async function POST(req: Request) {
     const warnings: string[] = [];
 
     if (!r.name?.trim()) errors.push('Nom obligatoire');
+    if (r.name && r.name.length > 300) {
+      errors.push(`Nom trop long (${r.name.length} caractères, max 300)`);
+    }
     if (r.sale_price_ttc == null || Number.isNaN(r.sale_price_ttc)) {
       errors.push('Prix de vente TTC invalide');
     } else if (r.sale_price_ttc < 0) {
@@ -107,6 +110,15 @@ export async function POST(req: Request) {
     }
     if (r.color && !/^#[0-9a-fA-F]{6}$/.test(r.color)) {
       errors.push(`Couleur invalide (attendu #RRGGBB) : ${r.color}`);
+    }
+    if (r.sku && r.sku.length > 200) {
+      errors.push(`SKU trop long (${r.sku.length} caractères, max 200)`);
+    }
+    if (r.barcode && r.barcode.length > 100) {
+      errors.push(`Code-barres trop long (${r.barcode.length} caractères, max 100)`);
+    }
+    if (r.category && r.category.length > 200) {
+      errors.push(`Catégorie trop longue (${r.category.length} caractères, max 200)`);
     }
     if (r.category && !categoriesByName.has(r.category.trim().toLowerCase())) {
       warnings.push(`Catégorie « ${r.category} » sera créée automatiquement`);

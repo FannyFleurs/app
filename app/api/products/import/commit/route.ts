@@ -8,13 +8,13 @@ import { audit } from '@/lib/audit/log';
 export const dynamic = 'force-dynamic';
 
 const rowSchema = z.object({
-  name: z.string().min(1).max(200),
-  sku: z.string().max(80).nullable().optional(),
-  barcode: z.string().max(80).nullable().optional(),
-  category: z.string().max(120).nullable().optional(),
+  name: z.string().min(1).max(300),
+  sku: z.string().max(200).nullable().optional(),
+  barcode: z.string().max(100).nullable().optional(),
+  category: z.string().max(200).nullable().optional(),
   sale_price_ttc: z.number().min(0),
   purchase_price_ht: z.number().min(0).nullable().optional(),
-  tax_rate_code: z.string().min(1).max(20),
+  tax_rate_code: z.string().min(1).max(40),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable().optional(),
   is_top_product: z.boolean().optional(),
   visible_in_pos: z.boolean().optional(),
