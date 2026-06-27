@@ -33,7 +33,7 @@ export default function AllPagesOverlay({ role, hiddenPaths, onClose, onLogout }
     .filter((i) => i.required || !hiddenPaths.includes(i.href));
 
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col bg-white animate-[fadeIn_120ms_ease-out]">
+    <div className="fixed inset-0 z-[60] flex flex-col bg-white animate-[fadeIn_120ms_ease-out] pt-safe pb-safe pl-safe pr-safe">
       <div className="h-14 flex items-center px-4 shrink-0 border-b border-border bg-white">
         <div className="flex items-center gap-2.5">
           <span className="grid h-9 w-9 place-items-center rounded-xl accent-bar text-white font-semibold">F</span>
