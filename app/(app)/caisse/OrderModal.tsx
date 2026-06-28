@@ -56,112 +56,40 @@ export default function OrderModal({
   const [addrZip, setAddrZip] = useState('');
   const [addrCity, setAddrCity] = useState('');
   const [notes, setNotes] = useState('');
-  const [paymentMode, setPaymentMode] = useState<'pay_now' | 'payment_link'>('pay_now');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [paymentLinkSent, setPaymentLinkSent] = useState<string | null>(null);
 
   async function submit() {
     if (!date || !time) { setError('Date et heure obligatoires.'); return; }
     if (type === 'delivery' && !addrLine1.trim()) {
       setError('Adresse de livraison obligatoire.'); return;
     }
+    if (!saleId) { setError('Aucune vente en cours.'); return; }
     setSaving(true); setError(null);
 
     const requested_at = new Date(`${date}T${time}:00`).toISOString();
-    const slot_label = `${date} · ${time}`;
-    const recipient_name = recipientName.trim() || undefined;
-    const recipient_phone = recipientPhone.trim() || undefined;
-    const delivery_address = type === 'delivery'
-      ? { line1: addrLine1.trim(), zip: addrZip.trim(), city: addrCity.trim() }
-      : undefined;
-    const internal_notes = notes.trim() || undefined;
-
-    // === MODE "Encaisser maintenant" =====================================
-    // Pas de POST /api/orders. On attache juste les infos de delivery à
-    // la vente en cours, puis on délègue au parent qui ouvre PaymentModal.
-    if (paymentMode === 'pay_now') {
-      if (!saleId) {
-        setSaving(false);
-        setError('Aucune vente en cours.');
-        return;
-      }
-      const intent: DeliveryIntent = {
-        pickup_or_delivery: type,
-        requested_at,
-        slot_label,
-        recipient_name,
-        recipient_phone,
-        delivery_address: delivery_address ?? null,
-        internal_notes,
-      };
-      // Persiste l'intent côté serveur (silencieux si migration 0019 absente)
-      try {
-        await fetch(`/api/sales/${saleId}/delivery`, {
-          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(intent),
-        });
-      } catch { /* on continue même si ça échoue */ }
-      setSaving(false);
-      onPayNow(intent);
-      return;
-    }
-
-    // === MODES "À régler au retrait" / "Lien de paiement" ================
-    const body = {
-      store_id: storeId,
-      customer_id: customer?.id ?? null,
+    const intent: DeliveryIntent = {
       pickup_or_delivery: type,
       requested_at,
-      slot_label,
-      recipient_name,
-      recipient_phone,
-      delivery_address,
-      internal_notes,
-      lines: lines.map((l) => ({
-        product_id: l.product_id,
-        label: l.label,
-        quantity: l.quantity,
-        unit_price_ttc: l.unit_price_ttc,
-        tax_rate: l.tax_rate,
-        tax_rate_code: l.tax_rate_code,
-      })),
+      slot_label: `${date} · ${time}`,
+      recipient_name: recipientName.trim() || undefined,
+      recipient_phone: recipientPhone.trim() || undefined,
+      delivery_address: type === 'delivery'
+        ? { line1: addrLine1.trim(), zip: addrZip.trim(), city: addrCity.trim() }
+        : null,
+      internal_notes: notes.trim() || undefined,
     };
-    const r = await fetch('/api/orders', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    if (!r.ok) {
-      setSaving(false);
-      const j = await r.json().catch(() => ({}));
-      setError(j.message ?? j.error ?? 'Erreur');
-      return;
-    }
-    const orderRes = await r.json();
-
-    // Si lien de paiement choisi → crée la session Stripe et l'envoie au client
-    if (paymentMode === 'payment_link') {
-      const linkRes = await fetch(`/api/orders/${orderRes.id}/payment-link`, {
-        method: 'POST',
+    // Persiste l'intent côté serveur (silencieux si migration 0019 absente)
+    try {
+      await fetch(`/api/sales/${saleId}/delivery`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(intent),
       });
-      if (!linkRes.ok) {
-        setSaving(false);
-        const j = await linkRes.json().catch(() => ({}));
-        setError(j.message ?? j.error ?? 'Stripe non configuré.');
-        return;
-      }
-      const j = await linkRes.json();
-      if (j.email_sent_to) {
-        setPaymentLinkSent(j.email_sent_to);
-      } else {
-        setPaymentLinkSent(j.url);
-      }
-      setSaving(false);
-      // On laisse la modale ouverte pour montrer la confirmation
-      return;
-    }
+    } catch { /* on continue même si ça échoue */ }
     setSaving(false);
-    onSaved();
+    // Le règlement (espèces, CB, lien Stripe, En compte…) se fait sur
+    // la modale de règlement classique côté parent.
+    onPayNow(intent);
   }
 
   return (
@@ -247,82 +175,22 @@ export default function OrderModal({
             <span className="text-xl font-semibold">{formatEUR(totalTtc)}</span>
           </div>
 
-          {/* Mode de règlement */}
-          <Field label="Règlement">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setPaymentMode('pay_now')}
-                className={`rounded-xl border py-2.5 text-sm font-semibold ${
-                  paymentMode === 'pay_now'
-                    ? 'accent-bar text-white border-transparent'
-                    : 'bg-white border-border text-ink'
-                }`}
-              >
-                Encaissement standard
-              </button>
-              <button
-                type="button"
-                onClick={() => setPaymentMode('payment_link')}
-                className={`rounded-xl border py-2.5 text-sm font-semibold ${
-                  paymentMode === 'payment_link'
-                    ? 'accent-bar text-white border-transparent'
-                    : 'bg-white border-border text-ink'
-                }`}
-                disabled={!customer?.email}
-                title={!customer?.email ? 'Le client doit avoir un email enregistré.' : ''}
-              >
-                Lien Stripe
-              </button>
-            </div>
-            {paymentMode === 'pay_now' && (
-              <p className="mt-2 text-xs text-ink-soft">
-                Modale de règlement standard (espèces / CB / chèque / carte cadeau / avoir /
-                <strong> En compte</strong> si le client paye au retrait ou à la livraison).
-                Le ticket portera la mention <strong>{type === 'pickup' ? 'RETRAIT' : 'LIVRAISON'}</strong>
-                {' '}avec la date prévue.
-              </p>
-            )}
-            {paymentMode === 'payment_link' && (
-              <p className="mt-2 text-xs text-ink-soft">
-                Un lien sécurisé Stripe sera envoyé à <strong>{customer?.email}</strong>.
-                Dès paiement, la commande passera en « payée » automatiquement.
-              </p>
-            )}
-            {paymentMode === 'payment_link' && !customer?.email && (
-              <p className="mt-2 text-xs text-danger">
-                ⚠ Aucun email sur la fiche client. Modifiez-la ou choisissez un autre mode.
-              </p>
-            )}
-          </Field>
+          <p className="text-xs text-ink-soft">
+            Le règlement (espèces, CB, chèque, carte cadeau, avoir, En compte, lien Stripe…)
+            se fait sur la modale d&apos;encaissement standard à l&apos;étape suivante. Le ticket
+            portera la mention <strong>{type === 'pickup' ? 'RETRAIT' : 'LIVRAISON'}</strong>
+            {' '}avec la date prévue.
+          </p>
         </div>
 
         {error && <div className="mt-3 rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
 
-        {paymentLinkSent && (
-          <div className="mt-3 rounded-xl bg-success/10 px-4 py-3 text-sm text-success">
-            ✓ Lien de paiement envoyé à <strong>{paymentLinkSent}</strong>.
-            <p className="mt-1 text-xs">
-              Vous serez notifié dès que le client aura payé.
-            </p>
-            <button onClick={onSaved} className="btn-primary mt-3 text-sm h-9">
-              Terminer
-            </button>
-          </div>
-        )}
-
-        {!paymentLinkSent && (
-          <div className="mt-4 flex justify-end gap-2">
-            <button onClick={onClose} className="btn-ghost">Annuler</button>
-            <button onClick={() => void submit()} disabled={saving} className="btn-primary">
-              {saving
-                ? '…'
-                : paymentMode === 'pay_now'
-                  ? 'Suite → Encaissement'
-                  : 'Créer la commande'}
-            </button>
-          </div>
-        )}
+        <div className="mt-4 flex justify-end gap-2">
+          <button onClick={onClose} className="btn-ghost">Annuler</button>
+          <button onClick={() => void submit()} disabled={saving} className="btn-primary">
+            {saving ? '…' : 'Suite → Encaissement'}
+          </button>
+        </div>
       </div>
     </div>
   );
