@@ -16,6 +16,26 @@ export default function ReceiptPreviewModal({ receipt, onClose }: Props) {
   const isSchool = receipt.id.startsWith('school-receipt-');
   const pdfUrl = isSchool ? '' : `/api/receipts/${receipt.id}/pdf`;
   const [invoice, setInvoice] = useState<{ id: string; number: string } | null>(null);
+  const [delivery, setDelivery] = useState<{
+    pickup_or_delivery: 'pickup' | 'delivery';
+    slot_label: string;
+    recipient_name?: string;
+    delivery_address?: { line1: string; zip: string; city: string } | null;
+  } | null>(null);
+
+  // Charge l'éventuel delivery_info attaché à la vente
+  useEffect(() => {
+    if (isSchool || !receipt.saleId) return;
+    void (async () => {
+      try {
+        const r = await fetch(`/api/sales/${receipt.saleId}`);
+        if (!r.ok) return;
+        const j = await r.json();
+        if (j.sale?.delivery_info) setDelivery(j.sale.delivery_info);
+      } catch { /* ignore */ }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showEmailModal, setShowEmailModal] = useState(false);
@@ -196,6 +216,29 @@ export default function ReceiptPreviewModal({ receipt, onClose }: Props) {
           )}
           {error && <div className="mt-2 text-xs text-danger">{error}</div>}
         </div>
+
+        {delivery && (
+          <div className="mt-4 rounded-xl border-2 border-accent-deep bg-accent-soft p-3">
+            <div className="text-xs uppercase tracking-widest font-bold text-accent-deep">
+              {delivery.pickup_or_delivery === 'pickup' ? '📦 RETRAIT BOUTIQUE' : '🚚 LIVRAISON'}
+            </div>
+            <div className="mt-1 text-sm">
+              <strong>{delivery.slot_label}</strong>
+            </div>
+            {delivery.recipient_name && (
+              <div className="text-xs text-ink-soft mt-0.5">
+                Destinataire : {delivery.recipient_name}
+              </div>
+            )}
+            {delivery.delivery_address && (
+              <div className="text-xs text-ink-soft mt-0.5">
+                {delivery.delivery_address.line1}
+                {delivery.delivery_address.zip && `, ${delivery.delivery_address.zip}`}
+                {delivery.delivery_address.city && ` ${delivery.delivery_address.city}`}
+              </div>
+            )}
+          </div>
+        )}
 
         {!isSchool && (
           <div className="mt-4 h-[300px] rounded-xl border border-border overflow-hidden">

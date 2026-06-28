@@ -1368,12 +1368,24 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
           customer={customer}
           totalTtc={totals.ttc}
           storeId={storeId}
+          saleId={saleId}
           deliveryProduct={products.find((p) => /livraison|delivery/i.test(p.name))}
           onClose={() => setShowOrderModal(false)}
           onSaved={() => {
             setShowOrderModal(false);
             setLines([]); setSaleId(null); setCustomer(null);
             setView({ kind: 'categories' });
+          }}
+          onPayNow={async () => {
+            // Encaisser maintenant : on ferme OrderModal, on s'assure que les
+            // lignes sont sync, puis on ouvre PaymentModal — flow caisse
+            // classique. Le delivery_info a déjà été PATCH sur la vente.
+            setShowOrderModal(false);
+            const id = await ensureSale();
+            if (id) {
+              await syncLines();
+              setShowPayment(true);
+            }
           }}
         />
       )}

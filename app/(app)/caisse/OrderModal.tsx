@@ -5,14 +5,28 @@ import { formatEUR } from '@/lib/services/money';
 import type { CartLine, PosProduct } from './CashRegister';
 import type { PickedCustomer } from './CustomerPickerModal';
 
+export interface DeliveryIntent {
+  pickup_or_delivery: 'pickup' | 'delivery';
+  requested_at: string;
+  slot_label: string;
+  recipient_name?: string;
+  recipient_phone?: string;
+  delivery_address?: { line1: string; zip: string; city: string } | null;
+  internal_notes?: string;
+}
+
 interface Props {
   lines: CartLine[];
   customer: PickedCustomer | null;
   totalTtc: number;
   storeId: string;
+  saleId: string | null;
   deliveryProduct?: PosProduct;
   onClose: () => void;
   onSaved: () => void;
+  /** Encaisser maintenant : on attache les infos de delivery à la vente
+   *  et on déclenche le flow paiement classique côté parent. */
+  onPayNow: (intent: DeliveryIntent) => void;
 }
 
 /**
@@ -24,7 +38,7 @@ interface Props {
  * - Une fois validée, la commande apparaît sur /orders.
  */
 export default function OrderModal({
-  lines, customer, totalTtc, storeId, deliveryProduct, onClose, onSaved,
+  lines, customer, totalTtc, storeId, saleId, deliveryProduct, onClose, onSaved, onPayNow,
 }: Props) {
   // Auto-détection : si une ligne "Livraison" est au panier → mode delivery
   const hasDeliveryLine = lines.some(
@@ -42,7 +56,7 @@ export default function OrderModal({
   const [addrZip, setAddrZip] = useState('');
   const [addrCity, setAddrCity] = useState('');
   const [notes, setNotes] = useState('');
-  const [paymentMode, setPaymentMode] = useState<'on_pickup' | 'payment_link'>('on_pickup');
+  const [paymentMode, setPaymentMode] = useState<'pay_now' | 'on_pickup' | 'payment_link'>('pay_now');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [paymentLinkSent, setPaymentLinkSent] = useState<string | null>(null);
@@ -55,18 +69,55 @@ export default function OrderModal({
     setSaving(true); setError(null);
 
     const requested_at = new Date(`${date}T${time}:00`).toISOString();
+    const slot_label = `${date} · ${time}`;
+    const recipient_name = recipientName.trim() || undefined;
+    const recipient_phone = recipientPhone.trim() || undefined;
+    const delivery_address = type === 'delivery'
+      ? { line1: addrLine1.trim(), zip: addrZip.trim(), city: addrCity.trim() }
+      : undefined;
+    const internal_notes = notes.trim() || undefined;
+
+    // === MODE "Encaisser maintenant" =====================================
+    // Pas de POST /api/orders. On attache juste les infos de delivery à
+    // la vente en cours, puis on délègue au parent qui ouvre PaymentModal.
+    if (paymentMode === 'pay_now') {
+      if (!saleId) {
+        setSaving(false);
+        setError('Aucune vente en cours.');
+        return;
+      }
+      const intent: DeliveryIntent = {
+        pickup_or_delivery: type,
+        requested_at,
+        slot_label,
+        recipient_name,
+        recipient_phone,
+        delivery_address: delivery_address ?? null,
+        internal_notes,
+      };
+      // Persiste l'intent côté serveur (silencieux si migration 0019 absente)
+      try {
+        await fetch(`/api/sales/${saleId}/delivery`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(intent),
+        });
+      } catch { /* on continue même si ça échoue */ }
+      setSaving(false);
+      onPayNow(intent);
+      return;
+    }
+
+    // === MODES "À régler au retrait" / "Lien de paiement" ================
     const body = {
       store_id: storeId,
       customer_id: customer?.id ?? null,
       pickup_or_delivery: type,
       requested_at,
-      slot_label: `${date} · ${time}`,
-      recipient_name: recipientName.trim() || undefined,
-      recipient_phone: recipientPhone.trim() || undefined,
-      delivery_address: type === 'delivery'
-        ? { line1: addrLine1.trim(), zip: addrZip.trim(), city: addrCity.trim() }
-        : undefined,
-      internal_notes: notes.trim() || undefined,
+      slot_label,
+      recipient_name,
+      recipient_phone,
+      delivery_address,
+      internal_notes,
       lines: lines.map((l) => ({
         product_id: l.product_id,
         label: l.label,
@@ -196,9 +247,20 @@ export default function OrderModal({
             <span className="text-xl font-semibold">{formatEUR(totalTtc)}</span>
           </div>
 
-          {/* Mode de règlement (réservé aux commandes différées) */}
+          {/* Mode de règlement */}
           <Field label="Règlement">
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => setPaymentMode('pay_now')}
+                className={`rounded-xl border py-2.5 text-sm font-semibold ${
+                  paymentMode === 'pay_now'
+                    ? 'accent-bar text-white border-transparent'
+                    : 'bg-white border-border text-ink'
+                }`}
+              >
+                Encaisser maintenant
+              </button>
               <button
                 type="button"
                 onClick={() => setPaymentMode('on_pickup')}
@@ -221,9 +283,16 @@ export default function OrderModal({
                 disabled={!customer?.email}
                 title={!customer?.email ? 'Le client doit avoir un email enregistré.' : ''}
               >
-                💳 Lien de paiement Stripe
+                Lien Stripe
               </button>
             </div>
+            {paymentMode === 'pay_now' && (
+              <p className="mt-2 text-xs text-ink-soft">
+                Espèces / CB / etc. — paiement standard. Le ticket mentionnera
+                le mode <strong>{type === 'pickup' ? 'RETRAIT' : 'LIVRAISON'}</strong>
+                {' '}avec la date prévue.
+              </p>
+            )}
             {paymentMode === 'payment_link' && (
               <p className="mt-2 text-xs text-ink-soft">
                 Un lien sécurisé Stripe sera envoyé à <strong>{customer?.email}</strong>.
@@ -256,7 +325,11 @@ export default function OrderModal({
           <div className="mt-4 flex justify-end gap-2">
             <button onClick={onClose} className="btn-ghost">Annuler</button>
             <button onClick={() => void submit()} disabled={saving} className="btn-primary">
-              {saving ? 'Création…' : 'Créer la commande'}
+              {saving
+                ? '…'
+                : paymentMode === 'pay_now'
+                  ? 'Suite → Encaissement'
+                  : 'Créer la commande'}
             </button>
           </div>
         )}
