@@ -201,6 +201,36 @@ export default function PaymentModal({ saleId, totalTtc, loyaltyRedemption, scho
         return;
       }
       const j = await res.json();
+
+      // Si l'utilisateur a inclus un règlement "payment_link", on déclenche
+      // la création de la session Stripe et l'envoi au client par email.
+      // Le webhook Stripe mettra à jour sales.payment_status='paid' à la
+      // réception du paiement.
+      const hasPaymentLink = payments.some((p) => p.method === 'payment_link');
+      if (hasPaymentLink) {
+        try {
+          const linkRes = await fetch(`/api/sales/${saleId}/payment-link`, {
+            method: 'POST',
+          });
+          if (linkRes.ok) {
+            const lj = await linkRes.json();
+            // Toast info au commerçant : lien créé (et email envoyé si client a un email)
+            if (lj.email_sent_to) {
+              alert(`✓ Lien de paiement Stripe créé et envoyé à ${lj.email_sent_to}`);
+            } else if (lj.url) {
+              // Pas d'email : on copie l'URL pour que le commerçant la transmette manuellement
+              try { await navigator.clipboard?.writeText(lj.url); } catch {}
+              alert(`Lien de paiement créé :\n\n${lj.url}\n\n(Copié dans le presse-papier — aucun email client renseigné.)`);
+            }
+          } else {
+            const lj = await linkRes.json().catch(() => ({}));
+            alert(`Vente validée, mais création du lien Stripe impossible : ${lj.message ?? lj.error ?? 'erreur'}`);
+          }
+        } catch (e) {
+          alert(`Vente validée, mais le lien Stripe n'a pas pu être créé : ${(e as Error).message}`);
+        }
+      }
+
       onValidated(j.receipt_id, j.receipt_number, j.loyalty);
     } finally { setLoading(false); }
   }

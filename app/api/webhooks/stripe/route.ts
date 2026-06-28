@@ -30,16 +30,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'INVALID_JSON' }, { status: 400 });
   }
 
-  // Récupère l'organisation depuis metadata
+  // Récupère l'organisation et la cible (order OU sale) depuis metadata
   const sessionObj = event.data?.object as {
     id?: string;
-    metadata?: { organization_id?: string; order_id?: string };
+    metadata?: { organization_id?: string; order_id?: string; sale_id?: string };
     payment_status?: string;
   };
   const orgId = sessionObj?.metadata?.organization_id;
   const orderId = sessionObj?.metadata?.order_id;
-  if (!orgId || !orderId) {
-    // Pas d'orga / order dans la metadata : on ignore poliment
+  const saleId = sessionObj?.metadata?.sale_id;
+  if (!orgId || (!orderId && !saleId)) {
+    // Pas d'orga / cible dans la metadata : on ignore poliment
     return NextResponse.json({ ok: true, ignored: true });
   }
 
@@ -67,18 +68,33 @@ export async function POST(req: Request) {
   }
 
   if (newStatus) {
-    await query(
-      `UPDATE orders
-          SET payment_status = $1,
-              paid_at = CASE WHEN $1 = 'paid' THEN now() ELSE paid_at END,
-              status = CASE
-                WHEN $1 = 'paid' AND status = 'confirmed' THEN 'in_preparation'
-                ELSE status
-              END,
-              updated_at = now()
-        WHERE id = $2 AND organization_id = $3`,
-      [newStatus, orderId, orgId],
-    );
+    if (orderId) {
+      await query(
+        `UPDATE orders
+            SET payment_status = $1,
+                paid_at = CASE WHEN $1 = 'paid' THEN now() ELSE paid_at END,
+                status = CASE
+                  WHEN $1 = 'paid' AND status = 'confirmed' THEN 'in_preparation'
+                  ELSE status
+                END,
+                updated_at = now()
+          WHERE id = $2 AND organization_id = $3`,
+        [newStatus, orderId, orgId],
+      );
+    }
+    if (saleId) {
+      // Migration 0020 ajoute payment_status sur sales — silencieux sinon
+      try {
+        await query(
+          `UPDATE sales
+              SET payment_status = $1,
+                  paid_at = CASE WHEN $1 = 'paid' THEN now() ELSE paid_at END,
+                  updated_at = now()
+            WHERE id = $2 AND organization_id = $3`,
+          [newStatus, saleId, orgId],
+        );
+      } catch { /* migration absente */ }
+    }
   }
 
   return NextResponse.json({ ok: true });
