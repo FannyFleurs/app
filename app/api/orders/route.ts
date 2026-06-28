@@ -101,23 +101,32 @@ export async function GET() {
   const g = await requirePermission('pos.use');
   if ('response' in g) return g.response;
 
-  // Détecte les colonnes Stripe (migration 0016 — silencieux si absente)
-  let stripeCols = '';
-  try {
-    const c = await query<{ exists: boolean }>(
-      `SELECT EXISTS (
-         SELECT 1 FROM information_schema.columns
-          WHERE table_name = 'orders' AND column_name = 'payment_status'
-       ) AS exists`,
-    );
-    if (c.rows[0]?.exists) {
-      stripeCols =
-        `, o.payment_status, o.payment_link_url, o.paid_at`;
-    }
-  } catch { /* ignore */ }
+  // Introspection : on adapte les SELECT aux colonnes optionnelles ajoutées
+  // par les migrations (0016 stripe sur orders, 0019 delivery_info sur sales,
+  // 0020 stripe sur sales, 0021 prep_status sur sales).
+  const colCheck = await query<{ table_name: string; column_name: string }>(
+    `SELECT table_name, column_name FROM information_schema.columns
+      WHERE (table_name = 'orders'
+              AND column_name IN ('payment_status','payment_link_url','paid_at'))
+         OR (table_name = 'sales'
+              AND column_name IN ('payment_status','payment_link_url','paid_at',
+                                  'delivery_info','prep_status'))`,
+  );
+  const has = (t: string, c: string) =>
+    colCheck.rows.some((r) => r.table_name === t && r.column_name === c);
+  const ordersHasStripe = has('orders', 'payment_status');
+  const salesHasDelivery = has('sales', 'delivery_info');
+  const salesHasPrep = has('sales', 'prep_status');
+  const salesHasStripe = has('sales', 'payment_status');
 
-  const { rows } = await query(
-    `SELECT o.id, o.number, o.status, o.pickup_or_delivery,
+  const ordersStripeCols = ordersHasStripe
+    ? `, o.payment_status, o.payment_link_url, o.paid_at`
+    : `, NULL::text AS payment_status, NULL::text AS payment_link_url, NULL::timestamptz AS paid_at`;
+
+  // 1) Source orders
+  const ordersRes = await query(
+    `SELECT 'order'::text AS source,
+            o.id, o.number, o.status, o.pickup_or_delivery,
             o.requested_at, o.slot_label,
             o.total_amount::text, o.deposit_amount::text,
             o.recipient_name, o.recipient_phone,
@@ -127,7 +136,7 @@ export async function GET() {
               NULLIF(TRIM(CONCAT(c.first_name,' ',c.last_name)), '')) AS customer_name,
             c.email AS customer_email, c.phone AS customer_phone,
             c.id AS customer_id
-            ${stripeCols}
+            ${ordersStripeCols}
        FROM orders o
        LEFT JOIN customers c ON c.id = o.customer_id
       WHERE o.organization_id = $1
@@ -135,5 +144,61 @@ export async function GET() {
       LIMIT 200`,
     [g.user.organizationId],
   );
-  return NextResponse.json({ orders: rows });
+
+  let salesRows: Record<string, unknown>[] = [];
+  // 2) Source sales avec delivery_info (vente caisse encaissée + retrait/livraison)
+  if (salesHasDelivery) {
+    const prepCol = salesHasPrep
+      ? `COALESCE(s.prep_status, 'confirmed')`
+      : `'confirmed'`;
+    const salesStripeCols = salesHasStripe
+      ? `, s.payment_status, s.payment_link_url, s.paid_at`
+      // Si pas Stripe sur sales : sale validée = payée
+      : `, 'paid'::text AS payment_status, NULL::text AS payment_link_url, s.validated_at AS paid_at`;
+
+    const res = await query(
+      `SELECT 'sale'::text AS source,
+              s.id,
+              r.number AS number,
+              ${prepCol} AS status,
+              (s.delivery_info->>'pickup_or_delivery') AS pickup_or_delivery,
+              (s.delivery_info->>'requested_at')::timestamptz AS requested_at,
+              (s.delivery_info->>'slot_label') AS slot_label,
+              s.total_ttc::text AS total_amount,
+              '0'::text AS deposit_amount,
+              (s.delivery_info->>'recipient_name') AS recipient_name,
+              (s.delivery_info->>'recipient_phone') AS recipient_phone,
+              (s.delivery_info->'delivery_address') AS delivery_address,
+              (s.delivery_info->>'internal_notes') AS internal_notes,
+              NULL::text AS card_message,
+              s.created_at,
+              COALESCE(c.company_name,
+                NULLIF(TRIM(CONCAT(c.first_name,' ',c.last_name)), '')) AS customer_name,
+              c.email AS customer_email, c.phone AS customer_phone,
+              c.id AS customer_id
+              ${salesStripeCols}
+         FROM sales s
+         LEFT JOIN customers c ON c.id = s.customer_id
+         LEFT JOIN receipts r ON r.sale_id = s.id
+        WHERE s.organization_id = $1
+          AND s.delivery_info IS NOT NULL
+        ORDER BY (s.delivery_info->>'requested_at')::timestamptz DESC NULLS LAST,
+                 s.created_at DESC
+        LIMIT 200`,
+      [g.user.organizationId],
+    );
+    salesRows = res.rows as Record<string, unknown>[];
+  }
+
+  // Fusion + tri par requested_at desc puis created_at desc
+  const merged = [...ordersRes.rows, ...salesRows].sort((a, b) => {
+    const ar = a.requested_at as string | null;
+    const br = b.requested_at as string | null;
+    if (ar && br) return new Date(br).getTime() - new Date(ar).getTime();
+    if (ar) return -1;
+    if (br) return 1;
+    return new Date(b.created_at as string).getTime() - new Date(a.created_at as string).getTime();
+  }).slice(0, 200);
+
+  return NextResponse.json({ orders: merged });
 }

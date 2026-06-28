@@ -34,9 +34,12 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   if ('response' in parsed) return parsed.response;
 
   try {
+    // Init prep_status à 'confirmed' si pas encore positionné (migration
+    // 0021). Silencieux si la colonne n'existe pas.
     const res = await query(
       `UPDATE sales
           SET delivery_info = $1::jsonb,
+              prep_status = COALESCE(prep_status, 'confirmed'),
               updated_at = now()
         WHERE id = $2 AND organization_id = $3
           AND status IN ('draft', 'on_hold')`,
@@ -48,8 +51,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     return NextResponse.json({ ok: true });
   } catch (err) {
     const msg = (err as Error).message || '';
-    if (msg.includes('delivery_info')) {
-      // Migration 0019 pas appliquée — on ignore silencieusement
+    if (msg.includes('delivery_info') || msg.includes('prep_status')) {
+      // Migration 0019 / 0021 pas appliquée — on ignore silencieusement
       return NextResponse.json({ ok: true, skipped: 'MIGRATION_MISSING' });
     }
     return jsonError('INTERNAL_ERROR', 500, { message: msg });

@@ -7,6 +7,7 @@ import Badge from '@/components/Badge';
 import EmptyState from '@/components/EmptyState';
 
 interface Order {
+  source: 'order' | 'sale';
   id: string;
   number: string | null;
   status: string;
@@ -94,30 +95,51 @@ export default function OrdersClient({ orgId: _orgId }: { orgId: string }) {
     };
   }, [orders]);
 
-  async function setStatus(id: string, status: string) {
+  async function setStatus(item: Order, status: string) {
     setBusy(true);
-    const r = await fetch(`/api/orders/${id}`, {
+    // Routing : commande différée → /api/orders, vente caisse → /api/sales
+    const url = item.source === 'sale'
+      ? `/api/sales/${item.id}/prep-status`
+      : `/api/orders/${item.id}`;
+    const body = item.source === 'sale'
+      ? { prep_status: status }
+      : { status };
+    const r = await fetch(url, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status }),
+      body: JSON.stringify(body),
     });
     setBusy(false);
     if (r.ok) {
-      setSelected((cur) => cur && cur.id === id ? { ...cur, status } : cur);
+      setSelected((cur) => cur && cur.id === item.id ? { ...cur, status } : cur);
       void reload();
     }
   }
 
-  async function cancel(id: string) {
+  async function cancel(item: Order) {
     if (!confirm('Annuler cette commande ?')) return;
     setBusy(true);
-    const r = await fetch(`/api/orders/${id}`, { method: 'DELETE' });
+    if (item.source === 'sale') {
+      // Pour une vente : on passe juste prep_status='cancelled'
+      // (la vente reste fiscalement validée, c'est juste la préparation
+      // qui est annulée — la trésorerie a déjà été enregistrée).
+      await fetch(`/api/sales/${item.id}/prep-status`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prep_status: 'cancelled' }),
+      });
+    } else {
+      await fetch(`/api/orders/${item.id}`, { method: 'DELETE' });
+    }
     setBusy(false);
-    if (r.ok) { setSelected(null); void reload(); }
+    setSelected(null);
+    void reload();
   }
 
-  async function generateStripeLink(id: string) {
+  async function generateStripeLink(item: Order) {
     setBusy(true);
-    const r = await fetch(`/api/orders/${id}/payment-link`, { method: 'POST' });
+    const url = item.source === 'sale'
+      ? `/api/sales/${item.id}/payment-link`
+      : `/api/orders/${item.id}/payment-link`;
+    const r = await fetch(url, { method: 'POST' });
     setBusy(false);
     if (!r.ok) {
       const j = await r.json().catch(() => ({}));
@@ -237,9 +259,9 @@ export default function OrdersClient({ orgId: _orgId }: { orgId: string }) {
         <OrderDetail
           order={selected}
           onClose={() => setSelected(null)}
-          onChangeStatus={(s) => void setStatus(selected.id, s)}
-          onCancel={() => void cancel(selected.id)}
-          onGenerateLink={() => void generateStripeLink(selected.id)}
+          onChangeStatus={(s) => void setStatus(selected, s)}
+          onCancel={() => void cancel(selected)}
+          onGenerateLink={() => void generateStripeLink(selected)}
           busy={busy}
         />
       )}
@@ -281,6 +303,9 @@ function OrderDetail({
               <Badge tone={s.tone}>{s.label}</Badge>
               {' · '}
               {order.pickup_or_delivery === 'delivery' ? 'Livraison' : 'Retrait boutique'}
+              {order.source === 'sale' && (
+                <> {' · '} <Badge tone="soft">Vente caisse</Badge></>
+              )}
             </p>
           </div>
           <button
