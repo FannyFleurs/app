@@ -100,12 +100,34 @@ export async function POST(req: Request) {
 export async function GET() {
   const g = await requirePermission('pos.use');
   if ('response' in g) return g.response;
+
+  // Détecte les colonnes Stripe (migration 0016 — silencieux si absente)
+  let stripeCols = '';
+  try {
+    const c = await query<{ exists: boolean }>(
+      `SELECT EXISTS (
+         SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'orders' AND column_name = 'payment_status'
+       ) AS exists`,
+    );
+    if (c.rows[0]?.exists) {
+      stripeCols =
+        `, o.payment_status, o.payment_link_url, o.paid_at`;
+    }
+  } catch { /* ignore */ }
+
   const { rows } = await query(
     `SELECT o.id, o.number, o.status, o.pickup_or_delivery,
-            o.requested_at, o.slot_label, o.total_amount::text,
-            o.recipient_name, o.recipient_phone, o.created_at,
+            o.requested_at, o.slot_label,
+            o.total_amount::text, o.deposit_amount::text,
+            o.recipient_name, o.recipient_phone,
+            o.delivery_address, o.internal_notes, o.card_message,
+            o.created_at,
             COALESCE(c.company_name,
-              NULLIF(TRIM(CONCAT(c.first_name,' ',c.last_name)), '')) AS customer_name
+              NULLIF(TRIM(CONCAT(c.first_name,' ',c.last_name)), '')) AS customer_name,
+            c.email AS customer_email, c.phone AS customer_phone,
+            c.id AS customer_id
+            ${stripeCols}
        FROM orders o
        LEFT JOIN customers c ON c.id = o.customer_id
       WHERE o.organization_id = $1
