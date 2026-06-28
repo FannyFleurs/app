@@ -56,7 +56,7 @@ export default function OrderModal({
   const [addrZip, setAddrZip] = useState('');
   const [addrCity, setAddrCity] = useState('');
   const [notes, setNotes] = useState('');
-  const [paymentMode, setPaymentMode] = useState<'pay_now' | 'on_pickup' | 'payment_link'>('pay_now');
+  const [paymentMode, setPaymentMode] = useState<'pay_now' | 'payment_link'>('pay_now');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [paymentLinkSent, setPaymentLinkSent] = useState<string | null>(null);
@@ -249,7 +249,7 @@ export default function OrderModal({
 
           {/* Mode de règlement */}
           <Field label="Règlement">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => setPaymentMode('pay_now')}
@@ -259,18 +259,7 @@ export default function OrderModal({
                     : 'bg-white border-border text-ink'
                 }`}
               >
-                Encaisser maintenant
-              </button>
-              <button
-                type="button"
-                onClick={() => setPaymentMode('on_pickup')}
-                className={`rounded-xl border py-2.5 text-sm font-semibold ${
-                  paymentMode === 'on_pickup'
-                    ? 'accent-bar text-white border-transparent'
-                    : 'bg-white border-border text-ink'
-                }`}
-              >
-                À régler {type === 'pickup' ? 'au retrait' : 'à la livraison'}
+                Encaissement standard
               </button>
               <button
                 type="button"
@@ -288,8 +277,9 @@ export default function OrderModal({
             </div>
             {paymentMode === 'pay_now' && (
               <p className="mt-2 text-xs text-ink-soft">
-                Espèces / CB / etc. — paiement standard. Le ticket mentionnera
-                le mode <strong>{type === 'pickup' ? 'RETRAIT' : 'LIVRAISON'}</strong>
+                Modale de règlement standard (espèces / CB / chèque / carte cadeau / avoir /
+                <strong> En compte</strong> si le client paye au retrait ou à la livraison).
+                Le ticket portera la mention <strong>{type === 'pickup' ? 'RETRAIT' : 'LIVRAISON'}</strong>
                 {' '}avec la date prévue.
               </p>
             )}
