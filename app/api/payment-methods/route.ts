@@ -4,7 +4,7 @@ import { query } from '@/lib/db/client';
 import { requirePermission } from '@/lib/auth/guards';
 import { parseJson } from '@/lib/validation/api';
 
-const KINDS = ['cash','card','check','transfer','gift_card','credit_note','deferred','other'] as const;
+const KINDS = ['cash','card','check','transfer','gift_card','credit_note','payment_link','deferred','other'] as const;
 
 const schema = z.object({
   code: z.string().max(40).optional(),

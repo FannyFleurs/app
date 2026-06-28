@@ -175,7 +175,7 @@ export default function PinLogin() {
                     setSelectedId(u.id);
                     setPin('');
                   }}
-                  className={`relative w-full text-left rounded-xl border bg-white px-4 py-3 pl-5 transition-all flex items-center gap-3 ${
+                  className={`relative w-full text-left rounded-xl border bg-white px-4 py-3 lg:py-[14px] pl-5 transition-all flex items-center gap-3 ${
                     isSelected
                       ? 'border-transparent ring-2 shadow-md'
                       : 'border-border hover:shadow-sm hover:border-gray-300'
@@ -242,22 +242,19 @@ export default function PinLogin() {
       {/* COLONNE DROITE — affichage / pavé PIN. Sur mobile, visible
           uniquement quand un user est sélectionné. */}
       <section className={`${selected ? 'flex' : 'hidden lg:flex'} flex-col overflow-hidden`}>
-        {/* En-tête à droite : logo + bouton retour mobile */}
-        <div className="px-4 lg:px-8 py-4 lg:py-6 flex items-center justify-between shrink-0">
-          {selected && (
+        {/* En-tête à droite : juste le bouton retour mobile (le logo
+            de gauche dans l'aside suffit, pas besoin de le doubler). */}
+        {selected && (
+          <div className="px-4 py-4 flex items-center shrink-0 lg:hidden">
             <button
               onClick={() => { setSelectedId(null); setPin(''); setError(null); }}
-              className="lg:hidden btn-ghost text-sm"
+              className="btn-ghost text-sm"
               aria-label="Retour à la liste des utilisateurs"
             >
               ← Retour
             </button>
-          )}
-          <div className="flex items-center gap-2.5 ml-auto">
-            <div className="grid h-9 w-9 place-items-center rounded-xl accent-bar text-white font-semibold">F</div>
-            <span className="font-semibold tracking-tight text-ink">{APP_NAME}</span>
           </div>
-        </div>
+        )}
 
         {/* Bandeau migration manquante éventuel */}
         {migrationRequired && (
@@ -402,8 +399,8 @@ function PinKey({ label, onPress, disabled, small }: {
     <button
       onClick={onPress}
       disabled={disabled}
-      className={`h-16 rounded-2xl border border-border bg-white hover:bg-gray-50 active:scale-95 transition disabled:opacity-40 ${
-        small ? 'text-lg' : 'text-2xl'
+      className={`h-16 lg:h-[88px] rounded-2xl border border-border bg-white hover:bg-gray-50 active:scale-95 transition disabled:opacity-40 ${
+        small ? 'text-lg lg:text-2xl' : 'text-2xl lg:text-4xl'
       } font-medium`}
     >
       {label}

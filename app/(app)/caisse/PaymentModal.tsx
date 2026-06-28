@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { formatEUR, round2 } from '@/lib/services/money';
 
-type Method = 'cash' | 'card' | 'check' | 'transfer' | 'gift_card' | 'credit_note' | 'other' | 'deferred';
+type Method = 'cash' | 'card' | 'check' | 'transfer' | 'gift_card' | 'credit_note' | 'payment_link' | 'other' | 'deferred';
 
 const FALLBACK_METHODS: Array<{ kind: Method; label: string }> = [
   { kind: 'cash', label: 'Espèces' },

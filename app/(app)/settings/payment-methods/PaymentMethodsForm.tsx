@@ -18,6 +18,7 @@ const PM_KIND_OPTIONS = [
   { value: 'transfer', label: 'Virement' },
   { value: 'gift_card', label: 'Carte cadeau' },
   { value: 'credit_note', label: 'Avoir' },
+  { value: 'payment_link', label: 'Lien de paiement Stripe' },
   { value: 'deferred', label: 'Différé client' },
   { value: 'other', label: 'Autre' },
 ];
