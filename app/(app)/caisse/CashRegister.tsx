@@ -925,12 +925,16 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
 
   return (
     <div
-      className="md:grid h-full flex flex-col"
+      className="md:grid h-full flex flex-col overflow-hidden min-h-0"
       style={{ gridTemplateColumns: `1fr 6px ${ticketWidth}px` }}
     >
-      {/* Gauche : catalogue. Sur mobile, écouter les swipes (gauche → ouvre panier). */}
+      {/* Gauche : catalogue. Sur mobile, écouter les swipes (gauche → ouvre panier).
+          min-h-0 + min-w-0 + flex-col contraignent la grille / colonne
+          pour que la zone .overflow-auto interne fonctionne et reste
+          la SEULE à scroller (le bouton Encaisser du panier à droite
+          reste toujours visible). */}
       <div
-        className="flex flex-col bg-white min-w-0 flex-1 md:flex-none"
+        className="flex flex-col bg-white min-w-0 min-h-0 flex-1 md:flex-none overflow-hidden"
         onTouchStart={onTouchStart}
         onTouchEnd={(e) => onTouchEnd(e, 'open')}
       >
@@ -1091,7 +1095,7 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
         onTouchStart={onTouchStart}
         onTouchEnd={(e) => onTouchEnd(e, 'close')}
         className={`
-          flex flex-col bg-white min-w-0
+          flex flex-col bg-white min-w-0 min-h-0 overflow-hidden
           md:border-l md:border-border md:static md:translate-x-0 md:visible md:opacity-100 md:p-0
           fixed inset-0 z-40 transition-transform duration-300 pt-safe pb-safe
           ${mobileCartOpen ? 'translate-x-0' : 'translate-x-full md:translate-x-0'}
