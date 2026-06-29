@@ -26,6 +26,23 @@ const config: Config = {
       fontFamily: {
         sans: ['ui-sans-serif', 'system-ui', '-apple-system', 'Inter', 'sans-serif'],
       },
+      // Toutes les tailles standards de Tailwind sont augmentees de 5px par
+      // rapport au defaut (caisse a vocation tactile, lisibilite iPad).
+      fontSize: {
+        xs:    ['17px',  { lineHeight: '21px' }],
+        sm:    ['19px',  { lineHeight: '25px' }],
+        base:  ['21px',  { lineHeight: '29px' }],
+        lg:    ['23px',  { lineHeight: '33px' }],
+        xl:    ['25px',  { lineHeight: '33px' }],
+        '2xl': ['29px',  { lineHeight: '37px' }],
+        '3xl': ['35px',  { lineHeight: '41px' }],
+        '4xl': ['41px',  { lineHeight: '45px' }],
+        '5xl': ['53px',  { lineHeight: '1' }],
+        '6xl': ['65px',  { lineHeight: '1' }],
+        '7xl': ['77px',  { lineHeight: '1' }],
+        '8xl': ['101px', { lineHeight: '1' }],
+        '9xl': ['133px', { lineHeight: '1' }],
+      },
       borderRadius: {
         xl: '14px',
         '2xl': '18px',
