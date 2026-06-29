@@ -35,23 +35,27 @@ export default function LineDiscountModal({
       <div className="card max-w-md w-full p-6">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Remise sur l&apos;article</h2>
-          <button onClick={onClose} className="text-ink-soft hover:text-ink">✕</button>
+          <button
+            onClick={onClose}
+            aria-label="Fermer"
+            className="h-10 w-10 grid place-items-center rounded-lg text-lg text-ink-soft hover:bg-gray-100 hover:text-ink"
+          >✕</button>
         </div>
         <p className="mt-1 text-sm text-ink-soft truncate">{label}</p>
         <p className="text-xs text-ink-soft">Base : {quantity} × {formatEUR(unitPriceTtc)} = {formatEUR(baseTtc)}</p>
 
-        <div className="mt-4 flex gap-1">
+        <div className="mt-4 flex gap-2">
           <button
             type="button"
             onClick={() => setMode('percent')}
-            className={`flex-1 rounded-xl py-2.5 text-sm font-medium border transition-colors ${
+            className={`flex-1 rounded-xl h-12 text-base font-semibold border transition-colors ${
               mode === 'percent' ? 'accent-bar text-white border-transparent' : 'bg-white text-ink border-border'
             }`}
           >Pourcentage</button>
           <button
             type="button"
             onClick={() => setMode('amount')}
-            className={`flex-1 rounded-xl py-2.5 text-sm font-medium border transition-colors ${
+            className={`flex-1 rounded-xl h-12 text-base font-semibold border transition-colors ${
               mode === 'amount' ? 'accent-bar text-white border-transparent' : 'bg-white text-ink border-border'
             }`}
           >Montant €</button>
@@ -63,18 +67,18 @@ export default function LineDiscountModal({
             <div className="flex items-center gap-2 mt-1">
               <input
                 type="number" step="0.1" min={0} max={100}
-                className="input text-2xl font-semibold"
+                className="input h-14 text-3xl font-semibold"
                 value={percent || ''}
                 onChange={(e) => setPercent(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
                 placeholder="0"
                 autoFocus
               />
-              <span className="text-2xl font-semibold text-ink-soft">%</span>
+              <span className="text-3xl font-semibold text-ink-soft">%</span>
             </div>
-            <div className="mt-2 grid grid-cols-5 gap-1">
+            <div className="mt-3 grid grid-cols-5 gap-2">
               {[5, 10, 15, 20, 30].map((p) => (
                 <button key={p} type="button" onClick={() => setPercent(p)}
-                        className="btn-ghost text-xs">-{p}%</button>
+                        className="btn-ghost h-11 text-sm font-medium">-{p}%</button>
               ))}
             </div>
           </div>
@@ -83,7 +87,7 @@ export default function LineDiscountModal({
             <label className="text-xs font-medium text-ink-soft">Montant de remise (€)</label>
             <input
               type="number" step="0.01" min={0} max={baseTtc}
-              className="input mt-1 text-2xl font-semibold"
+              className="input mt-1 h-14 text-3xl font-semibold"
               value={amount || ''}
               onChange={(e) => setAmount(Math.max(0, Math.min(baseTtc, Number(e.target.value) || 0)))}
               placeholder="0,00"
@@ -103,14 +107,14 @@ export default function LineDiscountModal({
           </div>
         </div>
 
-        <div className="mt-4 flex justify-end gap-2">
+        <div className="mt-4 flex justify-end gap-2 flex-wrap">
           {currentDiscount > 0 && (
-            <button onClick={() => onSave(0)} className="btn-ghost text-sm">
+            <button onClick={() => onSave(0)} className="btn-ghost h-12 text-sm px-4">
               Supprimer la remise
             </button>
           )}
-          <button onClick={onClose} className="btn-ghost">Annuler</button>
-          <button onClick={() => onSave(computedAmount)} className="btn-primary">
+          <button onClick={onClose} className="btn-ghost h-12 text-base px-5">Annuler</button>
+          <button onClick={() => onSave(computedAmount)} className="btn-primary h-12 text-base font-semibold px-6">
             Appliquer
           </button>
         </div>

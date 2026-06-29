@@ -109,7 +109,11 @@ export default function OpenSessionModal({
       <div className="card max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Ouverture caisse</h2>
-          <button onClick={onClose} className="text-ink-soft hover:text-ink">✕</button>
+          <button
+            onClick={onClose}
+            aria-label="Fermer"
+            className="h-10 w-10 grid place-items-center rounded-lg text-lg text-ink-soft hover:bg-gray-100 hover:text-ink"
+          >✕</button>
         </div>
 
         <p className="mt-1 text-sm text-ink-soft">
@@ -135,12 +139,12 @@ export default function OpenSessionModal({
         </div>
 
         {/* Pavé numérique */}
-        <div className="mt-3 grid grid-cols-3 gap-2">
+        <div className="mt-3 grid grid-cols-3 gap-2 lg:gap-3">
           {['7','8','9','4','5','6','1','2','3','.','0','⌫'].map((k) => (
             <button
               key={k}
               onClick={() => press(k)}
-              className="h-12 rounded-xl border border-border bg-white text-xl font-medium hover:bg-gray-50 active:scale-95 transition"
+              className="h-16 lg:h-20 rounded-xl border border-border bg-white text-2xl lg:text-3xl font-medium hover:bg-gray-50 active:scale-95 transition"
             >
               {k}
             </button>
@@ -152,7 +156,7 @@ export default function OpenSessionModal({
         <button
           disabled={loading}
           onClick={() => void submit()}
-          className="btn-primary w-full mt-4 h-12 text-base"
+          className="btn-primary w-full mt-4 h-16 text-lg font-semibold"
         >
           {loading ? 'Ouverture…' : `Ouvrir la caisse · ${formatEUR(value)}`}
         </button>

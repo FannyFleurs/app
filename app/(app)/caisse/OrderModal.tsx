@@ -97,19 +97,23 @@ export default function OrderModal({
       <div className="card max-w-lg w-full p-5 my-8" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-lg font-semibold">Nouvelle commande</h2>
-          <button onClick={onClose} className="text-ink-soft hover:text-ink">✕</button>
+          <button
+            onClick={onClose}
+            aria-label="Fermer"
+            className="h-10 w-10 grid place-items-center rounded-lg text-lg text-ink-soft hover:bg-gray-100 hover:text-ink"
+          >✕</button>
         </div>
 
         <div className="grid grid-cols-2 gap-2 mb-3">
           <button
             onClick={() => setType('pickup')}
-            className={`rounded-xl py-2.5 text-sm font-semibold border ${
+            className={`rounded-xl h-14 text-base font-semibold border ${
               type === 'pickup' ? 'accent-bar text-white border-transparent' : 'bg-white border-border text-ink'
             }`}
           >📦 Retrait boutique</button>
           <button
             onClick={() => setType('delivery')}
-            className={`rounded-xl py-2.5 text-sm font-semibold border ${
+            className={`rounded-xl h-14 text-base font-semibold border ${
               type === 'delivery' ? 'accent-bar text-white border-transparent' : 'bg-white border-border text-ink'
             }`}
           >🚚 Livraison</button>
@@ -125,39 +129,39 @@ export default function OrderModal({
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-2">
             <Field label={`Date de ${type === 'pickup' ? 'retrait' : 'livraison'} *`}>
-              <input type="date" className="input" min={today} value={date}
+              <input type="date" className="input h-12 text-base" min={today} value={date}
                      onChange={(e) => setDate(e.target.value)} />
             </Field>
             <Field label="Heure *">
-              <input type="time" className="input" value={time}
+              <input type="time" className="input h-12 text-base" value={time}
                      onChange={(e) => setTime(e.target.value)} />
             </Field>
           </div>
 
           <Field label="Destinataire (nom)">
-            <input className="input" value={recipientName}
+            <input className="input h-12 text-base" value={recipientName}
                    onChange={(e) => setRecipientName(e.target.value)}
                    placeholder={customer?.display_name ?? 'Nom du destinataire'} />
           </Field>
           <Field label="Destinataire (téléphone)">
-            <input className="input" value={recipientPhone}
+            <input className="input h-12 text-base" value={recipientPhone}
                    onChange={(e) => setRecipientPhone(e.target.value)} />
           </Field>
 
           {type === 'delivery' && (
             <>
               <Field label="Adresse de livraison *">
-                <input className="input" value={addrLine1}
+                <input className="input h-12 text-base" value={addrLine1}
                        onChange={(e) => setAddrLine1(e.target.value)}
                        placeholder="N°, rue" />
               </Field>
               <div className="grid grid-cols-3 gap-2">
                 <Field label="CP">
-                  <input className="input" value={addrZip}
+                  <input className="input h-12 text-base" value={addrZip}
                          onChange={(e) => setAddrZip(e.target.value)} />
                 </Field>
                 <Field label="Ville" colSpan={2}>
-                  <input className="input" value={addrCity}
+                  <input className="input h-12 text-base" value={addrCity}
                          onChange={(e) => setAddrCity(e.target.value)} />
                 </Field>
               </div>
@@ -165,7 +169,7 @@ export default function OrderModal({
           )}
 
           <Field label="Notes internes">
-            <textarea className="input h-16" value={notes}
+            <textarea className="input h-20 text-base py-2" value={notes}
                       onChange={(e) => setNotes(e.target.value)}
                       placeholder="Couleur de bouquet, message carte, etc." />
           </Field>
@@ -186,8 +190,12 @@ export default function OrderModal({
         {error && <div className="mt-3 rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
 
         <div className="mt-4 flex justify-end gap-2">
-          <button onClick={onClose} className="btn-ghost">Annuler</button>
-          <button onClick={() => void submit()} disabled={saving} className="btn-primary">
+          <button onClick={onClose} className="btn-ghost h-12 text-base px-5">Annuler</button>
+          <button
+            onClick={() => void submit()}
+            disabled={saving}
+            className="btn-primary h-12 text-base font-semibold px-6"
+          >
             {saving ? '…' : 'Suite → Encaissement'}
           </button>
         </div>

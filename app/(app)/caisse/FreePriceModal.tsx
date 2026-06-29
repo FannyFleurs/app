@@ -66,13 +66,17 @@ export default function FreePriceModal({
       <div className="card max-w-md w-full p-5" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Saisie prix libre</h2>
-          <button onClick={onClose} className="text-ink-soft hover:text-ink">✕</button>
+          <button
+            onClick={onClose}
+            aria-label="Fermer"
+            className="h-10 w-10 grid place-items-center rounded-lg text-lg text-ink-soft hover:bg-gray-100 hover:text-ink"
+          >✕</button>
         </div>
 
         <div className="mt-3">
           <label className="text-sm font-medium text-ink-soft">Libellé</label>
           <input
-            className="input mt-1"
+            className="input mt-1 h-12 text-base"
             value={label}
             onChange={(e) => setLabel(e.target.value)}
           />
@@ -93,12 +97,12 @@ export default function FreePriceModal({
         </div>
 
         {/* Pavé numérique */}
-        <div className="mt-3 grid grid-cols-3 gap-2">
+        <div className="mt-3 grid grid-cols-3 gap-2 lg:gap-3">
           {['7','8','9','4','5','6','1','2','3','.','0','⌫'].map((k) => (
             <button
               key={k}
               onClick={() => press(k)}
-              className="h-14 rounded-xl border border-border bg-white text-2xl font-medium hover:bg-gray-50 active:scale-95 transition"
+              className="h-16 lg:h-20 rounded-xl border border-border bg-white text-2xl lg:text-3xl font-medium hover:bg-gray-50 active:scale-95 transition"
             >
               {k}
             </button>
@@ -108,7 +112,7 @@ export default function FreePriceModal({
         <button
           disabled={amount <= 0 || !label.trim()}
           onClick={confirm}
-          className="btn-primary w-full mt-4 h-14 text-lg"
+          className="btn-primary w-full mt-4 h-16 text-xl font-semibold"
         >
           Ajouter au panier · {formatEUR(amount || 0)}
         </button>

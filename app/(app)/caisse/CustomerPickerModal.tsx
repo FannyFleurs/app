@@ -45,18 +45,22 @@ export default function CustomerPickerModal({ onClose, onPick }: Props) {
         <div className="card max-w-xl w-full p-5">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-lg font-semibold">Sélectionner un client</h2>
-            <button onClick={onClose} className="text-ink-soft hover:text-ink">✕</button>
+            <button
+              onClick={onClose}
+              aria-label="Fermer"
+              className="h-10 w-10 grid place-items-center rounded-lg text-lg text-ink-soft hover:bg-gray-100 hover:text-ink"
+            >✕</button>
           </div>
 
           <div className="flex gap-2">
             <input
               autoFocus
-              className="input flex-1"
+              className="input flex-1 h-12 text-base"
               placeholder="Nom, email, téléphone, SIRET…"
               value={q}
               onChange={(e) => setQ(e.target.value)}
             />
-            <button className="btn-soft whitespace-nowrap" onClick={() => setCreating(true)}>
+            <button className="btn-soft whitespace-nowrap h-12 text-base px-4" onClick={() => setCreating(true)}>
               + Nouveau
             </button>
           </div>
@@ -69,18 +73,18 @@ export default function CustomerPickerModal({ onClose, onPick }: Props) {
                 Aucun client. Créez-en un avec le bouton + Nouveau.
               </div>
             ) : (
-              <ul className="space-y-1">
+              <ul className="space-y-1.5">
                 {results.map((c) => (
                   <li key={c.id}>
                     <button
                       onClick={() => onPick(c)}
-                      className="w-full text-left rounded-xl border border-border px-3 py-2.5 hover:border-gray-300 hover:bg-gray-50"
+                      className="w-full text-left rounded-xl border border-border px-4 py-3 hover:border-gray-300 hover:bg-gray-50 active:scale-[0.99]"
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <span className="font-medium truncate">{c.display_name ?? '—'}</span>
+                        <span className="font-semibold truncate text-base">{c.display_name ?? '—'}</span>
                         <span className="text-[11px] text-ink-soft uppercase tracking-wider">{c.type}</span>
                       </div>
-                      <div className="text-xs text-ink-soft truncate">
+                      <div className="text-sm text-ink-soft truncate">
                         {c.email ?? c.phone ?? '—'}
                       </div>
                     </button>

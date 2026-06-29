@@ -1122,11 +1122,11 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5">
             <button
               disabled={lines.length === 0}
               onClick={() => setShowCartActions(true)}
-              className="btn-soft text-xs"
+              className="btn-soft text-sm h-10 px-3"
               title="Remise globale / commentaire"
             >
               Actions
@@ -1134,14 +1134,14 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
             <button
               disabled={lines.length === 0}
               onClick={() => { setLines([]); setSaleId(null); setCartComment(''); void detachCustomer(); }}
-              className="btn-ghost text-xs"
+              className="btn-ghost text-sm h-10 px-3"
             >
               Vider
             </button>
             <button
               disabled={lines.length === 0 && !saleId}
               onClick={() => void cancelTicket()}
-              className="btn-ghost text-xs text-danger hover:bg-danger/10"
+              className="btn-ghost text-sm h-10 px-3 text-danger hover:bg-danger/10"
               title="Annuler ce ticket"
             >
               Annuler
@@ -1161,11 +1161,18 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
                     <div className="text-xs text-warning">Remise systématique : -{customer.default_discount_pct}%</div>
                   )}
                 </div>
-                <div className="flex items-center gap-1">
-                  <button onClick={() => setShowPicker(true)} className="text-xs text-accent-deep hover:underline">
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => setShowPicker(true)}
+                    className="text-sm text-accent-deep hover:bg-accent-soft rounded-lg px-3 h-10 font-medium"
+                  >
                     Changer
                   </button>
-                  <button onClick={() => void detachCustomer()} className="text-ink-soft hover:text-danger px-1">✕</button>
+                  <button
+                    onClick={() => void detachCustomer()}
+                    className="text-ink-soft hover:text-danger hover:bg-danger/10 rounded-lg h-10 w-10 grid place-items-center text-lg"
+                    aria-label="Retirer le client"
+                  >✕</button>
                 </div>
               </div>
               {/* Pastilles soldes : cartes cadeau, avoirs, en compte. */}
@@ -1216,7 +1223,7 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
           ) : (
             <button
               onClick={() => setShowPicker(true)}
-              className="w-full rounded-xl border border-dashed border-border px-3 py-2 text-sm text-ink-soft hover:border-gray-300 hover:text-ink"
+              className="w-full rounded-xl border border-dashed border-border px-3 py-3 text-base text-ink-soft hover:border-gray-300 hover:text-ink"
             >
               + Associer un client
             </button>
@@ -1234,26 +1241,35 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
               <button
                 key={l.key}
                 onClick={() => setDiscountLineKey(l.key)}
-                className="w-full text-left rounded-lg border border-border px-2 py-1.5 bg-white hover:border-gray-300 transition-colors"
+                className="w-full text-left rounded-lg border border-border px-3 py-2 bg-white hover:border-gray-300 transition-colors"
                 title="Cliquer pour ajouter / modifier une remise"
               >
                 <div className="flex justify-between items-center gap-2">
-                  <div className="text-sm font-medium flex-1 truncate">{l.label}</div>
-                  <span className="font-semibold text-sm whitespace-nowrap">{formatEUR(sub)}</span>
+                  <div className="text-base font-medium flex-1 truncate">{l.label}</div>
+                  <span className="font-semibold text-base whitespace-nowrap">{formatEUR(sub)}</span>
                   <button
                     onClick={(e) => { e.stopPropagation(); requestRemoveLine(l.key); }}
-                    className="text-ink-soft hover:text-danger text-xs"
+                    className="h-10 w-10 grid place-items-center rounded-lg text-ink-soft hover:bg-danger/10 hover:text-danger text-base shrink-0"
+                    aria-label="Retirer cet article"
                   >✕</button>
                 </div>
-                <div className="mt-0.5 flex items-center justify-between text-[11px] text-ink-soft">
+                <div className="mt-1 flex items-center justify-between text-xs text-ink-soft">
                   <span>
                     {formatEUR(l.unit_price_ttc)}
                     {l.discount_amount > 0 && <span className="text-warning ml-1">· -{formatEUR(l.discount_amount)}</span>}
                   </span>
-                  <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
-                    <button className="h-6 w-6 rounded border border-border text-xs" onClick={() => incLine(l.key, -1)}>-</button>
-                    <span className="w-6 text-center text-ink">{l.quantity}</span>
-                    <button className="h-6 w-6 rounded border border-border text-xs" onClick={() => incLine(l.key, +1)}>+</button>
+                  <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      className="h-10 w-10 rounded-lg border border-border bg-white text-lg font-medium active:scale-95"
+                      onClick={() => incLine(l.key, -1)}
+                      aria-label="Réduire la quantité"
+                    >−</button>
+                    <span className="w-10 text-center text-ink text-base font-semibold tabular-nums">{l.quantity}</span>
+                    <button
+                      className="h-10 w-10 rounded-lg border border-border bg-white text-lg font-medium active:scale-95"
+                      onClick={() => incLine(l.key, +1)}
+                      aria-label="Augmenter la quantité"
+                    >+</button>
                   </div>
                 </div>
               </button>
@@ -1276,7 +1292,7 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
         <div className="p-2.5 border-t border-border space-y-2">
           <button
             disabled={lines.length === 0 || totals.ttc <= 0}
-            className="btn-soft w-full h-11 text-sm font-semibold"
+            className="btn-soft w-full h-12 text-base font-semibold"
             onClick={() => setShowOrderModal(true)}
           >
             📅 Commande différée (retrait à date)
@@ -1290,7 +1306,7 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
           </button>
           <button
             disabled={lines.length === 0 || !saleId}
-            className="btn-ghost w-full text-sm"
+            className="btn-ghost w-full h-12 text-base"
             onClick={() => void holdSale()}
           >
             Mettre en attente

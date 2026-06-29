@@ -153,15 +153,32 @@ export default function ReceiptPreviewModal({ receipt, onClose }: Props) {
             <p className="text-xs text-ink-soft mt-1">
               Aucune impression possible. La vente n&apos;est pas enregistrée.
             </p>
-            <button onClick={onClose} className="btn-primary mt-3 h-10 px-4 text-sm">
+            <button onClick={onClose} className="btn-primary mt-3 h-14 px-6 text-base font-semibold">
               Nouvelle vente
             </button>
           </div>
         ) : (
           <div className="mt-4 grid grid-cols-3 gap-3">
-            <a href={pdfUrl} target="_blank" rel="noreferrer" className="btn-primary">Imprimer / PDF</a>
-            <button onClick={() => setShowEmailModal(true)} className="btn-soft">Envoyer par mail</button>
-            <button onClick={onClose} className="btn-ghost">Nouvelle vente</button>
+            <a
+              href={pdfUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="btn-primary h-14 text-base font-semibold grid place-items-center"
+            >
+              Imprimer / PDF
+            </a>
+            <button
+              onClick={() => setShowEmailModal(true)}
+              className="btn-soft h-14 text-base font-semibold"
+            >
+              Envoyer par mail
+            </button>
+            <button
+              onClick={onClose}
+              className="btn-ghost h-14 text-base font-semibold"
+            >
+              Nouvelle vente
+            </button>
           </div>
         )}
 
@@ -192,7 +209,7 @@ export default function ReceiptPreviewModal({ receipt, onClose }: Props) {
               <a
                 href={`/api/invoices/${invoice.id}/pdf`}
                 target="_blank" rel="noreferrer"
-                className="btn-primary text-sm"
+                className="btn-primary h-12 text-base px-5 inline-flex items-center"
               >
                 Ouvrir la facture
               </a>
@@ -205,7 +222,11 @@ export default function ReceiptPreviewModal({ receipt, onClose }: Props) {
                   La facture sera numérotée, scellée, immuable.
                 </div>
               </div>
-              <button onClick={() => void generateInvoice()} disabled={generating} className="btn-soft text-sm">
+              <button
+                onClick={() => void generateInvoice()}
+                disabled={generating}
+                className="btn-soft h-12 text-base px-5"
+              >
                 {generating ? 'Génération…' : 'Générer la facture'}
               </button>
             </div>
@@ -306,13 +327,17 @@ function EmailReceiptModal({ receiptId, customerId, onClose, onSent }: {
       <div className="card max-w-md w-full p-5" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-lg font-semibold">Envoyer par mail</h3>
-          <button onClick={onClose} className="text-ink-soft hover:text-ink">✕</button>
+          <button
+            onClick={onClose}
+            aria-label="Fermer"
+            className="h-10 w-10 grid place-items-center rounded-lg text-lg text-ink-soft hover:bg-gray-100 hover:text-ink"
+          >✕</button>
         </div>
         <label className="text-sm font-medium text-ink-soft">Adresse email du client</label>
         <input
           autoFocus
           type="email"
-          className="input mt-1"
+          className="input mt-1 h-12 text-base"
           placeholder="client@exemple.fr"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
@@ -323,8 +348,12 @@ function EmailReceiptModal({ receiptId, customerId, onClose, onSent }: {
         )}
         {error && <div className="mt-3 rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
         <div className="mt-4 flex justify-end gap-2">
-          <button onClick={onClose} className="btn-ghost">Annuler</button>
-          <button onClick={() => void send()} disabled={loading || !email.trim()} className="btn-primary">
+          <button onClick={onClose} className="btn-ghost h-12 text-base px-5">Annuler</button>
+          <button
+            onClick={() => void send()}
+            disabled={loading || !email.trim()}
+            className="btn-primary h-12 text-base font-semibold px-6"
+          >
             {loading ? 'Envoi…' : 'Envoyer'}
           </button>
         </div>

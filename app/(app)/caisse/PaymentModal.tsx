@@ -245,7 +245,11 @@ export default function PaymentModal({ saleId, totalTtc, loyaltyRedemption, scho
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 lg:p-0 lg:mb-4 border-b border-border lg:border-0 shrink-0">
           <h2 className="text-base lg:text-lg font-semibold">Encaissement</h2>
-          <button onClick={onClose} className="text-ink-soft hover:text-ink p-1 -m-1">✕</button>
+          <button
+            onClick={onClose}
+            aria-label="Fermer"
+            className="h-10 w-10 grid place-items-center rounded-lg text-lg text-ink-soft hover:bg-gray-100 hover:text-ink"
+          >✕</button>
         </div>
 
         {/* Zone scrollable (mobile) / grille (desktop) */}
@@ -266,12 +270,12 @@ export default function PaymentModal({ saleId, totalTtc, loyaltyRedemption, scho
               </div>
             </div>
 
-            <div className="mt-2 lg:mt-3 grid grid-cols-3 gap-1.5 lg:gap-2">
+            <div className="mt-2 lg:mt-3 grid grid-cols-3 gap-2 lg:gap-3">
               {['7','8','9','4','5','6','1','2','3','.','0','⌫'].map((k) => (
                 <button
                   key={k}
                   onClick={() => press(k)}
-                  className="h-11 lg:h-16 rounded-lg lg:rounded-xl border border-border bg-white text-lg lg:text-2xl font-medium hover:bg-gray-50 active:scale-95 transition"
+                  className="h-14 lg:h-20 rounded-xl border border-border bg-white text-2xl lg:text-3xl font-medium hover:bg-gray-50 active:scale-95 transition"
                 >
                   {k}
                 </button>
@@ -285,13 +289,13 @@ export default function PaymentModal({ saleId, totalTtc, loyaltyRedemption, scho
               Mode de règlement
             </div>
             {/* Mobile : grille 2 colonnes pour gagner de la place. Desktop : pile verticale. */}
-            <div className="grid grid-cols-2 lg:grid-cols-1 gap-1.5 lg:gap-2">
+            <div className="grid grid-cols-2 lg:grid-cols-1 gap-2 lg:gap-2.5">
               {methods.map((m) => (
                 <button
                   key={m.kind + m.label}
                   onClick={() => tapMethod(m)}
                   disabled={remaining <= 0 && Number(amountStr || '0') <= 0}
-                  className="btn-soft h-10 lg:h-14 text-xs lg:text-base px-2"
+                  className="btn-soft h-14 lg:h-16 text-base font-medium px-3"
                 >
                   {m.label}
                 </button>
@@ -332,7 +336,11 @@ export default function PaymentModal({ saleId, totalTtc, loyaltyRedemption, scho
                     <li key={p.key} className="flex items-center justify-between gap-2 rounded-lg border border-border px-2 py-1 text-xs lg:text-sm">
                       <span className="font-medium truncate">{p.label}</span>
                       <span className="tabular-nums whitespace-nowrap">{formatEUR(p.amount)}</span>
-                      <button onClick={() => removePayment(p.key)} className="text-ink-soft hover:text-danger shrink-0">✕</button>
+                      <button
+                  onClick={() => removePayment(p.key)}
+                  aria-label="Retirer ce paiement"
+                  className="h-9 w-9 grid place-items-center rounded-md text-ink-soft hover:bg-danger/10 hover:text-danger shrink-0"
+                >✕</button>
                     </li>
                   ))}
                 </ul>
@@ -350,7 +358,7 @@ export default function PaymentModal({ saleId, totalTtc, loyaltyRedemption, scho
           <button
             disabled={loading || !canValidate}
             onClick={() => void validate()}
-            className="btn-primary w-full h-12 lg:h-14 text-base lg:text-lg"
+            className="btn-primary w-full h-14 lg:h-16 text-lg lg:text-xl font-semibold"
           >
             {loading ? 'Validation…' : canValidate ? `✓ Valider · ${formatEUR(totalTtc)}` : `Reste ${formatEUR(remaining)}`}
           </button>
@@ -486,7 +494,11 @@ function ReferencePaymentModal({
       <div className="card max-w-lg w-full p-5">
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold">{label}</h3>
-          <button onClick={onClose} className="text-ink-soft hover:text-ink">✕</button>
+          <button
+            onClick={onClose}
+            aria-label="Fermer"
+            className="h-10 w-10 grid place-items-center rounded-lg text-lg text-ink-soft hover:bg-gray-100 hover:text-ink"
+          >✕</button>
         </div>
         <p className="text-xs text-ink-soft mt-1">
           {kind === 'credit_note'
@@ -497,7 +509,7 @@ function ReferencePaymentModal({
         <div className="mt-3 flex gap-2">
           <input
             autoFocus
-            className="input flex-1"
+            className="input flex-1 h-12 text-base"
             placeholder={kind === 'credit_note' ? 'A-2026-… ou nom client' : '29… ou nom / téléphone'}
             value={search}
             onChange={(e) => {
@@ -507,17 +519,17 @@ function ReferencePaymentModal({
             }}
             onKeyDown={(e) => { if (e.key === 'Enter') void lookup(search); }}
           />
-          <button onClick={() => void lookup(search)} className="btn-soft text-sm">
+          <button onClick={() => void lookup(search)} className="btn-soft h-12 text-base px-4">
             {loading ? '…' : 'Vérifier'}
           </button>
         </div>
 
         {results.length > 0 && !found && (
-          <ul className="mt-3 space-y-1 max-h-40 overflow-auto">
+          <ul className="mt-3 space-y-1.5 max-h-60 overflow-auto">
             {results.map((c) => (
               <li key={c.id}>
                 <button
-                  className="w-full text-left px-3 py-2 rounded-lg border border-border hover:bg-gray-50"
+                  className="w-full text-left px-4 py-3 rounded-xl border border-border hover:bg-gray-50 active:scale-[0.99]"
                   onClick={() => { setSearch(c.code); void lookup(c.code); }}
                 >
                   <div className="flex justify-between text-sm">
@@ -548,7 +560,7 @@ function ReferencePaymentModal({
               <input
                 type="number" step="0.01" min={0}
                 max={Math.min(found.remaining, remainingDue)}
-                className="input mt-1 text-lg font-semibold"
+                className="input mt-1 h-12 text-xl font-semibold"
                 value={amount || ''}
                 onChange={(e) => setAmount(Number(e.target.value) || 0)}
               />
@@ -560,7 +572,7 @@ function ReferencePaymentModal({
             <button
               disabled={amount <= 0 || amount > Math.min(found.remaining, remainingDue) + 0.005}
               onClick={() => onConfirm(found.reference, amount, found.remaining)}
-              className="btn-primary w-full h-11"
+              className="btn-primary w-full h-14 text-lg font-semibold"
             >
               Utiliser {formatEUR(amount)}
             </button>

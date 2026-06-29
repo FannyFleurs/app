@@ -29,18 +29,22 @@ export default function CartActionsModal({
       <div className="card max-w-md w-full p-5" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-lg font-semibold">Actions panier</h2>
-          <button onClick={onClose} className="text-ink-soft hover:text-ink">✕</button>
+          <button
+            onClick={onClose}
+            aria-label="Fermer"
+            className="h-10 w-10 grid place-items-center rounded-lg text-lg text-ink-soft hover:bg-gray-100 hover:text-ink"
+          >✕</button>
         </div>
 
         <div className="flex gap-1 border-b border-border mb-3">
           <button onClick={() => setTab('discount')}
-                  className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px ${
+                  className={`px-4 h-12 text-base font-medium border-b-2 -mb-px ${
                     tab === 'discount' ? 'border-sage text-accent-deep' : 'border-transparent text-ink-soft'
                   }`}>
             Remise globale
           </button>
           <button onClick={() => setTab('comment')}
-                  className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px ${
+                  className={`px-4 h-12 text-base font-medium border-b-2 -mb-px ${
                     tab === 'comment' ? 'border-sage text-accent-deep' : 'border-transparent text-ink-soft'
                   }`}>
             Commentaire
@@ -49,13 +53,13 @@ export default function CartActionsModal({
 
         {tab === 'discount' ? (
           <>
-            <div className="flex gap-1 mb-3">
+            <div className="flex gap-2 mb-3">
               <button onClick={() => setMode('percent')}
-                      className={`flex-1 rounded-xl py-2 text-sm font-medium border ${
+                      className={`flex-1 rounded-xl h-12 text-base font-semibold border ${
                         mode === 'percent' ? 'accent-bar text-white border-transparent' : 'bg-white border-border'
                       }`}>Pourcentage</button>
               <button onClick={() => setMode('amount')}
-                      className={`flex-1 rounded-xl py-2 text-sm font-medium border ${
+                      className={`flex-1 rounded-xl h-12 text-base font-semibold border ${
                         mode === 'amount' ? 'accent-bar text-white border-transparent' : 'bg-white border-border'
                       }`}>Montant €</button>
             </div>
@@ -65,7 +69,7 @@ export default function CartActionsModal({
                 <label className="text-xs font-medium text-ink-soft">Pourcentage</label>
                 <input
                   type="number" step="0.5" min={0} max={100}
-                  className="input mt-1 text-xl font-semibold"
+                  className="input mt-1 h-14 text-2xl font-semibold"
                   value={percent || ''}
                   onChange={(e) => setPercent(Number(e.target.value) || 0)}
                   autoFocus
@@ -76,7 +80,7 @@ export default function CartActionsModal({
                 <label className="text-xs font-medium text-ink-soft">Montant (€)</label>
                 <input
                   type="number" step="0.01" min={0} max={cartTotal}
-                  className="input mt-1 text-xl font-semibold"
+                  className="input mt-1 h-14 text-2xl font-semibold"
                   value={amount || ''}
                   onChange={(e) => setAmount(Number(e.target.value) || 0)}
                   autoFocus
@@ -92,7 +96,7 @@ export default function CartActionsModal({
             <button
               onClick={() => onCartDiscount(mode, mode === 'percent' ? percent : amount)}
               disabled={computed <= 0}
-              className="btn-primary w-full mt-4 h-11"
+              className="btn-primary w-full mt-4 h-14 text-base font-semibold"
             >
               Appliquer la remise au panier
             </button>
@@ -102,14 +106,14 @@ export default function CartActionsModal({
             <label className="text-sm font-medium text-ink-soft">Commentaire pour ce ticket</label>
             <textarea
               autoFocus
-              className="input mt-1 h-24"
+              className="input mt-1 h-28 text-base py-2"
               value={comment}
               onChange={(e) => setComment(e.target.value)}
               placeholder="ex : pour Madame Dupont, livraison samedi"
             />
             <button
               onClick={() => onCommentSave(comment.trim())}
-              className="btn-primary w-full mt-4 h-11"
+              className="btn-primary w-full mt-4 h-14 text-base font-semibold"
             >
               Enregistrer le commentaire
             </button>
