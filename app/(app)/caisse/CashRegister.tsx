@@ -1137,6 +1137,7 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
         onTouchStart={onTouchStart}
         onTouchEnd={(e) => onTouchEnd(e, 'close')}
         className={`
+          size-original
           flex flex-col bg-white min-w-0 min-h-0 overflow-hidden
           md:border-l md:border-border md:static md:translate-x-0 md:visible md:opacity-100 md:p-0
           fixed inset-0 z-40 transition-transform duration-300 pt-safe pb-safe

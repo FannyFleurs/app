@@ -26,22 +26,22 @@ const config: Config = {
       fontFamily: {
         sans: ['ui-sans-serif', 'system-ui', '-apple-system', 'Inter', 'sans-serif'],
       },
-      // Toutes les tailles standards de Tailwind sont augmentees de 5px par
+      // Toutes les tailles standards de Tailwind sont augmentees de ~2px par
       // rapport au defaut (caisse a vocation tactile, lisibilite iPad).
       fontSize: {
-        xs:    ['17px',  { lineHeight: '21px' }],
-        sm:    ['19px',  { lineHeight: '25px' }],
-        base:  ['21px',  { lineHeight: '29px' }],
-        lg:    ['23px',  { lineHeight: '33px' }],
-        xl:    ['25px',  { lineHeight: '33px' }],
-        '2xl': ['29px',  { lineHeight: '37px' }],
-        '3xl': ['35px',  { lineHeight: '41px' }],
-        '4xl': ['41px',  { lineHeight: '45px' }],
-        '5xl': ['53px',  { lineHeight: '1' }],
-        '6xl': ['65px',  { lineHeight: '1' }],
-        '7xl': ['77px',  { lineHeight: '1' }],
-        '8xl': ['101px', { lineHeight: '1' }],
-        '9xl': ['133px', { lineHeight: '1' }],
+        xs:    ['14px',  { lineHeight: '18px' }],
+        sm:    ['16px',  { lineHeight: '22px' }],
+        base:  ['18px',  { lineHeight: '26px' }],
+        lg:    ['20px',  { lineHeight: '30px' }],
+        xl:    ['22px',  { lineHeight: '30px' }],
+        '2xl': ['26px',  { lineHeight: '34px' }],
+        '3xl': ['32px',  { lineHeight: '38px' }],
+        '4xl': ['38px',  { lineHeight: '42px' }],
+        '5xl': ['50px',  { lineHeight: '1' }],
+        '6xl': ['62px',  { lineHeight: '1' }],
+        '7xl': ['74px',  { lineHeight: '1' }],
+        '8xl': ['98px',  { lineHeight: '1' }],
+        '9xl': ['130px', { lineHeight: '1' }],
       },
       borderRadius: {
         xl: '14px',

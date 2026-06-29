@@ -51,6 +51,21 @@ body[data-mode="dark"] {
 .no-scrollbar { scrollbar-width: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 
+/* Zone "ticket" de la caisse : conserve les tailles de polices d'origine
+   (avant le bump global +2 px) pour rester compacte malgré l'augmentation
+   globale appliquee partout ailleurs. On surcharge les utilitaires text-*
+   utilises dans le panier. */
+.size-original .text-\[10px\]   { font-size: 10px; line-height: 14px; }
+.size-original .text-\[11px\]   { font-size: 11px; line-height: 15px; }
+.size-original .text-xs   { font-size: 12px; line-height: 16px; }
+.size-original .text-sm   { font-size: 14px; line-height: 20px; }
+.size-original .text-base { font-size: 16px; line-height: 24px; }
+.size-original .text-lg   { font-size: 18px; line-height: 28px; }
+.size-original .text-xl   { font-size: 20px; line-height: 28px; }
+.size-original .text-2xl  { font-size: 24px; line-height: 32px; }
+.size-original .text-3xl  { font-size: 30px; line-height: 36px; }
+.size-original .text-4xl  { font-size: 36px; line-height: 40px; }
+
 body[data-theme="sage"]       { --primary: #556B3E; --primary-deep: #3F5430; --primary-soft: #EFF4EA; }
 body[data-theme="charcoal"]   { --primary: #2A2F33; --primary-deep: #15191C; --primary-soft: #EEEEF0; }
 body[data-theme="navy"]       { --primary: #1F3A5F; --primary-deep: #15294A; --primary-soft: #E6EDF6; }
