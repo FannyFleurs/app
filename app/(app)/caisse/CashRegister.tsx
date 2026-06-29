@@ -1175,6 +1175,14 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
               Actions
             </button>
             <button
+              disabled={lines.length === 0 || !saleId}
+              onClick={() => void holdSale()}
+              className="btn-soft text-sm h-10 px-3"
+              title="Mettre ce ticket en attente"
+            >
+              Mettre en attente
+            </button>
+            <button
               disabled={lines.length === 0}
               onClick={() => { setLines([]); setSaleId(null); setCartComment(''); void detachCustomer(); }}
               className="btn-ghost text-sm h-10 px-3"
@@ -1374,18 +1382,6 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
               <span>Carte</span>
             </button>
           </div>
-
-          <div className="text-center text-base font-semibold tabular-nums">
-            Total à encaisser : {formatEUR(totals.ttc)}
-          </div>
-
-          <button
-            disabled={lines.length === 0 || !saleId}
-            className="btn-ghost w-full h-12 text-base"
-            onClick={() => void holdSale()}
-          >
-            Mettre en attente
-          </button>
         </div>
 
         {error && (
