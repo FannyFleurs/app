@@ -1144,60 +1144,50 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
           ${mobileCartOpen ? 'translate-x-0' : 'translate-x-full md:translate-x-0'}
         `}
       >
-        <div className="px-5 py-3 border-b border-border flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setMobileCartOpen(false)}
-              className="md:hidden -ml-2 px-2 py-1 text-ink-soft hover:text-ink text-xl"
-              aria-label="Retour aux articles (glissez à droite)"
-            >
-              ←
-            </button>
-            <div>
-              <div className="text-xs uppercase tracking-wider text-ink-soft">Ticket en cours</div>
-              <div className="text-sm font-medium flex items-center gap-1.5">
-                {lines.length} ligne(s)
-                {cartComment && (
-                  <span className="text-ink-soft" title={cartComment}>
-                    <Icon name="comment" size={12} />
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <button
-              disabled={lines.length === 0}
-              onClick={() => setShowCartActions(true)}
-              className="btn-soft text-sm h-10 px-3"
-              title="Remise globale / commentaire"
-            >
-              Actions
-            </button>
-            <button
-              disabled={lines.length === 0 || !saleId}
-              onClick={() => void holdSale()}
-              className="btn-soft text-sm h-10 px-3"
-              title="Mettre ce ticket en attente"
-            >
-              Mettre en attente
-            </button>
-            <button
-              disabled={lines.length === 0}
-              onClick={() => { setLines([]); setSaleId(null); setCartComment(''); void detachCustomer(); }}
-              className="btn-ghost text-sm h-10 px-3"
-            >
-              Vider
-            </button>
-            <button
-              disabled={lines.length === 0 && !saleId}
-              onClick={() => void cancelTicket()}
-              className="btn-ghost text-sm h-10 px-3 text-danger hover:bg-danger/10"
-              title="Annuler ce ticket"
-            >
-              Annuler
-            </button>
-          </div>
+        <div className="px-3 py-3 border-b border-border flex items-center justify-end gap-1.5">
+          <button
+            onClick={() => setMobileCartOpen(false)}
+            className="md:hidden mr-auto -ml-1 px-2 py-1 text-ink-soft hover:text-ink text-xl"
+            aria-label="Retour aux articles (glissez à droite)"
+          >
+            ←
+          </button>
+          {cartComment && (
+            <span className="text-ink-soft mr-auto" title={cartComment} aria-label="Ticket avec commentaire">
+              <Icon name="comment" size={14} />
+            </span>
+          )}
+          <button
+            disabled={lines.length === 0}
+            onClick={() => setShowCartActions(true)}
+            className="btn-soft text-sm h-10 px-3 whitespace-nowrap"
+            title="Remise globale / commentaire"
+          >
+            Actions
+          </button>
+          <button
+            disabled={lines.length === 0 || !saleId}
+            onClick={() => void holdSale()}
+            className="btn-soft text-sm h-10 px-3 whitespace-nowrap"
+            title="Mettre ce ticket en attente"
+          >
+            En attente
+          </button>
+          <button
+            disabled={lines.length === 0}
+            onClick={() => { setLines([]); setSaleId(null); setCartComment(''); void detachCustomer(); }}
+            className="btn-ghost text-sm h-10 px-3 whitespace-nowrap"
+          >
+            Vider
+          </button>
+          <button
+            disabled={lines.length === 0 && !saleId}
+            onClick={() => void cancelTicket()}
+            className="btn-ghost text-sm h-10 px-3 text-danger hover:bg-danger/10 whitespace-nowrap"
+            title="Annuler ce ticket"
+          >
+            Annuler
+          </button>
         </div>
 
         {/* Zone client */}
