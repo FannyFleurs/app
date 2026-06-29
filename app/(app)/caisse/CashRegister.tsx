@@ -672,6 +672,48 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
     setShowHeld(false);
   }
 
+  /**
+   * Encaissement direct sans modale de règlement : on alloue 100 % du
+   * montant TTC à une seule méthode (espèces ou carte). Utilisé par les
+   * boutons rapides "Espèces" / "Carte" sur le ticket. Pour tout autre
+   * cas (paiement multiple, lien Stripe, remise fidélité…), l'utilisateur
+   * clique sur "Autres" qui rouvre PaymentModal.
+   */
+  async function quickPay(method: 'cash' | 'card') {
+    if (lines.length === 0 || totals.ttc <= 0) return;
+    setError(null);
+    const id = await ensureSale();
+    if (!id) return;
+    await syncLines();
+    // Mode école : pas d'appel serveur, on fabrique un faux ticket comme
+    // PaymentModal le fait déjà.
+    if (schoolMode) {
+      const fakeId = `school-receipt-${Date.now()}`;
+      const fakeNumber = `ECOLE-${new Date().toISOString().slice(11, 19).replace(/:/g, '')}`;
+      await onValidated(fakeId, fakeNumber, null);
+      return;
+    }
+    try {
+      const r = await fetch(`/api/sales/${id}/validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          payments: [{ method, amount: totals.ttc }],
+          loyalty_redemption_amount: loyalty.used > 0 ? loyalty.used : undefined,
+        }),
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        setError(j.error ?? j.message ?? 'Erreur d\'encaissement');
+        return;
+      }
+      const j = await r.json();
+      await onValidated(j.receipt_id, j.receipt_number, j.loyalty);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
   async function onValidated(
     receiptId: string,
     receiptNumber: string,
@@ -1297,13 +1339,45 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
           >
             📅 Commande différée (retrait à date)
           </button>
-          <button
-            disabled={lines.length === 0 || totals.ttc <= 0}
-            className="btn-primary w-full h-16 text-xl"
-            onClick={async () => { const id = await ensureSale(); if (id) { await syncLines(); setShowPayment(true); } }}
-          >
-            Encaisser · {formatEUR(totals.ttc)}
-          </button>
+
+          {/* Encaissements rapides : Espèces + Autres en colonne à gauche
+              (chacun sur la moitié de la hauteur), Carte à droite sur toute
+              la hauteur. La modale de règlement n'est ouverte que pour
+              "Autres" (paiements multiples, chèque, lien Stripe, fidélité…). */}
+          <div className="grid grid-cols-2 grid-rows-2 gap-2 h-32">
+            <button
+              disabled={lines.length === 0 || totals.ttc <= 0}
+              onClick={() => void quickPay('cash')}
+              className="col-start-1 row-start-1 btn-primary text-lg font-semibold rounded-2xl flex flex-col items-center justify-center gap-0.5 disabled:opacity-40"
+              title="Encaisser en espèces"
+            >
+              <span className="text-xl leading-none">💶</span>
+              <span>Espèces</span>
+            </button>
+            <button
+              disabled={lines.length === 0 || totals.ttc <= 0}
+              onClick={async () => { const id = await ensureSale(); if (id) { await syncLines(); setShowPayment(true); } }}
+              className="col-start-1 row-start-2 btn-soft text-base font-semibold rounded-2xl flex flex-col items-center justify-center gap-0.5 disabled:opacity-40"
+              title="Choisir le mode de règlement (multiple, chèque, lien Stripe…)"
+            >
+              <span className="text-lg leading-none">⋯</span>
+              <span>Autres</span>
+            </button>
+            <button
+              disabled={lines.length === 0 || totals.ttc <= 0}
+              onClick={() => void quickPay('card')}
+              className="col-start-2 row-start-1 row-span-2 btn-primary text-2xl font-semibold rounded-2xl flex flex-col items-center justify-center gap-1 disabled:opacity-40"
+              title="Encaisser par carte bancaire"
+            >
+              <span className="text-3xl leading-none">💳</span>
+              <span>Carte</span>
+            </button>
+          </div>
+
+          <div className="text-center text-base font-semibold tabular-nums">
+            Total à encaisser : {formatEUR(totals.ttc)}
+          </div>
+
           <button
             disabled={lines.length === 0 || !saleId}
             className="btn-ghost w-full h-12 text-base"

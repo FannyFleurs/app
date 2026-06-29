@@ -127,7 +127,7 @@ export default function PinLogin() {
   }, [selectedId]);
 
   return (
-    <main className="h-screen overflow-hidden bg-white grid grid-cols-1 lg:grid-cols-[440px_1fr] pt-safe pb-safe pl-safe pr-safe">
+    <main className="h-screen overflow-hidden bg-white grid grid-cols-1 lg:grid-cols-[520px_1fr] pt-safe pb-safe pl-safe pr-safe">
       {/* COLONNE GAUCHE — sélection utilisateur. Sur mobile, on masque la
           liste quand un user est sélectionné, pour laisser place au PIN. */}
       <aside className={`${selected ? 'hidden lg:flex' : 'flex'} flex-col border-r border-border bg-white overflow-hidden`}>
@@ -175,7 +175,7 @@ export default function PinLogin() {
                     setSelectedId(u.id);
                     setPin('');
                   }}
-                  className={`relative w-full text-left rounded-xl border bg-white px-4 py-3 lg:py-[14px] pl-5 transition-all flex items-center gap-3 ${
+                  className={`relative w-full text-left rounded-2xl border bg-white px-5 py-5 lg:py-6 pl-6 transition-all flex items-center gap-4 ${
                     isSelected
                       ? 'border-transparent ring-2 shadow-md'
                       : 'border-border hover:shadow-sm hover:border-gray-300'
@@ -183,19 +183,26 @@ export default function PinLogin() {
                   style={isSelected ? { ['--tw-ring-color' as string]: 'var(--primary)' } : undefined}
                 >
                   <span
-                    className="absolute left-0 top-2 bottom-2 w-1.5 rounded-r-full"
+                    className="absolute left-0 top-2.5 bottom-2.5 w-2 rounded-r-full"
                     style={{ backgroundColor: c }}
                   />
+                  <div
+                    className="grid h-12 w-12 lg:h-14 lg:w-14 place-items-center rounded-full text-white font-semibold text-lg lg:text-xl shrink-0"
+                    style={{ backgroundColor: c }}
+                    aria-hidden="true"
+                  >
+                    {(u.full_name?.[0] ?? '?').toUpperCase()}
+                  </div>
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium text-sm truncate">{u.full_name}</div>
-                    <div className="text-[11px] text-ink-soft">
+                    <div className="font-semibold text-lg lg:text-xl truncate leading-tight">{u.full_name}</div>
+                    <div className="text-sm text-ink-soft mt-0.5">
                       {ROLE_LABELS[u.role] ?? u.role}
                       {!u.has_pin && <span className="text-warning ml-1">· sans PIN</span>}
                     </div>
                   </div>
                   {isSelected && (
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                         strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="text-accent-deep">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                         strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="text-accent-deep shrink-0">
                       <circle cx="12" cy="8" r="4" />
                       <path d="M4 21v-1a8 8 0 0 1 16 0v1" />
                     </svg>
