@@ -5,13 +5,17 @@ import { query } from '@/lib/db/client';
 export async function GET() {
   const user = await readSessionFromCookie();
   if (!user) return NextResponse.json({ user: null }, { status: 200 });
+  // Politique d'acces : voir commentaire dans app/(app)/caisse/page.tsx.
   const stores = await query<{ id: string; code: string; name: string }>(
     `SELECT s.id, s.code, s.name FROM stores s
-       LEFT JOIN user_store_access usa
-         ON usa.store_id = s.id AND usa.user_id = $1
       WHERE s.organization_id = $2
         AND s.is_active = TRUE
-        AND ($3 = 'super_admin' OR $3 = 'owner' OR usa.user_id IS NOT NULL)
+        AND (
+          $3 IN ('super_admin','owner','manager')
+          OR NOT EXISTS (SELECT 1 FROM user_store_access WHERE user_id = $1)
+          OR EXISTS (SELECT 1 FROM user_store_access
+                      WHERE user_id = $1 AND store_id = s.id)
+        )
       ORDER BY s.name`,
     [user.id, user.organizationId, user.role],
   );

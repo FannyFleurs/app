@@ -26,11 +26,22 @@ export default async function CaissePage() {
     );
   }
 
+  // Politique d'acces aux boutiques :
+  // - Roles admin (super_admin/owner/manager) : toutes les boutiques actives.
+  // - Autres roles : filtrees par user_store_access SI l'utilisateur a AU
+  //   MOINS UNE restriction. Sans aucune restriction (cas d'un compte
+  //   frais qui vient d'etre cree), on considere qu'il a acces a tout.
+  //   Cela evite l'ecran "Caisse non configuree" au premier login des
+  //   comptes vendeur / caisse creees sans configuration explicite.
   const stores = await query<{ id: string; code: string; name: string }>(
     `SELECT s.id, s.code, s.name FROM stores s
-       LEFT JOIN user_store_access usa ON usa.store_id = s.id AND usa.user_id = $1
       WHERE s.organization_id = $2 AND s.is_active
-        AND ($3 IN ('super_admin','owner','manager') OR usa.user_id IS NOT NULL)
+        AND (
+          $3 IN ('super_admin','owner','manager')
+          OR NOT EXISTS (SELECT 1 FROM user_store_access WHERE user_id = $1)
+          OR EXISTS (SELECT 1 FROM user_store_access
+                      WHERE user_id = $1 AND store_id = s.id)
+        )
       ORDER BY s.name`,
     [user.id, user.organizationId, user.role],
   );
