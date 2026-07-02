@@ -75,13 +75,26 @@ export async function POST(req: Request) {
         d.role, d.is_active ?? true, pinHash, d.pin_required ?? true,
       ],
     );
+    const newUserId = ins.rows[0]!.id;
+
+    // Rattache le nouvel utilisateur a toutes les boutiques actives de
+    // l'organisation courante. Sans ca, un role non-admin (vendeur,
+    // comptable...) tombe sur l'ecran "Caisse non configuree" au 1er
+    // login car aucune ligne dans user_store_access.
+    await query(
+      `INSERT INTO user_store_access (user_id, store_id)
+         SELECT $1, id FROM stores
+          WHERE organization_id = $2 AND is_active = TRUE
+       ON CONFLICT DO NOTHING`,
+      [newUserId, g.user.organizationId],
+    );
 
     await audit({
       organizationId: g.user.organizationId, userId: g.user.id,
-      action: 'users.create', entityType: 'user', entityId: ins.rows[0]!.id,
+      action: 'users.create', entityType: 'user', entityId: newUserId,
       payload: { full_name: d.full_name, role: d.role },
     });
-    return NextResponse.json({ id: ins.rows[0]!.id }, { status: 201 });
+    return NextResponse.json({ id: newUserId }, { status: 201 });
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error('[users.create]', err);
