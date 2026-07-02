@@ -1,5 +1,5 @@
 import { readSessionFromCookie } from '@/lib/auth/session';
-import { hasPermission } from '@/lib/auth/rbac';
+import { userCan } from '@/lib/auth/permissions';
 import { query } from '@/lib/db/client';
 import MaJourneeShell from './MaJourneeShell';
 
@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function MaJourneePage() {
   const user = (await readSessionFromCookie())!;
-  if (!hasPermission(user.role, 'pos.use')) {
+  if (!(await userCan(user, 'pos.use'))) {
     return <div className="p-8">Accès refusé.</div>;
   }
   const stores = await query<{ id: string; name: string }>(
@@ -21,7 +21,7 @@ export default async function MaJourneePage() {
   );
   return (
     <MaJourneeShell
-      canClose={hasPermission(user.role, 'closures.daily')}
+      canClose={(await userCan(user, 'closures.daily'))}
       stores={stores.rows}
       registers={registers.rows}
     />

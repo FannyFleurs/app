@@ -9,6 +9,7 @@ interface User {
   role: string;
   has_pin: boolean;
   pin_required?: boolean;
+  color?: string | null;
 }
 
 const APP_NAME = 'Webpos';
@@ -158,7 +159,9 @@ export default function PinLogin() {
           ) : (
             users.map((u) => {
               const isSelected = u.id === selectedId;
-              const c = userColor(u.full_name);
+              // Priorite : couleur choisie manuellement (users.color) ;
+              // sinon fallback deterministe base sur le nom.
+              const c = u.color || userColor(u.full_name);
               return (
                 <button
                   key={u.id}

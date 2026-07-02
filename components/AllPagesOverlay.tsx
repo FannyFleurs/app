@@ -3,20 +3,21 @@
 import { useEffect } from 'react';
 import Link from 'next/link';
 import { SIDEBAR_ITEMS } from './Sidebar';
-import { hasPermission, type Role } from '@/lib/auth/rbac';
+import type { Role, Permission } from '@/lib/auth/rbac';
 import Icon from './Icon';
 import { useSchoolMode, activateSchoolMode, deactivateSchoolMode } from '@/lib/school-mode';
 
 interface Props {
   role: Role;
   hiddenPaths: string[];
+  permissions: Set<Permission>;
   onClose: () => void;
   onLogout: () => void;
 }
 
 const GROUP_ORDER = ['Vente', 'Relation', 'Catalogue', 'Pilotage', 'Système'];
 
-export default function AllPagesOverlay({ role, hiddenPaths, onClose, onLogout }: Props) {
+export default function AllPagesOverlay({ role, hiddenPaths, permissions, onClose, onLogout }: Props) {
   const schoolActive = useSchoolMode();
 
   function toggleSchool() {
@@ -47,8 +48,9 @@ export default function AllPagesOverlay({ role, hiddenPaths, onClose, onLogout }
     };
   }, [onClose]);
 
+  void role; // gardé dans la signature pour compat future
   const visible = SIDEBAR_ITEMS
-    .filter((i) => !i.perm || hasPermission(role, i.perm))
+    .filter((i) => !i.perm || permissions.has(i.perm))
     .filter((i) => i.required || !hiddenPaths.includes(i.href));
 
   return (

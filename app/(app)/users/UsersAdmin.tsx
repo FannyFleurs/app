@@ -11,7 +11,10 @@ interface User {
   role: string; is_active: boolean; has_pin: boolean;
   pin_required?: boolean;
   last_login_at: string | null;
+  color?: string | null;
 }
+
+const USER_COLORS = ['#F4A09B', '#7AD09A', '#F0C25A', '#8FD5DA', '#C58EC2', '#9DB4F0', '#F39A6A', '#B39DDB', '#4DB6AC'];
 
 const ROLE_LABELS: Record<string, string> = {
   super_admin: 'Super Admin',
@@ -143,6 +146,7 @@ function UserFormModal({ user, onClose, onSaved }: {
   const [showPassword, setShowPassword] = useState(false);
   const [isActive, setIsActive] = useState(user?.is_active ?? true);
   const [pinRequired, setPinRequired] = useState(user?.pin_required ?? true);
+  const [color, setColor] = useState<string | null>(user?.color ?? null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -165,6 +169,8 @@ function UserFormModal({ user, onClose, onSaved }: {
     };
     if (pin) payload.pin = pin;
     if (password) payload.password = password;
+    // color: on envoie meme si null pour permettre de reset a l'auto
+    payload.color = color;
     const url = user ? `/api/users/${user.id}` : '/api/users';
     const method = user ? 'PATCH' : 'POST';
     const r = await fetch(url, {
@@ -223,6 +229,37 @@ function UserFormModal({ user, onClose, onSaved }: {
               ))}
             </div>
             <p className="mt-1 text-xs text-ink-soft">{ROLE_DESC[role]}</p>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-ink-soft">
+              Couleur d&apos;étiquette
+              <span className="text-xs text-ink-soft ml-1">— pastille + avatar sur l&apos;écran de connexion</span>
+            </label>
+            <div className="mt-2 flex items-center flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setColor(null)}
+                title="Couleur automatique (basée sur le nom)"
+                className={`h-9 px-3 rounded-lg border text-xs font-medium ${
+                  color === null ? 'accent-bar text-white border-transparent' : 'bg-white border-border text-ink'
+                }`}
+              >
+                Auto
+              </button>
+              {USER_COLORS.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setColor(c)}
+                  aria-label={`Couleur ${c}`}
+                  className={`h-9 w-9 rounded-lg border-2 transition-transform ${
+                    color === c ? 'scale-110 border-ink' : 'border-transparent hover:scale-105'
+                  }`}
+                  style={{ backgroundColor: c }}
+                />
+              ))}
+            </div>
           </div>
 
           <div>

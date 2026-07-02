@@ -1,7 +1,7 @@
 import { readSessionFromCookie } from '@/lib/auth/session';
 import { query } from '@/lib/db/client';
 import CashRegister from './CashRegister';
-import { hasPermission } from '@/lib/auth/rbac';
+import { userCan } from '@/lib/auth/permissions';
 import Link from 'next/link';
 import {
   mergeWithDefaults,
@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function CaissePage() {
   const user = (await readSessionFromCookie())!;
-  if (!hasPermission(user.role, 'pos.use')) {
+  if (!(await userCan(user, 'pos.use'))) {
     return (
       <div className="p-8">
         <div className="card p-6 max-w-md">

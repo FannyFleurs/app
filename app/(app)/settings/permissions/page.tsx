@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { readSessionFromCookie } from '@/lib/auth/session';
-import { hasPermission } from '@/lib/auth/rbac';
+import { userCan } from '@/lib/auth/permissions';
 import PageHeader from '@/components/PageHeader';
 import RolePermissionsAdmin from './RolePermissionsAdmin';
 
@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function PermissionsPage() {
   const user = (await readSessionFromCookie())!;
-  if (!hasPermission(user.role, 'settings.write')) {
+  if (!(await userCan(user, 'settings.write'))) {
     return <div className="p-8">Accès refusé : seul un administrateur peut éditer les permissions.</div>;
   }
 

@@ -7,6 +7,7 @@ import {
   type PosUiSettings,
 } from '@/lib/settings/pos-ui';
 import AppShell, { type SubscriptionInfo } from '@/components/AppShell';
+import { resolveEffectivePermissions } from '@/lib/auth/permissions';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await readSessionFromCookie();
@@ -47,6 +48,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     }
   } catch { /* migration 0010 absente : on n'affiche pas la pastille */ }
 
+  // Resout les permissions effectives (defauts role + overrides role +
+  // overrides user) une seule fois par navigation, puis passe l'ensemble
+  // au shell client. Ainsi la sidebar / topbar / overlay "Toutes les
+  // pages" respectent les overrides configures dans /settings/permissions.
+  const effectivePerms = await resolveEffectivePermissions(
+    user.id, user.role, user.organizationId,
+  );
+
   return (
     <AppShell
       user={{ id: user.id, fullName: user.fullName, role: user.role, email: user.email }}
@@ -57,6 +66,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       autoLogoutMinutes={ui.auto_logout_minutes}
       headerTabs={ui.header_tabs ?? []}
       subscription={subscription}
+      permissions={Array.from(effectivePerms)}
     >
       {children}
     </AppShell>

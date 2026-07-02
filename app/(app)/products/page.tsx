@@ -1,13 +1,13 @@
 import { readSessionFromCookie } from '@/lib/auth/session';
 import { query } from '@/lib/db/client';
-import { hasPermission } from '@/lib/auth/rbac';
+import { userCan } from '@/lib/auth/permissions';
 import ProductsList from './ProductsList';
 
 export const dynamic = 'force-dynamic';
 
 export default async function ProductsPage() {
   const user = (await readSessionFromCookie())!;
-  if (!hasPermission(user.role, 'products.read')) {
+  if (!(await userCan(user, 'products.read'))) {
     return <div className="p-8">Accès refusé.</div>;
   }
   const taxes = await query<{ id: string; code: string; rate: string; label: string; is_default: boolean }>(
@@ -24,7 +24,7 @@ export default async function ProductsPage() {
   );
   return (
     <ProductsList
-      canEdit={hasPermission(user.role, 'products.write')}
+      canEdit={(await userCan(user, 'products.write'))}
       taxRates={taxes.rows.map((t) => ({ ...t, rate: Number(t.rate) }))}
       categories={cats.rows}
     />

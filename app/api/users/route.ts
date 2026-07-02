@@ -16,6 +16,7 @@ const schema = z.object({
   password: z.string().min(8).max(120).optional(),
   pin_required: z.boolean().optional(),
   is_active: z.boolean().optional(),
+  color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Couleur invalide').nullable().optional(),
 }).refine(
   (d) => d.pin_required === false || !!d.pin,
   { message: 'PIN obligatoire quand pin_required est activé', path: ['pin'] },
@@ -37,7 +38,19 @@ export async function GET() {
        ORDER BY full_name`,
     [g.user.organizationId],
   );
-  return NextResponse.json({ users: rows });
+  // Ajoute la colonne color a la reponse (silencieux si migration 0022 absente).
+  try {
+    const colorRes = await query<{ id: string; color: string | null }>(
+      `SELECT id, color FROM users WHERE organization_id = $1`,
+      [g.user.organizationId],
+    );
+    const colorMap = new Map(colorRes.rows.map((r) => [r.id, r.color]));
+    return NextResponse.json({
+      users: rows.map((u) => ({ ...u, color: colorMap.get(u.id) ?? null })),
+    });
+  } catch {
+    return NextResponse.json({ users: rows });
+  }
 }
 
 export async function POST(req: Request) {
@@ -76,6 +89,16 @@ export async function POST(req: Request) {
       ],
     );
     const newUserId = ins.rows[0]!.id;
+
+    // Couleur d'etiquette (silencieux si migration 0022 absente).
+    if (d.color) {
+      try {
+        await query(
+          `UPDATE users SET color = $1 WHERE id = $2 AND organization_id = $3`,
+          [d.color.toUpperCase(), newUserId, g.user.organizationId],
+        );
+      } catch { /* ignore */ }
+    }
 
     // Rattache le nouvel utilisateur a toutes les boutiques actives de
     // l'organisation courante. Sans ca, un role non-admin (vendeur,

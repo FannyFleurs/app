@@ -1,5 +1,5 @@
 import { readSessionFromCookie } from '@/lib/auth/session';
-import { hasPermission } from '@/lib/auth/rbac';
+import { userCan } from '@/lib/auth/permissions';
 import { query } from '@/lib/db/client';
 import CompanyAdmin from './CompanyAdmin';
 
@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function CompanySettingsPage() {
   const user = (await readSessionFromCookie())!;
-  if (!hasPermission(user.role, 'settings.read')) {
+  if (!(await userCan(user, 'settings.read'))) {
     return <div className="p-8">Accès refusé.</div>;
   }
 
@@ -24,7 +24,7 @@ export default async function CompanySettingsPage() {
   return (
     <CompanyAdmin
       org={org.rows[0]!}
-      canWrite={hasPermission(user.role, 'settings.write')}
+      canWrite={(await userCan(user, 'settings.write'))}
     />
   );
 }

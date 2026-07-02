@@ -1,5 +1,5 @@
 import { readSessionFromCookie } from '@/lib/auth/session';
-import { hasPermission } from '@/lib/auth/rbac';
+import { userCan } from '@/lib/auth/permissions';
 import { query } from '@/lib/db/client';
 import ClosuresAdmin from './ClosuresAdmin';
 
@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function ClosuresPage() {
   const user = (await readSessionFromCookie())!;
-  if (!hasPermission(user.role, 'closures.daily')) {
+  if (!(await userCan(user, 'closures.daily'))) {
     return <div className="p-8">Accès refusé.</div>;
   }
   const stores = await query<{ id: string; name: string }>(

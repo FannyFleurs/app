@@ -1,5 +1,5 @@
 import { readSessionFromCookie } from '@/lib/auth/session';
-import { hasPermission } from '@/lib/auth/rbac';
+import { userCan } from '@/lib/auth/permissions';
 import { query } from '@/lib/db/client';
 import CustomersList from './CustomersList';
 
@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function CustomersPage() {
   const user = (await readSessionFromCookie())!;
-  if (!hasPermission(user.role, 'customers.read')) {
+  if (!(await userCan(user, 'customers.read'))) {
     return <div className="p-8">Accès refusé.</div>;
   }
 
@@ -46,7 +46,7 @@ export default async function CustomersPage() {
   return (
     <CustomersList
       customers={customers.rows}
-      canWrite={hasPermission(user.role, 'customers.write')}
+      canWrite={(await userCan(user, 'customers.write'))}
     />
   );
 }

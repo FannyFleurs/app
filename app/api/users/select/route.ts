@@ -27,11 +27,12 @@ export async function GET() {
   try {
     const { rows } = await query<{
       id: string; full_name: string; role: string;
-      has_pin: boolean; pin_required: boolean;
+      has_pin: boolean; pin_required: boolean; color: string | null;
     }>(
       `SELECT id, full_name, role,
               (pin_code_hash IS NOT NULL) AS has_pin,
-              COALESCE(pin_required, TRUE) AS pin_required
+              COALESCE(pin_required, TRUE) AS pin_required,
+              color
          FROM users
         WHERE is_active = TRUE
           AND organization_id = $1
@@ -70,6 +71,19 @@ export async function GET() {
         tenant_id: tenantId,
         migration_required: '0009_user_pin_optional',
       });
+    }
+    if (m.includes('column "color"') || m.includes('"users".color')) {
+      // Migration 0022 pas encore appliquee : on renvoie sans color.
+      const { rows } = await query(
+        `SELECT id, full_name, role,
+                (pin_code_hash IS NOT NULL) AS has_pin,
+                COALESCE(pin_required, TRUE) AS pin_required
+           FROM users
+          WHERE is_active = TRUE AND organization_id = $1
+          ORDER BY full_name`,
+        [tenantId],
+      );
+      return NextResponse.json({ users: rows, tenant_id: tenantId });
     }
     // eslint-disable-next-line no-console
     console.error('[users.select]', err);

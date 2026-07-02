@@ -1,5 +1,6 @@
 import { query } from '@/lib/db/client';
 import { PERMISSIONS, type Permission, type Role } from './rbac';
+import type { AuthUser } from './session';
 
 /**
  * Permissions effectives d'un utilisateur, en tenant compte :
@@ -69,4 +70,17 @@ export async function hasEffectivePermission(
 ): Promise<boolean> {
   const set = await resolveEffectivePermissions(userId, role, organizationId);
   return set.has(perm);
+}
+
+/**
+ * Sucre syntaxique pour les server components : `await userCan(user, 'foo')`.
+ * Tient compte des overrides role-level (roles_permissions_overrides)
+ * ET user-level (user_permission_overrides) — contrairement au
+ * hasPermission(role, perm) statique defini dans rbac.ts.
+ */
+export async function userCan(
+  user: AuthUser,
+  perm: Permission,
+): Promise<boolean> {
+  return hasEffectivePermission(user.id, user.role, user.organizationId, perm);
 }

@@ -16,6 +16,7 @@ const patch = z.object({
   password: z.string().min(8).max(120).optional(),
   pin_required: z.boolean().optional(),
   is_active: z.boolean().optional(),
+  color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).nullable().optional(),
 });
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
@@ -44,16 +45,33 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     const h = await hashPassword(d.password);
     sets.push(`password_hash = $${i++}`); vals.push(h);
   }
-  if (sets.length === 0) return NextResponse.json({ ok: true });
-  sets.push('updated_at = now()');
-  vals.push(params.id, g.user.organizationId);
+  // color est UPDATE separement plus bas (silencieux si migration 0022 absente).
+  if (sets.length === 0 && d.color === undefined) return NextResponse.json({ ok: true });
 
-  const res = await query(
-    `UPDATE users SET ${sets.join(', ')}
-      WHERE id = $${i++} AND organization_id = $${i}`,
-    vals,
-  );
-  if (res.rowCount === 0) return jsonError('NOT_FOUND', 404);
+  if (sets.length > 0) {
+    sets.push('updated_at = now()');
+    vals.push(params.id, g.user.organizationId);
+    const res = await query(
+      `UPDATE users SET ${sets.join(', ')}
+        WHERE id = $${i++} AND organization_id = $${i}`,
+      vals,
+    );
+    if (res.rowCount === 0) return jsonError('NOT_FOUND', 404);
+  }
+
+  if (d.color !== undefined) {
+    try {
+      await query(
+        `UPDATE users SET color = $1, updated_at = now()
+          WHERE id = $2 AND organization_id = $3`,
+        [d.color === null ? null : d.color.toUpperCase(), params.id, g.user.organizationId],
+      );
+    } catch (err) {
+      const m = (err as Error).message ?? '';
+      // Migration 0022 pas appliquee : on ignore silencieusement le color.
+      if (!(m.includes('column "color"') || m.includes('"users".color'))) throw err;
+    }
+  }
 
   await audit({
     organizationId: g.user.organizationId, userId: g.user.id,

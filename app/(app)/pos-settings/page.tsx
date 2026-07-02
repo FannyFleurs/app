@@ -1,5 +1,5 @@
 import { readSessionFromCookie } from '@/lib/auth/session';
-import { hasPermission } from '@/lib/auth/rbac';
+import { userCan } from '@/lib/auth/permissions';
 import { query } from '@/lib/db/client';
 import {
   mergeWithDefaults,
@@ -13,10 +13,10 @@ export const dynamic = 'force-dynamic';
 
 export default async function POSSettingsPage() {
   const user = (await readSessionFromCookie())!;
-  if (!hasPermission(user.role, 'pos.use')) {
+  if (!(await userCan(user, 'pos.use'))) {
     return <div className="p-8">Accès refusé.</div>;
   }
-  const canWrite = hasPermission(user.role, 'pos.settings.write');
+  const canWrite = (await userCan(user, 'pos.settings.write'));
 
   const { rows } = await query<{ value: Partial<PosUiSettings> }>(
     `SELECT value FROM settings WHERE organization_id = $1 AND key = $2`,

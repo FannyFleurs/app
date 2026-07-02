@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { readSessionFromCookie } from '@/lib/auth/session';
-import { hasPermission } from '@/lib/auth/rbac';
+import { userCan } from '@/lib/auth/permissions';
 import { query } from '@/lib/db/client';
 import { formatEUR } from '@/lib/services/money';
 import PageHeader from '@/components/PageHeader';
@@ -19,7 +19,7 @@ const TYPE_LABEL: Record<string, string> = {
 
 export default async function CustomerDetailPage({ params }: { params: { id: string } }) {
   const user = (await readSessionFromCookie())!;
-  if (!hasPermission(user.role, 'customers.read')) return <div className="p-8">Accès refusé.</div>;
+  if (!(await userCan(user, 'customers.read'))) return <div className="p-8">Accès refusé.</div>;
 
   const cust = await query<{
     id: string; type: string;
@@ -89,7 +89,7 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
         actions={(
           <>
             <button className="btn-soft" disabled title="Phase 2">Modifier</button>
-            {hasPermission(user.role, 'customers.anonymize') && (
+            {(await userCan(user, 'customers.anonymize')) && (
               <button className="btn-ghost text-danger" disabled title="Phase 2">Anonymiser (RGPD)</button>
             )}
           </>

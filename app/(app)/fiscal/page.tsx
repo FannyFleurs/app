@@ -1,5 +1,5 @@
 import { readSessionFromCookie } from '@/lib/auth/session';
-import { hasPermission } from '@/lib/auth/rbac';
+import { userCan } from '@/lib/auth/permissions';
 import { query, withTransaction } from '@/lib/db/client';
 import { FiscalCore } from '@/lib/fiscal/core';
 import PageHeader from '@/components/PageHeader';
@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function FiscalPage() {
   const user = (await readSessionFromCookie())!;
-  if (!hasPermission(user.role, 'fiscal.audit')) {
+  if (!(await userCan(user, 'fiscal.audit'))) {
     return <div className="p-8">Accès refusé.</div>;
   }
   const events = await query<{

@@ -7,7 +7,7 @@ import AllPagesOverlay from './AllPagesOverlay';
 import WakeLockKeeper from './WakeLockKeeper';
 import PaidOrderNotifier from './PaidOrderNotifier';
 import SchoolModeBanner from './SchoolModeBanner';
-import type { Role } from '@/lib/auth/rbac';
+import type { Role, Permission } from '@/lib/auth/rbac';
 import type { PosThemeColor, ColorScheme, AutoLogoutMode } from '@/lib/settings/pos-ui';
 
 interface User { id: string; fullName: string; role: Role; email: string }
@@ -28,13 +28,15 @@ interface Props {
   autoLogoutMinutes: number;
   headerTabs: string[];
   subscription: SubscriptionInfo | null;
+  permissions: Permission[];
   children: React.ReactNode;
 }
 
 export default function AppShell({
   user, themeColor, colorScheme, hiddenPaths, autoLogoutMode, autoLogoutMinutes, headerTabs,
-  subscription, children,
+  subscription, permissions, children,
 }: Props) {
+  const permSet = new Set(permissions);
   const [menuOpen, setMenuOpen] = useState(false);
   const router = useRouter();
 
@@ -99,6 +101,7 @@ export default function AppShell({
         hiddenPaths={hiddenPaths}
         headerTabs={headerTabs}
         subscription={subscription}
+        permissions={permSet}
         onOpenMenu={() => setMenuOpen(true)}
         onLogout={() => void logout()}
       />
@@ -112,6 +115,7 @@ export default function AppShell({
         <AllPagesOverlay
           role={user.role}
           hiddenPaths={hiddenPaths}
+          permissions={permSet}
           onClose={() => setMenuOpen(false)}
           onLogout={() => void logout()}
         />

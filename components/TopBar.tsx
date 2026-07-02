@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { SIDEBAR_ITEMS, type SidebarItem } from './Sidebar';
-import { hasPermission, type Role } from '@/lib/auth/rbac';
+import type { Role, Permission } from '@/lib/auth/rbac';
 import { HEADER_TABS_DEFAULT, HEADER_TABS_MAX } from '@/lib/settings/pos-ui';
 import Icon from './Icon';
 
@@ -24,12 +24,13 @@ interface Props {
   hiddenPaths: string[];
   headerTabs: string[];
   subscription: TopBarSubscription | null;
+  permissions: Set<Permission>;
   onOpenMenu: () => void;
   onLogout: () => void;
 }
 
 export default function TopBar({
-  user, hiddenPaths, headerTabs, subscription, onOpenMenu, onLogout,
+  user, hiddenPaths, headerTabs, subscription, permissions, onOpenMenu, onLogout,
 }: Props) {
   const path = usePathname();
 
@@ -40,7 +41,7 @@ export default function TopBar({
   const tabs = order
     .map((href) => SIDEBAR_ITEMS.find((i) => i.href === href))
     .filter((i): i is SidebarItem => !!i)
-    .filter((i) => !i.perm || hasPermission(user.role, i.perm))
+    .filter((i) => !i.perm || permissions.has(i.perm))
     .filter((i) => i.required || !hiddenPaths.includes(i.href));
 
   const firstName = user.fullName.split(/\s+/)[0] ?? user.fullName;

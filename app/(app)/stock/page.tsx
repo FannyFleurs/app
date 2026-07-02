@@ -1,5 +1,5 @@
 import { readSessionFromCookie } from '@/lib/auth/session';
-import { hasPermission } from '@/lib/auth/rbac';
+import { userCan } from '@/lib/auth/permissions';
 import { query } from '@/lib/db/client';
 import StockAdmin from './StockAdmin';
 
@@ -15,7 +15,7 @@ export default async function StockPage() {
 
   return (
     <StockAdmin
-      canAdjust={hasPermission(user.role, 'stock.adjust')}
+      canAdjust={(await userCan(user, 'stock.adjust'))}
       stores={stores.rows}
     />
   );
