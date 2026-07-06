@@ -14,6 +14,20 @@ import {
   type PosUiSettings,
 } from '@/lib/settings/pos-ui';
 
+const walletSchema = z.object({
+  enabled: z.boolean().optional(),
+  pass_type_id: z.string().max(160).optional(),
+  team_id: z.string().max(40).optional(),
+  logo_text: z.string().max(60).optional(),
+  primary_label: z.string().max(40).optional(),
+  background_color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+  foreground_color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+  show_points: z.boolean().optional(),
+  show_tier: z.boolean().optional(),
+  show_since: z.boolean().optional(),
+  back_message: z.string().max(500).optional(),
+}).partial();
+
 const loyaltySchema = z.object({
   enabled: z.boolean().optional(),
   euros_earned: z.number().min(0).optional(),
@@ -21,6 +35,7 @@ const loyaltySchema = z.object({
   min_redeem: z.number().min(0).optional(),
   stackable: z.boolean().optional(),
   on_excluded_categories: z.array(z.string()).optional(),
+  wallet: walletSchema.optional(),
 }).partial();
 
 const schema = z.object({
@@ -60,14 +75,22 @@ export async function PATCH(req: Request) {
     `SELECT value FROM settings WHERE organization_id = $1 AND key = $2`,
     [g.user.organizationId, POS_UI_KEY],
   );
-  // Pour les sous-objets (loyalty), on merge récursivement avec l'existant + défauts.
+  // Pour les sous-objets (loyalty et loyalty.wallet), on merge recursivement
+  // avec l'existant + defauts pour ne pas ecraser un champ non envoye.
   const existing = current.rows[0]?.value ?? {};
+  const nextLoyalty = parsed.data.loyalty
+    ? {
+        ...(existing.loyalty ?? {}),
+        ...parsed.data.loyalty,
+        wallet: parsed.data.loyalty.wallet
+          ? { ...(existing.loyalty?.wallet ?? {}), ...parsed.data.loyalty.wallet }
+          : existing.loyalty?.wallet,
+      }
+    : existing.loyalty;
   const merged = mergeWithDefaults({
     ...existing,
     ...parsed.data,
-    loyalty: parsed.data.loyalty
-      ? { ...(existing.loyalty ?? {}), ...parsed.data.loyalty }
-      : existing.loyalty,
+    loyalty: nextLoyalty,
   } as Partial<PosUiSettings>);
 
   await query(

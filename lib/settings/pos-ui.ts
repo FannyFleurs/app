@@ -22,6 +22,33 @@ export type AutoLogoutMode = (typeof AUTO_LOGOUT_MODES)[number];
 export const COLOR_SCHEMES = ['light', 'dark', 'system'] as const;
 export type ColorScheme = (typeof COLOR_SCHEMES)[number];
 
+export interface WalletPassSettings {
+  /** Active la génération de cartes fidélité Apple Wallet. */
+  enabled: boolean;
+  /**
+   * Pass Type Identifier declare sur developer.apple.com (ex.
+   * "pass.fr.webpos.loyalty"). L'infrastructure serveur signe les
+   * .pkpass avec le certificat correspondant.
+   */
+  pass_type_id: string;
+  /** Team ID Apple (10 caracteres, en haut a droite du portail). */
+  team_id: string;
+  /** Texte du logo en haut a gauche du pass. Defaut = nom boutique. */
+  logo_text: string;
+  /** Libelle du champ principal (defaut : "Solde fidelite"). */
+  primary_label: string;
+  /** Couleur de fond du pass en #RRGGBB. Defaut = couleur d'accent theme. */
+  background_color: string;
+  /** Couleur du texte du pass en #RRGGBB. Defaut = blanc chaud. */
+  foreground_color: string;
+  /** Afficher les champs secondaires du pass. */
+  show_points: boolean;
+  show_tier: boolean;
+  show_since: boolean;
+  /** Message optionnel affiche au verso du pass. */
+  back_message: string;
+}
+
 export interface LoyaltySettings {
   enabled: boolean;
   euros_earned: number;      // ex 5 : on gagne 5 € de fidélité
@@ -29,6 +56,8 @@ export interface LoyaltySettings {
   min_redeem: number;        // seuil mini d'utilisation (ex 5 €)
   stackable: boolean;        // cumulable avec d'autres remises ?
   on_excluded_categories: string[];
+  /** Carte fidelite Apple Wallet (facultatif). */
+  wallet: WalletPassSettings;
 }
 
 export interface PosUiSettings {
@@ -97,6 +126,19 @@ export const POS_UI_DEFAULTS: PosUiSettings = {
     min_redeem: 5,
     stackable: false,
     on_excluded_categories: [],
+    wallet: {
+      enabled: false,
+      pass_type_id: '',
+      team_id: '',
+      logo_text: '',
+      primary_label: 'Solde fidélité',
+      background_color: '#556B3E',
+      foreground_color: '#F5F1E8',
+      show_points: true,
+      show_tier: false,
+      show_since: true,
+      back_message: '',
+    },
   },
   hidden_sidebar_paths: [],
   auto_logout_mode: 'never',
@@ -196,7 +238,7 @@ export const POS_TILE_SIZE_LABELS: Record<PosTileSize, { label: string; descript
 
 /** Fusionne des valeurs partielles (lues en BDD) avec les défauts pour garantir une structure complète. */
 export function mergeWithDefaults(partial: Partial<PosUiSettings> | null | undefined): PosUiSettings {
-  if (!partial) return { ...POS_UI_DEFAULTS };
+  if (!partial) return { ...POS_UI_DEFAULTS, loyalty: { ...POS_UI_DEFAULTS.loyalty, wallet: { ...POS_UI_DEFAULTS.loyalty.wallet } } };
   const out = { ...POS_UI_DEFAULTS };
   for (const k of Object.keys(POS_UI_DEFAULTS) as (keyof PosUiSettings)[]) {
     if (partial[k] !== undefined) {
@@ -204,5 +246,15 @@ export function mergeWithDefaults(partial: Partial<PosUiSettings> | null | undef
       out[k] = partial[k];
     }
   }
+  // Deep-merge loyalty.wallet pour eviter la perte des defauts quand un
+  // ancien pos_ui n'a pas encore ce sous-objet.
+  out.loyalty = {
+    ...POS_UI_DEFAULTS.loyalty,
+    ...(partial.loyalty ?? {}),
+    wallet: {
+      ...POS_UI_DEFAULTS.loyalty.wallet,
+      ...(partial.loyalty?.wallet ?? {}),
+    },
+  };
   return out;
 }
