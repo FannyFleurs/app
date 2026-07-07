@@ -26,7 +26,7 @@ interface Vendor {
 }
 
 type Period = 'today' | 'yesterday' | 'week' | 'month' | 'custom';
-type Tab = 'xz' | 'tickets' | 'stock' | 'log' | 'account';
+type Tab = 'xz' | 'tickets' | 'account';
 
 function periodDates(p: Period, from: string, to: string): { from: string; to: string } {
   const today = new Date();
@@ -179,18 +179,6 @@ export default function CADashboard({
           />
         )}
         {tab === 'tickets' && <TicketsView storeId={storeId} range={range} />}
-        {tab === 'stock' && (
-          <PlaceholderView
-            title="Stock"
-            message="Consultation du stock — bientôt disponible ici."
-          />
-        )}
-        {tab === 'log' && (
-          <PlaceholderView
-            title="Journal"
-            message="Journal des évènements caisse — bientôt disponible."
-          />
-        )}
         {tab === 'account' && (
           <AccountView user={user} onLogout={logout} />
         )}
@@ -613,19 +601,8 @@ function TicketsView({ storeId, range }: { storeId: string; range: { from: strin
 }
 
 /* ------------------------------------------------------------------ */
-/* Placeholder + Account views                                        */
+/* Account view                                                       */
 /* ------------------------------------------------------------------ */
-
-function PlaceholderView({ title, message }: { title: string; message: string }) {
-  return (
-    <div className="px-4 py-4 space-y-3">
-      <h2 className="text-lg font-semibold">{title}</h2>
-      <div className="rounded-2xl bg-white border border-border p-6 text-center text-sm text-ink-soft">
-        {message}
-      </div>
-    </div>
-  );
-}
 
 function AccountView({
   user, onLogout,
@@ -664,8 +641,6 @@ function BottomNav({ tab, onChange }: { tab: Tab; onChange: (t: Tab) => void }) 
   const items: Array<{ key: Tab; label: string; icon: React.ReactNode }> = [
     { key: 'xz',      label: 'X / Z',    icon: <ChartIcon /> },
     { key: 'tickets', label: 'Tickets',  icon: <TicketIcon /> },
-    { key: 'stock',   label: 'Stock',    icon: <StockIcon /> },
-    { key: 'log',     label: 'Log',      icon: <LogIcon /> },
     { key: 'account', label: 'Compte',   icon: <UserIcon /> },
   ];
   return (
@@ -705,21 +680,6 @@ function TicketIcon() {
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <path d="M6 3h10l3 4v14H6z" />
       <path d="M9 8h6M9 12h6M9 16h4" />
-    </svg>
-  );
-}
-function StockIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 8l8-4 8 4v8l-8 4-8-4z" />
-      <path d="M4 8l8 4 8-4M12 12v10" />
-    </svg>
-  );
-}
-function LogIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 6h16M4 12h16M4 18h10" />
     </svg>
   );
 }
