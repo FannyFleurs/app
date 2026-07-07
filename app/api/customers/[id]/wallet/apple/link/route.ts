@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import QRCode from 'qrcode';
 import { requirePermission } from '@/lib/auth/guards';
 import { query } from '@/lib/db/client';
 import { signWalletToken } from '@/lib/wallet/link-token';
@@ -37,6 +38,18 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const origin = new URL(req.url).origin;
   const url = `${origin}/w/${token}`;
 
+  // QR SVG genere cote serveur (lib eprouvee, pas notre encodeur maison)
+  let qr: string;
+  try {
+    qr = await QRCode.toString(url, {
+      type: 'svg', errorCorrectionLevel: 'M', margin: 1, width: 240,
+    });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[wallet.link.qr]', err);
+    qr = '';
+  }
+
   await audit({
     organizationId: g.user.organizationId,
     userId: g.user.id,
@@ -45,5 +58,5 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     entityId: params.id,
   });
 
-  return NextResponse.json({ url });
+  return NextResponse.json({ url, qr });
 }
