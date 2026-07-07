@@ -196,15 +196,21 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
         {
           key: 'loyalty',
           label: 'Fidélité',
-          content: !loyalty.rows[0] ? (
-            <p className="text-sm text-ink-soft">Aucun compte fidélité actif.</p>
-          ) : (
+          content: (
             <div className="space-y-3">
+              <WalletActions
+                customerId={params.id}
+                customerEmail={c.email}
+                customerPhone={c.phone}
+              />
+              {!loyalty.rows[0] ? (
+                <p className="text-sm text-ink-soft">Aucun compte fidélité actif — la carte Wallet démarrera à 0 €.</p>
+              ) : (
+                <>
               <div className="card p-5">
                 <div className="text-xs uppercase tracking-wider text-ink-soft">Solde</div>
                 <div className="text-3xl font-semibold tracking-tight">{loyalty.rows[0].points_balance} pts</div>
               </div>
-              <WalletActions customerId={params.id} />
               <div className="card overflow-hidden">
                 <table className="w-full text-sm">
                   <thead className="bg-bg text-ink-soft text-xs uppercase">
@@ -233,6 +239,8 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
                   </tbody>
                 </table>
               </div>
+                </>
+              )}
             </div>
           ),
         },
