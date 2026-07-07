@@ -95,12 +95,7 @@ export default function AppShell({
   }, [autoLogoutMode]);
 
   return (
-    <div className="h-screen overflow-hidden flex flex-col bg-warning pt-safe pl-safe pr-safe pb-safe">
-      {/* bg-warning sur le root : quand le mode ecole est actif, la zone
-          safe-area au-dessus prend le jaune du bandeau (continuité
-          visuelle) ; en mode normal l'utilisateur ne la voit pas car
-          le contenu qui suit est blanc et couvre tout le viewport
-          disponible. */}
+    <div className="h-screen overflow-hidden flex flex-col bg-white pt-safe pl-safe pr-safe pb-safe">
       <SchoolModeBanner />
       <div className="flex-1 flex flex-row overflow-hidden min-h-0">
         {/* Sidebar verticale (desktop / tablette) */}
