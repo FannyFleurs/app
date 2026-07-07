@@ -62,7 +62,16 @@ export default function PinLogin() {
       await loadUsers();
       setLoading(false);
     })();
+    // Prefetch /caisse des le montage du login : quand la connexion
+    // reussira, la navigation sera quasi-instantanee (chunks JS deja
+    // charges, layout compile).
+    router.prefetch('/caisse');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Etat de transition post-connexion : on masque le login pour laisser
+  // apparaitre la caisse "au travers" quasi-immediatement.
+  const [transitioning, setTransitioning] = useState(false);
 
   async function bootstrap() {
     setBootstrapping(true);
@@ -89,15 +98,20 @@ export default function PinLogin() {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ user_id: forUser, pin: pinValue }),
     });
-    setSubmitting(false);
     if (!r.ok) {
+      setSubmitting(false);
       const j = await r.json().catch(() => ({}));
       setError(prettyError(j.error));
       setPin('');
       return;
     }
-    router.push('/');
-    router.refresh();
+    // Succes : on masque immediatement le login et on navigue
+    // directement vers /caisse (route deja prefetchee au montage).
+    // Pas de router.refresh() : la nouvelle page rendra son layout
+    // avec la session fraiche puisqu'on quitte le route group /login
+    // pour entrer dans (app), le layout est monte de zero.
+    setTransitioning(true);
+    router.push('/caisse');
   }
 
   function press(key: string) {
@@ -126,6 +140,18 @@ export default function PinLogin() {
     return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
+
+  // En transition : on masque completement l'ecran de login (fade tres
+  // court) pour que la caisse dessous apparaisse quasi-instantanement.
+  if (transitioning) {
+    return (
+      <main
+        className="fixed inset-0 z-[200] bg-white grid place-items-center pointer-events-none"
+        style={{ animation: 'fadeIn 90ms ease-out reverse forwards' }}
+        aria-hidden="true"
+      />
+    );
+  }
 
   return (
     <main className="h-screen overflow-hidden bg-white grid grid-cols-1 lg:grid-cols-[520px_1fr] pt-safe pb-safe pl-safe pr-safe">
@@ -168,13 +194,20 @@ export default function PinLogin() {
                   onClick={async () => {
                     setError(null);
                     if (!u.pin_required) {
-                      // Connexion sans PIN explicitement autorisée
+                      // Connexion sans PIN — on transitionne tout de suite
+                      // pour que la tuile "disparaisse" en meme temps
+                      // qu'on lance le fetch.
+                      setTransitioning(true);
                       const r = await fetch('/api/auth/no-pin-login', {
                         method: 'POST', headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ user_id: u.id }),
                       });
-                      if (r.ok) { router.push('/'); router.refresh(); return; }
+                      if (r.ok) { router.push('/caisse'); return; }
+                      setTransitioning(false);
                     }
+                    // Prefetch anticipe : selection d'un user = intention
+                    // de connexion imminente.
+                    router.prefetch('/caisse');
                     setSelectedId(u.id);
                     setPin('');
                   }}
