@@ -1,7 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatEUR } from '@/lib/services/money';
+import Icon from '@/components/Icon';
 
 interface Store { id: string; name: string }
 interface Summary {
@@ -11,20 +12,21 @@ interface Summary {
   tickets_count: number; avg_ticket_ttc: number; max_ticket_ttc: number;
   customers_count: number; items_sold: number; unique_products_sold: number;
 }
+interface HourBucket { hour: number; ca_ht: number; ca_ttc: number; tickets_count: number }
 interface Product {
   product_id: string | null; product_name: string;
   category_name: string | null;
   quantity: number; ca_ttc: number; ca_ht: number;
   cost_ht: number; marge_ht: number; marge_pct: number;
 }
+interface TvaRow { rate: number; base_ht: number; tva: number; ttc: number }
 interface Vendor {
   user_id: string; full_name: string;
   tickets_count: number; ca_ttc: number; ca_ht: number; avg_ticket_ttc: number;
 }
 
 type Period = 'today' | 'yesterday' | 'week' | 'month' | 'custom';
-type SortKey = 'ca_ttc' | 'quantity' | 'marge_ht' | 'product_name';
-type SortOrder = 'asc' | 'desc';
+type Tab = 'xz' | 'tickets' | 'stock' | 'log' | 'account';
 
 function periodDates(p: Period, from: string, to: string): { from: string; to: string } {
   const today = new Date();
@@ -47,6 +49,7 @@ export default function CADashboard({
   const today = new Date().toISOString().slice(0, 10);
   const [customFrom, setCustomFrom] = useState(today);
   const [customTo, setCustomTo] = useState(today);
+  const [tab, setTab] = useState<Tab>('xz');
 
   const range = useMemo(
     () => periodDates(period, customFrom, customTo),
@@ -54,43 +57,69 @@ export default function CADashboard({
   );
 
   const [summary, setSummary] = useState<Summary | null>(null);
+  const [hours, setHours] = useState<HourBucket[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [tva, setTva] = useState<TvaRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshedAt, setRefreshedAt] = useState<Date | null>(null);
-  const [autoRefresh, setAutoRefresh] = useState(true);
-  const [sortKey, setSortKey] = useState<SortKey>('ca_ttc');
-  const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
+  const [showFullSales, setShowFullSales] = useState(false);
+
+  const currentStore = useMemo(
+    () => stores.find((s) => s.id === storeId) ?? null,
+    [stores, storeId],
+  );
 
   const reload = useCallback(async () => {
     setLoading(true);
     const qs = new URLSearchParams({ from: range.from, to: range.to });
     if (storeId) qs.set('store_id', storeId);
     try {
-      const [rS, rP, rV] = await Promise.all([
+      const [rS, rH, rP, rV, rT] = await Promise.all([
         fetch(`/api/ca/summary?${qs.toString()}`),
-        fetch(`/api/ca/products?${qs.toString()}&sort=${sortKey}&order=${sortOrder}&limit=200`),
+        fetch(`/api/ca/hourly?${qs.toString()}`),
+        fetch(`/api/ca/products?${qs.toString()}&sort=ca_ttc&order=desc&limit=100`),
         fetch(`/api/ca/vendors?${qs.toString()}`),
+        fetch(`/api/ca/tva?${qs.toString()}`),
       ]);
       if (rS.ok) setSummary(await rS.json());
+      if (rH.ok) setHours((await rH.json()).hours);
       if (rP.ok) setProducts((await rP.json()).products);
       if (rV.ok) setVendors((await rV.json()).vendors);
+      if (rT.ok) setTva((await rT.json()).tva);
       setRefreshedAt(new Date());
     } finally {
       setLoading(false);
     }
-  }, [range.from, range.to, storeId, sortKey, sortOrder]);
+  }, [range.from, range.to, storeId]);
 
   useEffect(() => { void reload(); }, [reload]);
-  useEffect(() => {
-    if (!autoRefresh) return;
-    const id = setInterval(() => { void reload(); }, 30_000);
-    return () => clearInterval(id);
-  }, [autoRefresh, reload]);
 
-  function toggleSort(key: SortKey) {
-    if (sortKey === key) setSortOrder((o) => o === 'asc' ? 'desc' : 'asc');
-    else { setSortKey(key); setSortOrder(key === 'product_name' ? 'asc' : 'desc'); }
+  // Pull-to-refresh : detection swipe vers le bas quand scrollY = 0.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const pullRef = useRef<{ startY: number; active: boolean } | null>(null);
+  const [pullDist, setPullDist] = useState(0);
+  const PULL_TRIGGER = 90;
+
+  function onTouchStart(e: React.TouchEvent) {
+    if ((scrollRef.current?.scrollTop ?? 0) > 0) return;
+    const t = e.touches[0];
+    if (!t) return;
+    pullRef.current = { startY: t.clientY, active: true };
+  }
+  function onTouchMove(e: React.TouchEvent) {
+    if (!pullRef.current?.active) return;
+    if ((scrollRef.current?.scrollTop ?? 0) > 0) { pullRef.current = null; setPullDist(0); return; }
+    const t = e.touches[0]; if (!t) return;
+    const dy = t.clientY - pullRef.current.startY;
+    if (dy > 0) setPullDist(Math.min(dy * 0.5, PULL_TRIGGER * 1.4));
+  }
+  function onTouchEnd() {
+    if (!pullRef.current?.active) return;
+    const shouldRefresh = pullDist >= PULL_TRIGGER;
+    pullRef.current = null;
+    setPullDist(0);
+    if (shouldRefresh) void reload();
   }
 
   async function logout() {
@@ -99,248 +128,606 @@ export default function CADashboard({
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-6 md:p-8 space-y-6">
-      {/* Header */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="text-xs uppercase tracking-widest text-ink-soft font-semibold">Chiffre d&apos;affaires</div>
-          <h1 className="text-2xl md:text-3xl font-semibold tracking-tight mt-1">{orgName}</h1>
-          <p className="text-sm text-ink-soft mt-0.5">
-            {refreshedAt
-              ? `Mis à jour à ${refreshedAt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`
-              : 'Chargement…'}
-            {loading && ' · actualisation…'}
-          </p>
-        </div>
-        <div className="flex items-center gap-2 text-sm">
-          <span className="text-ink-soft hidden sm:inline">{user.fullName}</span>
-          <button
-            onClick={() => void logout()}
-            className="btn-ghost text-sm h-10 px-3"
-          >
-            Se déconnecter
-          </button>
-        </div>
-      </div>
+    <div className="fixed inset-0 flex flex-col bg-bg overflow-hidden">
+      {/* Barre du haut : selecteur boutique + refresh */}
+      <TopBar
+        currentStore={currentStore}
+        stores={stores}
+        orgName={orgName}
+        onStoreChange={setStoreId}
+        loading={loading}
+        onRefresh={() => void reload()}
+      />
 
-      {/* Filters */}
-      <div className="card p-4 flex flex-wrap items-center gap-3">
-        <div className="flex flex-wrap items-center gap-1">
-          {([
-            ['today', 'Aujourd\'hui'],
-            ['yesterday', 'Hier'],
-            ['week', '7 derniers jours'],
-            ['month', 'Ce mois-ci'],
-            ['custom', 'Personnalisé'],
-          ] as [Period, string][]).map(([p, label]) => (
-            <button
-              key={p}
-              onClick={() => setPeriod(p)}
-              className={`h-10 px-3 rounded-lg text-sm font-medium transition-colors ${
-                period === p
-                  ? 'accent-bar text-white'
-                  : 'bg-white border border-border hover:bg-gray-50 text-ink-soft'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-        {period === 'custom' && (
-          <div className="flex items-center gap-2">
-            <input type="date" className="input h-10" value={customFrom}
-                   max={customTo} onChange={(e) => setCustomFrom(e.target.value)} />
-            <span className="text-ink-soft">→</span>
-            <input type="date" className="input h-10" value={customTo}
-                   min={customFrom} max={today} onChange={(e) => setCustomTo(e.target.value)} />
+      {/* Contenu scrollable + pull-to-refresh */}
+      <div
+        ref={scrollRef}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        className="flex-1 overflow-y-auto overscroll-contain relative"
+        style={{ paddingBottom: '80px' /* laisse la place a la bottom nav */ }}
+      >
+        {/* Indicateur pull-to-refresh */}
+        {pullDist > 0 && (
+          <div
+            className="grid place-items-center text-xs text-ink-soft"
+            style={{ height: `${pullDist}px`, transition: 'height 100ms' }}
+          >
+            <div className={`transition-transform ${pullDist >= PULL_TRIGGER ? 'rotate-180' : ''}`}>
+              ↓
+            </div>
+            {pullDist >= PULL_TRIGGER ? 'Relâcher pour actualiser' : 'Tirer pour actualiser'}
           </div>
         )}
 
-        <div className="flex-1" />
+        {tab === 'xz' && (
+          <XzView
+            summary={summary}
+            hours={hours}
+            products={products}
+            vendors={vendors}
+            tva={tva}
+            period={period}
+            setPeriod={setPeriod}
+            customFrom={customFrom} setCustomFrom={setCustomFrom}
+            customTo={customTo} setCustomTo={setCustomTo}
+            today={today}
+            showFullSales={showFullSales}
+            setShowFullSales={setShowFullSales}
+            refreshedAt={refreshedAt}
+          />
+        )}
+        {tab === 'tickets' && <TicketsView storeId={storeId} range={range} />}
+        {tab === 'stock' && (
+          <PlaceholderView
+            title="Stock"
+            message="Consultation du stock — bientôt disponible ici."
+          />
+        )}
+        {tab === 'log' && (
+          <PlaceholderView
+            title="Journal"
+            message="Journal des évènements caisse — bientôt disponible."
+          />
+        )}
+        {tab === 'account' && (
+          <AccountView user={user} onLogout={logout} />
+        )}
+      </div>
 
+      {/* Bottom nav */}
+      <BottomNav tab={tab} onChange={setTab} />
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Top bar                                                            */
+/* ------------------------------------------------------------------ */
+
+function TopBar({
+  currentStore, stores, orgName, onStoreChange, loading, onRefresh,
+}: {
+  currentStore: Store | null; stores: Store[]; orgName: string;
+  onStoreChange: (id: string) => void;
+  loading: boolean; onRefresh: () => void;
+}) {
+  return (
+    <div className="shrink-0 bg-white border-b border-border px-4 py-3 flex items-center gap-3">
+      <div className="h-10 w-10 rounded-xl bg-accent-soft grid place-items-center text-accent-deep">
+        <Icon name="pos" size={20} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <label className="sr-only" htmlFor="storeSel">Boutique</label>
         <select
-          className="input h-10 max-w-[220px]"
-          value={storeId}
-          onChange={(e) => setStoreId(e.target.value)}
+          id="storeSel"
+          value={currentStore?.id ?? ''}
+          onChange={(e) => onStoreChange(e.target.value)}
+          className="font-semibold text-base bg-transparent border-none outline-none appearance-none pr-6 truncate max-w-full"
+          style={{
+            backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'8\' viewBox=\'0 0 12 8\'%3E%3Cpath fill=\'none\' stroke=\'%236B6F73\' stroke-width=\'2\' d=\'M1 1l5 5 5-5\'/%3E%3C/svg%3E")',
+            backgroundRepeat: 'no-repeat',
+            backgroundPosition: 'right 0 center',
+            backgroundSize: '10px',
+          }}
         >
           <option value="">Toutes les boutiques</option>
           {stores.map((s) => (
             <option key={s.id} value={s.id}>{s.name}</option>
           ))}
         </select>
+        <div className="text-xs text-ink-soft truncate">{orgName}</div>
+      </div>
+      <button
+        onClick={onRefresh}
+        disabled={loading}
+        aria-label="Actualiser"
+        className="h-10 w-10 grid place-items-center rounded-xl border border-border hover:bg-gray-50 text-ink-soft disabled:opacity-50"
+      >
+        <span className={`inline-block ${loading ? 'animate-spin' : ''}`}>↻</span>
+      </button>
+    </div>
+  );
+}
 
-        <label className="flex items-center gap-2 text-sm text-ink-soft">
-          <input
-            type="checkbox"
-            checked={autoRefresh}
-            onChange={(e) => setAutoRefresh(e.target.checked)}
-          />
-          Actualisation auto (30s)
-        </label>
+/* ------------------------------------------------------------------ */
+/* X/Z view — dashboard principal                                     */
+/* ------------------------------------------------------------------ */
 
-        <button
-          onClick={() => void reload()}
-          className="btn-soft text-sm h-10 px-4"
-          disabled={loading}
-        >
-          {loading ? '…' : '↻'}
-        </button>
+function XzView({
+  summary, hours, products, vendors, tva,
+  period, setPeriod, customFrom, setCustomFrom, customTo, setCustomTo, today,
+  showFullSales, setShowFullSales, refreshedAt,
+}: {
+  summary: Summary | null;
+  hours: HourBucket[];
+  products: Product[];
+  vendors: Vendor[];
+  tva: TvaRow[];
+  period: Period; setPeriod: (p: Period) => void;
+  customFrom: string; setCustomFrom: (v: string) => void;
+  customTo: string;   setCustomTo: (v: string) => void;
+  today: string;
+  showFullSales: boolean; setShowFullSales: (v: boolean) => void;
+  refreshedAt: Date | null;
+}) {
+  const topProducts = showFullSales ? products : products.slice(0, 5);
+
+  return (
+    <div className="px-4 py-4 space-y-4">
+      {/* Filtre periode */}
+      <PeriodPills
+        period={period} setPeriod={setPeriod}
+        customFrom={customFrom} setCustomFrom={setCustomFrom}
+        customTo={customTo} setCustomTo={setCustomTo}
+        today={today}
+      />
+
+      {/* Hero CA */}
+      <div className="rounded-2xl bg-accent-soft border border-accent/10 p-5">
+        <div className="text-sm text-accent-deep/80 font-medium">Chiffre d&apos;affaires (HT)</div>
+        <div className="mt-1 text-4xl font-semibold text-accent-deep tabular-nums leading-none">
+          {summary ? formatEUR(summary.ca_ht) : '—'}
+        </div>
+        <div className="mt-2 text-sm text-accent-deep/70 tabular-nums">
+          {summary ? `${formatEUR(summary.ca_ttc)} TTC` : ''}
+        </div>
       </div>
 
-      {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Kpi label="CA TTC" value={summary ? formatEUR(summary.ca_ttc) : '—'} big />
-        <Kpi label="Marge HT"
-             value={summary ? formatEUR(summary.marge_ht) : '—'}
-             extra={summary ? `${summary.marge_pct} %` : undefined}
-             tone={summary && summary.marge_ht >= 0 ? 'success' : 'danger'} />
-        <Kpi label="Panier moyen"
-             value={summary ? formatEUR(summary.avg_ticket_ttc) : '—'}
-             extra={summary ? `${summary.tickets_count} ticket(s)` : undefined} />
-        <Kpi label="Articles vendus"
-             value={summary ? String(summary.items_sold) : '—'}
-             extra={summary ? `${summary.unique_products_sold} produits distincts` : undefined} />
-      </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Kpi label="CA HT"          value={summary ? formatEUR(summary.ca_ht) : '—'} />
-        <Kpi label="TVA collectée"  value={summary ? formatEUR(summary.tva) : '—'} />
-        <Kpi label="Clients uniques" value={summary ? String(summary.customers_count) : '—'} />
-        <Kpi label="Plus gros ticket" value={summary ? formatEUR(summary.max_ticket_ttc) : '—'} />
+      {/* 2 KPIs */}
+      <div className="grid grid-cols-2 gap-3">
+        <StatCard label="Nb de ventes"
+                  value={summary ? String(summary.tickets_count) : '—'} />
+        <StatCard label="Panier moyen"
+                  value={summary ? formatEUR(summary.avg_ticket_ttc) : '—'}
+                  hint="TTC" />
       </div>
 
-      {/* Produits */}
-      <section>
-        <div className="flex items-baseline justify-between gap-2 mb-2">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-ink-soft">
-            Articles vendus
-          </h2>
-          <span className="text-xs text-ink-soft">{products.length} article(s)</span>
-        </div>
-        <div className="card overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-white text-ink-soft text-xs uppercase border-b border-border">
-                <tr>
-                  <SortHeader label="Produit"    active={sortKey === 'product_name'} order={sortOrder}
-                              align="left"  onClick={() => toggleSort('product_name')} />
-                  <th className="text-left px-4 py-3 hidden md:table-cell">Catégorie</th>
-                  <SortHeader label="Quantité"   active={sortKey === 'quantity'} order={sortOrder}
-                              align="right" onClick={() => toggleSort('quantity')} />
-                  <SortHeader label="CA TTC"     active={sortKey === 'ca_ttc'} order={sortOrder}
-                              align="right" onClick={() => toggleSort('ca_ttc')} />
-                  <SortHeader label="Marge HT"   active={sortKey === 'marge_ht'} order={sortOrder}
-                              align="right" onClick={() => toggleSort('marge_ht')} />
-                  <th className="text-right px-4 py-3 hidden md:table-cell">Marge %</th>
-                </tr>
-              </thead>
-              <tbody>
-                {products.length === 0 ? (
-                  <tr><td colSpan={6} className="text-center px-4 py-10 text-ink-soft">Aucun article vendu sur la période.</td></tr>
-                ) : products.map((p, i) => (
-                  <tr key={p.product_id ?? `null-${i}`} className="border-t border-border">
-                    <td className="px-4 py-3 font-medium">{p.product_name}</td>
-                    <td className="px-4 py-3 text-ink-soft hidden md:table-cell">{p.category_name ?? '—'}</td>
-                    <td className="px-4 py-3 text-right tabular-nums">{p.quantity}</td>
-                    <td className="px-4 py-3 text-right tabular-nums font-medium">{formatEUR(p.ca_ttc)}</td>
-                    <td className={`px-4 py-3 text-right tabular-nums ${p.marge_ht >= 0 ? 'text-success' : 'text-danger'}`}>
-                      {formatEUR(p.marge_ht)}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums hidden md:table-cell text-ink-soft">
-                      {p.marge_pct} %
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
+      {/* Marge + Articles */}
+      <div className="grid grid-cols-2 gap-3">
+        <StatCard label="Marge HT"
+                  value={summary ? formatEUR(summary.marge_ht) : '—'}
+                  hint={summary ? `${summary.marge_pct} %` : undefined}
+                  tone={summary && summary.marge_ht >= 0 ? 'success' : 'danger'} />
+        <StatCard label="Articles vendus"
+                  value={summary ? String(summary.items_sold) : '—'}
+                  hint={summary ? `${summary.unique_products_sold} produits` : undefined} />
+      </div>
 
-      {/* Vendeurs */}
-      <section>
-        <div className="flex items-baseline justify-between gap-2 mb-2">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-ink-soft">
-            Ventes par vendeur
-          </h2>
+      {/* CA par heure */}
+      <HourlyChart hours={hours} />
+
+      {/* Top ventes */}
+      <div className="rounded-2xl bg-white border border-border p-4">
+        <div className="flex items-baseline justify-between mb-3">
+          <h3 className="font-semibold">Top ventes {period === 'today' ? 'du jour' : 'de la période'}</h3>
+          {products.length > 5 && (
+            <button
+              onClick={() => setShowFullSales(!showFullSales)}
+              className="text-sm text-accent-deep hover:underline"
+            >
+              {showFullSales ? 'Réduire' : 'Tout voir'}
+            </button>
+          )}
         </div>
-        <div className="card overflow-hidden">
+        {topProducts.length === 0 ? (
+          <p className="text-sm text-ink-soft">Aucune vente sur la période.</p>
+        ) : (
+          <ol className="space-y-2">
+            {topProducts.map((p, i) => (
+              <li key={p.product_id ?? `x-${i}`} className="flex items-center gap-3">
+                <span className="w-6 text-accent-deep font-semibold tabular-nums">{i + 1}</span>
+                <span className="flex-1 min-w-0 truncate">{p.product_name}</span>
+                <span className="text-ink-soft text-sm tabular-nums whitespace-nowrap">×{p.quantity}</span>
+                <span className="tabular-nums font-medium whitespace-nowrap">{formatEUR(p.ca_ttc)}</span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
+
+      {/* Ventes par vendeur */}
+      {vendors.length > 0 && (
+        <div className="rounded-2xl bg-white border border-border p-4">
+          <h3 className="font-semibold mb-3">Ventes par vendeur</h3>
+          <ul className="space-y-2">
+            {vendors.map((v) => {
+              const share = summary && summary.ca_ttc > 0
+                ? (v.ca_ttc / summary.ca_ttc) * 100 : 0;
+              return (
+                <li key={v.user_id} className="flex items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="truncate font-medium">{v.full_name}</div>
+                    <div className="text-xs text-ink-soft">
+                      {v.tickets_count} ticket{v.tickets_count > 1 ? 's' : ''} · panier moyen {formatEUR(v.avg_ticket_ttc)}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-medium tabular-nums">{formatEUR(v.ca_ttc)}</div>
+                    <div className="text-xs text-ink-soft tabular-nums">{share.toFixed(1)} %</div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
+      {/* Détail TVA */}
+      {tva.length > 0 && (
+        <div className="rounded-2xl bg-white border border-border p-4">
+          <h3 className="font-semibold mb-3">Détail TVA</h3>
           <table className="w-full text-sm">
-            <thead className="bg-white text-ink-soft text-xs uppercase border-b border-border">
+            <thead className="text-ink-soft text-xs uppercase tracking-wider">
               <tr>
-                <th className="text-left  px-4 py-3">Vendeur</th>
-                <th className="text-right px-4 py-3">Tickets</th>
-                <th className="text-right px-4 py-3">CA TTC</th>
-                <th className="text-right px-4 py-3">Panier moyen</th>
-                <th className="text-right px-4 py-3">Part</th>
+                <th className="text-left py-1">Taux</th>
+                <th className="text-right py-1">Base HT</th>
+                <th className="text-right py-1">TVA</th>
+                <th className="text-right py-1">Total TTC</th>
               </tr>
             </thead>
             <tbody>
-              {vendors.length === 0 ? (
-                <tr><td colSpan={5} className="text-center px-4 py-10 text-ink-soft">Aucune vente sur la période.</td></tr>
-              ) : vendors.map((v) => {
-                const share = summary && summary.ca_ttc > 0
-                  ? (v.ca_ttc / summary.ca_ttc) * 100 : 0;
-                return (
-                  <tr key={v.user_id} className="border-t border-border">
-                    <td className="px-4 py-3 font-medium">{v.full_name}</td>
-                    <td className="px-4 py-3 text-right tabular-nums">{v.tickets_count}</td>
-                    <td className="px-4 py-3 text-right tabular-nums font-medium">{formatEUR(v.ca_ttc)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums">{formatEUR(v.avg_ticket_ttc)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums text-ink-soft">{share.toFixed(1)} %</td>
-                  </tr>
-                );
-              })}
+              {tva.map((t) => (
+                <tr key={t.rate} className="border-t border-border">
+                  <td className="py-2">{t.rate} %</td>
+                  <td className="py-2 text-right tabular-nums">{formatEUR(t.base_ht)}</td>
+                  <td className="py-2 text-right tabular-nums text-ink-soft">{formatEUR(t.tva)}</td>
+                  <td className="py-2 text-right tabular-nums font-medium">{formatEUR(t.ttc)}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
-      </section>
+      )}
 
-      <div className="text-xs text-ink-soft text-center pt-4">
-        Webpos · dashboard en lecture seule
+      <div className="text-center text-xs text-ink-soft pt-2">
+        {refreshedAt
+          ? `Mis à jour à ${refreshedAt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`
+          : ''}
       </div>
     </div>
   );
 }
 
-function Kpi({ label, value, extra, tone, big }: {
-  label: string; value: string; extra?: string;
-  tone?: 'success' | 'danger'; big?: boolean;
+function StatCard({ label, value, hint, tone }: {
+  label: string; value: string; hint?: string;
+  tone?: 'success' | 'danger';
 }) {
   const color =
     tone === 'success' ? 'text-success' :
     tone === 'danger' ? 'text-danger' : 'text-ink';
   return (
-    <div className="card p-4">
-      <div className="text-[11px] uppercase tracking-widest text-ink-soft font-semibold">{label}</div>
-      <div className={`font-semibold tabular-nums mt-1 leading-none ${big ? 'text-3xl md:text-4xl' : 'text-2xl'} ${color}`}>
+    <div className="rounded-2xl bg-white border border-border p-4">
+      <div className="text-xs text-ink-soft font-medium">{label}</div>
+      <div className={`text-2xl font-semibold mt-1 tabular-nums leading-none ${color}`}>
         {value}
       </div>
-      {extra && (
-        <div className={`text-xs mt-1 tabular-nums ${color}`}>{extra}</div>
+      {hint && <div className={`text-xs mt-1 tabular-nums ${color}`}>{hint}</div>}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Period filter                                                      */
+/* ------------------------------------------------------------------ */
+
+function PeriodPills({
+  period, setPeriod, customFrom, setCustomFrom, customTo, setCustomTo, today,
+}: {
+  period: Period; setPeriod: (p: Period) => void;
+  customFrom: string; setCustomFrom: (v: string) => void;
+  customTo: string; setCustomTo: (v: string) => void;
+  today: string;
+}) {
+  const items: [Period, string][] = [
+    ['today', 'Aujourd\'hui'],
+    ['yesterday', 'Hier'],
+    ['week', '7 j'],
+    ['month', 'Ce mois'],
+    ['custom', 'Perso'],
+  ];
+  return (
+    <div>
+      <div className="flex overflow-x-auto no-scrollbar gap-1.5">
+        {items.map(([p, label]) => (
+          <button
+            key={p}
+            onClick={() => setPeriod(p)}
+            className={`shrink-0 h-9 px-3 rounded-full text-sm font-medium transition-colors ${
+              period === p
+                ? 'accent-bar text-white'
+                : 'bg-white border border-border text-ink-soft'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {period === 'custom' && (
+        <div className="mt-2 flex items-center gap-2">
+          <input type="date" className="input h-10 flex-1" value={customFrom}
+                 max={customTo} onChange={(e) => setCustomFrom(e.target.value)} />
+          <span className="text-ink-soft">→</span>
+          <input type="date" className="input h-10 flex-1" value={customTo}
+                 min={customFrom} max={today} onChange={(e) => setCustomTo(e.target.value)} />
+        </div>
       )}
     </div>
   );
 }
 
-function SortHeader({
-  label, active, order, align, onClick,
+/* ------------------------------------------------------------------ */
+/* Hourly chart                                                       */
+/* ------------------------------------------------------------------ */
+
+function HourlyChart({ hours }: { hours: HourBucket[] }) {
+  if (hours.length === 0) return null;
+
+  const minHour = Math.min(...hours.map((h) => h.hour));
+  const maxHour = Math.max(...hours.map((h) => h.hour));
+  const values: { hour: number; value: number }[] = [];
+  for (let h = minHour; h <= maxHour; h++) {
+    const found = hours.find((x) => x.hour === h);
+    values.push({ hour: h, value: found?.ca_ht ?? 0 });
+  }
+  const max = Math.max(...values.map((v) => v.value), 1);
+  const peak = values.reduce((a, b) => b.value > a.value ? b : a, values[0]!);
+
+  // Grille : 4 seuils
+  const gridSteps = [1, 0.75, 0.5, 0.25, 0];
+  const H = 140;
+
+  return (
+    <div className="rounded-2xl bg-white border border-border p-4">
+      <div className="flex items-baseline justify-between mb-3">
+        <h3 className="font-semibold">CA par heure (HT)</h3>
+        <span className="rounded-full bg-warning/10 text-warning px-2 py-0.5 text-xs font-medium">
+          ⚡ Pic à {peak.hour}h
+        </span>
+      </div>
+      <div className="relative" style={{ height: `${H + 20}px` }}>
+        {/* Grille + valeurs Y */}
+        <div className="absolute inset-0 flex flex-col justify-between pointer-events-none">
+          {gridSteps.map((s) => (
+            <div key={s} className="flex items-center gap-2">
+              <div className="w-10 text-[10px] text-ink-soft tabular-nums text-right">
+                {formatShort(max * s)}
+              </div>
+              <div className="flex-1 border-t border-border/60" />
+            </div>
+          ))}
+        </div>
+        {/* Barres */}
+        <div className="absolute left-12 right-0 top-0 bottom-5 flex items-end gap-1">
+          {values.map((v) => {
+            const h = (v.value / max) * H;
+            const isPeak = v.hour === peak.hour;
+            return (
+              <div
+                key={v.hour}
+                className={`flex-1 rounded-t ${
+                  isPeak ? 'bg-warning' : 'bg-accent'
+                }`}
+                style={{
+                  height: v.value === 0 ? '2px' : `${h}px`,
+                  minHeight: v.value === 0 ? '2px' : '4px',
+                  opacity: v.value === 0 ? 0.25 : 1,
+                }}
+                title={`${v.hour}h — ${formatEUR(v.value)}`}
+              />
+            );
+          })}
+        </div>
+        {/* Labels X (heures) — un sur 2 pour ne pas surcharger */}
+        <div className="absolute left-12 right-0 bottom-0 flex gap-1">
+          {values.map((v, i) => (
+            <div
+              key={v.hour}
+              className="flex-1 text-center text-[10px] text-ink-soft tabular-nums"
+            >
+              {i % 2 === 0 ? `${v.hour}h` : ''}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function formatShort(n: number): string {
+  if (n >= 1000) return `${(n / 1000).toFixed(1)} k€`;
+  return `${Math.round(n)} €`;
+}
+
+/* ------------------------------------------------------------------ */
+/* Tickets view (lecture seule)                                       */
+/* ------------------------------------------------------------------ */
+
+function TicketsView({ storeId, range }: { storeId: string; range: { from: string; to: string } }) {
+  const [items, setItems] = useState<Array<{
+    id: string; receipt_number: string; validated_at: string;
+    total_ttc: string; user_full_name: string; customer_name: string | null;
+  }>>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    void (async () => {
+      setLoading(true);
+      const qs = new URLSearchParams({ from: range.from, to: range.to });
+      if (storeId) qs.set('store_id', storeId);
+      const r = await fetch(`/api/ca/tickets?${qs.toString()}`);
+      if (r.ok) setItems((await r.json()).tickets);
+      setLoading(false);
+    })();
+  }, [storeId, range.from, range.to]);
+
+  return (
+    <div className="px-4 py-4 space-y-3">
+      <h2 className="text-lg font-semibold">Tickets</h2>
+      {loading ? (
+        <p className="text-sm text-ink-soft">Chargement…</p>
+      ) : items.length === 0 ? (
+        <p className="text-sm text-ink-soft">Aucun ticket sur la période.</p>
+      ) : (
+        <div className="rounded-2xl bg-white border border-border overflow-hidden">
+          <ul className="divide-y divide-border">
+            {items.map((t) => (
+              <li key={t.id} className="p-3 flex items-center gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="font-mono text-sm">{t.receipt_number}</div>
+                  <div className="text-xs text-ink-soft truncate">
+                    {new Date(t.validated_at).toLocaleString('fr-FR')}
+                    {' · '}
+                    {t.user_full_name}
+                    {t.customer_name && ` · ${t.customer_name}`}
+                  </div>
+                </div>
+                <div className="tabular-nums font-medium">{formatEUR(Number(t.total_ttc))}</div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Placeholder + Account views                                        */
+/* ------------------------------------------------------------------ */
+
+function PlaceholderView({ title, message }: { title: string; message: string }) {
+  return (
+    <div className="px-4 py-4 space-y-3">
+      <h2 className="text-lg font-semibold">{title}</h2>
+      <div className="rounded-2xl bg-white border border-border p-6 text-center text-sm text-ink-soft">
+        {message}
+      </div>
+    </div>
+  );
+}
+
+function AccountView({
+  user, onLogout,
 }: {
-  label: string; active: boolean; order: SortOrder;
-  align: 'left' | 'right'; onClick: () => void;
+  user: { fullName: string; email: string };
+  onLogout: () => void;
 }) {
   return (
-    <th className={`text-${align} px-4 py-3`}>
+    <div className="px-4 py-4 space-y-3">
+      <h2 className="text-lg font-semibold">Compte</h2>
+      <div className="rounded-2xl bg-white border border-border p-5 space-y-2">
+        <div>
+          <div className="text-xs text-ink-soft">Utilisateur</div>
+          <div className="font-medium">{user.fullName}</div>
+        </div>
+        <div>
+          <div className="text-xs text-ink-soft">Email</div>
+          <div className="font-medium">{user.email}</div>
+        </div>
+      </div>
       <button
-        onClick={onClick}
-        className={`inline-flex items-center gap-1 hover:text-ink transition-colors ${
-          active ? 'text-ink font-semibold' : ''
-        }`}
+        onClick={onLogout}
+        className="w-full h-12 rounded-xl bg-danger/10 text-danger font-semibold hover:bg-danger/15"
       >
-        {label}
-        <span className="text-[10px]">
-          {active ? (order === 'asc' ? '▲' : '▼') : '↕'}
-        </span>
+        Se déconnecter
       </button>
-    </th>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Bottom nav                                                         */
+/* ------------------------------------------------------------------ */
+
+function BottomNav({ tab, onChange }: { tab: Tab; onChange: (t: Tab) => void }) {
+  const items: Array<{ key: Tab; label: string; icon: React.ReactNode }> = [
+    { key: 'xz',      label: 'X / Z',    icon: <ChartIcon /> },
+    { key: 'tickets', label: 'Tickets',  icon: <TicketIcon /> },
+    { key: 'stock',   label: 'Stock',    icon: <StockIcon /> },
+    { key: 'log',     label: 'Log',      icon: <LogIcon /> },
+    { key: 'account', label: 'Compte',   icon: <UserIcon /> },
+  ];
+  return (
+    <nav
+      className="shrink-0 bg-white border-t border-border flex items-stretch"
+      style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+    >
+      {items.map((it) => {
+        const active = tab === it.key;
+        return (
+          <button
+            key={it.key}
+            onClick={() => onChange(it.key)}
+            className={`flex-1 h-16 flex flex-col items-center justify-center gap-1 transition-colors ${
+              active ? 'text-accent-deep' : 'text-ink-soft'
+            }`}
+          >
+            <span className="h-6">{it.icon}</span>
+            <span className={`text-[11px] font-medium ${active ? 'font-semibold' : ''}`}>{it.label}</span>
+          </button>
+        );
+      })}
+    </nav>
+  );
+}
+
+function ChartIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M8 16v-4M12 16v-8M16 16v-6" />
+    </svg>
+  );
+}
+function TicketIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6 3h10l3 4v14H6z" />
+      <path d="M9 8h6M9 12h6M9 16h4" />
+    </svg>
+  );
+}
+function StockIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 8l8-4 8 4v8l-8 4-8-4z" />
+      <path d="M4 8l8 4 8-4M12 12v10" />
+    </svg>
+  );
+}
+function LogIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 6h16M4 12h16M4 18h10" />
+    </svg>
+  );
+}
+function UserIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="8" r="4" />
+      <path d="M4 21v-1a8 8 0 0 1 16 0v1" />
+    </svg>
   );
 }
