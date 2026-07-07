@@ -9,7 +9,7 @@ import WakeLockKeeper from './WakeLockKeeper';
 import PaidOrderNotifier from './PaidOrderNotifier';
 import SchoolModeBanner from './SchoolModeBanner';
 import type { Role, Permission } from '@/lib/auth/rbac';
-import type { PosThemeColor, ColorScheme, AutoLogoutMode } from '@/lib/settings/pos-ui';
+import { POS_THEME_COLOR_VALUES, type PosThemeColor, type ColorScheme, type AutoLogoutMode } from '@/lib/settings/pos-ui';
 
 interface User { id: string; fullName: string; role: Role; email: string }
 
@@ -42,6 +42,20 @@ export default function AppShell({
   const router = useRouter();
 
   useEffect(() => { document.body.setAttribute('data-theme', themeColor); }, [themeColor]);
+
+  // Synchronise la meta theme-color (barre systeme iOS/Android + chrome
+  // Safari macOS) avec la couleur d'accent selectionnee. Si la couleur
+  // n'est pas trouvee, on retombe sur blanc.
+  useEffect(() => {
+    const hex = POS_THEME_COLOR_VALUES[themeColor]?.main ?? '#FFFFFF';
+    let meta = document.querySelector('meta[name="theme-color"]') as HTMLMetaElement | null;
+    if (!meta) {
+      meta = document.createElement('meta');
+      meta.name = 'theme-color';
+      document.head.appendChild(meta);
+    }
+    meta.content = hex;
+  }, [themeColor]);
 
   useEffect(() => {
     function applyMode() {

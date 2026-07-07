@@ -36,7 +36,9 @@ export const viewport: Viewport = {
   minimumScale: 1,
   userScalable: false,
   viewportFit: 'cover',
-  themeColor: '#556B3E',
+  // themeColor par defaut blanc — sera surcharge dynamiquement par
+  // AppShell selon la couleur d'accent choisie dans /settings/pos-ui.
+  themeColor: '#FFFFFF',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
