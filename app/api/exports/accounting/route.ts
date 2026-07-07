@@ -5,6 +5,19 @@ import { query } from '@/lib/db/client';
 import { requirePermission } from '@/lib/auth/guards';
 import { parseJson, jsonError } from '@/lib/validation/api';
 import { audit } from '@/lib/audit/log';
+import {
+  ACCOUNTING_ACCOUNTS_KEY,
+  mergeAccountingAccounts,
+  type AccountingAccounts,
+} from '@/lib/settings/accounting';
+
+async function loadAccounts(orgId: string): Promise<AccountingAccounts> {
+  const { rows } = await query<{ value: Partial<AccountingAccounts> }>(
+    `SELECT value FROM settings WHERE organization_id = $1 AND key = $2`,
+    [orgId, ACCOUNTING_ACCOUNTS_KEY],
+  );
+  return mergeAccountingAccounts(rows[0]?.value ?? null);
+}
 
 export async function GET() {
   const g = await requirePermission('fiscal.export');
@@ -101,6 +114,7 @@ export async function POST(req: Request) {
         ORDER BY day`,
       [g.user.organizationId, period_start, period_end],
     );
+    const accts = await loadAccounts(g.user.organizationId);
     const header = ['Date', 'Compte', 'Libellé', 'Débit', 'Crédit'];
     const out: string[][] = [];
     for (const r of rows.rows) {
@@ -109,10 +123,10 @@ export async function POST(req: Request) {
       const tva = Number(r.total_tva);
       const cash = Number(r.cash_total);
       const card = Number(r.card_total);
-      out.push([d, '707000', 'Ventes du jour',       '0.00', ht.toFixed(2)]);
-      out.push([d, '445710', 'TVA collectée',         '0.00', tva.toFixed(2)]);
-      out.push([d, '530000', 'Caisse — espèces',      cash.toFixed(2), '0.00']);
-      out.push([d, '512000', 'Banque — CB',           card.toFixed(2), '0.00']);
+      out.push([d, accts.sales,   'Ventes du jour',       '0.00', ht.toFixed(2)]);
+      out.push([d, accts.tva_20,  'TVA collectée',         '0.00', tva.toFixed(2)]);
+      out.push([d, accts.cash,    'Caisse — espèces',      cash.toFixed(2), '0.00']);
+      out.push([d, accts.bank,    'Banque — CB',           card.toFixed(2), '0.00']);
     }
     content = '﻿' + [header.join(';')].concat(out.map((r) => r.join(';'))).join('\n');
   } else if (format === 'fec_like') {
@@ -132,6 +146,7 @@ export async function POST(req: Request) {
       'JournalCode', 'EcritureNum', 'EcritureDate', 'CompteNum', 'CompteLib',
       'PieceRef', 'PieceDate', 'EcritureLib', 'Debit', 'Credit',
     ];
+    const accts = await loadAccounts(g.user.organizationId);
     const out = [header.join('|')];
     let num = 1;
     for (const s of sales.rows) {
@@ -140,9 +155,9 @@ export async function POST(req: Request) {
       const ht = Number(s.total_ttc) - Number(s.total_tva);
       const tva = Number(s.total_tva);
       const ref = s.receipt_number;
-      out.push(['VEN', String(num), d, '707000', 'Ventes', ref, d, `Ticket ${ref}`, '0.00', ht.toFixed(2)].join('|'));
-      out.push(['VEN', String(num), d, '445710', 'TVA',    ref, d, `Ticket ${ref}`, '0.00', tva.toFixed(2)].join('|'));
-      out.push(['VEN', String(num), d, '530000', 'Caisse', ref, d, `Ticket ${ref}`, Number(s.total_ttc).toFixed(2), '0.00'].join('|'));
+      out.push(['VEN', String(num), d, accts.sales,  'Ventes', ref, d, `Ticket ${ref}`, '0.00', ht.toFixed(2)].join('|'));
+      out.push(['VEN', String(num), d, accts.tva_20, 'TVA',    ref, d, `Ticket ${ref}`, '0.00', tva.toFixed(2)].join('|'));
+      out.push(['VEN', String(num), d, accts.cash,   'Caisse', ref, d, `Ticket ${ref}`, Number(s.total_ttc).toFixed(2), '0.00'].join('|'));
       num++;
     }
     content = '﻿' + out.join('\n');

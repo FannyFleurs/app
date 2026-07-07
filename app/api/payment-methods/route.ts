@@ -13,15 +13,50 @@ const schema = z.object({
   position: z.number().int().min(0).optional(),
 });
 
+const DEFAULT_METHODS: Array<{ kind: typeof KINDS[number]; label: string; position: number }> = [
+  { kind: 'cash',         label: 'Espèces',              position: 10 },
+  { kind: 'card',         label: 'Carte bancaire',       position: 20 },
+  { kind: 'check',        label: 'Chèque',               position: 30 },
+  { kind: 'transfer',     label: 'Virement',             position: 40 },
+  { kind: 'gift_card',    label: 'Carte cadeau',         position: 50 },
+  { kind: 'credit_note',  label: 'Avoir',                position: 60 },
+  { kind: 'payment_link', label: 'Lien de paiement Stripe', position: 70 },
+];
+
 export async function GET() {
   const g = await requirePermission('pos.use');
   if ('response' in g) return g.response;
-  const { rows } = await query(
+
+  // Auto-seed : si l'organisation n'a aucun mode de reglement, on cree
+  // les modes par defaut. C'est cette absence de seed qui faisait
+  // apparaitre la page /settings/payment-methods "vide" alors que la
+  // modale d'encaissement affichait les modes du fallback en dur.
+  let { rows } = await query<{ id: string; code: string; kind: string; label: string; is_active: boolean; position: number }>(
     `SELECT id, code, kind, label, is_active, position
        FROM payment_methods WHERE organization_id = $1
       ORDER BY position, label`,
     [g.user.organizationId],
   );
+  if (rows.length === 0) {
+    for (const m of DEFAULT_METHODS) {
+      const code = `${m.kind}_default`;
+      try {
+        await query(
+          `INSERT INTO payment_methods (organization_id, code, kind, label, position)
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT DO NOTHING`,
+          [g.user.organizationId, code, m.kind, m.label, m.position],
+        );
+      } catch { /* on n'echoue jamais la lecture pour un probleme de seed */ }
+    }
+    const reload = await query<{ id: string; code: string; kind: string; label: string; is_active: boolean; position: number }>(
+      `SELECT id, code, kind, label, is_active, position
+         FROM payment_methods WHERE organization_id = $1
+        ORDER BY position, label`,
+      [g.user.organizationId],
+    );
+    rows = reload.rows;
+  }
   return NextResponse.json({ methods: rows });
 }
 
