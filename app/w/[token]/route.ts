@@ -106,6 +106,15 @@ export async function GET(_req: Request, { params }: { params: { token: string }
     );
   }
 
+  // Enregistre aussi le serial dans customers.loyalty_code s'il est vide.
+  await query(
+    `UPDATE customers
+        SET loyalty_code = $1, updated_at = now()
+      WHERE id = $2 AND organization_id = $3
+        AND (loyalty_code IS NULL OR loyalty_code = '')`,
+    [serial, claims.customerId, claims.orgId],
+  );
+
   const subject: PassSubject = {
     customerId: claims.customerId,
     customerName,

@@ -824,8 +824,13 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
    * vers un client, puis l'attache au panier. Utilise depuis le
    * scanner global — permet de scanner la carte de n'importe ou sur
    * la caisse, meme sans avoir ouvert le picker client.
+   *
+   * IMPORTANT : PAS de useCallback ici. On veut la fonction refresh a
+   * chaque render pour capturer les valeurs a jour de sessionId,
+   * pickCustomer, ensureSale — sinon on tombe sur un "Aucune session
+   * caisse ouverte" alors qu'elle est bien ouverte (stale closure).
    */
-  const attachCustomerBySerial = useCallback(async (serial: string) => {
+  async function attachCustomerBySerial(serial: string) {
     setError(null);
     try {
       const lookup = await fetch(`/api/wallet/lookup?serial=${encodeURIComponent(serial)}`);
@@ -854,10 +859,9 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
     } catch (e) {
       setError((e as Error).message);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }
   const attachSerialRef = useRef(attachCustomerBySerial);
-  useEffect(() => { attachSerialRef.current = attachCustomerBySerial; }, [attachCustomerBySerial]);
+  attachSerialRef.current = attachCustomerBySerial;
 
   // Raccourcis clavier
   useEffect(() => {
@@ -1038,7 +1042,16 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && search.trim()) {
-                const match = products.find((p) => p.barcode === search.trim());
+                const raw = search.trim();
+                // Detection carte fidelite : "FID..." (normalise pour
+                // gerer le mangling clavier iPad AZERTY qui remplace '-' par '§').
+                const normalized = raw.replace(/[^A-Z0-9]/gi, '').toUpperCase();
+                if (normalized.startsWith('FID') && normalized.length >= 6) {
+                  void attachCustomerBySerial(normalized);
+                  setSearch('');
+                  return;
+                }
+                const match = products.find((p) => p.barcode === raw);
                 if (match) { addProduct(match); setSearch(''); }
               }
             }}

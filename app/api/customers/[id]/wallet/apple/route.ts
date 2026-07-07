@@ -104,6 +104,17 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
     );
   }
 
+  // Enregistre aussi le serial dans customers.loyalty_code s'il est vide,
+  // pour que la recherche dans le picker client + la fiche client
+  // trouvent le client via son numero de carte.
+  await query(
+    `UPDATE customers
+        SET loyalty_code = $1, updated_at = now()
+      WHERE id = $2 AND organization_id = $3
+        AND (loyalty_code IS NULL OR loyalty_code = '')`,
+    [serial, params.id, g.user.organizationId],
+  );
+
   // 4. Genere le .pkpass.
   const subject: PassSubject = {
     customerId: params.id,
