@@ -286,12 +286,12 @@ function XzView({
 
       {/* Hero CA */}
       <div className="rounded-2xl bg-accent-soft border border-accent/10 p-5">
-        <div className="text-sm text-accent-deep/80 font-medium">Chiffre d&apos;affaires (HT)</div>
+        <div className="text-sm text-accent-deep/80 font-medium">Chiffre d&apos;affaires (TTC)</div>
         <div className="mt-1 text-4xl font-semibold text-accent-deep tabular-nums leading-none">
-          {summary ? formatEUR(summary.ca_ht) : '—'}
+          {summary ? formatEUR(summary.ca_ttc) : '—'}
         </div>
         <div className="mt-2 text-sm text-accent-deep/70 tabular-nums">
-          {summary ? `${formatEUR(summary.ca_ttc)} TTC` : ''}
+          {summary ? `${formatEUR(summary.ca_ht)} HT` : ''}
         </div>
       </div>
 
