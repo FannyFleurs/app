@@ -1415,7 +1415,7 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
             <button
               disabled={lines.length === 0 || totals.ttc <= 0}
               onClick={() => void quickPay('cash')}
-              className="col-start-1 row-start-1 btn-primary text-lg font-semibold rounded-2xl flex flex-col items-center justify-center gap-0.5 disabled:opacity-40"
+              className="col-start-1 row-start-1 btn-primary text-lg font-semibold rounded-[5px] flex flex-col items-center justify-center gap-0.5 disabled:opacity-40"
               title="Encaisser en espèces"
             >
               <span className="text-xl leading-none">💶</span>
@@ -1424,7 +1424,7 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
             <button
               disabled={lines.length === 0 || totals.ttc <= 0}
               onClick={async () => { const id = await ensureSale(); if (id) { await syncLines(); setShowPayment(true); } }}
-              className="col-start-1 row-start-2 btn-soft text-base font-semibold rounded-2xl flex flex-col items-center justify-center gap-0.5 disabled:opacity-40"
+              className="col-start-1 row-start-2 btn-soft text-base font-semibold rounded-[5px] flex flex-col items-center justify-center gap-0.5 disabled:opacity-40"
               title="Choisir le mode de règlement (multiple, chèque, lien Stripe…)"
             >
               <span className="text-lg leading-none">⋯</span>
@@ -1433,7 +1433,7 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
             <button
               disabled={lines.length === 0 || totals.ttc <= 0}
               onClick={() => void quickPay('card')}
-              className="col-start-2 row-start-1 row-span-2 btn-primary text-2xl font-semibold rounded-2xl flex flex-col items-center justify-center gap-1 disabled:opacity-40"
+              className="col-start-2 row-start-1 row-span-2 btn-primary text-2xl font-semibold rounded-[5px] flex flex-col items-center justify-center gap-1 disabled:opacity-40"
               title="Encaisser par carte bancaire"
             >
               <span className="text-3xl leading-none">💳</span>

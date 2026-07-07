@@ -95,7 +95,7 @@ export default function AllPagesOverlay({ role, hiddenPaths, permissions, onClos
                       key={item.href}
                       href={item.href}
                       onClick={onClose}
-                      className="group card p-2 flex flex-col items-center justify-center text-center aspect-square hover:shadow-md hover:border-gray-300 transition-all"
+                      className="group card p-2 flex flex-col items-center justify-center text-center aspect-[4/3] hover:shadow-md hover:border-gray-300 transition-all"
                     >
                       <span
                         className="grid h-8 w-8 place-items-center rounded-lg mb-1 bg-accent-soft text-accent-deep group-hover:scale-105 transition-transform"
@@ -123,7 +123,7 @@ export default function AllPagesOverlay({ role, hiddenPaths, permissions, onClos
           <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-2">
             <button
               onClick={toggleSchool}
-              className={`card p-2 flex flex-col items-center justify-center text-center aspect-square transition-all hover:shadow-md hover:border-gray-300 ${
+              className={`card p-2 flex flex-col items-center justify-center text-center aspect-[4/3] transition-all hover:shadow-md hover:border-gray-300 ${
                 schoolActive ? 'border-warning bg-warning/10' : ''
               }`}
               title={schoolActive
