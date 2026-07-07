@@ -1195,13 +1195,19 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
           {customer ? (
             <>
               <div className="flex items-center justify-between gap-2 rounded-xl bg-accent-soft px-3 py-2">
-                <div className="min-w-0">
-                  <div className="text-[10px] uppercase tracking-wider text-ink-soft">Client</div>
-                  <div className="text-sm font-medium truncate">{customer.display_name}</div>
+                <a
+                  href={`/customers?id=${customer.id}`}
+                  className="min-w-0 text-left hover:opacity-80 transition-opacity"
+                  title="Ouvrir la fiche client (le panier est conservé)"
+                >
+                  <div className="text-[10px] uppercase tracking-wider text-ink-soft">Client · voir la fiche</div>
+                  <div className="text-sm font-medium truncate underline decoration-dotted underline-offset-2">
+                    {customer.display_name}
+                  </div>
                   {customer.default_discount_pct && customer.default_discount_pct > 0 && (
                     <div className="text-xs text-warning">Remise systématique : -{customer.default_discount_pct}%</div>
                   )}
-                </div>
+                </a>
                 <div className="flex items-center gap-1.5">
                   <button
                     onClick={() => setShowPicker(true)}

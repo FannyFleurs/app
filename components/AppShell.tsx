@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import TopBar from './TopBar';
+import LeftRail from './LeftRail';
 import AllPagesOverlay from './AllPagesOverlay';
 import WakeLockKeeper from './WakeLockKeeper';
 import PaidOrderNotifier from './PaidOrderNotifier';
@@ -96,20 +97,37 @@ export default function AppShell({
   return (
     <div className="h-screen overflow-hidden flex flex-col bg-white">
       <SchoolModeBanner />
-      <TopBar
-        user={{ fullName: user.fullName, role: user.role }}
-        hiddenPaths={hiddenPaths}
-        headerTabs={headerTabs}
-        subscription={subscription}
-        permissions={permSet}
-        onOpenMenu={() => setMenuOpen(true)}
-        onLogout={() => void logout()}
-      />
+      <div className="flex-1 flex flex-row overflow-hidden min-h-0">
+        {/* Sidebar verticale (desktop / tablette) */}
+        <LeftRail
+          user={{ fullName: user.fullName, role: user.role }}
+          hiddenPaths={hiddenPaths}
+          headerTabs={headerTabs}
+          permissions={permSet}
+          onOpenMenu={() => setMenuOpen(true)}
+          onLogout={() => void logout()}
+        />
 
-      {/* Scroll vertical autorisé par défaut sur toutes les pages.
-          Les pages à mise en page fixe (CAISSE) appliquent leur propre
-          overflow-hidden + h-full pour ne pas scroller. */}
-      <main className="flex-1 overflow-y-auto overflow-x-hidden bg-white relative">{children}</main>
+        <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+          {/* TopBar mobile uniquement — le rail vertical prend le relais dès md */}
+          <div className="md:hidden">
+            <TopBar
+              user={{ fullName: user.fullName, role: user.role }}
+              hiddenPaths={hiddenPaths}
+              headerTabs={headerTabs}
+              subscription={subscription}
+              permissions={permSet}
+              onOpenMenu={() => setMenuOpen(true)}
+              onLogout={() => void logout()}
+            />
+          </div>
+
+          {/* Scroll vertical autorisé par défaut sur toutes les pages.
+              Les pages à mise en page fixe (CAISSE) appliquent leur propre
+              overflow-hidden + h-full pour ne pas scroller. */}
+          <main className="flex-1 overflow-y-auto overflow-x-hidden bg-white relative">{children}</main>
+        </div>
+      </div>
 
       {menuOpen && (
         <AllPagesOverlay

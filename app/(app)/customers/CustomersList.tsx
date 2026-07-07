@@ -2,11 +2,12 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Badge from '@/components/Badge';
 import EmptyState from '@/components/EmptyState';
 import CustomerFormModal, { type CustomerLike } from '@/components/CustomerFormModal';
 import { formatEUR } from '@/lib/services/money';
+import WalletActions from './[id]/WalletActions';
 
 interface Customer {
   id: string;
@@ -65,11 +66,20 @@ const TABS: Array<{ key: Tab; label: string }> = [
 
 export default function CustomersList({ customers: initialCustomers, canWrite }: { customers: Customer[]; canWrite: boolean }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [customers, setCustomers] = useState(initialCustomers);
   useEffect(() => { setCustomers(initialCustomers); }, [initialCustomers]);
   const [q, setQ] = useState('');
   const [type, setType] = useState<'all' | string>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  // Selection automatique via ?id=<uuid> (utilise depuis /caisse quand
+  // on clique sur le nom du client attache au ticket).
+  useEffect(() => {
+    const id = searchParams.get('id');
+    if (id && id !== selectedId) void selectCustomer(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
   const [detail, setDetail] = useState<CustomerDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [editing, setEditing] = useState<CustomerLike | null | undefined>(undefined);
@@ -357,14 +367,21 @@ function CustomerDetailContent({ tab, detail, canWrite, onEdit }: {
       {tab === 'achats'  && <PurchasedItemsTable customerId={c.id} />}
 
       {tab === 'fidelite' && (
-        <div className="card p-5">
-          <h3 className="font-semibold mb-2">Solde fidélité</h3>
-          <div className="text-3xl font-semibold">
-            {detail.loyalty_points != null ? `${detail.loyalty_points} pts` : '—'}
+        <div className="space-y-3">
+          <div className="card p-5">
+            <h3 className="font-semibold mb-2">Solde fidélité</h3>
+            <div className="text-3xl font-semibold">
+              {detail.loyalty_points != null ? `${detail.loyalty_points} pts` : '—'}
+            </div>
+            <p className="text-xs text-ink-soft mt-2">
+              Le solde est crédité automatiquement à chaque vente validée, selon le programme actif.
+            </p>
           </div>
-          <p className="text-xs text-ink-soft mt-2">
-            Le solde est crédité automatiquement à chaque vente validée, selon le programme actif.
-          </p>
+          <WalletActions
+            customerId={c.id}
+            customerEmail={c.email}
+            customerPhone={c.phone}
+          />
         </div>
       )}
 
@@ -373,12 +390,6 @@ function CustomerDetailContent({ tab, detail, canWrite, onEdit }: {
           Aucun bon d&apos;achat enregistré pour ce client.
         </div>
       )}
-
-      <div className="pt-2">
-        <Link href={`/customers/${c.id}`} className="text-sm text-accent-deep hover:underline">
-          Vue complète →
-        </Link>
-      </div>
     </div>
   );
 }
