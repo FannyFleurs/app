@@ -38,12 +38,18 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const origin = new URL(req.url).origin;
   const url = `${origin}/w/${token}`;
 
-  // QR SVG genere cote serveur (lib eprouvee, pas notre encodeur maison)
+  // QR SVG genere cote serveur en FORCANT le mode 'byte' — sans ca la
+  // lib detecte auto le mode 'alphanumeric' qui a une table de
+  // caracteres differente d'ASCII (le '-' peut y etre mal decode par
+  // certains scanners iOS, remplace par des caracteres bizarres).
+  // Byte mode = encodage direct des octets UTF-8, transparent pour tout
+  // scanner conforme.
   let qr: string;
   try {
-    qr = await QRCode.toString(url, {
-      type: 'svg', errorCorrectionLevel: 'M', margin: 1, width: 240,
-    });
+    qr = await QRCode.toString(
+      [{ data: Buffer.from(url, 'utf8'), mode: 'byte' }],
+      { type: 'svg', errorCorrectionLevel: 'M', margin: 1, width: 240 },
+    );
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error('[wallet.link.qr]', err);
