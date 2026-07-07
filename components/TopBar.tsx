@@ -47,7 +47,7 @@ export default function TopBar({
   const firstName = user.fullName.split(/\s+/)[0] ?? user.fullName;
 
   return (
-    <header className="sticky top-0 z-40 shrink-0 flex items-stretch bg-white border-b border-border pt-safe pl-safe pr-safe min-h-14">
+    <header className="sticky top-0 z-40 shrink-0 flex items-stretch bg-white border-b border-border min-h-14">
       {/* Logo */}
       <Link href="/caisse" className="flex items-center gap-2.5 pl-4 pr-5 shrink-0 hover:bg-gray-50 transition-colors">
         <span className="grid h-9 w-9 place-items-center rounded-xl accent-bar text-white font-semibold">

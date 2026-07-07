@@ -53,7 +53,7 @@ export default function LeftRail({
 
   return (
     <aside
-      className="hidden md:flex flex-col shrink-0 w-20 lg:w-24 bg-white border-r border-border h-full pt-safe pb-safe pl-safe"
+      className="hidden md:flex flex-col shrink-0 w-20 lg:w-24 bg-white border-r border-border h-full"
     >
       {/* Logo */}
       <Link
