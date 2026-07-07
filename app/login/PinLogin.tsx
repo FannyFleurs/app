@@ -94,24 +94,29 @@ export default function PinLogin() {
 
   async function submit(forUser: string, pinValue: string) {
     setSubmitting(true); setError(null);
-    const r = await fetch('/api/auth/pin-login', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: forUser, pin: pinValue }),
-    });
-    if (!r.ok) {
+    try {
+      const r = await fetch('/api/auth/pin-login', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: forUser, pin: pinValue }),
+      });
+      if (!r.ok) {
+        setSubmitting(false);
+        const j = await r.json().catch(() => ({}));
+        setError(prettyError(j.error));
+        setPin('');
+        return;
+      }
+      // Succes : overlay immediat + navigation "dure" (window.location)
+      // qui garantit une reprise 100% propre — plus fiable que
+      // router.push apres un cycle logout/login, ou apres un service
+      // worker mis a jour.
+      setTransitioning(true);
+      window.location.assign('/caisse');
+    } catch (e) {
       setSubmitting(false);
-      const j = await r.json().catch(() => ({}));
-      setError(prettyError(j.error));
+      setError((e as Error).message || 'Réseau indisponible');
       setPin('');
-      return;
     }
-    // Succes : on masque immediatement le login et on navigue
-    // directement vers /caisse (route deja prefetchee au montage).
-    // Pas de router.refresh() : la nouvelle page rendra son layout
-    // avec la session fraiche puisqu'on quitte le route group /login
-    // pour entrer dans (app), le layout est monte de zero.
-    setTransitioning(true);
-    router.push('/caisse');
   }
 
   function press(key: string) {
@@ -198,12 +203,28 @@ export default function PinLogin() {
                       // pour que la tuile "disparaisse" en meme temps
                       // qu'on lance le fetch.
                       setTransitioning(true);
-                      const r = await fetch('/api/auth/no-pin-login', {
-                        method: 'POST', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ user_id: u.id }),
-                      });
-                      if (r.ok) { router.push('/caisse'); return; }
+                      try {
+                        const r = await fetch('/api/auth/no-pin-login', {
+                          method: 'POST', headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ user_id: u.id }),
+                        });
+                        if (r.ok) {
+                          // window.location.assign = navigation "dure"
+                          // qui force le browser a recharger la page :
+                          // le cookie de session est bien pris en compte
+                          // et on repart d'un state React totalement propre.
+                          // C'est un peu plus lent que router.push mais
+                          // 100% fiable, notamment apres un logout+login.
+                          window.location.assign('/caisse');
+                          return;
+                        }
+                        const j = await r.json().catch(() => ({}));
+                        setError(prettyError(j.error) || j.message || 'Connexion impossible');
+                      } catch (e) {
+                        setError((e as Error).message || 'Réseau indisponible');
+                      }
                       setTransitioning(false);
+                      return;
                     }
                     // Prefetch anticipe : selection d'un user = intention
                     // de connexion imminente.
