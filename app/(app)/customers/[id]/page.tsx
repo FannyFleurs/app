@@ -7,6 +7,7 @@ import { formatEUR } from '@/lib/services/money';
 import PageHeader from '@/components/PageHeader';
 import Badge from '@/components/Badge';
 import Tabs from '@/components/Tabs';
+import WalletActions from './WalletActions';
 
 export const dynamic = 'force-dynamic';
 
@@ -203,6 +204,7 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
                 <div className="text-xs uppercase tracking-wider text-ink-soft">Solde</div>
                 <div className="text-3xl font-semibold tracking-tight">{loyalty.rows[0].points_balance} pts</div>
               </div>
+              <WalletActions customerId={params.id} />
               <div className="card overflow-hidden">
                 <table className="w-full text-sm">
                   <thead className="bg-bg text-ink-soft text-xs uppercase">
