@@ -349,10 +349,26 @@ export async function sendUpdatePush(
 /* Helpers publics                                                       */
 /* -------------------------------------------------------------------- */
 
-/** Serial number stable pour un couple (customerId × passTypeId). */
+/**
+ * Serial number stable pour un couple (customerId × passTypeId).
+ * Format : "FID" + 8 chars hexa MAJ, SANS separateur — le tiret '-'
+ * peut etre reencode en '§' sur iPad AZERTY lors du scan (mapping
+ * clavier US → FR au niveau OS), ce qui cassait la recherche client.
+ */
 export function computeSerial(customerId: string): string {
   const id = customerId.replace(/-/g, '').slice(0, 12).toUpperCase();
-  return `FID-${id.slice(0, 4)}-${id.slice(4, 8)}`;
+  return `FID${id.slice(0, 8)}`;
+}
+
+/**
+ * Normalise un code scanne (retire tout ce qui n'est pas alphanum et
+ * met en MAJ) pour comparer avec un serial de la table wallet_passes.
+ * Rend le lookup insensible aux souci d'encodage clavier (le '-' d'un
+ * ancien serial "FID-XXXX-XXXX" scanne en "FID§XXXX§XXXX" retombe
+ * bien sur "FIDXXXXXXXX" apres normalisation).
+ */
+export function normalizeSerial(raw: string): string {
+  return raw.replace(/[^A-Z0-9]/gi, '').toUpperCase();
 }
 
 /** authenticationToken aleatoire pour securiser le web service. */

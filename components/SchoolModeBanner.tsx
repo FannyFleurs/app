@@ -21,7 +21,10 @@ export default function SchoolModeBanner() {
   }
 
   return (
-    <div className="sticky top-0 z-[100] bg-warning text-white px-3 py-1.5 flex items-center justify-between gap-3 text-sm shadow-md">
+    <div
+      className="sticky top-0 z-[100] bg-warning text-white px-3 py-1.5 pl-safe pr-safe flex items-center justify-between gap-3 text-sm shadow-md"
+      style={{ paddingTop: 'max(6px, env(safe-area-inset-top, 0px))' }}
+    >
       <div className="flex items-center gap-2 min-w-0">
         <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-white text-warning text-[10px] font-bold shrink-0">
           ⓘ

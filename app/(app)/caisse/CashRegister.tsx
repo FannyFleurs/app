@@ -819,6 +819,46 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
     }
   }
 
+  /**
+   * Resout un serial de carte fidelite scanne (Apple Wallet ou autre)
+   * vers un client, puis l'attache au panier. Utilise depuis le
+   * scanner global — permet de scanner la carte de n'importe ou sur
+   * la caisse, meme sans avoir ouvert le picker client.
+   */
+  const attachCustomerBySerial = useCallback(async (serial: string) => {
+    setError(null);
+    try {
+      const lookup = await fetch(`/api/wallet/lookup?serial=${encodeURIComponent(serial)}`);
+      if (!lookup.ok) return;
+      const j = await lookup.json() as { customer_id: string | null };
+      if (!j.customer_id) {
+        setError(`Carte fidélité inconnue (${serial})`);
+        return;
+      }
+      const cr = await fetch(`/api/customers/${j.customer_id}`);
+      if (!cr.ok) return;
+      const cj = await cr.json();
+      const cu = cj.customer;
+      if (!cu) return;
+      await pickCustomer({
+        id: cu.id,
+        display_name: cu.company_name
+          || [cu.first_name, cu.last_name].filter(Boolean).join(' ')
+          || 'Client',
+        type: cu.type ?? 'particulier',
+        email: cu.email ?? null,
+        phone: cu.phone ?? null,
+        company_name: cu.company_name ?? null,
+        default_discount_pct: Number(cu.default_discount_pct ?? 0),
+      });
+    } catch (e) {
+      setError((e as Error).message);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const attachSerialRef = useRef(attachCustomerBySerial);
+  useEffect(() => { attachSerialRef.current = attachCustomerBySerial; }, [attachCustomerBySerial]);
+
   // Raccourcis clavier
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -864,6 +904,15 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
       const products = productsRef.current;
       const c = code.trim();
       if (!c) return;
+      // Detection carte fidelite (Apple Wallet, Google Wallet, etc.) :
+      // le serial commence par "FID". Normalise en strippant tout ce
+      // qui n'est pas alphanum (evite les soucis de mapping clavier
+      // qui remplacent '-' par '§' sur iPad AZERTY).
+      const normalized = c.replace(/[^A-Z0-9]/gi, '').toUpperCase();
+      if (normalized.startsWith('FID') && normalized.length >= 6) {
+        void attachSerialRef.current(normalized);
+        return;
+      }
       const match = products.find(
         (p) => p.barcode === c || p.barcode === c.toUpperCase() ||
                p.sku === c || p.sku === c.toUpperCase(),
