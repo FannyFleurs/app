@@ -273,7 +273,7 @@ export default function ProductFormModal({
             </p>
           </Field>
 
-          {stores.length > 1 && (
+          {stores.length > 0 && (
             <Field label="Boutiques concernées" full>
               <div className="mt-1 space-y-1.5">
                 <label className="flex items-center gap-2 text-sm">

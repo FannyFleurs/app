@@ -43,7 +43,8 @@ export type IconName =
   | 'minus'
   | 'close'
   | 'warning'
-  | 'sparkle';
+  | 'sparkle'
+  | 'transfer';
 
 const ICONS: Record<IconName, React.ReactNode> = {
   dashboard: (
@@ -55,11 +56,10 @@ const ICONS: Record<IconName, React.ReactNode> = {
     </>
   ),
   pos: (
+    // Sac / panier de courses — represente l'action de vente en caisse.
     <>
-      <rect x="3" y="6" width="18" height="13" rx="2" />
-      <path d="M3 10h18" />
-      <path d="M8 15h2" />
-      <path d="M8 2v4M16 2v4" />
+      <path d="M5 8h14l-1.2 11a2 2 0 0 1-2 1.8H8.2a2 2 0 0 1-2-1.8L5 8Z" />
+      <path d="M8 8V6a4 4 0 0 1 8 0v2" />
     </>
   ),
   'my-day': (
@@ -97,7 +97,14 @@ const ICONS: Record<IconName, React.ReactNode> = {
     </>
   ),
   loyalty: (
-    <path d="M12 2.5l2.95 6 6.62.95-4.79 4.66 1.13 6.58L12 17.6l-5.91 3.1 1.13-6.58L2.43 9.45l6.62-.95L12 2.5Z" />
+    // Carte bancaire (avoirs & cartes cadeaux) — rectangle avec bande
+    // magnetique en haut et puce a gauche.
+    <>
+      <rect x="2.5" y="5.5" width="19" height="13" rx="2" />
+      <path d="M2.5 9h19" />
+      <rect x="5.5" y="12" width="4" height="3" rx="0.5" />
+      <path d="M14 15.5h4" />
+    </>
   ),
   products: (
     <>
@@ -256,6 +263,16 @@ const ICONS: Record<IconName, React.ReactNode> = {
     <>
       <path d="M12 3v3M12 18v3M3 12h3M18 12h3" />
       <path d="m5.6 5.6 2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1" />
+    </>
+  ),
+  transfer: (
+    // Deux fleches horizontales opposees — evoque un transfert entre
+    // deux points (boutique A → boutique B et retour possible).
+    <>
+      <path d="M4 8h13" />
+      <path d="M14 5l3 3-3 3" />
+      <path d="M20 16H7" />
+      <path d="M10 19l-3-3 3-3" />
     </>
   ),
 };
