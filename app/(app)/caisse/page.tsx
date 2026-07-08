@@ -8,6 +8,11 @@ import {
   POS_UI_KEY,
   type PosUiSettings,
 } from '@/lib/settings/pos-ui';
+import {
+  SCREEN_DELIVERY_KEY,
+  mergeScreenDeliveryDefaults,
+  type ScreenDeliverySettings,
+} from '@/lib/settings/screen-delivery';
 
 export const dynamic = 'force-dynamic';
 
@@ -65,6 +70,12 @@ export default async function CaissePage() {
   );
   const posSettings = mergeWithDefaults(posSettingsRows.rows[0]?.value ?? null);
 
+  const screenDeliveryRows = await query<{ value: Partial<ScreenDeliverySettings> }>(
+    `SELECT value FROM settings WHERE organization_id = $1 AND key = $2`,
+    [user.organizationId, SCREEN_DELIVERY_KEY],
+  );
+  const screenDelivery = mergeScreenDeliveryDefaults(screenDeliveryRows.rows[0]?.value ?? null);
+
   if (stores.rows.length === 0 || registers.rows.length === 0) {
     return (
       <div className="p-8">
@@ -87,6 +98,7 @@ export default async function CaissePage() {
       taxRates={taxRates.rows.map((t) => ({ ...t, rate: Number(t.rate) }))}
       currentUser={{ id: user.id, name: user.fullName, role: user.role }}
       posUi={posSettings}
+      deferredOrdersEnabled={screenDelivery.enabled}
     />
   );
 }

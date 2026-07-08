@@ -38,6 +38,8 @@ export default function PaymentMethodsForm({ canWrite }: { canWrite: boolean }) 
   const [loading, setLoading] = useState(true);
   const [newLabel, setNewLabel] = useState('');
   const [newKind, setNewKind] = useState('other');
+  const [addError, setAddError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -63,12 +65,23 @@ export default function PaymentMethodsForm({ canWrite }: { canWrite: boolean }) 
   }
   async function add() {
     if (!newLabel.trim()) return;
-    await fetch('/api/payment-methods', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ label: newLabel.trim(), kind: newKind }),
-    });
-    setNewLabel('');
-    void load();
+    setAddError(null);
+    setSaving(true);
+    try {
+      const r = await fetch('/api/payment-methods', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: newLabel.trim(), kind: newKind }),
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        setAddError(j.message ?? j.error ?? `Erreur (${r.status})`);
+        return;
+      }
+      setNewLabel('');
+      await load();
+    } finally {
+      setSaving(false);
+    }
   }
 
   // Un mode payment_link est-il present et actif ?
@@ -111,20 +124,31 @@ export default function PaymentMethodsForm({ canWrite }: { canWrite: boolean }) 
           </ul>
         )}
         {canWrite && (
-          <div className="mt-3 flex items-center gap-2">
-            <input
-              className="input h-9 flex-1" placeholder="Nouveau libellé"
-              value={newLabel} onChange={(e) => setNewLabel(e.target.value)}
-            />
-            <select
-              className="input h-9 max-w-[160px]" value={newKind}
-              onChange={(e) => setNewKind(e.target.value)}
-            >
-              {PM_KIND_OPTIONS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
-            </select>
-            <button className="btn-soft text-sm" onClick={() => void add()} disabled={!newLabel.trim()}>
-              + Ajouter
-            </button>
+          <div className="mt-3 space-y-2">
+            <div className="flex items-center gap-2">
+              <input
+                className="input h-9 flex-1" placeholder="Nouveau libellé"
+                value={newLabel} onChange={(e) => setNewLabel(e.target.value)}
+              />
+              <select
+                className="input h-9 max-w-[160px]" value={newKind}
+                onChange={(e) => setNewKind(e.target.value)}
+              >
+                {PM_KIND_OPTIONS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
+              </select>
+              <button
+                className="btn-soft text-sm"
+                onClick={() => void add()}
+                disabled={!newLabel.trim() || saving}
+              >
+                {saving ? '…' : '+ Ajouter'}
+              </button>
+            </div>
+            {addError && (
+              <div className="rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">
+                {addError}
+              </div>
+            )}
           </div>
         )}
       </div>

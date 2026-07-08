@@ -67,10 +67,31 @@ export async function POST(req: Request) {
   if ('response' in parsed) return parsed.response;
   const m = parsed.data;
   const code = m.code ?? `${m.kind}_${Date.now().toString(36)}`;
-  const ins = await query<{ id: string }>(
-    `INSERT INTO payment_methods (organization_id, code, kind, label, position)
-     VALUES ($1,$2,$3,$4,$5) RETURNING id`,
-    [g.user.organizationId, code, m.kind, m.label, m.position ?? 99],
-  );
-  return NextResponse.json({ id: ins.rows[0]!.id }, { status: 201 });
+  try {
+    const ins = await query<{ id: string }>(
+      `INSERT INTO payment_methods (organization_id, code, kind, label, position)
+       VALUES ($1,$2,$3,$4,$5) RETURNING id`,
+      [g.user.organizationId, code, m.kind, m.label, m.position ?? 99],
+    );
+    return NextResponse.json({ id: ins.rows[0]!.id }, { status: 201 });
+  } catch (err) {
+    const msg = (err as Error).message ?? '';
+    if (msg.includes('duplicate') || msg.includes('unique')) {
+      return NextResponse.json(
+        { error: 'CODE_ALREADY_EXISTS', message: 'Un mode avec ce code existe deja.' },
+        { status: 409 },
+      );
+    }
+    if (msg.includes('check') || msg.includes('kind')) {
+      return NextResponse.json(
+        {
+          error: 'INVALID_KIND',
+          message: 'Ce type de reglement n\'est pas encore accepte par la base. Deployez la migration 0027.',
+        },
+        { status: 400 },
+      );
+    }
+    console.error('[payment-methods.create]', err);
+    return NextResponse.json({ error: 'INTERNAL_ERROR', message: msg }, { status: 500 });
+  }
 }

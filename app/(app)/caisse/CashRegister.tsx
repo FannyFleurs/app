@@ -76,13 +76,17 @@ interface Props {
   taxRates: TaxRate[];
   currentUser: { id: string; name: string; role: string };
   posUi: PosUiSettings;
+  /** Si false, le bouton "Commande differee (retrait a date)" est masque. */
+  deferredOrdersEnabled: boolean;
 }
 
 type View = { kind: 'categories' } | { kind: 'products'; categoryId: string | 'uncategorized' };
 
 const FREE_PRICE_TAX_CODE_DEFAULT = 'TVA20';
 
-export default function CashRegister({ stores, registers, taxRates, currentUser, posUi }: Props) {
+export default function CashRegister({
+  stores, registers, taxRates, currentUser, posUi, deferredOrdersEnabled,
+}: Props) {
   const metrics = useMemo(() => tileMetrics(posUi.tile_size), [posUi.tile_size]);
   // Mode école : quand actif, on ne fait AUCUN appel mutant côté serveur.
   // La caisse a une session fictive auto-ouverte, les lignes restent en
@@ -1457,13 +1461,15 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
         </div>
 
         <div className="p-2.5 border-t border-border space-y-2">
-          <button
-            disabled={lines.length === 0 || totals.ttc <= 0}
-            className="btn-soft w-full h-12 text-base font-semibold"
-            onClick={() => setShowOrderModal(true)}
-          >
-            📅 Commande différée (retrait à date)
-          </button>
+          {deferredOrdersEnabled && (
+            <button
+              disabled={lines.length === 0 || totals.ttc <= 0}
+              className="btn-soft w-full h-12 text-base font-semibold"
+              onClick={() => setShowOrderModal(true)}
+            >
+              📅 Commande différée (retrait à date)
+            </button>
+          )}
 
           {/* Encaissements rapides : Espèces + Autres en colonne à gauche
               (chacun sur la moitié de la hauteur), Carte à droite sur toute

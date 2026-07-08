@@ -12,6 +12,7 @@ export default async function SettingsLayout({ children }: { children: React.Rea
     { href: '/settings/pos-settings',     label: 'Paramètres caisse',     icon: 'pos-settings' as const, perm: 'pos.use' as const },
     { href: '/settings/opening-float',    label: 'Fond de caisse',        icon: 'closures' as const,     perm: 'pos.use' as const },
     { href: '/settings/payment-methods',  label: 'Modes de règlement',    icon: 'invoices' as const,     perm: 'settings.write' as const },
+    { href: '/settings/screen-delivery',  label: 'Écran & Livraison',     icon: 'truck' as const,        perm: 'settings.write' as const },
     // /settings/stripe est desormais integre inline dans la page
     // "Modes de reglement" (section apparente uniquement quand le mode
     // "Lien de paiement Stripe" est actif). On ne l'affiche plus dans
