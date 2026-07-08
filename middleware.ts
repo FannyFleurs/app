@@ -44,6 +44,19 @@ export function middleware(req: NextRequest) {
     return res;
   }
 
+  // Page de connexion back-office : email + mot de passe. On pose le
+  // cookie webpos_bo=1 pour que le login qui suit redirige vers le
+  // back-office (et pas vers /caisse).
+  if (url.pathname === '/bo/login') {
+    const res = NextResponse.next();
+    res.cookies.set(BO_COOKIE, '1', {
+      path: '/',
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 30,
+    });
+    return res;
+  }
+
   // Point d'entree /bo (chemin) : pose le cookie et va au tableau de
   // bord. Sert de fallback quand le sous-domaine bo. n'est pas encore
   // configure (env Vercel *.vercel.app).
@@ -53,7 +66,7 @@ export function middleware(req: NextRequest) {
     res.cookies.set(BO_COOKIE, '1', {
       path: '/',
       sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 30, // 30 jours
+      maxAge: 60 * 60 * 24 * 30,
     });
     return res;
   }

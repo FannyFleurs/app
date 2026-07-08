@@ -11,13 +11,14 @@ import AppShell, { type SubscriptionInfo } from '@/components/AppShell';
 import { resolveEffectivePermissions } from '@/lib/auth/permissions';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const user = await readSessionFromCookie();
-  if (!user) redirect('/login');
-
   // Mode back-office : injecte par le middleware sur le sous-domaine bo.
-  // Adapte la sidebar (menu complet), masque /caisse partout et donne
-  // acces a certaines pages reservees (Societe & boutiques).
+  // ou apres visite de /bo (cookie webpos_bo=1). Adapte la sidebar (menu
+  // complet), masque /caisse partout et donne acces a certaines pages
+  // reservees (Societe & boutiques).
   const backOffice = headers().get('x-webpos-bo') === '1';
+
+  const user = await readSessionFromCookie();
+  if (!user) redirect(backOffice ? '/bo/login' : '/login');
 
   const { rows } = await query<{ value: Partial<PosUiSettings> }>(
     `SELECT value FROM settings WHERE organization_id = $1 AND key = $2`,
