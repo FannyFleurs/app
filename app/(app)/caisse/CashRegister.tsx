@@ -982,6 +982,7 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
 
   if (!sessionId) {
     const currentStore = stores.find((s) => s.id === storeId) ?? stores[0];
+    const currentRegister = registers.find((r) => r.id === registerId);
     return (
       <>
         <div className="h-full grid place-items-center px-4">
@@ -991,11 +992,26 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
             </div>
             <h1 className="text-2xl font-semibold tracking-tight">Caisse fermée</h1>
             <p className="mt-2 text-sm text-ink-soft">
-              {currentStore?.name ? `${currentStore.name} — ` : ''}
+              {currentStore?.name ? `${currentStore.name}` : ''}
+              {currentRegister?.name ? ` · ${currentRegister.name}` : ''}
+            </p>
+
+            {/* Selecteur si l'utilisateur a acces a plusieurs boutiques/caisses */}
+            <div className="mt-4 flex justify-center">
+              <StoreRegisterSwitcher
+                stores={stores}
+                registers={registers}
+                storeId={storeId}
+                registerId={registerId}
+                onChange={(sId, rId) => { setStoreId(sId); setRegisterId(rId); }}
+              />
+            </div>
+
+            <p className="mt-4 text-sm text-ink-soft">
               Ouvrez la caisse pour commencer la journée.
             </p>
             <button
-              className="btn-primary mt-6 w-full h-12 text-base"
+              className="btn-primary mt-4 w-full h-12 text-base"
               onClick={() => setShowOpenSession(true)}
             >
               Ouvrir la caisse
@@ -1037,6 +1053,20 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
         onTouchEnd={(e) => onTouchEnd(e, 'open')}
       >
         <div className="flex items-center gap-2 px-3 md:px-5 py-3 border-b border-border bg-white">
+          <StoreRegisterSwitcher
+            stores={stores}
+            registers={registers}
+            storeId={storeId}
+            registerId={registerId}
+            onChange={(sId, rId) => {
+              setStoreId(sId);
+              setRegisterId(rId);
+              // Reset saleId : le panier appartient a une register precise.
+              setSaleId(null);
+              setLines([]);
+              setCustomer(null);
+            }}
+          />
           <input
             ref={searchRef}
             className="input flex-1 md:max-w-[16rem]"
@@ -1605,6 +1635,85 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
           />
         );
       })()}
+    </div>
+  );
+}
+
+/**
+ * Selecteur compact boutique / caisse. Affiche la boutique + caisse
+ * courantes ; au clic, deroule la liste des combinaisons possibles.
+ * Ne s'affiche que si l'utilisateur a acces a plusieurs paires
+ * (sinon aucun choix a faire).
+ */
+function StoreRegisterSwitcher({
+  stores, registers, storeId, registerId, onChange,
+}: {
+  stores: { id: string; code: string; name: string }[];
+  registers: { id: string; store_id: string; code: string; name: string }[];
+  storeId: string;
+  registerId: string;
+  onChange: (storeId: string, registerId: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const currentStore = stores.find((s) => s.id === storeId);
+  const currentRegister = registers.find((r) => r.id === registerId);
+  const totalPairs = registers.filter((r) => stores.some((s) => s.id === r.store_id)).length;
+  if (totalPairs <= 1) return null;
+
+  return (
+    <div className="relative shrink-0">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="h-10 px-3 rounded-xl border border-border bg-white flex items-center gap-2 hover:bg-gray-50 text-left"
+        title="Changer de boutique / caisse"
+      >
+        <div className="min-w-0 max-w-[160px]">
+          <div className="text-[10px] uppercase tracking-wider text-ink-soft leading-none">
+            {currentStore?.name ?? 'Boutique'}
+          </div>
+          <div className="text-sm font-medium truncate leading-tight">
+            {currentRegister?.name ?? 'Caisse'}
+          </div>
+        </div>
+        <span className="text-ink-soft text-xs">▾</span>
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 top-full mt-1 z-50 rounded-xl border border-border bg-white shadow-lg min-w-[260px] max-h-80 overflow-y-auto">
+            {stores.map((s) => {
+              const regs = registers.filter((r) => r.store_id === s.id);
+              if (regs.length === 0) return null;
+              return (
+                <div key={s.id} className="border-b border-border last:border-b-0">
+                  <div className="px-3 py-1.5 text-[10px] uppercase tracking-wider text-ink-soft font-semibold bg-gray-50">
+                    {s.name}
+                  </div>
+                  {regs.map((r) => {
+                    const active = r.id === registerId;
+                    return (
+                      <button
+                        key={r.id}
+                        onClick={() => {
+                          onChange(s.id, r.id);
+                          setOpen(false);
+                        }}
+                        className={`w-full text-left px-3 py-2 flex items-center gap-2 text-sm ${
+                          active ? 'bg-accent-soft text-accent-deep' : 'hover:bg-gray-50'
+                        }`}
+                      >
+                        <span className="font-mono text-xs text-ink-soft w-8">{r.code}</span>
+                        <span className="flex-1">{r.name}</span>
+                        {active && <span className="text-accent-deep">✓</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
     </div>
   );
 }

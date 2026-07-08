@@ -262,13 +262,16 @@ function StoreFormModal({ store, onClose, onSaved }: {
   const [error, setError] = useState<string | null>(null);
 
   async function submit() {
-    if (!code.trim() || !name.trim()) { setError('Code et nom requis.'); return; }
+    if (!name.trim()) { setError('Nom obligatoire.'); return; }
     setSaving(true); setError(null);
-    const payload = {
-      code: code.trim(), name: name.trim(),
+    const payload: Record<string, unknown> = {
+      name: name.trim(),
       address: { line1: line1.trim(), zip: zip.trim(), city: city.trim(), country: 'FR' },
       ...(store ? { is_active: isActive } : {}),
     };
+    // Code : uniquement transmis si l'utilisateur en a saisi un (mode
+    // avance). Sinon le serveur genere B1, B2… automatiquement.
+    if (code.trim()) payload.code = code.trim();
     const r = store
       ? await fetch(`/api/stores/${store.id}`, {
           method: 'PATCH', headers: { 'Content-Type': 'application/json' },
@@ -295,14 +298,23 @@ function StoreFormModal({ store, onClose, onSaved }: {
           <button onClick={onClose} className="text-ink-soft hover:text-ink">✕</button>
         </div>
         <div className="space-y-3">
-          <Field label="Code court">
-            <input className="input" value={code} maxLength={20}
-                   onChange={(e) => setCode(e.target.value.toUpperCase())}
-                   placeholder="ex : BOUT-01" />
-          </Field>
           <Field label="Nom de la boutique">
-            <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
+            <input className="input" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
           </Field>
+          {store && (
+            <Field label="Code court (auto)">
+              <input
+                className="input font-mono text-sm bg-gray-50"
+                value={code}
+                maxLength={20}
+                onChange={(e) => setCode(e.target.value.toUpperCase())}
+                placeholder="ex : B1"
+              />
+              <p className="mt-1 text-xs text-ink-soft">
+                Généré automatiquement à la création. Modifiable manuellement si besoin.
+              </p>
+            </Field>
+          )}
           <Field label="Adresse">
             <input className="input" value={line1} onChange={(e) => setLine1(e.target.value)} placeholder="N°, rue" />
           </Field>
@@ -404,8 +416,17 @@ function RegisterFormModal({ register, stores, onClose, onSaved }: {
 
   async function submit() {
     if (!storeId) { setError('Boutique requise.'); return; }
-    if (!code.trim() || !name.trim()) { setError('Code et nom requis.'); return; }
+    if (register && (!code.trim() || !name.trim())) {
+      setError('Code et nom requis.');
+      return;
+    }
     setSaving(true); setError(null);
+    const createBody: Record<string, unknown> = { store_id: storeId };
+    // A la creation, on transmet uniquement ce que l'utilisateur a saisi.
+    // Sinon le serveur genere le code (C1, C2…) et le nom (Caisse 1…).
+    if (code.trim()) createBody.code = code.trim();
+    if (name.trim()) createBody.name = name.trim();
+
     const r = register
       ? await fetch(`/api/registers/${register.id}`, {
           method: 'PATCH', headers: { 'Content-Type': 'application/json' },
@@ -413,7 +434,7 @@ function RegisterFormModal({ register, stores, onClose, onSaved }: {
         })
       : await fetch('/api/registers', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ store_id: storeId, code: code.trim(), name: name.trim() }),
+          body: JSON.stringify(createBody),
         });
     setSaving(false);
     if (!r.ok) {
@@ -434,18 +455,21 @@ function RegisterFormModal({ register, stores, onClose, onSaved }: {
         <div className="space-y-3">
           {!register && (
             <Field label="Boutique">
-              <select className="input" value={storeId} onChange={(e) => setStoreId(e.target.value)}>
+              <select className="input" value={storeId} onChange={(e) => setStoreId(e.target.value)} autoFocus>
                 {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </Field>
           )}
-          <Field label="Code court">
-            <input className="input" value={code} maxLength={20}
-                   onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="ex : CAISSE-01" />
+          <Field label={register ? 'Nom' : 'Nom (auto si vide)'}>
+            <input className="input" value={name} onChange={(e) => setName(e.target.value)}
+                   placeholder={register ? '' : 'ex : Caisse 1'} />
           </Field>
-          <Field label="Nom">
-            <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
-          </Field>
+          {register && (
+            <Field label="Code court">
+              <input className="input font-mono text-sm bg-gray-50" value={code} maxLength={20}
+                     onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="ex : C1" />
+            </Field>
+          )}
           {register && (
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />

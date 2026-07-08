@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { query } from '@/lib/db/client';
+import { query, withTransaction } from '@/lib/db/client';
 import { requirePermission } from '@/lib/auth/guards';
 import { parseJson, jsonError } from '@/lib/validation/api';
 import { audit } from '@/lib/audit/log';
 
 const schema = z.object({
-  code: z.string().min(1).max(40),
+  code: z.string().max(40).optional(),
   name: z.string().min(1).max(120),
   address: z.object({
     line1: z.string().max(160).optional(),
@@ -15,6 +15,33 @@ const schema = z.object({
     country: z.string().max(80).optional(),
   }).optional(),
 });
+
+/**
+ * Genere un code court alphanumerique unique pour une boutique dans
+ * l'organisation : B1, B2, B3... on prend le prochain libre.
+ */
+async function nextStoreCode(orgId: string, client: { query: typeof query }): Promise<string> {
+  const r = await client.query<{ next: number }>(
+    `SELECT COALESCE(MAX(NULLIF(regexp_replace(code, '\\D', '', 'g'), '')::int), 0) + 1 AS next
+       FROM stores
+      WHERE organization_id = $1 AND code ~ '^B[0-9]+$'`,
+    [orgId],
+  );
+  return `B${r.rows[0]?.next ?? 1}`;
+}
+
+/**
+ * Genere un code court unique pour une caisse : C1, C2... dans la boutique.
+ */
+async function nextRegisterCode(storeId: string, client: { query: typeof query }): Promise<string> {
+  const r = await client.query<{ next: number }>(
+    `SELECT COALESCE(MAX(NULLIF(regexp_replace(code, '\\D', '', 'g'), '')::int), 0) + 1 AS next
+       FROM registers
+      WHERE store_id = $1 AND code ~ '^C[0-9]+$'`,
+    [storeId],
+  );
+  return `C${r.rows[0]?.next ?? 1}`;
+}
 
 export async function GET() {
   const g = await requirePermission('settings.read');
@@ -36,17 +63,41 @@ export async function POST(req: Request) {
   const d = parsed.data;
 
   try {
-    const ins = await query<{ id: string }>(
-      `INSERT INTO stores (organization_id, code, name, address, is_active)
-       VALUES ($1, $2, $3, $4, TRUE) RETURNING id`,
-      [g.user.organizationId, d.code, d.name, JSON.stringify(d.address ?? {})],
-    );
+    const result = await withTransaction(async (client) => {
+      // Code : soit fourni, soit auto-genere (B1, B2...).
+      const code = d.code?.trim() || await nextStoreCode(g.user.organizationId, client);
+
+      const store = await client.query<{ id: string; code: string }>(
+        `INSERT INTO stores (organization_id, code, name, address, is_active)
+         VALUES ($1, $2, $3, $4, TRUE) RETURNING id, code`,
+        [g.user.organizationId, code, d.name, JSON.stringify(d.address ?? {})],
+      );
+      const storeId = store.rows[0]!.id;
+
+      // Premiere caisse creee automatiquement, code C1, nom "Caisse 1".
+      const regCode = await nextRegisterCode(storeId, client);
+      const register = await client.query<{ id: string; code: string }>(
+        `INSERT INTO registers (organization_id, store_id, code, name, is_active)
+         VALUES ($1, $2, $3, $4, TRUE) RETURNING id, code`,
+        [g.user.organizationId, storeId, regCode, `Caisse ${regCode.replace(/\D/g, '')}`],
+      );
+
+      return {
+        id: storeId,
+        code: store.rows[0]!.code,
+        register: {
+          id: register.rows[0]!.id,
+          code: register.rows[0]!.code,
+        },
+      };
+    });
+
     await audit({
       organizationId: g.user.organizationId, userId: g.user.id,
-      action: 'stores.create', entityType: 'store', entityId: ins.rows[0]!.id,
-      payload: d,
+      action: 'stores.create', entityType: 'store', entityId: result.id,
+      payload: { ...d, code: result.code, auto_register: result.register.code },
     });
-    return NextResponse.json({ id: ins.rows[0]!.id }, { status: 201 });
+    return NextResponse.json(result, { status: 201 });
   } catch (err) {
     const m = (err as Error).message ?? '';
     if (m.includes('duplicate')) return jsonError('CODE_ALREADY_EXISTS', 409);
