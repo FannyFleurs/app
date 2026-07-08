@@ -44,7 +44,6 @@ export default function PinLogin() {
   const [bootstrapping, setBootstrapping] = useState(false);
   const [bootstrapResult, setBootstrapResult] = useState<{ email: string; pin: string } | null>(null);
   const [migrationRequired, setMigrationRequired] = useState<string | null>(null);
-  const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [tenantRequired, setTenantRequired] = useState(false);
 
   async function loadUsers() {
@@ -270,37 +269,33 @@ export default function PinLogin() {
           )}
         </div>
 
-        {/* Bouton bas — Accès / Inscription. "+ Créer ma boutique" n'apparaît
-            que si aucun utilisateur n'est encore configuré sur ce poste. */}
-        <div className="border-t border-border p-4 shrink-0 bg-white space-y-2">
-          <button
-            onClick={() => setShowAdminLogin(true)}
-            className="btn-primary w-full h-12 text-base"
-          >
-            <span className="inline-flex items-center gap-2">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                   strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <circle cx="9" cy="7" r="4" />
-                <path d="M16 11l2 2 4-4" />
-                <path d="M2 21v-1a7 7 0 0 1 14 0v1" />
-              </svg>
-              {tenantRequired ? 'Me connecter (email)' : 'Accès admin et autres'}
-            </span>
-          </button>
-          {users.length === 0 && (
-            <a
-              href="/setup"
-              className="btn-ghost w-full h-10 text-sm text-center inline-flex items-center justify-center"
-            >
-              + Créer ma boutique (essai 14 jours)
-            </a>
-          )}
-          {bootstrapResult && (
-            <div className="rounded-xl bg-success/10 px-3 py-2 text-xs text-success text-center">
-              ✓ Démo créée : <strong>{bootstrapResult.email}</strong> · PIN <strong>{bootstrapResult.pin}</strong>
-            </div>
-          )}
-        </div>
+        {/* Bouton bas — accessible uniquement si aucun utilisateur n'est
+            encore configure sur ce poste (creation initiale d'une
+            boutique en essai). Le bouton "Acces admin" a ete retire :
+            la caisse est un poste physique, l'admin passe par le
+            back-office (bo.<domaine>) depuis un autre appareil. */}
+        {(users.length === 0 || tenantRequired) && (
+          <div className="border-t border-border p-4 shrink-0 bg-white space-y-2">
+            {users.length === 0 && (
+              <a
+                href="/setup"
+                className="btn-primary w-full h-12 text-base text-center inline-flex items-center justify-center"
+              >
+                + Créer ma boutique (essai 14 jours)
+              </a>
+            )}
+            {tenantRequired && (
+              <p className="text-xs text-ink-soft text-center">
+                Aucun poste rattaché à cette caisse. Contactez votre administrateur.
+              </p>
+            )}
+            {bootstrapResult && (
+              <div className="rounded-xl bg-success/10 px-3 py-2 text-xs text-success text-center">
+                ✓ Démo créée : <strong>{bootstrapResult.email}</strong> · PIN <strong>{bootstrapResult.pin}</strong>
+              </div>
+            )}
+          </div>
+        )}
       </aside>
 
       {/* COLONNE DROITE — affichage / pavé PIN. Sur mobile, visible
@@ -389,67 +384,7 @@ npm run user:test</pre>
         </div>
       </section>
 
-      {showAdminLogin && (
-        <AdminLoginModal
-          onClose={() => setShowAdminLogin(false)}
-          onSuccess={() => { router.push('/'); router.refresh(); }}
-        />
-      )}
     </main>
-  );
-}
-
-function AdminLoginModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true); setErr(null);
-    const r = await fetch('/api/auth/login', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: email.trim(), password }),
-    });
-    setBusy(false);
-    if (!r.ok) {
-      const j = await r.json().catch(() => ({}));
-      setErr(j.error ?? j.message ?? 'Connexion impossible');
-      return;
-    }
-    onSuccess();
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-ink/30 backdrop-blur-sm p-4" onClick={onClose}>
-      <form className="card max-w-sm w-full p-6" onSubmit={submit} onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">Accès admin et autres</h2>
-          <button type="button" onClick={onClose} className="text-ink-soft hover:text-ink">✕</button>
-        </div>
-        <p className="text-sm text-ink-soft mb-3">
-          Connectez-vous avec votre email et mot de passe pour accéder à l&apos;administration.
-        </p>
-        <div className="space-y-3">
-          <div>
-            <label className="text-sm font-medium text-ink-soft">Email</label>
-            <input className="input mt-1" type="email" autoFocus value={email}
-                   onChange={(e) => setEmail(e.target.value)} />
-          </div>
-          <div>
-            <label className="text-sm font-medium text-ink-soft">Mot de passe</label>
-            <input className="input mt-1" type="password" value={password}
-                   onChange={(e) => setPassword(e.target.value)} />
-          </div>
-        </div>
-        {err && <div className="mt-3 rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{err}</div>}
-        <button type="submit" disabled={busy || !email || !password}
-                className="btn-primary w-full mt-4 h-11">
-          {busy ? 'Connexion…' : 'Se connecter'}
-        </button>
-      </form>
-    </div>
   );
 }
 
