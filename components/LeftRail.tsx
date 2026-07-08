@@ -115,10 +115,18 @@ export default function LeftRail({
           })}
         </nav>
 
-        <div className="border-t border-border px-2 py-3 flex items-center gap-2 shrink-0">
+        <div className="border-t border-border px-2 py-3 space-y-1.5 shrink-0">
+          <a
+            href="/bo/exit"
+            className="flex items-center gap-2 rounded-xl px-3 py-2 hover:bg-gray-50 text-xs text-ink-soft"
+            title="Revenir à la caisse (site principal)"
+          >
+            <Icon name="pos" size={16} />
+            Retour à la caisse
+          </a>
           <button
             onClick={onLogout}
-            className="flex-1 flex items-center gap-2 rounded-xl px-3 py-2 hover:bg-gray-50 text-sm text-left"
+            className="w-full flex items-center gap-2 rounded-xl px-3 py-2 hover:bg-gray-50 text-sm text-left"
             title={`${user.fullName} — se déconnecter`}
           >
             <span
