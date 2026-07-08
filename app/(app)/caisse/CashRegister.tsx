@@ -1095,10 +1095,10 @@ export default function CashRegister({
         onTouchStart={onTouchStart}
         onTouchEnd={(e) => onTouchEnd(e, 'open')}
       >
-        <div className="flex items-center gap-2 px-3 md:px-5 py-3 border-b border-border bg-white">
+        <div className="flex items-center gap-2 px-3 md:px-5 h-14 shrink-0 border-b border-border bg-white">
           <input
             ref={searchRef}
-            className="input flex-1 md:max-w-[16rem]"
+            className="input h-10 flex-1 md:max-w-[16rem]"
             placeholder="Rechercher / scanner…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -1268,7 +1268,7 @@ export default function CashRegister({
           ${mobileCartOpen ? 'translate-x-0' : 'translate-x-full md:translate-x-0'}
         `}
       >
-        <div className="px-3 py-3 border-b border-border flex items-center justify-end gap-1.5">
+        <div className="px-3 h-14 shrink-0 border-b border-border flex items-center justify-end gap-1.5">
           <button
             onClick={() => setMobileCartOpen(false)}
             className="md:hidden mr-auto -ml-1 px-2 py-1 text-ink-soft hover:text-ink text-xl"
