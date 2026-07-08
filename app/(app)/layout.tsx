@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { headers } from 'next/headers';
 import { readSessionFromCookie } from '@/lib/auth/session';
 import { query } from '@/lib/db/client';
 import {
@@ -12,6 +13,11 @@ import { resolveEffectivePermissions } from '@/lib/auth/permissions';
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await readSessionFromCookie();
   if (!user) redirect('/login');
+
+  // Mode back-office : injecte par le middleware sur le sous-domaine bo.
+  // Adapte la sidebar (menu complet), masque /caisse partout et donne
+  // acces a certaines pages reservees (Societe & boutiques).
+  const backOffice = headers().get('x-webpos-bo') === '1';
 
   const { rows } = await query<{ value: Partial<PosUiSettings> }>(
     `SELECT value FROM settings WHERE organization_id = $1 AND key = $2`,
@@ -67,6 +73,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       headerTabs={ui.header_tabs ?? []}
       subscription={subscription}
       permissions={Array.from(effectivePerms)}
+      backOffice={backOffice}
     >
       {children}
     </AppShell>

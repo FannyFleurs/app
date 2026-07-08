@@ -30,12 +30,17 @@ interface Props {
   headerTabs: string[];
   subscription: SubscriptionInfo | null;
   permissions: Permission[];
+  /**
+   * Vue back-office (sous-domaine bo.) : sidebar en menu complet,
+   * pas de bouton caisse, quelques pages supplementaires (Societe).
+   */
+  backOffice?: boolean;
   children: React.ReactNode;
 }
 
 export default function AppShell({
   user, themeColor, colorScheme, hiddenPaths, autoLogoutMode, autoLogoutMinutes, headerTabs,
-  subscription, permissions, children,
+  subscription, permissions, backOffice = false, children,
 }: Props) {
   const permSet = new Set(permissions);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -120,6 +125,7 @@ export default function AppShell({
           permissions={permSet}
           onOpenMenu={() => setMenuOpen(true)}
           onLogout={() => void logout()}
+          backOffice={backOffice}
         />
 
         <div className="flex-1 flex flex-col overflow-hidden min-w-0">

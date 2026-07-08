@@ -260,8 +260,8 @@ export default function POSSettingsForm({ initial, canWrite }: Props) {
         </Section>
 
         <Section
-          title="Onglets du header"
-          description={`Choisissez les pages affichées en onglets dans la barre supérieure (${HEADER_TABS_MAX} max). Les autres restent accessibles via le menu hamburger.`}
+          title="Sidebar"
+          description={`Choisissez les pages affichées dans la sidebar (${HEADER_TABS_MAX} max). Les autres restent accessibles via le menu hamburger.`}
         >
           <HeaderTabsManager
             value={settings.header_tabs?.length ? settings.header_tabs : HEADER_TABS_DEFAULT}
@@ -475,7 +475,7 @@ function HeaderTabsManager({
         </div>
         {selected.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-ink-soft">
-            Aucun onglet sélectionné — la barre supérieure affichera l&apos;ordre par défaut.
+            Aucune page sélectionnée — la sidebar affichera l&apos;ordre par défaut.
           </div>
         ) : (
           <ul className="space-y-1.5">
