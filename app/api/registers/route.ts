@@ -29,6 +29,7 @@ export async function GET() {
   if ('response' in g) return g.response;
   const { rows } = await query(
     `SELECT r.id, r.code, r.name, r.store_id, r.is_active,
+            r.device_id, r.device_name, r.bound_at,
             s.name AS store_name
        FROM registers r
        JOIN stores s ON s.id = r.store_id

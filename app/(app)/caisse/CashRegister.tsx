@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatEUR, round2 } from '@/lib/services/money';
 import PaymentModal from './PaymentModal';
+import RegisterPicker from './RegisterPicker';
 import ReceiptPreviewModal from './ReceiptPreviewModal';
 import HoldListModal from './HoldListModal';
 import OpenSessionModal from './OpenSessionModal';
@@ -68,7 +69,10 @@ export interface TaxRate { id: string; code: string; rate: number; is_default: b
 
 interface Props {
   stores: { id: string; code: string; name: string }[];
-  registers: { id: string; store_id: string; code: string; name: string }[];
+  registers: {
+    id: string; store_id: string; code: string; name: string;
+    device_id: string | null; device_name: string | null;
+  }[];
   taxRates: TaxRate[];
   currentUser: { id: string; name: string; role: string };
   posUi: PosUiSettings;
@@ -86,12 +90,40 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
   // détruites au passage en mode normal.
   const schoolMode = useSchoolMode();
 
-  const [storeId, setStoreId] = useState<string>(stores[0]!.id);
-  const registersForStore = useMemo(
-    () => registers.filter((r) => r.store_id === storeId),
-    [registers, storeId],
-  );
-  const [registerId, setRegisterId] = useState<string>(registersForStore[0]?.id ?? '');
+  // Liaison poste (device) <-> caisse : 1 poste = 1 caisse.
+  // - deviceId : UUID cote client, stocke en localStorage.
+  // - registerId/storeId : non renseignes tant que la caisse n'a pas
+  //   ete choisie (premier accès sur ce poste). Un ecran de selection
+  //   s'affiche pour que l'utilisateur pique une caisse libre.
+  const [deviceId, setDeviceId] = useState<string | null>(null);
+  const [storeId, setStoreId] = useState<string>('');
+  const [registerId, setRegisterId] = useState<string>('');
+  const [pickerNeeded, setPickerNeeded] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    let id = localStorage.getItem('webpos_device_id');
+    if (!id) {
+      // crypto.randomUUID est dispo dans tous les navigateurs modernes
+      // (Safari 15.4+, Chrome 92+, Firefox 95+).
+      id = (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
+        ? crypto.randomUUID()
+        : `dev-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      localStorage.setItem('webpos_device_id', id);
+    }
+    setDeviceId(id);
+    const bound = registers.find((r) => r.device_id === id);
+    if (bound) {
+      setStoreId(bound.store_id);
+      setRegisterId(bound.id);
+      setPickerNeeded(false);
+    } else {
+      setStoreId('');
+      setRegisterId('');
+      setPickerNeeded(true);
+    }
+  }, [registers]);
+
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessionLoading, setSessionLoading] = useState(true);
   const [showOpenSession, setShowOpenSession] = useState(false);
@@ -975,6 +1007,27 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
     return () => document.removeEventListener('keydown', onKey, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 1) On attend la resolution du deviceId cote client.
+  if (!deviceId) {
+    return <div className="p-8 text-ink-soft">Chargement caisse…</div>;
+  }
+
+  // 2) Le poste n'est lie a aucune caisse : ecran de choix.
+  if (pickerNeeded) {
+    return (
+      <RegisterPicker
+        stores={stores}
+        registers={registers}
+        deviceId={deviceId}
+        onBound={(sId, rId) => {
+          setStoreId(sId);
+          setRegisterId(rId);
+          setPickerNeeded(false);
+        }}
+      />
+    );
+  }
 
   if (sessionLoading) {
     return <div className="p-8 text-ink-soft">Chargement caisse…</div>;

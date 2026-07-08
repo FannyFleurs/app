@@ -45,8 +45,11 @@ export default async function CaissePage() {
       ORDER BY s.name`,
     [user.id, user.organizationId, user.role],
   );
-  const registers = await query<{ id: string; store_id: string; code: string; name: string }>(
-    `SELECT id, store_id, code, name FROM registers
+  const registers = await query<{
+    id: string; store_id: string; code: string; name: string;
+    device_id: string | null; device_name: string | null;
+  }>(
+    `SELECT id, store_id, code, name, device_id, device_name FROM registers
       WHERE organization_id = $1 AND is_active = TRUE ORDER BY name`,
     [user.organizationId],
   );

@@ -19,6 +19,7 @@ interface Store {
 interface Register {
   id: string; code: string; name: string; store_id: string; store_name: string;
   is_active: boolean;
+  device_id: string | null; device_name: string | null; bound_at: string | null;
 }
 
 interface TaxRate {
@@ -349,6 +350,28 @@ function RegistersPanel({ registers, stores, canWrite, onChange }: {
   registers: Register[]; stores: Store[]; canWrite: boolean; onChange: () => void;
 }) {
   const [editing, setEditing] = useState<Register | null | undefined>(undefined);
+  const [releasing, setReleasing] = useState<string | null>(null);
+
+  async function release(r: Register) {
+    const label = r.device_name ? `"${r.device_name}"` : 'ce poste';
+    if (!confirm(
+      `Liberer la caisse "${r.name}" de ${label} ?\n\n` +
+      `Le poste actuellement lie ne pourra plus utiliser cette caisse, ` +
+      `et vous devrez la re-selectionner sur un autre appareil au prochain acces.`,
+    )) return;
+    setReleasing(r.id);
+    try {
+      const res = await fetch(`/api/registers/${r.id}/release`, { method: 'POST' });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        alert(j.message ?? j.error ?? 'Erreur');
+        return;
+      }
+      onChange();
+    } finally {
+      setReleasing(null);
+    }
+  }
 
   return (
     <div className="space-y-3">
@@ -366,6 +389,7 @@ function RegistersPanel({ registers, stores, canWrite, onChange }: {
               <th className="text-left px-4 py-3 font-semibold">Code</th>
               <th className="text-left px-4 py-3 font-semibold">Nom</th>
               <th className="text-left px-4 py-3 font-semibold">Boutique</th>
+              <th className="text-left px-4 py-3 font-semibold">Poste lié</th>
               <th className="text-center px-4 py-3 font-semibold">État</th>
               <th></th>
             </tr>
@@ -376,10 +400,33 @@ function RegistersPanel({ registers, stores, canWrite, onChange }: {
                 <td className="px-4 py-3 font-mono text-xs">{r.code}</td>
                 <td className="px-4 py-3 font-medium">{r.name}</td>
                 <td className="px-4 py-3 text-ink-soft">{r.store_name}</td>
+                <td className="px-4 py-3">
+                  {r.device_id ? (
+                    <div className="text-xs">
+                      <div className="font-medium">{r.device_name ?? 'Poste sans nom'}</div>
+                      {r.bound_at && (
+                        <div className="text-ink-soft">
+                          depuis le {new Date(r.bound_at).toLocaleDateString('fr-FR')}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-xs text-ink-soft">Aucun</span>
+                  )}
+                </td>
                 <td className="px-4 py-3 text-center">
                   {r.is_active ? <Badge tone="success">Active</Badge> : <Badge tone="warning">Désactivée</Badge>}
                 </td>
-                <td className="px-4 py-3 text-right">
+                <td className="px-4 py-3 text-right space-x-3 whitespace-nowrap">
+                  {canWrite && r.device_id && (
+                    <button
+                      onClick={() => void release(r)}
+                      disabled={releasing === r.id}
+                      className="text-red-600 text-xs hover:underline disabled:opacity-50"
+                    >
+                      {releasing === r.id ? 'Libération…' : 'Libérer'}
+                    </button>
+                  )}
                   {canWrite && (
                     <button onClick={() => setEditing(r)} className="text-accent-deep text-xs hover:underline">
                       Modifier
@@ -391,6 +438,12 @@ function RegistersPanel({ registers, stores, canWrite, onChange }: {
           </tbody>
         </table>
       </div>
+
+      <p className="text-xs text-ink-soft">
+        Une caisse est liée à un seul poste (tablette, iPad, PC). Pour la
+        transférer sur un autre appareil, cliquez sur <strong>Libérer</strong> :
+        la caisse redeviendra sélectionnable au prochain accès sur un nouveau poste.
+      </p>
 
       {editing !== undefined && (
         <RegisterFormModal
