@@ -14,6 +14,7 @@ interface Product {
   is_top_product?: boolean;
   no_discount?: boolean;
   color?: string | null;
+  store_ids?: string[];
 }
 
 // Palette de couleurs pré-définies pour les tuiles caisse — cohérente
@@ -43,12 +44,16 @@ export default function ProductFormModal({
 }) {
   const defaultTax = taxRates.find((t) => t.is_default) ?? taxRates[0];
   const [liveCategories, setLiveCategories] = useState(categories);
-  // Recharge la liste des catégories à l'ouverture pour intégrer celles
-  // créées depuis la dernière navigation.
+  const [stores, setStores] = useState<{ id: string; name: string }[]>([]);
+  // Recharge la liste des catégories + boutiques à l'ouverture.
   useEffect(() => {
     void (async () => {
-      const r = await fetch('/api/categories');
-      if (r.ok) setLiveCategories((await r.json()).categories);
+      const [rC, rS] = await Promise.all([
+        fetch('/api/categories'),
+        fetch('/api/me'),
+      ]);
+      if (rC.ok) setLiveCategories((await rC.json()).categories);
+      if (rS.ok) setStores((await rS.json()).stores ?? []);
     })();
   }, []);
   const [form, setForm] = useState({
@@ -68,6 +73,7 @@ export default function ProductFormModal({
     is_top_product: product?.is_top_product ?? false,
     no_discount: product?.no_discount ?? false,
     color: product?.color ?? null,
+    store_ids: product?.store_ids ?? [],
     price_change_reason: '',
   });
   const [error, setError] = useState<string | null>(null);
@@ -92,6 +98,7 @@ export default function ProductFormModal({
       is_top_product: form.is_top_product,
       no_discount: form.no_discount,
       color: form.color,
+      store_ids: form.store_ids,
     };
     if (product && form.price_change_reason) payload.price_change_reason = form.price_change_reason;
     const res = product
@@ -265,6 +272,58 @@ export default function ProductFormModal({
               Couleur de fond appliquée à la tuile article sur la grille caisse.
             </p>
           </Field>
+
+          {stores.length > 1 && (
+            <Field label="Boutiques concernées" full>
+              <div className="mt-1 space-y-1.5">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={form.store_ids.length === 0}
+                    onChange={(e) => {
+                      if (e.target.checked) setForm({ ...form, store_ids: [] });
+                    }}
+                  />
+                  <span className="font-medium">Toutes les boutiques</span>
+                </label>
+                {form.store_ids.length > 0 && (
+                  <div className="ml-6 space-y-1 border-l border-border pl-3">
+                    {stores.map((s) => {
+                      const checked = form.store_ids.includes(s.id);
+                      return (
+                        <label key={s.id} className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) => {
+                              const next = e.target.checked
+                                ? [...form.store_ids, s.id]
+                                : form.store_ids.filter((x) => x !== s.id);
+                              setForm({ ...form, store_ids: next });
+                            }}
+                          />
+                          {s.name}
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+                {form.store_ids.length === 0 && stores.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => setForm({ ...form, store_ids: [stores[0]!.id] })}
+                    className="ml-6 text-xs text-accent-deep hover:underline"
+                  >
+                    ↳ Limiter à certaines boutiques
+                  </button>
+                )}
+              </div>
+              <p className="mt-2 text-xs text-ink-soft">
+                Si aucune boutique n&apos;est cochée, le produit est visible dans toutes les boutiques de l&apos;organisation.
+              </p>
+            </Field>
+          )}
+
           {product && (
             <Field label="Raison du changement de prix" full>
               <input className="input" value={form.price_change_reason}

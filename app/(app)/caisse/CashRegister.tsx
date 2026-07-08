@@ -196,11 +196,14 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
 
   const searchRef = useRef<HTMLInputElement>(null);
 
-  // Charge produits + catégories
+  // Charge produits + catégories (re-fetch a chaque changement de boutique
+  // — la portee des produits par store_ids peut varier d'une boutique a
+  // l'autre).
   useEffect(() => {
+    if (!storeId) return;
     void (async () => {
       const [pRes, cRes] = await Promise.all([
-        fetch('/api/products?pos=1'),
+        fetch(`/api/products?pos=1&store_id=${encodeURIComponent(storeId)}`),
         fetch('/api/categories'),
       ]);
       if (pRes.ok) {
@@ -215,7 +218,7 @@ export default function CashRegister({ stores, registers, taxRates, currentUser,
       }
       if (cRes.ok) setCategories((await cRes.json()).categories);
     })();
-  }, []);
+  }, [storeId]);
 
   // Vérifie session caisse
   const refreshSession = useCallback(async () => {

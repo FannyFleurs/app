@@ -28,6 +28,7 @@ const patchSchema = z.object({
   visible_in_pos: z.boolean().optional(),
   is_active: z.boolean().optional(),
   tags: z.array(z.string()).optional(),
+  store_ids: z.array(z.string().uuid()).optional(),
 });
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
@@ -74,16 +75,19 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     let hasTopCol = true;
     let hasNdCol = true;
     let hasColorCol = true;
-    if (patch.is_top_product != null || patch.no_discount != null || patch.color !== undefined) {
+    let hasStoreIdsCol = true;
+    if (patch.is_top_product != null || patch.no_discount != null
+        || patch.color !== undefined || patch.store_ids !== undefined) {
       const colCheck = await client.query<{ column_name: string }>(
         `SELECT column_name FROM information_schema.columns
           WHERE table_name = 'products'
-            AND column_name IN ('is_top_product','no_discount','color')`,
+            AND column_name IN ('is_top_product','no_discount','color','store_ids')`,
       );
       const set = new Set(colCheck.rows.map((r) => r.column_name));
       hasTopCol = set.has('is_top_product');
       hasNdCol = set.has('no_discount');
       hasColorCol = set.has('color');
+      hasStoreIdsCol = set.has('store_ids');
     }
 
     const setParts: string[] = ['updated_by = $1', 'updated_at = now()'];
@@ -94,6 +98,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       if (k === 'is_top_product' && !hasTopCol) continue;
       if (k === 'no_discount' && !hasNdCol) continue;
       if (k === 'color' && !hasColorCol) continue;
+      if (k === 'store_ids' && !hasStoreIdsCol) continue;
       setParts.push(`${k} = $${i++}`);
       values.push(v);
     }

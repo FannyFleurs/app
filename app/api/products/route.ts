@@ -30,7 +30,30 @@ const productSchema = z.object({
   no_discount: z.boolean().default(false),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional().nullable(),
   tags: z.array(z.string()).default([]),
+  /**
+   * Portee du produit par boutique. Array vide = visible dans TOUTES
+   * les boutiques de l'org (retrocompat). Sinon, uniquement dans les
+   * boutiques listees.
+   */
+  store_ids: z.array(z.string().uuid()).default([]),
 });
+
+/**
+ * Cache d'introspection : indique si la colonne products.store_ids
+ * existe (migration 0025 appliquee).
+ */
+let _hasStoreIds: boolean | null = null;
+async function hasStoreIdsColumn(): Promise<boolean> {
+  if (_hasStoreIds !== null) return _hasStoreIds;
+  const r = await query<{ exists: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'products' AND column_name = 'store_ids'
+     ) AS exists`,
+  );
+  _hasStoreIds = !!r.rows[0]?.exists;
+  return _hasStoreIds;
+}
 
 // Cache d'introspection : indique si la colonne products.is_top_product
 // existe (migration 0008 appliquée). Évite de planter si la migration n'a
@@ -55,6 +78,7 @@ export async function GET(req: Request) {
   const q = url.searchParams.get('q')?.trim();
   const onlyActive = url.searchParams.get('active') !== 'false';
   const inPos = url.searchParams.get('pos') === '1';
+  const storeId = url.searchParams.get('store_id') || undefined;
 
   const params: unknown[] = [g.user.organizationId];
   let where = `p.organization_id = $1`;
@@ -64,6 +88,12 @@ export async function GET(req: Request) {
     params.push(`%${q.toLowerCase()}%`);
     params.push(q);
     where += ` AND (lower(p.name) LIKE $${params.length - 1} OR p.barcode = $${params.length} OR p.sku = $${params.length})`;
+  }
+  // Filtre par boutique : produit visible si son store_ids est vide
+  // (portee "toutes") OU contient le store demande.
+  if (storeId && (await hasStoreIdsColumn())) {
+    params.push(storeId);
+    where += ` AND (COALESCE(array_length(p.store_ids, 1), 0) = 0 OR p.store_ids @> ARRAY[$${params.length}]::uuid[])`;
   }
 
   const topCol = (await hasTopColumn())
@@ -89,6 +119,9 @@ export async function GET(req: Request) {
      ) AS exists`,
   );
   const colorCol = colorRes.rows[0]?.exists ? `p.color` : `NULL AS color`;
+  const storeIdsCol = (await hasStoreIdsColumn())
+    ? `p.store_ids`
+    : `'{}'::uuid[] AS store_ids`;
 
   const { rows } = await query(
     `SELECT p.id, p.name, p.short_description, p.sku, p.barcode, p.image_url, p.unit,
@@ -97,6 +130,7 @@ export async function GET(req: Request) {
             ${topCol},
             ${ndCol},
             ${colorCol},
+            ${storeIdsCol},
             p.tags, p.is_seasonal, p.is_customizable,
             t.rate AS tax_rate, t.id AS tax_rate_id, t.code AS tax_rate_code, t.label AS tax_rate_label,
             c.name AS category_name, c.color AS category_color
@@ -166,6 +200,10 @@ export async function POST(req: Request) {
     if (colorExists.rows[0]?.exists) {
       cols.push('color');
       values.push(p.color ?? null);
+    }
+    if (await hasStoreIdsColumn()) {
+      cols.push('store_ids');
+      values.push(p.store_ids);
     }
     // created_by + updated_by partagent la même valeur
     cols.push('created_by', 'updated_by');
