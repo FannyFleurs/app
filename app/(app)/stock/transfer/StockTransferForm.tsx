@@ -45,6 +45,16 @@ export default function StockTransferForm({ stores }: { stores: Store[] }) {
     setToStoreId(dst);
   }, [stores]);
 
+  // Garde-fou : si la source change et devient egale a la destination,
+  // on repositionne la destination sur la premiere autre boutique.
+  useEffect(() => {
+    if (!fromStoreId) return;
+    if (!toStoreId || toStoreId === fromStoreId) {
+      const dst = stores.find((s) => s.id !== fromStoreId)?.id ?? '';
+      setToStoreId(dst);
+    }
+  }, [fromStoreId, toStoreId, stores]);
+
   // Recharge les produits + le stock de la boutique source.
   useEffect(() => {
     if (!fromStoreId) return;
@@ -135,24 +145,24 @@ export default function StockTransferForm({ stores }: { stores: Store[] }) {
     && fromStoreId !== toStoreId && quantity > 0 && quantity <= currentStock;
 
   return (
-    <div className="p-6 md:p-8 max-w-3xl space-y-5">
+    <div className="p-6 md:p-8 w-full space-y-5">
       <div>
         <Link href="/stock" className="text-sm text-ink-soft hover:text-ink">← Stock</Link>
         <h1 className="text-2xl font-semibold tracking-tight mt-1">Transfert de stock</h1>
-        <p className="mt-1 text-sm text-ink-soft">
+        <p className="mt-1 text-sm text-ink-soft max-w-3xl">
           Déplacez du stock d&apos;une boutique à l&apos;autre. Si le produit
           n&apos;est pas encore disponible dans la boutique destination, il y
           est ajouté automatiquement.
         </p>
       </div>
 
-      {/* Boutiques */}
+      {/* Boutiques — pleine largeur en haut */}
       <div className="card p-5 space-y-3">
-        <div className="grid grid-cols-[1fr_auto_1fr] gap-3 items-end">
+        <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr] gap-3 items-end">
           <div>
             <label className="text-xs font-medium text-ink-soft">Depuis</label>
             <select
-              className="input mt-1 h-12 text-base"
+              className="input mt-1 h-12 text-base w-full"
               value={fromStoreId}
               onChange={(e) => { setFromStoreId(e.target.value); setProductId(''); }}
             >
@@ -164,14 +174,14 @@ export default function StockTransferForm({ stores }: { stores: Store[] }) {
           <button
             type="button"
             onClick={switchStores}
-            className="h-12 w-12 grid place-items-center rounded-xl border border-border hover:bg-gray-50 text-ink-soft"
+            className="h-12 sm:w-12 w-full grid place-items-center rounded-xl border border-border hover:bg-gray-50 text-ink-soft"
             title="Inverser"
             aria-label="Inverser les boutiques"
           >⇄</button>
           <div>
             <label className="text-xs font-medium text-ink-soft">Vers</label>
             <select
-              className="input mt-1 h-12 text-base"
+              className="input mt-1 h-12 text-base w-full"
               value={toStoreId}
               onChange={(e) => setToStoreId(e.target.value)}
             >
@@ -182,6 +192,10 @@ export default function StockTransferForm({ stores }: { stores: Store[] }) {
           </div>
         </div>
       </div>
+
+      {/* 2 colonnes en desktop : produit a gauche, quantite+motif+resume a droite */}
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-5 items-start">
+        <div className="space-y-5">
 
       {/* Recherche produit */}
       <div className="card p-5 space-y-3">
@@ -194,7 +208,7 @@ export default function StockTransferForm({ stores }: { stores: Store[] }) {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
-        <div className="max-h-56 overflow-y-auto -mx-1 px-1 space-y-1">
+        <div className="max-h-[420px] overflow-y-auto -mx-1 px-1 space-y-1">
           {filtered.map((p) => {
             const isSelected = p.id === productId;
             const qty = stock[p.id] ?? 0;
@@ -228,8 +242,13 @@ export default function StockTransferForm({ stores }: { stores: Store[] }) {
         </div>
       </div>
 
+        </div>
+
+        {/* Colonne droite : quantite, motif, feedback */}
+        <div className="space-y-4 lg:sticky lg:top-4 self-start">
+
       {/* Quantité + motif */}
-      {currentProduct && (
+      {currentProduct ? (
         <div className="card p-5 space-y-3">
           <div className="flex items-baseline justify-between">
             <div className="font-medium">{currentProduct.name}</div>
@@ -269,6 +288,23 @@ export default function StockTransferForm({ stores }: { stores: Store[] }) {
               maxLength={200}
             />
           </div>
+
+          <div className="flex justify-end gap-2 pt-1">
+            <Link href="/stock" className="btn-ghost h-12 text-base px-5 inline-flex items-center">
+              Terminer
+            </Link>
+            <button
+              onClick={() => void submit()}
+              disabled={!canSubmit || busy}
+              className="btn-primary h-12 text-base font-semibold px-6"
+            >
+              {busy ? 'Transfert…' : `Transférer ${quantity > 0 ? quantity : ''}`}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="card p-6 text-center text-sm text-ink-soft">
+          Sélectionnez un produit dans la liste à gauche pour définir la quantité à transférer.
         </div>
       )}
 
@@ -288,17 +324,7 @@ export default function StockTransferForm({ stores }: { stores: Store[] }) {
         </div>
       )}
 
-      <div className="flex justify-end gap-2">
-        <Link href="/stock" className="btn-ghost h-12 text-base px-5 inline-flex items-center">
-          Terminer
-        </Link>
-        <button
-          onClick={() => void submit()}
-          disabled={!canSubmit || busy}
-          className="btn-primary h-12 text-base font-semibold px-6"
-        >
-          {busy ? 'Transfert…' : `Transférer ${quantity > 0 ? quantity : ''}`}
-        </button>
+        </div>
       </div>
     </div>
   );
