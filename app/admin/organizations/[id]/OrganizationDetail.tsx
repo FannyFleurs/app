@@ -126,6 +126,8 @@ export default function OrganizationDetail({ id }: { id: string }) {
 
       <BoundRegisters id={o.id} version={version} />
 
+      <OrgUsers id={o.id} />
+
       <section>
         <h3 className="text-sm font-semibold uppercase tracking-widest text-ink-soft mb-2">
           Historique des actions
@@ -553,6 +555,80 @@ function BoundRegisters({ id, version }: { id: string; version: number }) {
                   {busy === r.id ? '…' : 'Libérer'}
                 </button>
               )}
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** Utilisateurs de l'org + réinitialisation de mot de passe (super-admin). */
+interface OrgUserRow {
+  id: string; full_name: string; email: string; role: string;
+  is_active: boolean; has_password: boolean;
+}
+
+function OrgUsers({ id }: { id: string }) {
+  const [users, setUsers] = useState<OrgUserRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  async function reload() {
+    setLoading(true);
+    const r = await fetch(`/api/admin/organizations/${id}/users`, { cache: 'no-store' });
+    if (r.ok) setUsers((await r.json()).users ?? []);
+    setLoading(false);
+  }
+  useEffect(() => { void reload(); /* eslint-disable-next-line */ }, [id]);
+
+  async function reset(u: OrgUserRow) {
+    const pwd = window.prompt(
+      `Nouveau mot de passe pour ${u.full_name} (${u.email}) — 8 caractères minimum :`,
+    );
+    if (!pwd) return;
+    if (pwd.length < 8) { alert('8 caractères minimum.'); return; }
+    setBusy(u.id);
+    const r = await fetch(`/api/admin/organizations/${id}/users/${u.id}/reset-password`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pwd }),
+    });
+    setBusy(null);
+    if (r.ok) {
+      alert(`Mot de passe réinitialisé. Communiquez-le à ${u.full_name} :\n\n${pwd}`);
+    } else {
+      const j = await r.json().catch(() => ({}));
+      alert(j.message ?? j.error ?? 'Erreur');
+    }
+  }
+
+  return (
+    <section className="card p-5 space-y-3">
+      <h3 className="font-semibold">Utilisateurs</h3>
+      {loading ? (
+        <div className="text-sm text-ink-soft py-2">Chargement…</div>
+      ) : users.length === 0 ? (
+        <div className="text-sm text-ink-soft">Aucun utilisateur.</div>
+      ) : (
+        <div className="rounded-xl border border-border divide-y divide-border overflow-hidden">
+          {users.map((u) => (
+            <div key={u.id} className="flex items-center gap-3 px-4 py-2.5">
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium truncate">
+                  {u.full_name}
+                  <span className="text-ink-soft font-normal"> · {u.email}</span>
+                </div>
+                <div className="text-xs text-ink-soft">
+                  {u.role}{!u.has_password && ' · pas de mot de passe'}
+                </div>
+              </div>
+              <button
+                onClick={() => void reset(u)}
+                disabled={busy === u.id}
+                className="btn-ghost text-xs text-accent-deep hover:bg-accent-soft disabled:opacity-50"
+              >
+                {busy === u.id ? '…' : 'Réinitialiser le mot de passe'}
+              </button>
             </div>
           ))}
         </div>

@@ -19,6 +19,7 @@ export default function CaisseLogin() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [forgot, setForgot] = useState(false);
 
   if (mode === 'pin') {
     return (
@@ -99,6 +100,20 @@ export default function CaisseLogin() {
           <button type="submit" disabled={loading} className="btn-primary w-full h-11">
             {loading ? 'Connexion…' : 'Se connecter'}
           </button>
+          <button
+            type="button"
+            onClick={() => setForgot((v) => !v)}
+            className="w-full text-center text-xs text-ink-soft hover:text-ink underline"
+          >
+            Mot de passe oublié ?
+          </button>
+          {forgot && (
+            <div className="rounded-xl bg-gray-50 border border-border px-3 py-2 text-xs text-ink-soft">
+              Contactez votre administrateur : il peut réinitialiser votre mot
+              de passe depuis les paramètres (Gestion des utilisateurs). En
+              caisse, la connexion rapide se fait par code PIN.
+            </div>
+          )}
         </form>
 
         <div className="mt-4 text-center">

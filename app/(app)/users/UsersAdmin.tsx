@@ -164,6 +164,7 @@ function UserFormModal({ user, stores, onClose, onSaved }: {
   const [role, setRole] = useState<string>(user?.role ?? 'vendeur');
   const [pin, setPin] = useState('');
   const [password, setPassword] = useState('');
+  const [passwordConfirm, setPasswordConfirm] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isActive, setIsActive] = useState(user?.is_active ?? true);
   const [pinRequired, setPinRequired] = useState(user?.pin_required ?? true);
@@ -195,6 +196,9 @@ function UserFormModal({ user, stores, onClose, onSaved }: {
     if (pin && !/^\d{4}$/.test(pin)) { setError('Le PIN doit faire 4 chiffres.'); return; }
     if (password && password.length < 8) {
       setError('Mot de passe : 8 caractères minimum.'); return;
+    }
+    if (password && password !== passwordConfirm) {
+      setError('Les mots de passe ne correspondent pas.'); return;
     }
     if (stores.length > 0 && storeIds.size === 0) {
       setError('Sélectionnez au moins une boutique.'); return;
@@ -373,6 +377,19 @@ function UserFormModal({ user, stores, onClose, onSaved }: {
                 {showPassword ? 'Masquer' : 'Afficher'}
               </button>
             </div>
+            {password.length > 0 && (
+              <input
+                type={showPassword ? 'text' : 'password'}
+                className="input mt-2"
+                value={passwordConfirm}
+                onChange={(e) => setPasswordConfirm(e.target.value)}
+                placeholder="Confirmer le mot de passe"
+                autoComplete="new-password"
+              />
+            )}
+            {password.length > 0 && passwordConfirm.length > 0 && password !== passwordConfirm && (
+              <p className="mt-1 text-xs text-danger">Les mots de passe ne correspondent pas.</p>
+            )}
             <p className="mt-1 text-xs text-ink-soft">
               Sert à la connexion au back-office (bo.) et au suivi du CA
               (email + mot de passe). Le PIN sert uniquement en caisse.

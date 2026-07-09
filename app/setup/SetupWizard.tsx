@@ -30,6 +30,7 @@ interface FormState {
   admin_email: string;
   admin_pin: string;
   admin_password: string;
+  admin_password_confirm: string;
   // Offre choisie
   plan: 'essentiel' | 'croissance';
 }
@@ -82,6 +83,7 @@ export default function SetupWizard() {
     admin_email: '',
     admin_pin: '',
     admin_password: '',
+    admin_password_confirm: '',
     plan: 'croissance',
   });
 
@@ -115,6 +117,7 @@ export default function SetupWizard() {
       case 'register': return f.register_code.trim().length > 0 && f.register_name.trim().length > 0;
       case 'tax':      return f.taxes.length > 0 && f.taxes.every((t) => t.code && t.label && t.rate >= 0);
       case 'admin':    return f.admin_name.trim().length > 0
+                            && f.admin_password === f.admin_password_confirm
                             && /^[^@]+@[^@]+\.[^@]+$/.test(f.admin_email)
                             && /^\d{4}$/.test(f.admin_pin)
                             && f.admin_password.length >= 8;
@@ -382,8 +385,20 @@ export default function SetupWizard() {
                     autoComplete="new-password"
                   />
                   <p className="mt-1 text-xs text-ink-soft">
-                    Sert à la connexion via email + mot de passe (Accès admin).
+                    Sert à la connexion email + mot de passe (back-office, CA).
                   </p>
+                </Field>
+                <Field label="Confirmer le mot de passe *">
+                  <input
+                    type="password"
+                    className="input"
+                    value={f.admin_password_confirm}
+                    onChange={(e) => patch('admin_password_confirm', e.target.value)}
+                    autoComplete="new-password"
+                  />
+                  {f.admin_password_confirm.length > 0 && f.admin_password !== f.admin_password_confirm && (
+                    <p className="mt-1 text-xs text-danger">Les mots de passe ne correspondent pas.</p>
+                  )}
                 </Field>
                 <Field label="PIN (4 chiffres) *">
                   <input
