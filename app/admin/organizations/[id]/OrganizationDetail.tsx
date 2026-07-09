@@ -123,6 +123,8 @@ export default function OrganizationDetail({ id }: { id: string }) {
 
       <ActiveSessions id={o.id} version={version} onChange={() => void reload()} />
 
+      <BoundRegisters id={o.id} version={version} />
+
       <section>
         <h3 className="text-sm font-semibold uppercase tracking-widest text-ink-soft mb-2">
           Historique des actions
@@ -446,6 +448,109 @@ function ActiveSessions({ id, version, onChange }: {
               </div>
             );
           })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/**
+ * Postes (caisses) liés à un appareil physique — modèle « 1 poste = 1
+ * caisse » (migration 0026). Distinct des sessions de connexion : ici on
+ * gère la liaison durable device_id ↔ register. Le super-admin peut
+ * libérer une caisse à distance (changement de tablette, abus…).
+ */
+interface RegisterRow {
+  id: string; code: string; name: string; is_active: boolean;
+  store_name: string;
+  device_id: string | null; device_name: string | null; bound_at: string | null;
+}
+
+function BoundRegisters({ id, version }: { id: string; version: number }) {
+  const [registers, setRegisters] = useState<RegisterRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [migrationNeeded, setMigrationNeeded] = useState(false);
+
+  async function reload() {
+    setLoading(true);
+    const r = await fetch(`/api/admin/organizations/${id}/registers`, { cache: 'no-store' });
+    if (r.ok) {
+      const j = await r.json();
+      setRegisters(j.registers ?? []);
+      setMigrationNeeded(!!j.migration_required);
+    }
+    setLoading(false);
+  }
+  useEffect(() => { void reload(); /* eslint-disable-next-line */ }, [id, version]);
+
+  async function release(rid: string, label: string) {
+    if (!confirm(`Libérer la caisse « ${label} » de son poste ?\n\nLe poste devra re-sélectionner sa caisse au prochain accès.`)) return;
+    setBusy(rid);
+    const r = await fetch(`/api/admin/organizations/${id}/registers/${rid}`, { method: 'DELETE' });
+    setBusy(null);
+    if (r.ok) void reload();
+  }
+
+  const bound = registers.filter((r) => r.device_id);
+
+  return (
+    <section className="card p-5 space-y-3">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h3 className="font-semibold">Postes actifs (caisses liées)</h3>
+          <p className="text-xs mt-0.5 text-ink-soft">
+            Liaison durable « 1 poste = 1 caisse ». Libérez une caisse pour
+            autoriser un nouvel appareil (changement de tablette…).
+            {' '}<strong>{bound.length}</strong> poste(s) actif(s) sur {registers.length} caisse(s).
+          </p>
+        </div>
+        <button onClick={() => void reload()} className="btn-ghost text-xs">Rafraîchir</button>
+      </div>
+
+      {loading ? (
+        <div className="text-sm text-ink-soft py-2">Chargement…</div>
+      ) : migrationNeeded ? (
+        <div className="rounded-xl border border-dashed border-border p-4 text-sm text-ink-soft text-center">
+          Migration 0026 non appliquée sur cette base — liaison postes indisponible.
+        </div>
+      ) : registers.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-border p-4 text-sm text-ink-soft text-center">
+          Aucune caisse configurée pour cette organisation.
+        </div>
+      ) : (
+        <div className="rounded-xl border border-border divide-y divide-border overflow-hidden">
+          {registers.map((r) => (
+            <div key={r.id} className="flex items-center gap-3 px-4 py-2.5">
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium truncate flex items-center gap-2">
+                  <span className="font-mono text-xs text-ink-soft">{r.code}</span>
+                  {r.name}
+                  <span className="text-ink-soft font-normal">· {r.store_name}</span>
+                </div>
+                <div className="text-xs mt-0.5">
+                  {r.device_id ? (
+                    <span className="text-ink-soft">
+                      Poste : <strong className="text-ink">{r.device_name ?? 'sans nom'}</strong>
+                      {r.bound_at && ` · lié le ${new Date(r.bound_at).toLocaleString('fr-FR')}`}
+                    </span>
+                  ) : (
+                    <span className="text-ink-soft/70">Libre — aucun poste lié</span>
+                  )}
+                </div>
+              </div>
+              {r.device_id && (
+                <button
+                  onClick={() => void release(r.id, r.name)}
+                  disabled={busy === r.id}
+                  className="btn-ghost text-xs text-danger hover:bg-danger/10 disabled:opacity-50"
+                  title="Libérer la caisse à distance"
+                >
+                  {busy === r.id ? '…' : 'Libérer'}
+                </button>
+              )}
+            </div>
+          ))}
         </div>
       )}
     </section>
