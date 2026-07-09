@@ -3,14 +3,19 @@
 import { useRef, useState } from 'react';
 import type { PlatformSettings } from '@/lib/settings/platform';
 
-export default function PlatformConfigForm({ initial }: { initial: PlatformSettings }) {
-  const [s, setS] = useState<PlatformSettings>(initial);
+export type FormData = PlatformSettings & {
+  stripe_secret_key_set: boolean;
+  stripe_webhook_secret_set: boolean;
+};
+
+export default function PlatformConfigForm({ initial }: { initial: FormData }) {
+  const [s, setS] = useState<FormData>(initial);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  function patch<K extends keyof PlatformSettings>(k: K, v: PlatformSettings[K]) {
+  function patch<K extends keyof FormData>(k: K, v: FormData[K]) {
     setS((prev) => ({ ...prev, [k]: v }));
   }
 
@@ -196,17 +201,23 @@ export default function PlatformConfigForm({ initial }: { initial: PlatformSetti
                    placeholder="pk_live_…" />
           </div>
           <div>
-            <label className="text-xs font-medium text-ink-soft">Clé secrète (sk_…)</label>
+            <label className="text-xs font-medium text-ink-soft">
+              Clé secrète (sk_…)
+              {s.stripe_secret_key_set && <span className="ml-1 text-success">· déjà définie</span>}
+            </label>
             <input type="password" className="input mt-1 font-mono text-sm" value={s.stripe_secret_key}
                    onChange={(e) => patch('stripe_secret_key', e.target.value)}
-                   placeholder="sk_live_…" />
+                   placeholder={s.stripe_secret_key_set ? 'Laisser vide pour conserver' : 'sk_live_…'} />
           </div>
         </div>
         <div>
-          <label className="text-xs font-medium text-ink-soft">Webhook signing secret (whsec_…)</label>
+          <label className="text-xs font-medium text-ink-soft">
+            Webhook signing secret (whsec_…)
+            {s.stripe_webhook_secret_set && <span className="ml-1 text-success">· déjà défini</span>}
+          </label>
           <input type="password" className="input mt-1 font-mono text-sm" value={s.stripe_webhook_secret}
                  onChange={(e) => patch('stripe_webhook_secret', e.target.value)}
-                 placeholder="whsec_…" />
+                 placeholder={s.stripe_webhook_secret_set ? 'Laisser vide pour conserver' : 'whsec_…'} />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>

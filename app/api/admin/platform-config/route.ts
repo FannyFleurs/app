@@ -44,16 +44,31 @@ async function readRaw(): Promise<Partial<PlatformSettings>> {
   return rows[0]?.value ?? {};
 }
 
+/**
+ * Ne JAMAIS renvoyer les secrets (clé secrète Stripe, webhook secret) au
+ * navigateur : on les masque et on expose seulement un flag "défini".
+ */
+function safeSettings(raw: Partial<PlatformSettings>) {
+  const merged = mergePlatformDefaults(raw);
+  return {
+    ...merged,
+    stripe_secret_key: '',
+    stripe_secret_key_set: !!merged.stripe_secret_key,
+    stripe_webhook_secret: '',
+    stripe_webhook_secret_set: !!merged.stripe_webhook_secret,
+  };
+}
+
 export async function GET() {
   const g = await requireSuperAdmin();
   if ('response' in g) return g.response;
   try {
     const raw = await readRaw();
-    return NextResponse.json({ settings: mergePlatformDefaults(raw) });
+    return NextResponse.json({ settings: safeSettings(raw) });
   } catch {
     // Migration 0029 pas encore appliquee.
     return NextResponse.json({
-      settings: mergePlatformDefaults(null),
+      settings: safeSettings({}),
       migration_required: '0029_platform_settings',
     });
   }
@@ -66,7 +81,12 @@ export async function PATCH(req: Request) {
   if ('response' in parsed) return parsed.response;
 
   const existing = await readRaw();
-  const merged = mergePlatformDefaults({ ...existing, ...parsed.data });
+  // Les secrets ne sont écrasés QUE si une nouvelle valeur non vide est
+  // fournie (le front envoie vide pour "conserver l'existant").
+  const d = { ...parsed.data };
+  if (!d.stripe_secret_key || !d.stripe_secret_key.trim()) delete d.stripe_secret_key;
+  if (!d.stripe_webhook_secret || !d.stripe_webhook_secret.trim()) delete d.stripe_webhook_secret;
+  const merged = mergePlatformDefaults({ ...existing, ...d });
 
   await query(
     `INSERT INTO platform_settings (id, value, updated_by, updated_at)
@@ -83,5 +103,5 @@ export async function PATCH(req: Request) {
     payload: { keys: Object.keys(parsed.data) },
   });
 
-  return NextResponse.json({ settings: merged });
+  return NextResponse.json({ settings: safeSettings(merged) });
 }

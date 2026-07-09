@@ -1,19 +1,26 @@
 import { query } from '@/lib/db/client';
 import { mergePlatformDefaults, type PlatformSettings } from '@/lib/settings/platform';
-import PlatformConfigForm from './PlatformConfigForm';
+import PlatformConfigForm, { type FormData } from './PlatformConfigForm';
 
 export const dynamic = 'force-dynamic';
 
 export default async function AdminConfigurationPage() {
-  let initial: PlatformSettings;
+  let merged: PlatformSettings = mergePlatformDefaults(null);
   try {
     const { rows } = await query<{ value: Partial<PlatformSettings> }>(
       `SELECT value FROM platform_settings WHERE id = 1`,
     );
-    initial = mergePlatformDefaults(rows[0]?.value ?? null);
-  } catch {
-    initial = mergePlatformDefaults(null);
-  }
+    merged = mergePlatformDefaults(rows[0]?.value ?? null);
+  } catch { /* migration 0029 absente */ }
+
+  // On ne transmet JAMAIS les secrets au client : masqués + flag "défini".
+  const initial: FormData = {
+    ...merged,
+    stripe_secret_key: '',
+    stripe_secret_key_set: !!merged.stripe_secret_key,
+    stripe_webhook_secret: '',
+    stripe_webhook_secret_set: !!merged.stripe_webhook_secret,
+  };
 
   return (
     <div className="max-w-3xl mx-auto p-6">
