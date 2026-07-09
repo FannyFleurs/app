@@ -224,7 +224,24 @@ function StoresPanel({ stores, canWrite, onChange, planLabel, maxStores }: {
   planLabel: string; maxStores: number | null;
 }) {
   const [editing, setEditing] = useState<Store | null | undefined>(undefined);
+  const [deleting, setDeleting] = useState<string | null>(null);
   const atLimit = maxStores !== null && stores.length >= maxStores;
+
+  async function remove(s: Store) {
+    if (!confirm(`Supprimer définitivement la boutique « ${s.name} » et ses caisses ?\n\nImpossible si des ventes y sont enregistrées.`)) return;
+    setDeleting(s.id);
+    try {
+      const r = await fetch(`/api/stores/${s.id}`, { method: 'DELETE' });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        alert(j.message ?? j.error ?? 'Suppression impossible.');
+        return;
+      }
+      onChange();
+    } finally {
+      setDeleting(null);
+    }
+  }
 
   return (
     <div className="space-y-3">
@@ -255,9 +272,20 @@ function StoresPanel({ stores, canWrite, onChange, planLabel, maxStores }: {
               {[s.address?.line1, s.address?.zip, s.address?.city].filter(Boolean).join(' ') || '—'}
             </div>
             {canWrite && (
-              <button onClick={() => setEditing(s)} className="mt-3 text-xs text-accent-deep hover:underline">
-                Modifier
-              </button>
+              <div className="mt-3 flex items-center gap-3">
+                <button onClick={() => setEditing(s)} className="text-xs text-accent-deep hover:underline">
+                  Modifier
+                </button>
+                {stores.length > 1 && (
+                  <button
+                    onClick={() => void remove(s)}
+                    disabled={deleting === s.id}
+                    className="text-xs text-danger hover:underline disabled:opacity-50"
+                  >
+                    {deleting === s.id ? 'Suppression…' : 'Supprimer'}
+                  </button>
+                )}
+              </div>
             )}
           </div>
         ))}

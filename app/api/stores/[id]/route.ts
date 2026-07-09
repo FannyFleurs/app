@@ -48,3 +48,69 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   });
   return NextResponse.json({ ok: true });
 }
+
+/**
+ * Suppression d'une boutique. Refusée si elle a des ventes validées
+ * (données fiscales à conserver) ou si c'est la dernière boutique de
+ * l'organisation. Supprime en cascade ses caisses (registers).
+ */
+export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
+  const g = await requirePermission('settings.write');
+  if ('response' in g) return g.response;
+
+  // La boutique appartient bien à l'org ?
+  const own = await query(
+    `SELECT 1 FROM stores WHERE id = $1 AND organization_id = $2`,
+    [params.id, g.user.organizationId],
+  );
+  if (own.rowCount === 0) return jsonError('NOT_FOUND', 404);
+
+  // Ne pas supprimer la dernière boutique.
+  const total = await query<{ c: string }>(
+    `SELECT COUNT(*)::text AS c FROM stores WHERE organization_id = $1`,
+    [g.user.organizationId],
+  );
+  if (Number(total.rows[0]?.c ?? 0) <= 1) {
+    return NextResponse.json({
+      error: 'LAST_STORE',
+      message: 'Impossible de supprimer la dernière boutique de l\'organisation.',
+    }, { status: 409 });
+  }
+
+  // Bloque si des ventes validées existent (conservation fiscale).
+  try {
+    const sales = await query<{ c: string }>(
+      `SELECT COUNT(*)::text AS c FROM sales
+        WHERE store_id = $1 AND status = 'validated'`,
+      [params.id],
+    );
+    if (Number(sales.rows[0]?.c ?? 0) > 0) {
+      return NextResponse.json({
+        error: 'STORE_HAS_SALES',
+        message: 'Cette boutique a des ventes enregistrées : elle ne peut pas être supprimée (conservation fiscale). Vous pouvez la désactiver à la place.',
+      }, { status: 409 });
+    }
+  } catch { /* table sales absente : on continue */ }
+
+  try {
+    // Les caisses sont supprimées en cascade explicitement (pas de sales).
+    await query(`DELETE FROM registers WHERE store_id = $1`, [params.id]);
+    await query(`DELETE FROM stores WHERE id = $1 AND organization_id = $2`,
+      [params.id, g.user.organizationId]);
+  } catch (err) {
+    const m = (err as Error).message ?? '';
+    // Contrainte FK (données rattachées) : on refuse proprement.
+    return NextResponse.json({
+      error: 'STORE_IN_USE',
+      message: 'Impossible de supprimer : des données sont rattachées à cette boutique. Désactivez-la à la place.',
+      detail: m,
+    }, { status: 409 });
+  }
+
+  await audit({
+    organizationId: g.user.organizationId, userId: g.user.id,
+    action: 'stores.delete', entityType: 'store', entityId: params.id,
+    payload: {},
+  });
+  return NextResponse.json({ ok: true });
+}
