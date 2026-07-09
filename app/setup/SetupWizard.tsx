@@ -29,7 +29,14 @@ interface FormState {
   admin_email: string;
   admin_pin: string;
   admin_password: string;
+  // Offre choisie
+  plan: 'essentiel' | 'croissance';
 }
+
+const PLANS = [
+  { key: 'essentiel' as const, name: 'Essentiel', price: '29', desc: '1 boutique · 1 caisse' },
+  { key: 'croissance' as const, name: 'Croissance', price: '59', desc: 'Caisses illimitées · multi-postes' },
+];
 
 const STEPS = [
   { key: 'company',  label: 'Société' },
@@ -72,6 +79,7 @@ export default function SetupWizard() {
     admin_email: '',
     admin_pin: '',
     admin_password: '',
+    plan: 'croissance',
   });
 
   // Mode multi-tenant : pas de check global, on autorise toujours la création.
@@ -150,15 +158,24 @@ export default function SetupWizard() {
           rate: t.rate,
           is_default: t.is_default,
         })),
+        plan: f.plan,
       }),
     });
-    setBusy(false);
     if (!r.ok) {
+      setBusy(false);
       const j = await r.json().catch(() => ({}));
       setError(j.message ?? j.error ?? 'Erreur');
       return;
     }
     const j = await r.json();
+    // Paiement Stripe requis : on redirige vers le Checkout (on garde
+    // busy=true, la page va changer).
+    if (j.checkout_url) {
+      window.location.assign(j.checkout_url);
+      return;
+    }
+    // Fallback (Stripe non configuré) : compte créé + connecté.
+    setBusy(false);
     setSuccess({ email: j.email });
   }
 
@@ -401,6 +418,36 @@ export default function SetupWizard() {
                 ['Mot de passe', '•'.repeat(Math.min(f.admin_password.length, 12))],
                 ['PIN', '••••'],
               ]} />
+
+              {/* Choix de l'offre */}
+              <div>
+                <div className="text-sm font-semibold mb-2">Votre offre</div>
+                <div className="grid grid-cols-2 gap-3">
+                  {PLANS.map((p) => (
+                    <button
+                      key={p.key}
+                      type="button"
+                      onClick={() => patch('plan', p.key)}
+                      className={`rounded-xl border p-4 text-left transition ${
+                        f.plan === p.key ? 'border-accent bg-accent-soft/40' : 'border-border hover:border-accent'
+                      }`}
+                    >
+                      <div className="font-semibold">{p.name}</div>
+                      <div className="mt-1 flex items-baseline gap-1">
+                        <span className="text-2xl font-semibold">{p.price}</span>
+                        <span className="text-xs text-ink-soft">€ HT / mois</span>
+                      </div>
+                      <div className="mt-1 text-xs text-ink-soft">{p.desc}</div>
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-2 text-xs text-ink-soft">
+                  14 jours d&apos;essai gratuit. Votre carte est enregistrée
+                  maintenant mais n&apos;est débitée qu&apos;à la fin de l&apos;essai.
+                  Résiliable à tout moment.
+                </p>
+              </div>
+
               {error && <div className="rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
             </div>
           )}
@@ -420,7 +467,7 @@ export default function SetupWizard() {
             </button>
           ) : (
             <button onClick={() => void submit()} disabled={busy} className="btn-primary h-12 px-6">
-              {busy ? 'Création…' : '✓ Finaliser et créer le compte'}
+              {busy ? 'Redirection…' : 'Continuer vers le paiement ›'}
             </button>
           )}
         </div>

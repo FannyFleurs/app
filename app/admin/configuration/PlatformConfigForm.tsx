@@ -176,6 +176,63 @@ export default function PlatformConfigForm({ initial }: { initial: PlatformSetti
         </div>
       </section>
 
+      {/* Facturation Stripe (abonnements des boutiques) */}
+      <section className="card p-5 space-y-4">
+        <div>
+          <h2 className="font-semibold">Facturation Stripe (abonnements)</h2>
+          <p className="mt-1 text-xs text-ink-soft">
+            Compte Stripe qui encaisse les abonnements des boutiques. Créez
+            2 produits/prix récurrents (Essentiel 29€, Croissance 59€) dans
+            votre dashboard Stripe et collez leurs <strong>Price ID</strong>
+            (price_…) ci-dessous. Webhook à déclarer :
+            <code className="bg-gray-100 px-1 rounded ml-1">https://VOTRE-DOMAINE/api/webhooks/stripe-billing</code>
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs font-medium text-ink-soft">Clé publique (pk_…)</label>
+            <input className="input mt-1 font-mono text-sm" value={s.stripe_publishable_key}
+                   onChange={(e) => patch('stripe_publishable_key', e.target.value)}
+                   placeholder="pk_live_…" />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-ink-soft">Clé secrète (sk_…)</label>
+            <input type="password" className="input mt-1 font-mono text-sm" value={s.stripe_secret_key}
+                   onChange={(e) => patch('stripe_secret_key', e.target.value)}
+                   placeholder="sk_live_…" />
+          </div>
+        </div>
+        <div>
+          <label className="text-xs font-medium text-ink-soft">Webhook signing secret (whsec_…)</label>
+          <input type="password" className="input mt-1 font-mono text-sm" value={s.stripe_webhook_secret}
+                 onChange={(e) => patch('stripe_webhook_secret', e.target.value)}
+                 placeholder="whsec_…" />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs font-medium text-ink-soft">Price ID — Essentiel (29€)</label>
+            <input className="input mt-1 font-mono text-sm" value={s.stripe_price_essentiel}
+                   onChange={(e) => patch('stripe_price_essentiel', e.target.value)}
+                   placeholder="price_…" />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-ink-soft">Price ID — Croissance (59€)</label>
+            <input className="input mt-1 font-mono text-sm" value={s.stripe_price_croissance}
+                   onChange={(e) => patch('stripe_price_croissance', e.target.value)}
+                   placeholder="price_…" />
+          </div>
+        </div>
+        <div className="max-w-[180px]">
+          <label className="text-xs font-medium text-ink-soft">Jours d&apos;essai</label>
+          <input type="number" min={0} max={90} className="input mt-1" value={s.trial_days}
+                 onChange={(e) => patch('trial_days', Number(e.target.value) || 0)} />
+        </div>
+        <p className="text-xs text-ink-soft">
+          Tant que la clé secrète et au moins un Price ID ne sont pas
+          renseignés, l&apos;inscription reste en essai gratuit sans paiement.
+        </p>
+      </section>
+
       {error && <div className="rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
       {saved && <div className="rounded-xl bg-success/10 px-3 py-2 text-sm text-success">✓ Configuration enregistrée</div>}
 

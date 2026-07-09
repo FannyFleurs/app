@@ -27,6 +27,12 @@ const schema = z.object({
   contact_email: z.string().max(160).optional(),
   contact_phone: z.string().max(40).optional(),
   website: z.string().max(200).optional(),
+  stripe_secret_key: z.string().max(200).optional(),
+  stripe_publishable_key: z.string().max(200).optional(),
+  stripe_webhook_secret: z.string().max(200).optional(),
+  stripe_price_essentiel: z.string().max(100).optional(),
+  stripe_price_croissance: z.string().max(100).optional(),
+  trial_days: z.number().int().min(0).max(90).optional(),
 });
 
 async function readRaw(): Promise<Partial<PlatformSettings>> {

@@ -27,6 +27,16 @@ export interface PlatformSettings {
   contact_email: string;
   contact_phone: string;
   website: string;
+
+  /** ---- Facturation SaaS (Stripe plateforme) ---- */
+  stripe_secret_key: string;
+  stripe_publishable_key: string;
+  stripe_webhook_secret: string;
+  /** Price IDs Stripe des 2 offres (mode subscription). */
+  stripe_price_essentiel: string;
+  stripe_price_croissance: string;
+  /** Durée de l'essai gratuit avant le 1er débit. */
+  trial_days: number;
 }
 
 export const PLATFORM_DEFAULTS: PlatformSettings = {
@@ -43,6 +53,12 @@ export const PLATFORM_DEFAULTS: PlatformSettings = {
   contact_email: '',
   contact_phone: '',
   website: '',
+  stripe_secret_key: '',
+  stripe_publishable_key: '',
+  stripe_webhook_secret: '',
+  stripe_price_essentiel: '',
+  stripe_price_croissance: '',
+  trial_days: 14,
 };
 
 export function mergePlatformDefaults(
@@ -53,7 +69,8 @@ export function mergePlatformDefaults(
   for (const k of Object.keys(PLATFORM_DEFAULTS) as (keyof PlatformSettings)[]) {
     const v = partial[k];
     if (v !== undefined && v !== null) {
-      out[k] = v;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (out as any)[k] = v;
     }
   }
   return out;

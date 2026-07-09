@@ -1,12 +1,16 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { cookies, headers } from 'next/headers';
-import { withTransaction } from '@/lib/db/client';
+import { withTransaction, query } from '@/lib/db/client';
 import { hashPassword } from '@/lib/auth/password';
 import { createSession, sessionCookieOptions } from '@/lib/auth/session';
 import { setTenantCookie } from '@/lib/auth/tenant';
 import { jsonError } from '@/lib/validation/api';
 import { parseJson } from '@/lib/validation/api';
+import {
+  getPlatformConfig, billingConfigured, priceForPlan, subscriptionPlan,
+  createStripeCustomer, createCheckoutSession,
+} from '@/lib/billing/stripe';
 
 export const dynamic = 'force-dynamic';
 
@@ -53,6 +57,8 @@ const schema = z.object({
     rate: z.number().min(0).max(100),
     is_default: z.boolean().optional(),
   })).min(1).max(10),
+  /** Offre choisie (déclenche le paiement Stripe si configuré). */
+  plan: z.enum(['essentiel', 'croissance']).optional(),
 });
 
 const TRIAL_DAYS = 14;
@@ -72,6 +78,14 @@ export async function POST(req: Request) {
   const ip = headers().get('x-forwarded-for')?.split(',')[0]?.trim()
           || headers().get('x-real-ip')
           || null;
+
+  // Facturation : si Stripe est configuré et une offre est choisie, on
+  // exige le paiement (Checkout). Sinon fallback : trial direct + login.
+  const platform = await getPlatformConfig();
+  const plan = d.plan;
+  const priceId = plan ? priceForPlan(platform, plan) : '';
+  const trialDays = platform.trial_days || TRIAL_DAYS;
+  const gated = billingConfigured(platform) && !!plan && !!priceId;
 
   try {
     const created = await withTransaction(async (client) => {
@@ -93,11 +107,12 @@ export async function POST(req: Request) {
         slug = `${base}-${i}`;
       }
 
-      // 3. Organisation
+      // 3. Organisation. Si paiement exigé (gated), l'org reste
+      //    "incomplete" (onboarding_complete=FALSE) jusqu'au Checkout.
       const orgIns = await client.query<{ id: string }>(
         `INSERT INTO organizations
-           (name, legal_name, slug, siret, vat_number, address, contact, plan, trial_ends_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,'trial', now() + ($8 || ' days')::interval)
+           (name, legal_name, slug, siret, vat_number, address, contact, plan, trial_ends_at, onboarding_complete)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,'trial', now() + ($8 || ' days')::interval, $9)
          RETURNING id`,
         [
           d.company.name,
@@ -115,17 +130,24 @@ export async function POST(req: Request) {
             phone: d.company.phone ?? '',
             email: d.company.email ?? '',
           }),
-          String(TRIAL_DAYS),
+          String(trialDays),
+          !gated, // onboarding_complete
         ],
       );
       const orgId = orgIns.rows[0]!.id;
 
-      // 4. Abonnement (trial)
+      // 4. Abonnement. gated -> 'incomplete' (en attente du paiement) ;
+      //    sinon trial actif immediat.
       await client.query(
         `INSERT INTO subscriptions (organization_id, plan, status, current_period_start, current_period_end)
-         VALUES ($1, 'trial', 'active', now(), now() + ($2 || ' days')::interval)
+         VALUES ($1, $2, $3, now(), now() + ($4 || ' days')::interval)
          ON CONFLICT (organization_id) DO NOTHING`,
-        [orgId, String(TRIAL_DAYS)],
+        [
+          orgId,
+          gated ? subscriptionPlan(plan!) : 'trial',
+          gated ? 'incomplete' : 'active',
+          String(trialDays),
+        ],
       );
 
       // 5. Boutique
@@ -173,7 +195,53 @@ export async function POST(req: Request) {
       };
     });
 
-    // 9. Auto-login : session + cookie tenant
+    // 9a. Paiement exigé : on crée le client + la session Checkout Stripe
+    //     et on renvoie l'URL. Pas d'auto-login : l'accès est débloqué
+    //     par le webhook quand la carte est saisie.
+    if (gated) {
+      const h = headers();
+      const host = (h.get('host') ?? '').toLowerCase();
+      const proto = h.get('x-forwarded-proto') ?? 'https';
+      // Domaine app. pour le retour (sur un vrai domaine), sinon même host.
+      const isVercel = host.endsWith('.vercel.app') || host.startsWith('localhost');
+      const base = host.replace(/^www\./, '');
+      const appHost = isVercel ? host : `app.${base}`;
+      const successUrl = `${proto}://${appHost}/login?welcome=1`;
+      const cancelUrl = `${proto}://${host}/setup?canceled=1`;
+
+      try {
+        const customerId = await createStripeCustomer(platform, {
+          email: created.email,
+          name: d.company.name,
+          orgId: created.organization_id,
+        });
+        await query(
+          `UPDATE subscriptions SET stripe_customer_id = $1 WHERE organization_id = $2`,
+          [customerId, created.organization_id],
+        );
+        const session = await createCheckoutSession(platform, {
+          customerId,
+          priceId,
+          orgId: created.organization_id,
+          trialDays,
+          successUrl,
+          cancelUrl,
+        });
+        return NextResponse.json({
+          organization_id: created.organization_id,
+          checkout_url: session.url,
+        }, { status: 201 });
+      } catch (stripeErr) {
+        // eslint-disable-next-line no-console
+        console.error('[setup.stripe]', stripeErr);
+        return NextResponse.json({
+          error: 'STRIPE_ERROR',
+          message: 'Impossible de démarrer le paiement. Réessayez ou contactez le support.',
+        }, { status: 502 });
+      }
+    }
+
+    // 9b. Fallback (Stripe non configuré) : auto-login trial + cookie tenant.
     const token = await createSession({
       userId: created.user_id,
       organizationId: created.organization_id,

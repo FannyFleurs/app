@@ -20,6 +20,28 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const user = await readSessionFromCookie();
   if (!user) redirect(backOffice ? '/bo/login' : '/login');
 
+  // Gate d'accès facturation : une org "incomplete" (paiement non
+  // finalisé) ou dont l'abonnement est résilié/expiré n'accède pas à
+  // l'app. Silencieux si migration 0030 absente. super_admin exempté.
+  if (user.role !== 'super_admin') {
+    try {
+      const gate = await query<{ onboarding_complete: boolean; status: string | null }>(
+        `SELECT o.onboarding_complete, s.status
+           FROM organizations o
+           LEFT JOIN subscriptions s ON s.organization_id = o.id
+          WHERE o.id = $1`,
+        [user.organizationId],
+      );
+      const g = gate.rows[0];
+      if (g && g.onboarding_complete === false) {
+        return <BillingBlock reason="incomplete" />;
+      }
+      if (g && (g.status === 'cancelled' || g.status === 'expired')) {
+        return <BillingBlock reason="cancelled" />;
+      }
+    } catch { /* migration 0030 absente : pas de gate */ }
+  }
+
   const { rows } = await query<{ value: Partial<PosUiSettings> }>(
     `SELECT value FROM settings WHERE organization_id = $1 AND key = $2`,
     [user.organizationId, POS_UI_KEY],
@@ -78,5 +100,33 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     >
       {children}
     </AppShell>
+  );
+}
+
+/** Écran de blocage : abonnement non finalisé ou résilié. */
+function BillingBlock({ reason }: { reason: 'incomplete' | 'cancelled' }) {
+  const isIncomplete = reason === 'incomplete';
+  return (
+    <main className="min-h-screen grid place-items-center bg-gray-50 p-6">
+      <div className="card max-w-md w-full p-8 text-center">
+        <div className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-accent-soft text-accent-deep text-2xl">
+          {isIncomplete ? '⏳' : '🔒'}
+        </div>
+        <h1 className="text-xl font-semibold tracking-tight">
+          {isIncomplete ? 'Finalisez votre inscription' : 'Abonnement inactif'}
+        </h1>
+        <p className="mt-2 text-sm text-ink-soft">
+          {isIncomplete
+            ? 'Votre inscription n\'est pas terminée : ajoutez un moyen de paiement pour activer votre boutique (essai gratuit, aucun débit immédiat).'
+            : 'Votre abonnement a été résilié ou a expiré. Réactivez-le pour retrouver l\'accès à votre caisse.'}
+        </p>
+        <a href="/setup" className="btn-primary mt-5 inline-flex">
+          {isIncomplete ? 'Reprendre l\'inscription' : 'Réactiver mon abonnement'}
+        </a>
+        <p className="mt-3 text-xs text-ink-soft">
+          Besoin d&apos;aide ? Contactez le support.
+        </p>
+      </div>
+    </main>
   );
 }
