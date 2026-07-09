@@ -1,4 +1,4 @@
-# Webpos
+# HelloPos
 
 **Caisse SaaS moderne pour fleuristes, magasins de plantes et commerces végétaux.**
 Conçue *certification-ready* par rapport aux exigences françaises applicables aux
@@ -44,7 +44,7 @@ npm run db:seed
 npm run dev
 # http://localhost:3000
 
-# Comptes de démonstration (mot de passe : Webpos2026!) :
+# Comptes de démonstration (mot de passe : HelloPos2026!) :
 # owner@webpos.test, manager@webpos.test, vendeur@webpos.test, comptable@webpos.test
 ```
 

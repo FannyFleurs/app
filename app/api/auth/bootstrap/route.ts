@@ -26,7 +26,7 @@ export async function POST() {
       if (orgRes.rowCount === 0) {
         const ins = await client.query<{ id: string }>(
           `INSERT INTO organizations (name, legal_name, address, contact)
-           VALUES ('Webpos Dev', 'Webpos Dev',
+           VALUES ('HelloPos Dev', 'HelloPos Dev',
                    '{"line1":"1 rue Test","zip":"75001","city":"Paris","country":"FR"}'::jsonb,
                    '{"email":"contact@webpos.test"}'::jsonb)
            RETURNING id`,
@@ -63,7 +63,7 @@ export async function POST() {
       const pinHash = await hashPassword('1234');
       await client.query(
         `INSERT INTO users (organization_id, email, password_hash, full_name, role, pin_code_hash)
-         VALUES ($1, 'admin@webpos.test', $2, 'Admin Webpos', 'owner', $2)`,
+         VALUES ($1, 'admin@webpos.test', $2, 'Admin HelloPos', 'owner', $2)`,
         [orgId, pinHash],
       );
 

@@ -5,12 +5,12 @@ import { randomBytes } from 'node:crypto';
 
 /**
  * Crée (ou promeut) un compte super_admin pour le gestionnaire de la
- * plateforme Webpos SaaS.
+ * plateforme HelloPos SaaS.
  *
  * Le super_admin a un accès cross-tenant à la console /admin (liste des
  * organisations, abonnements, paiements, octroi de périodes offertes…).
  * Il n'a PAS besoin d'avoir une "vraie" boutique. On le rattache à une
- * organisation technique "Webpos Platform" créée si nécessaire.
+ * organisation technique "HelloPos Platform" créée si nécessaire.
  *
  * Usage :
  *   npm run create:super-admin <email> [mot_de_passe]
@@ -25,7 +25,7 @@ import { randomBytes } from 'node:crypto';
  *   - Si l'email existe déjà → on promeut au rôle super_admin (no-op s'il
  *     l'est déjà). Le mot de passe n'est pas réécrit.
  *   - Sinon → on crée :
- *       1. l'organisation technique "Webpos Platform" (slug platform), si
+ *       1. l'organisation technique "HelloPos Platform" (slug platform), si
  *          elle n'existe pas encore ;
  *       2. l'utilisateur, role=super_admin, avec mot de passe + PIN.
  *
@@ -82,7 +82,7 @@ async function main() {
 
     // ---- Création complète ----
 
-    // 1. Organisation "Webpos Platform" si absente
+    // 1. Organisation "HelloPos Platform" si absente
     let platformId: string;
     const orgRes = await client.query<{ id: string }>(
       `SELECT id FROM organizations WHERE slug = 'platform' LIMIT 1`,
@@ -92,11 +92,11 @@ async function main() {
     } else {
       const ins = await client.query<{ id: string }>(
         `INSERT INTO organizations (name, legal_name, slug, plan)
-         VALUES ('Webpos Platform', 'Webpos Platform', 'platform', 'enterprise')
+         VALUES ('HelloPos Platform', 'HelloPos Platform', 'platform', 'enterprise')
          RETURNING id`,
       );
       platformId = ins.rows[0]!.id;
-      console.log(`• Organisation technique "Webpos Platform" créée (slug: platform)`);
+      console.log(`• Organisation technique "HelloPos Platform" créée (slug: platform)`);
     }
 
     // 2. Mot de passe + PIN
@@ -113,12 +113,12 @@ async function main() {
 
     console.log(``);
     console.log(`╭───────────────────────────────────────────────────────╮`);
-    console.log(`│  ✓ Super admin Webpos créé                        │`);
+    console.log(`│  ✓ Super admin HelloPos créé                        │`);
     console.log(`├───────────────────────────────────────────────────────┤`);
     console.log(`│  Email           : ${email.padEnd(35)}│`);
     console.log(`│  Mot de passe    : ${password.padEnd(35)}│`);
     console.log(`│  PIN (caisse)    : ${pin.padEnd(35)}│`);
-    console.log(`│  Tenant rattaché : Webpos Platform                    │`);
+    console.log(`│  Tenant rattaché : HelloPos Platform                    │`);
     console.log(`╰───────────────────────────────────────────────────────╯`);
     console.log(``);
     console.log(`Connexion :`);

@@ -1,4 +1,4 @@
-# Architecture Webpos
+# Architecture HelloPos
 
 ## Couches
 

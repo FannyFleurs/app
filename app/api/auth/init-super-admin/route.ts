@@ -53,7 +53,7 @@ export async function POST(req: Request) {
         });
       }
 
-      // Crée (ou réutilise) une orga "Webpos système"
+      // Crée (ou réutilise) une orga "HelloPos système"
       let orgRes = await client.query<{ id: string }>(
         `SELECT id FROM organizations WHERE slug = 'webpos-system' LIMIT 1`,
       );
@@ -62,7 +62,7 @@ export async function POST(req: Request) {
         const ins = await client.query<{ id: string }>(
           `INSERT INTO organizations
              (name, legal_name, slug, plan, max_devices)
-           VALUES ('Webpos système', 'Webpos système', 'webpos-system',
+           VALUES ('HelloPos système', 'HelloPos système', 'webpos-system',
                    'enterprise', 50)
            RETURNING id`,
         );

@@ -12,7 +12,7 @@ interface User {
   color?: string | null;
 }
 
-const APP_NAME = 'Webpos';
+const APP_NAME = 'HelloPos';
 
 const ROLE_LABELS: Record<string, string> = {
   super_admin: 'Super Admin',

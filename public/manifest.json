@@ -1,6 +1,6 @@
 {
-  "name": "Webpos",
-  "short_name": "Webpos",
+  "name": "HelloPos",
+  "short_name": "HelloPos",
   "description": "Caisse SaaS pour fleuristes et commerces végétaux",
   "start_url": "/caisse",
   "scope": "/",

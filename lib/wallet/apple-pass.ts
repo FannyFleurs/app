@@ -167,7 +167,7 @@ export interface PassSubject {
 }
 
 /**
- * Construit et signe un .pkpass pour le programme fidelite Webpos.
+ * Construit et signe un .pkpass pour le programme fidelite HelloPos.
  * Retourne un Buffer directement utilisable pour envoi HTTP (content-type
  * application/vnd.apple.pkpass).
  */

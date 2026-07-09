@@ -51,7 +51,7 @@ export default function AdminDashboard() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Dashboard SaaS</h1>
         <p className="mt-1 text-sm text-ink-soft">
-          Vue d&apos;ensemble des comptes clients Webpos.
+          Vue d&apos;ensemble des comptes clients HelloPos.
         </p>
       </div>
 

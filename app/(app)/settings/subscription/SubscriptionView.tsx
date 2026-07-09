@@ -53,7 +53,7 @@ const ADDONS: Array<{ key: string; label: string; price: string; description: st
     key: 'multi_device',
     label: 'Multi-appareils',
     price: '+9 €/mois',
-    description: 'Connectez Webpos sur plusieurs iPads / postes simultanément (vendeurs en parallèle).',
+    description: 'Connectez HelloPos sur plusieurs iPads / postes simultanément (vendeurs en parallèle).',
   },
 ];
 

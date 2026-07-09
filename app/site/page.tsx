@@ -1,11 +1,24 @@
 import Link from 'next/link';
+import { query } from '@/lib/db/client';
+import { mergePlatformDefaults, type PlatformSettings } from '@/lib/settings/platform';
 
 export const dynamic = 'force-dynamic';
 export const metadata = {
-  title: 'Webpos — Caisse pour fleuristes',
+  title: 'HelloPos — Caisse pour fleuristes',
   description:
     'Caisse SaaS moderne pour fleuristes et commerces végétaux : encaissement iPad, catalogue, stock, fidélité, conformité française.',
 };
+
+async function loadPlatform(): Promise<PlatformSettings> {
+  try {
+    const { rows } = await query<{ value: Partial<PlatformSettings> }>(
+      `SELECT value FROM platform_settings WHERE id = 1`,
+    );
+    return mergePlatformDefaults(rows[0]?.value ?? null);
+  } catch {
+    return mergePlatformDefaults(null);
+  }
+}
 
 const FEATURES = [
   {
@@ -83,20 +96,27 @@ const PLANS = [
   },
 ];
 
-export default function LandingPage() {
+export default async function LandingPage() {
+  const platform = await loadPlatform();
+  const brand = platform.brand_name || 'HelloPos';
   return (
     <main className="min-h-screen bg-white text-ink">
       {/* Header */}
       <header className="border-b border-border">
         <div className="max-w-6xl mx-auto flex items-center justify-between px-6 py-4">
           <Link href="/" className="flex items-center gap-2">
-            <span
-              className="grid h-9 w-9 place-items-center rounded-xl text-white font-semibold"
-              style={{ backgroundColor: 'var(--primary, #6d5b3f)' }}
-            >
-              F
-            </span>
-            <span className="font-semibold tracking-tight">Webpos</span>
+            {platform.logo_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={platform.logo_url} alt={brand} className="h-9 w-9 rounded-xl object-contain" />
+            ) : (
+              <span
+                className="grid h-9 w-9 place-items-center rounded-xl text-white font-semibold"
+                style={{ backgroundColor: 'var(--primary, #6d5b3f)' }}
+              >
+                {brand.charAt(0)}
+              </span>
+            )}
+            <span className="font-semibold tracking-tight">{brand}</span>
           </Link>
           <nav className="hidden md:flex items-center gap-6 text-sm">
             <a href="#features" className="text-ink-soft hover:text-ink">Fonctionnalités</a>
@@ -141,7 +161,7 @@ export default function LandingPage() {
           <div className="text-center max-w-2xl mx-auto mb-10">
             <h2 className="text-3xl font-semibold tracking-tight">Tout ce dont votre boutique a besoin</h2>
             <p className="mt-3 text-ink-soft">
-              Du comptoir au back-office, Webpos couvre l&apos;ensemble des besoins d&apos;un fleuriste indépendant ou en réseau.
+              Du comptoir au back-office, {brand} couvre l&apos;ensemble des besoins d&apos;un fleuriste indépendant ou en réseau.
             </p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -210,7 +230,7 @@ export default function LandingPage() {
       {/* CTA */}
       <section className="border-t border-border bg-gray-50">
         <div className="max-w-4xl mx-auto px-6 py-16 text-center">
-          <h2 className="text-3xl font-semibold tracking-tight">Prêt à passer à Webpos ?</h2>
+          <h2 className="text-3xl font-semibold tracking-tight">Prêt à passer à {brand} ?</h2>
           <p className="mt-3 text-ink-soft">
             Créez votre compte en moins de 2 minutes et testez toutes les fonctionnalités pendant 14 jours.
           </p>
@@ -227,13 +247,34 @@ export default function LandingPage() {
 
       {/* Footer */}
       <footer className="border-t border-border bg-white">
-        <div className="max-w-6xl mx-auto px-6 py-8 flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-ink-soft">
-          <div>© {new Date().getFullYear()} Webpos — Caisse pour fleuristes</div>
-          <div className="flex gap-4">
-            <a href="mailto:contact@webpos.fr" className="hover:text-ink">Contact</a>
-            <Link href="/login" className="hover:text-ink">Caisse</Link>
-            <Link href="/bo" className="hover:text-ink">Back-office</Link>
+        <div className="max-w-6xl mx-auto px-6 py-8 space-y-4 text-sm text-ink-soft">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div>© {new Date().getFullYear()} {brand}
+              {platform.company_legal_name && ` — ${platform.company_legal_name}`}
+            </div>
+            <div className="flex gap-4">
+              {platform.contact_email && (
+                <a href={`mailto:${platform.contact_email}`} className="hover:text-ink">Contact</a>
+              )}
+              <Link href="/login" className="hover:text-ink">Caisse</Link>
+              <Link href="/bo" className="hover:text-ink">Back-office</Link>
+            </div>
           </div>
+          {(platform.address_line1 || platform.company_siret || platform.contact_phone) && (
+            <div className="text-xs text-ink-soft/80 space-y-0.5">
+              {(platform.address_line1 || platform.address_city) && (
+                <div>
+                  {[platform.address_line1, [platform.address_zip, platform.address_city].filter(Boolean).join(' '), platform.address_country]
+                    .filter(Boolean).join(', ')}
+                </div>
+              )}
+              <div className="flex flex-wrap gap-x-4">
+                {platform.company_siret && <span>SIRET {platform.company_siret}</span>}
+                {platform.company_vat && <span>TVA {platform.company_vat}</span>}
+                {platform.contact_phone && <span>Tél. {platform.contact_phone}</span>}
+              </div>
+            </div>
+          )}
         </div>
       </footer>
     </main>

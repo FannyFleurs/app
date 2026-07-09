@@ -66,7 +66,7 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
   params2.append('payment_method_types[]', 'card');
   params2.append('line_items[0][price_data][currency]', 'eur');
   params2.append('line_items[0][price_data][product_data][name]',
-    `Vente ${sale.receipt_number ?? ''} ${sale.customer_name ?? 'Webpos'}`.trim());
+    `Vente ${sale.receipt_number ?? ''} ${sale.customer_name ?? 'HelloPos'}`.trim());
   params2.append('line_items[0][price_data][unit_amount]', String(amountCents));
   params2.append('line_items[0][quantity]', '1');
   params2.append('success_url', successUrl);

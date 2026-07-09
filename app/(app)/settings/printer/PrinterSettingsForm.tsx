@@ -179,7 +179,7 @@ export default function PrinterSettingsForm({ canWrite }: { canWrite: boolean })
         <ul className="mt-2 text-xs text-ink-soft space-y-1 list-disc list-inside">
           <li>
             <strong>Test depuis le serveur</strong> : le test tente une connexion TCP depuis
-            les serveurs Webpos (Frankfurt). Il échouera pour une IP de LAN privé
+            les serveurs HelloPos (Frankfurt). Il échouera pour une IP de LAN privé
             (192.168.x.x, 10.x.x.x) — c&apos;est normal.
           </li>
           <li>

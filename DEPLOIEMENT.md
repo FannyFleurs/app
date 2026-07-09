@@ -1,6 +1,6 @@
-# Déploiement Webpos sur Vercel + Neon
+# Déploiement HelloPos sur Vercel + Neon
 
-Guide pas-à-pas pour mettre Webpos en ligne en **30 minutes**, avec
+Guide pas-à-pas pour mettre HelloPos en ligne en **30 minutes**, avec
 auto-déploiement à chaque `git push`. Stack : Vercel (app Next.js) + Neon
 (Postgres serverless, région Frankfurt = UE).
 
@@ -213,7 +213,7 @@ nouvelle colonne (2ᵉ deploy).
 
 ## 9. Limites du tier gratuit
 
-| Tier gratuit | Limite | Pour Webpos |
+| Tier gratuit | Limite | Pour HelloPos |
 |---|---|---|
 | Vercel Hobby | 100 GB-h serverless / mois | OK pour 1 fleuriste (~5 GB-h/mois) |
 | Vercel Hobby | 100 GB bandwidth / mois | OK |
@@ -235,7 +235,7 @@ Quand le produit est validé et que tu veux 100 % le contrôle :
 1. Crée un VPS (Scaleway DEV1-M, ~5 €/mois, région Paris)
 2. Installe Docker + Docker Compose
 3. `pg_dump` depuis Neon, restore sur Postgres local
-4. Lance le container Webpos via docker-compose
+4. Lance le container HelloPos via docker-compose
 5. Caddy en façade pour HTTPS auto
 6. Bascule le DNS (Cloudflare conseillé)
 

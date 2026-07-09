@@ -75,7 +75,7 @@ async function main() {
     }
 
     // Utilisateurs
-    const pwd = await hashPassword('Webpos2026!');
+    const pwd = await hashPassword('HelloPos2026!');
     // PIN par défaut "1234" pour tous les comptes seedés
     const pinHash = await hashPassword('1234');
     const users: Array<[string, string, string]> = [
@@ -130,7 +130,7 @@ async function main() {
 
     // eslint-disable-next-line no-console
     console.log('✓ Seed terminé');
-    console.log('Comptes (mot de passe : Webpos2026!) :');
+    console.log('Comptes (mot de passe : HelloPos2026!) :');
     for (const [email] of users) console.log('  •', email);
   });
 

@@ -1,7 +1,7 @@
 # Conformité fiscale — dossier technique
 
 Ce document décrit, fonction par fonction, les mécanismes mis en place dans
-Webpos pour satisfaire aux exigences françaises applicables aux systèmes
+HelloPos pour satisfaire aux exigences françaises applicables aux systèmes
 de caisse (article 286, I, 3°bis du CGI ; BOI-TVA-DECLA-30-10-30 ; principes
 inspirés de la norme NF525).
 

@@ -167,7 +167,7 @@ export default function SetupWizard() {
       <main className="h-screen grid place-items-center bg-white p-6">
         <div className="card max-w-md w-full p-6 text-center">
           <div className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-success/10 text-success text-2xl">✓</div>
-          <h1 className="text-2xl font-semibold">Bienvenue sur Webpos !</h1>
+          <h1 className="text-2xl font-semibold">Bienvenue sur HelloPos !</h1>
           <p className="mt-2 text-sm text-ink-soft">
             Votre boutique est créée et vous êtes déjà connecté. 14 jours
             d&apos;essai gratuit pour tester la solution.
@@ -193,7 +193,7 @@ export default function SetupWizard() {
         <header className="flex items-center gap-3 mb-6">
           <div className="grid h-11 w-11 place-items-center rounded-2xl accent-bar text-white text-lg font-semibold">F</div>
           <div>
-            <div className="text-xl font-semibold tracking-tight">Webpos — Configuration</div>
+            <div className="text-xl font-semibold tracking-tight">HelloPos — Configuration</div>
             <div className="text-xs text-ink-soft">Configurez votre installation en quelques minutes.</div>
           </div>
         </header>
@@ -228,12 +228,12 @@ export default function SetupWizard() {
                 <Field label="Nom commercial *">
                   <input className="input" value={f.company_name}
                          onChange={(e) => patch('company_name', e.target.value)}
-                         placeholder="Webpos Fleurs" />
+                         placeholder="HelloPos Fleurs" />
                 </Field>
                 <Field label="Raison sociale *">
                   <input className="input" value={f.company_legal}
                          onChange={(e) => patch('company_legal', e.target.value)}
-                         placeholder="SARL Webpos" />
+                         placeholder="SARL HelloPos" />
                 </Field>
                 <Field label="SIRET">
                   <input className="input" value={f.company_siret} maxLength={14}

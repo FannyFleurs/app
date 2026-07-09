@@ -159,7 +159,7 @@ export default function StripeSettingsForm({ canEdit }: { canEdit: boolean }) {
         <ol className="space-y-2 text-sm list-decimal list-inside text-ink-soft">
           <li>Création d&apos;une commande (livraison ou retrait différé) en caisse.</li>
           <li>Choix du mode de règlement <strong>Lien de paiement</strong>.</li>
-          <li>Webpos crée une session Stripe Checkout, l&apos;envoie au client par email.</li>
+          <li>HelloPos crée une session Stripe Checkout, l&apos;envoie au client par email.</li>
           <li>Le client paye depuis chez lui ; Stripe nous notifie via webhook.</li>
           <li>La commande passe automatiquement en <strong>payée</strong>.</li>
         </ol>

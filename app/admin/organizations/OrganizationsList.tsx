@@ -55,7 +55,7 @@ export default function OrganizationsList() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Organisations</h1>
         <p className="mt-1 text-sm text-ink-soft">
-          Toutes les sociétés clientes inscrites sur Webpos.
+          Toutes les sociétés clientes inscrites sur HelloPos.
         </p>
       </div>
 

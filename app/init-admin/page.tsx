@@ -48,7 +48,7 @@ export default function InitAdminPage() {
         <h1 className="text-xl font-semibold tracking-tight">Bootstrap super-admin</h1>
         <p className="mt-1 text-sm text-ink-soft">
           Crée le premier compte qui pourra gérer toutes les organisations
-          clientes de Webpos. Cette page s&apos;auto-désactive une fois le
+          clientes de HelloPos. Cette page s&apos;auto-désactive une fois le
           compte créé.
         </p>
 

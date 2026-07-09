@@ -53,7 +53,7 @@ export default function TopBar({
         <span className="grid h-9 w-9 place-items-center rounded-xl accent-bar text-white font-semibold">
           F
         </span>
-        <span className="font-semibold tracking-tight hidden sm:inline text-ink">Webpos</span>
+        <span className="font-semibold tracking-tight hidden sm:inline text-ink">HelloPos</span>
       </Link>
 
       {/* Onglets — masqués sur mobile, alignés à gauche sur ≥ md (justify-start
