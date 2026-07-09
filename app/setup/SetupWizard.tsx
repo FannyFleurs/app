@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import BrandMark, { useBrand } from '@/components/BrandMark';
 
 interface TaxRow { code: string; label: string; rate: number; is_default: boolean }
 
@@ -34,8 +35,8 @@ interface FormState {
 }
 
 const PLANS = [
-  { key: 'essentiel' as const, name: 'Essentiel', price: '29', desc: '1 boutique · 1 caisse' },
-  { key: 'croissance' as const, name: 'Croissance', price: '59', desc: 'Caisses illimitées · multi-postes' },
+  { key: 'essentiel' as const, name: 'Essentiel', desc: '1 boutique · 1 caisse' },
+  { key: 'croissance' as const, name: 'Croissance', desc: 'Caisses illimitées · multi-postes' },
 ];
 
 const STEPS = [
@@ -45,6 +46,7 @@ const STEPS = [
   { key: 'tax',      label: 'TVA' },
   { key: 'admin',    label: 'Administrateur' },
   { key: 'recap',    label: 'Récapitulatif' },
+  { key: 'payment',  label: 'Paiement' },
 ] as const;
 
 const DEFAULT_TAXES: TaxRow[] = [
@@ -55,6 +57,7 @@ const DEFAULT_TAXES: TaxRow[] = [
 
 export default function SetupWizard() {
   const router = useRouter();
+  const brand = useBrand();
   const [step, setStep] = useState<typeof STEPS[number]['key']>('company');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -208,28 +211,28 @@ export default function SetupWizard() {
     <main className="min-h-screen bg-white">
       <div className="max-w-3xl mx-auto p-6 sm:p-10">
         <header className="flex items-center gap-3 mb-6">
-          <div className="grid h-11 w-11 place-items-center rounded-2xl accent-bar text-white text-lg font-semibold">F</div>
+          <BrandMark size={44} showName={false} />
           <div>
-            <div className="text-xl font-semibold tracking-tight">HelloPos — Configuration</div>
+            <div className="text-xl font-semibold tracking-tight">{brand.brand_name || 'HelloPos'} — Configuration</div>
             <div className="text-xs text-ink-soft">Configurez votre installation en quelques minutes.</div>
           </div>
         </header>
 
         {/* Stepper */}
-        <ol className="mb-6 grid grid-cols-3 sm:grid-cols-6 gap-2">
+        <ol className="mb-6 flex flex-wrap gap-x-4 gap-y-2">
           {STEPS.map((s, i) => {
             const idx = STEPS.findIndex((x) => x.key === step);
             const active = s.key === step;
             const done = i < idx;
             return (
               <li key={s.key} className="flex items-center gap-2 text-xs">
-                <span className={`h-7 w-7 rounded-full grid place-items-center text-[11px] font-semibold ${
+                <span className={`h-7 w-7 shrink-0 rounded-full grid place-items-center text-[11px] font-semibold ${
                   active ? 'text-white' : done ? 'bg-success/15 text-success' : 'bg-gray-100 text-ink-soft'
                 }`}
                   style={active ? { backgroundColor: 'var(--primary)' } : undefined}>
                   {done ? '✓' : i + 1}
                 </span>
-                <span className={`hidden sm:inline ${active ? 'text-ink font-medium' : 'text-ink-soft'}`}>
+                <span className={`whitespace-nowrap ${active ? 'text-ink font-medium' : 'text-ink-soft'}`}>
                   {s.label}
                 </span>
               </li>
@@ -418,36 +421,42 @@ export default function SetupWizard() {
                 ['Mot de passe', '•'.repeat(Math.min(f.admin_password.length, 12))],
                 ['PIN', '••••'],
               ]} />
+            </div>
+          )}
 
-              {/* Choix de l'offre */}
-              <div>
-                <div className="text-sm font-semibold mb-2">Votre offre</div>
-                <div className="grid grid-cols-2 gap-3">
-                  {PLANS.map((p) => (
+          {step === 'payment' && (
+            <div className="space-y-4">
+              <SectionHeader title="Paiement" subtitle="Choisissez votre offre. 14 jours d'essai, débit à l'échéance." />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {PLANS.map((p) => {
+                  const price = p.key === 'croissance'
+                    ? (brand.plan_croissance_price || '59')
+                    : (brand.plan_essentiel_price || '29');
+                  return (
                     <button
                       key={p.key}
                       type="button"
                       onClick={() => patch('plan', p.key)}
                       className={`rounded-xl border p-4 text-left transition ${
-                        f.plan === p.key ? 'border-accent bg-accent-soft/40' : 'border-border hover:border-accent'
+                        f.plan === p.key ? 'border-accent bg-accent-soft/40 ring-1 ring-accent' : 'border-border hover:border-accent'
                       }`}
                     >
                       <div className="font-semibold">{p.name}</div>
                       <div className="mt-1 flex items-baseline gap-1">
-                        <span className="text-2xl font-semibold">{p.price}</span>
+                        <span className="text-2xl font-semibold">{price}</span>
                         <span className="text-xs text-ink-soft">€ HT / mois</span>
                       </div>
                       <div className="mt-1 text-xs text-ink-soft">{p.desc}</div>
                     </button>
-                  ))}
-                </div>
-                <p className="mt-2 text-xs text-ink-soft">
-                  14 jours d&apos;essai gratuit. Votre carte est enregistrée
-                  maintenant mais n&apos;est débitée qu&apos;à la fin de l&apos;essai.
-                  Résiliable à tout moment.
-                </p>
+                  );
+                })}
               </div>
-
+              <div className="rounded-xl bg-gray-50 border border-border px-4 py-3 text-xs text-ink-soft">
+                14 jours d&apos;essai gratuit. Votre carte est enregistrée à
+                l&apos;étape suivante (Stripe sécurisé) mais n&apos;est débitée
+                qu&apos;à la fin de l&apos;essai. Un code promo pourra être saisi
+                sur la page de paiement. Résiliable à tout moment.
+              </div>
               {error && <div className="rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
             </div>
           )}
@@ -457,7 +466,7 @@ export default function SetupWizard() {
           <button onClick={prev} disabled={step === STEPS[0]!.key} className="btn-ghost">
             ‹ Précédent
           </button>
-          {step !== 'recap' ? (
+          {step !== 'payment' ? (
             <button
               onClick={next}
               disabled={!canAdvance()}

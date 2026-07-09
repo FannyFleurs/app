@@ -2,8 +2,7 @@
 
 import { useState } from 'react';
 import PinLogin from './PinLogin';
-
-const APP_NAME = 'HelloPos';
+import { useBrand } from '@/components/BrandMark';
 
 /**
  * Écran de connexion caisse. Par défaut : un formulaire centré
@@ -13,6 +12,8 @@ const APP_NAME = 'HelloPos';
  * quotidien.
  */
 export default function CaisseLogin() {
+  const brand = useBrand();
+  const APP_NAME = brand.brand_name || 'HelloPos';
   const [mode, setMode] = useState<'email' | 'pin'>('email');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -59,10 +60,15 @@ export default function CaisseLogin() {
   return (
     <main className="min-h-screen grid place-items-center bg-gray-50 px-4 pt-safe pb-safe">
       <div className="w-full max-w-sm">
-        <div className="text-center mb-6">
-          <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl accent-bar text-white text-2xl font-semibold mb-3">
-            {APP_NAME.charAt(0)}
-          </div>
+        <div className="flex flex-col items-center text-center mb-6">
+          {brand.logo_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={brand.logo_url} alt={APP_NAME} className="h-14 w-14 rounded-2xl object-contain mb-3" />
+          ) : (
+            <div className="grid h-14 w-14 place-items-center rounded-2xl accent-bar text-white text-2xl font-semibold mb-3">
+              {APP_NAME.charAt(0)}
+            </div>
+          )}
           <h1 className="text-2xl font-semibold tracking-tight">{APP_NAME}</h1>
           <p className="mt-1 text-sm text-ink-soft">Connexion à la caisse</p>
         </div>

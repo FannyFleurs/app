@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { readSessionFromCookie } from '@/lib/auth/session';
 import BackOfficeLoginForm from './BackOfficeLoginForm';
+import BrandMark from '@/components/BrandMark';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,13 +18,8 @@ export default async function BackOfficeLoginPage() {
   return (
     <main className="min-h-screen grid place-items-center bg-gray-50 px-4">
       <div className="w-full max-w-md">
-        <div className="text-center mb-6">
-          <div
-            className="mx-auto grid h-14 w-14 place-items-center rounded-2xl text-white text-2xl font-semibold mb-3"
-            style={{ backgroundColor: 'var(--primary, #6d5b3f)' }}
-          >
-            F
-          </div>
+        <div className="flex flex-col items-center text-center mb-6">
+          <BrandMark size={56} showName={false} className="mb-3" />
           <h1 className="text-2xl font-semibold tracking-tight">Back-office</h1>
           <p className="mt-1 text-sm text-ink-soft">
             Connectez-vous avec votre email et votre mot de passe administrateur.

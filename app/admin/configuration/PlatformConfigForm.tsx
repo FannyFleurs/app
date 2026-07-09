@@ -222,11 +222,27 @@ export default function PlatformConfigForm({ initial }: { initial: PlatformSetti
                    placeholder="price_…" />
           </div>
         </div>
-        <div className="max-w-[180px]">
-          <label className="text-xs font-medium text-ink-soft">Jours d&apos;essai</label>
-          <input type="number" min={0} max={90} className="input mt-1" value={s.trial_days}
-                 onChange={(e) => patch('trial_days', Number(e.target.value) || 0)} />
+        <div className="grid grid-cols-3 gap-3">
+          <div>
+            <label className="text-xs font-medium text-ink-soft">Jours d&apos;essai</label>
+            <input type="number" min={0} max={90} className="input mt-1" value={s.trial_days}
+                   onChange={(e) => patch('trial_days', Number(e.target.value) || 0)} />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-ink-soft">Prix affiché Essentiel (€)</label>
+            <input className="input mt-1" value={s.plan_essentiel_price}
+                   onChange={(e) => patch('plan_essentiel_price', e.target.value)} placeholder="29" />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-ink-soft">Prix affiché Croissance (€)</label>
+            <input className="input mt-1" value={s.plan_croissance_price}
+                   onChange={(e) => patch('plan_croissance_price', e.target.value)} placeholder="59" />
+          </div>
         </div>
+        <p className="text-xs text-ink-soft">
+          Les montants affichés sont cosmétiques : ils doivent correspondre
+          aux prix réels définis dans Stripe (via les Price IDs).
+        </p>
         <p className="text-xs text-ink-soft">
           Tant que la clé secrète et au moins un Price ID ne sont pas
           renseignés, l&apos;inscription reste en essai gratuit sans paiement.

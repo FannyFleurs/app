@@ -6,6 +6,7 @@ import { SIDEBAR_ITEMS, type SidebarItem } from './Sidebar';
 import type { Role, Permission } from '@/lib/auth/rbac';
 import { HEADER_TABS_DEFAULT, HEADER_TABS_MAX } from '@/lib/settings/pos-ui';
 import Icon from './Icon';
+import { useBrand } from './BrandMark';
 
 export interface LeftRailUser {
   fullName: string;
@@ -39,6 +40,7 @@ export default function LeftRail({
   user, hiddenPaths, headerTabs, permissions, onOpenMenu, onLogout, backOffice = false,
 }: Props) {
   const path = usePathname();
+  const brand = useBrand();
 
   const order = (headerTabs && headerTabs.length > 0 ? headerTabs : HEADER_TABS_DEFAULT)
     .slice(0, HEADER_TABS_MAX);
@@ -69,12 +71,17 @@ export default function LeftRail({
           className="flex items-center gap-2 px-4 h-16 shrink-0"
           title="Back-office"
         >
-          <span
-            className="grid h-10 w-10 place-items-center rounded-2xl text-white font-semibold text-lg shrink-0"
-            style={{ backgroundColor: 'var(--primary)' }}
-          >
-            F
-          </span>
+          {brand.logo_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={brand.logo_url} alt={brand.brand_name} className="h-10 w-10 rounded-2xl object-contain shrink-0" />
+          ) : (
+            <span
+              className="grid h-10 w-10 place-items-center rounded-2xl text-white font-semibold text-lg shrink-0"
+              style={{ backgroundColor: 'var(--primary)' }}
+            >
+              {(brand.brand_name || 'H').charAt(0)}
+            </span>
+          )}
           <div className="min-w-0">
             <div className="text-sm font-semibold leading-tight truncate">Back-office</div>
             <div className="text-[11px] text-ink-soft leading-tight truncate">Gestion à distance</div>
@@ -155,12 +162,17 @@ export default function LeftRail({
         className="grid place-items-center h-16 shrink-0"
         title="Caisse"
       >
-        <span
-          className="grid h-11 w-11 place-items-center rounded-2xl text-white font-semibold text-lg"
-          style={{ backgroundColor: 'var(--primary)' }}
-        >
-          F
-        </span>
+        {brand.logo_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={brand.logo_url} alt={brand.brand_name} className="h-11 w-11 rounded-2xl object-contain" />
+        ) : (
+          <span
+            className="grid h-11 w-11 place-items-center rounded-2xl text-white font-semibold text-lg"
+            style={{ backgroundColor: 'var(--primary)' }}
+          >
+            {(brand.brand_name || 'H').charAt(0)}
+          </span>
+        )}
       </Link>
 
       {/* Icônes de navigation centrées verticalement */}

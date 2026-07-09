@@ -186,7 +186,13 @@ export default async function LandingPage() {
             </p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            {PLANS.map((p) => (
+            {PLANS.map((p) => {
+              const price = p.name === 'Essentiel'
+                ? (platform.plan_essentiel_price || p.price)
+                : p.name === 'Croissance'
+                  ? (platform.plan_croissance_price || p.price)
+                  : p.price;
+              return (
               <div
                 key={p.name}
                 className={`card p-6 ${
@@ -200,8 +206,8 @@ export default async function LandingPage() {
                 </div>
                 <h3 className="mt-2 text-xl font-semibold">{p.name}</h3>
                 <div className="mt-4 flex items-baseline gap-1">
-                  <span className="text-4xl font-semibold">{p.price}</span>
-                  {p.price !== 'Sur mesure' && (
+                  <span className="text-4xl font-semibold">{price}</span>
+                  {price !== 'Sur mesure' && (
                     <span className="text-ink-soft">€ HT / mois</span>
                   )}
                 </div>
@@ -222,7 +228,8 @@ export default async function LandingPage() {
                   {p.cta}
                 </Link>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </section>

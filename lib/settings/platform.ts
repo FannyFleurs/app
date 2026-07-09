@@ -37,6 +37,10 @@ export interface PlatformSettings {
   stripe_price_croissance: string;
   /** Durée de l'essai gratuit avant le 1er débit. */
   trial_days: number;
+  /** Montants affichés des 2 offres (€ HT/mois) — cosmétique, doivent
+   *  correspondre aux prix Stripe. */
+  plan_essentiel_price: string;
+  plan_croissance_price: string;
 }
 
 export const PLATFORM_DEFAULTS: PlatformSettings = {
@@ -59,6 +63,8 @@ export const PLATFORM_DEFAULTS: PlatformSettings = {
   stripe_price_essentiel: '',
   stripe_price_croissance: '',
   trial_days: 14,
+  plan_essentiel_price: '29',
+  plan_croissance_price: '59',
 };
 
 export function mergePlatformDefaults(
