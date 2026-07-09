@@ -51,14 +51,9 @@ const PLANS: Plan[] = [
   },
 ];
 
-const ADDONS: Array<{ key: string; label: string; price: string; description: string }> = [
-  {
-    key: 'multi_device',
-    label: 'Multi-appareils',
-    price: '+9 €/mois',
-    description: 'Connectez HelloPos sur plusieurs iPads / postes simultanément (vendeurs en parallèle).',
-  },
-];
+// Options additionnelles statiques (l'option "caisse supplémentaire" est
+// gérée dynamiquement plus bas selon la config Stripe).
+const ADDONS: Array<{ key: string; label: string; price: string; description: string }> = [];
 
 export default function SubscriptionView() {
   const [data, setData] = useState<Data | null>(null);
