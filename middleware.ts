@@ -85,6 +85,19 @@ export function middleware(req: NextRequest) {
 
     // bo.<domaine> -> back-office
     if (host.startsWith('bo.')) {
+      // Racine -> tableau de bord (si non connecte, le layout (app)
+      // redirigera vers /bo/login grace au header x-webpos-bo).
+      if (pathname === '/') {
+        url.pathname = '/dashboard';
+        return NextResponse.redirect(url);
+      }
+      // Login : on force le login back-office (email + mot de passe),
+      // PAS le login PIN caisse.
+      if (pathname === '/login') {
+        url.pathname = '/bo/login';
+        return NextResponse.redirect(url);
+      }
+      // La caisse n'existe pas en back-office.
       if (pathname === '/caisse' || pathname.startsWith('/caisse/')) {
         url.pathname = '/dashboard';
         return NextResponse.redirect(url);
@@ -143,6 +156,14 @@ export function middleware(req: NextRequest) {
 
   // Mode back-office actif via cookie
   if (req.cookies.get(BO_COOKIE)?.value === '1') {
+    if (pathname === '/') {
+      url.pathname = '/dashboard';
+      return NextResponse.redirect(url);
+    }
+    if (pathname === '/login') {
+      url.pathname = '/bo/login';
+      return NextResponse.redirect(url);
+    }
     if (pathname === '/caisse' || pathname.startsWith('/caisse/')) {
       url.pathname = '/dashboard';
       return NextResponse.redirect(url);
