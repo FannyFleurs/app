@@ -134,6 +134,53 @@ async function stripeGet<T>(secretKey: string, path: string): Promise<T> {
   return json as T;
 }
 
+async function stripeDelete<T>(secretKey: string, path: string): Promise<T> {
+  const res = await fetch(`${STRIPE_API}${path}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${secretKey}` },
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json?.error?.message ?? `Stripe ${res.status}`);
+  return json as T;
+}
+
+interface StripeSubItem { id: string; price: { id: string }; quantity: number }
+interface StripeSub { id: string; items: { data: StripeSubItem[] } }
+
+/**
+ * Ajuste la quantité d'un article d'abonnement (add-on) sur une
+ * subscription Stripe existante. quantity=0 supprime l'article.
+ * Proration automatique (facturation au prorata du cycle).
+ */
+export async function setSubscriptionAddonQuantity(
+  c: PlatformSettings,
+  params: { subscriptionId: string; priceId: string; quantity: number },
+): Promise<void> {
+  const sub = await stripeGet<StripeSub>(
+    c.stripe_secret_key,
+    `/subscriptions/${params.subscriptionId}`,
+  );
+  const item = sub.items.data.find((i) => i.price?.id === params.priceId);
+
+  if (params.quantity <= 0) {
+    if (item) await stripeDelete(c.stripe_secret_key, `/subscription_items/${item.id}`);
+    return;
+  }
+  if (item) {
+    await stripePost(c.stripe_secret_key, `/subscription_items/${item.id}`, {
+      quantity: params.quantity,
+      proration_behavior: 'create_prorations',
+    });
+  } else {
+    await stripePost(c.stripe_secret_key, '/subscription_items', {
+      subscription: params.subscriptionId,
+      price: params.priceId,
+      quantity: params.quantity,
+      proration_behavior: 'create_prorations',
+    });
+  }
+}
+
 export interface PromoInput {
   code: string;
   /** Type de remise. */

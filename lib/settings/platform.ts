@@ -41,6 +41,9 @@ export interface PlatformSettings {
    *  correspondre aux prix Stripe. */
   plan_essentiel_price: string;
   plan_croissance_price: string;
+  /** Option caisse supplémentaire : Price ID Stripe + montant affiché. */
+  stripe_price_extra_register: string;
+  addon_register_price: string;
 }
 
 export const PLATFORM_DEFAULTS: PlatformSettings = {
@@ -65,6 +68,8 @@ export const PLATFORM_DEFAULTS: PlatformSettings = {
   trial_days: 14,
   plan_essentiel_price: '29',
   plan_croissance_price: '59',
+  stripe_price_extra_register: '',
+  addon_register_price: '9',
 };
 
 export function mergePlatformDefaults(

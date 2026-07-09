@@ -13,10 +13,14 @@ export interface PlanLimits {
   label: string;
 }
 
-export function planLimits(plan: string | null | undefined): PlanLimits {
+export function planLimits(
+  plan: string | null | undefined,
+  extraRegisters = 0,
+): PlanLimits {
   switch (plan) {
     case 'starter':
-      return { maxStores: 1, maxRegistersPerStore: 1, label: 'Essentiel' };
+      // Essentiel : 1 caisse de base + caisses supplémentaires achetées.
+      return { maxStores: 1, maxRegistersPerStore: 1 + Math.max(0, extraRegisters), label: 'Essentiel' };
     case 'pro':
       return { maxStores: 1, maxRegistersPerStore: Infinity, label: 'Croissance' };
     case 'enterprise':

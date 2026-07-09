@@ -35,6 +35,8 @@ const schema = z.object({
   trial_days: z.number().int().min(0).max(90).optional(),
   plan_essentiel_price: z.string().max(20).optional(),
   plan_croissance_price: z.string().max(20).optional(),
+  stripe_price_extra_register: z.string().max(100).optional(),
+  addon_register_price: z.string().max(20).optional(),
 });
 
 async function readRaw(): Promise<Partial<PlatformSettings>> {

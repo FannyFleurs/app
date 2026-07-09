@@ -254,6 +254,27 @@ export default function PlatformConfigForm({ initial }: { initial: FormData }) {
           Les montants affichés sont cosmétiques : ils doivent correspondre
           aux prix réels définis dans Stripe (via les Price IDs).
         </p>
+
+        <div className="pt-2 border-t border-border">
+          <h3 className="text-sm font-semibold mb-2">Option — caisse supplémentaire</h3>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-ink-soft">Price ID (récurrent /mois)</label>
+              <input className="input mt-1 font-mono text-sm" value={s.stripe_price_extra_register}
+                     onChange={(e) => patch('stripe_price_extra_register', e.target.value)}
+                     placeholder="price_…" />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-ink-soft">Prix affiché (€)</label>
+              <input className="input mt-1" value={s.addon_register_price}
+                     onChange={(e) => patch('addon_register_price', e.target.value)} placeholder="9" />
+            </div>
+          </div>
+          <p className="mt-1 text-xs text-ink-soft">
+            Permet aux clients Essentiel d&apos;ajouter des caisses moyennant
+            un supplément mensuel.
+          </p>
+        </div>
         <p className="text-xs text-ink-soft">
           Tant que la clé secrète et au moins un Price ID ne sont pas
           renseignés, l&apos;inscription reste en essai gratuit sans paiement.

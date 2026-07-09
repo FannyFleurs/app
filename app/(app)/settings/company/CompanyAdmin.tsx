@@ -31,11 +31,14 @@ type Tab = 'identity' | 'stores' | 'registers' | 'tax';
 
 export default function CompanyAdmin({
   org: initialOrg, canWrite, planLabel, maxStores, maxRegistersPerStore,
+  canBuyExtraRegister = false, extraRegisterPrice = '9',
 }: {
   org: Org; canWrite: boolean;
   planLabel: string;
   maxStores: number | null;
   maxRegistersPerStore: number | null;
+  canBuyExtraRegister?: boolean;
+  extraRegisterPrice?: string;
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>('identity');
@@ -81,7 +84,8 @@ export default function CompanyAdmin({
       )}
       {tab === 'registers' && (
         <RegistersPanel registers={registers} stores={stores} canWrite={canWrite} onChange={() => void reload()}
-                        planLabel={planLabel} maxRegistersPerStore={maxRegistersPerStore} />
+                        planLabel={planLabel} maxRegistersPerStore={maxRegistersPerStore}
+                        canBuyExtraRegister={canBuyExtraRegister} extraRegisterPrice={extraRegisterPrice} />
       )}
       {tab === 'tax' && (
         <TaxPanel taxRates={taxRates} canWrite={canWrite} onChange={() => void reload()} />
@@ -489,15 +493,42 @@ function StoreFormModal({ store, onClose, onSaved }: {
   );
 }
 
-function RegistersPanel({ registers, stores, canWrite, onChange, planLabel, maxRegistersPerStore }: {
+function RegistersPanel({
+  registers, stores, canWrite, onChange, planLabel, maxRegistersPerStore,
+  canBuyExtraRegister, extraRegisterPrice,
+}: {
   registers: Register[]; stores: Store[]; canWrite: boolean; onChange: () => void;
   planLabel: string; maxRegistersPerStore: number | null;
+  canBuyExtraRegister: boolean; extraRegisterPrice: string;
 }) {
   const [editing, setEditing] = useState<Register | null | undefined>(undefined);
   const [releasing, setReleasing] = useState<string | null>(null);
+  const [buyingAddon, setBuyingAddon] = useState(false);
   // Limite atteinte si CHAQUE boutique a déjà son quota de caisses.
   const atLimit = maxRegistersPerStore !== null && stores.length > 0 &&
     stores.every((s) => registers.filter((r) => r.store_id === s.id).length >= maxRegistersPerStore);
+
+  // Souscrit une caisse supplémentaire (+prix/mois) puis ouvre la
+  // création de caisse (la limite a augmenté).
+  async function buyExtraAndAdd() {
+    if (!confirm(`Souscrire une caisse supplémentaire (+${extraRegisterPrice} €/mois) ?\n\nFacturée au prorata sur votre abonnement Stripe.`)) return;
+    setBuyingAddon(true);
+    try {
+      const r = await fetch('/api/billing/addon/register', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ delta: 1 }),
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        alert(j.message ?? j.error ?? 'Impossible de souscrire l\'option.');
+        return;
+      }
+      onChange(); // recharge (la limite serveur a augmenté)
+      setEditing(null); // ouvre la création de caisse
+    } finally {
+      setBuyingAddon(false);
+    }
+  }
 
   async function release(r: Register) {
     const label = r.device_name ? `"${r.device_name}"` : 'ce poste';
@@ -530,10 +561,24 @@ function RegistersPanel({ registers, stores, canWrite, onChange, planLabel, maxR
             + Ajouter une caisse
           </button>
           {atLimit && (
-            <p className="text-xs text-ink-soft">
-              Votre offre <strong>{planLabel}</strong> est limitée à {maxRegistersPerStore} caisse(s) par boutique.
-              {' '}<a href="/settings/subscription" className="text-accent-deep underline">Passer à Croissance</a> pour des caisses illimitées.
-            </p>
+            <div className="text-xs text-ink-soft space-y-2">
+              <p>
+                Votre offre <strong>{planLabel}</strong> est limitée à {maxRegistersPerStore} caisse(s) par boutique.
+              </p>
+              {canBuyExtraRegister ? (
+                <button
+                  onClick={() => void buyExtraAndAdd()}
+                  disabled={buyingAddon}
+                  className="btn-soft text-sm"
+                >
+                  {buyingAddon ? 'Souscription…' : `+ Ajouter une caisse (+${extraRegisterPrice} €/mois)`}
+                </button>
+              ) : (
+                <p>
+                  <a href="/settings/subscription" className="text-accent-deep underline">Passer à Croissance</a> pour des caisses illimitées.
+                </p>
+              )}
+            </div>
           )}
         </div>
       )}

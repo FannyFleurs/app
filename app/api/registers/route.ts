@@ -6,18 +6,21 @@ import { parseJson, jsonError } from '@/lib/validation/api';
 import { audit } from '@/lib/audit/log';
 import { planLimits, effectivePlan } from '@/lib/billing/plan-limits';
 
-async function orgPlan(orgId: string): Promise<string> {
+async function orgPlanInfo(orgId: string): Promise<{ plan: string; extra: number }> {
   try {
-    const r = await query<{ sub_plan: string | null; org_plan: string | null }>(
-      `SELECT s.plan AS sub_plan, o.plan AS org_plan
+    const r = await query<{ sub_plan: string | null; org_plan: string | null; extra: number | null }>(
+      `SELECT s.plan AS sub_plan, o.plan AS org_plan, s.extra_registers AS extra
          FROM organizations o
          LEFT JOIN subscriptions s ON s.organization_id = o.id
         WHERE o.id = $1`,
       [orgId],
     );
-    return effectivePlan(r.rows[0]?.sub_plan ?? null, r.rows[0]?.org_plan ?? null);
+    return {
+      plan: effectivePlan(r.rows[0]?.sub_plan ?? null, r.rows[0]?.org_plan ?? null),
+      extra: Number(r.rows[0]?.extra ?? 0) || 0,
+    };
   } catch {
-    return 'trial';
+    return { plan: 'trial', extra: 0 };
   }
 }
 
@@ -71,8 +74,9 @@ export async function POST(req: Request) {
     );
     if (storeCheck.rowCount === 0) return jsonError('STORE_NOT_FOUND', 404);
 
-    // Limite d'offre : nombre de caisses par boutique.
-    const limits = planLimits(await orgPlan(g.user.organizationId));
+    // Limite d'offre : nombre de caisses par boutique (+ options).
+    const info = await orgPlanInfo(g.user.organizationId);
+    const limits = planLimits(info.plan, info.extra);
     if (Number.isFinite(limits.maxRegistersPerStore)) {
       const cnt = await query<{ c: string }>(
         `SELECT COUNT(*)::text AS c FROM registers WHERE store_id = $1`,

@@ -11,6 +11,9 @@ interface Data {
     current_period_end: string | null;
     cancel_at_period_end: boolean;
   } | null;
+  extra_registers?: number;
+  addon_register_price?: string;
+  addon_register_available?: boolean;
   migration_required?: string;
 }
 
@@ -61,15 +64,33 @@ export default function SubscriptionView() {
   const [data, setData] = useState<Data | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [addonBusy, setAddonBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    void (async () => {
-      const r = await fetch('/api/subscription');
-      if (r.ok) setData(await r.json());
-      setLoading(false);
-    })();
-  }, []);
+  async function reload() {
+    const r = await fetch('/api/subscription');
+    if (r.ok) setData(await r.json());
+  }
+  useEffect(() => { void reload().finally(() => setLoading(false)); }, []);
+
+  // Ajuste l'option caisse supplémentaire (+1 / −1).
+  async function changeAddon(delta: number) {
+    setAddonBusy(true); setError(null);
+    try {
+      const r = await fetch('/api/billing/addon/register', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ delta }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setError(j.message ?? j.error ?? 'Impossible de modifier l\'option.');
+        return;
+      }
+      await reload();
+    } finally {
+      setAddonBusy(false);
+    }
+  }
 
   // Ouvre le portail de facturation Stripe (moyen de paiement, factures,
   // changement d'offre, résiliation). Si aucun abonnement Stripe n'existe
@@ -221,6 +242,36 @@ export default function SubscriptionView() {
           Options
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Caisse supplémentaire (offre Essentiel) */}
+          {data.addon_register_available && (
+            <div className="card p-5">
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="font-semibold">Caisse supplémentaire</div>
+                  <div className="text-lg font-semibold tracking-tight">
+                    +{data.addon_register_price ?? '9'} €/mois
+                  </div>
+                </div>
+                <Badge tone="neutral">{data.extra_registers ?? 0} active(s)</Badge>
+              </div>
+              <p className="mt-2 text-sm text-ink-soft">
+                Ajoutez des caisses à votre offre Essentiel. Facturé au prorata,
+                résiliable à tout moment.
+              </p>
+              <div className="mt-3 flex items-center gap-2">
+                <button className="btn-primary text-sm flex-1" disabled={busy || addonBusy}
+                        onClick={() => void changeAddon(1)}>
+                  {addonBusy ? '…' : '+ Ajouter une caisse'}
+                </button>
+                {(data.extra_registers ?? 0) > 0 && (
+                  <button className="btn-ghost text-sm" disabled={busy || addonBusy}
+                          onClick={() => void changeAddon(-1)}>
+                    − Retirer
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
           {ADDONS.map((a) => (
             <div key={a.key} className="card p-5">
               <div className="flex items-start justify-between">
