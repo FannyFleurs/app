@@ -60,6 +60,8 @@ const ADDONS: Array<{ key: string; label: string; price: string; description: st
 export default function SubscriptionView() {
   const [data, setData] = useState<Data | null>(null);
   const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     void (async () => {
@@ -68,6 +70,35 @@ export default function SubscriptionView() {
       setLoading(false);
     })();
   }, []);
+
+  // Ouvre le portail de facturation Stripe (moyen de paiement, factures,
+  // changement d'offre, résiliation). Si aucun abonnement Stripe n'existe
+  // encore, démarre un paiement (checkout).
+  async function openBilling() {
+    setBusy(true); setError(null);
+    try {
+      const r = await fetch('/api/billing/portal', { method: 'POST' });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok && j.url) { window.location.assign(j.url); return; }
+      if (j.error === 'NO_CUSTOMER') {
+        // Pas encore d'abonnement Stripe : on lance un checkout.
+        const c = await fetch('/api/billing/checkout', { method: 'POST' });
+        const cj = await c.json().catch(() => ({}));
+        if (c.ok && cj.checkout_url) { window.location.assign(cj.checkout_url); return; }
+        setError(cj.message ?? cj.error ?? 'Le paiement n\'est pas encore configuré.');
+        return;
+      }
+      setError(
+        j.error === 'STRIPE_NOT_CONFIGURED'
+          ? 'La facturation en ligne n\'est pas encore activée. Contactez le support.'
+          : (j.message ?? 'Impossible d\'ouvrir la facturation.'),
+      );
+    } catch {
+      setError('Réseau indisponible.');
+    } finally {
+      setBusy(false);
+    }
+  }
 
   if (loading) return <div className="p-8 text-sm text-ink-soft">Chargement…</div>;
   if (!data) return <div className="p-8 text-sm text-danger">Erreur de chargement.</div>;
@@ -176,10 +207,11 @@ export default function SubscriptionView() {
                 </ul>
                 <button
                   className={isCurrent ? 'btn-ghost mt-4' : 'btn-primary mt-4'}
-                  disabled={isCurrent}
-                  title={isCurrent ? 'Vous êtes sur ce plan' : 'Le paiement en ligne arrive bientôt'}
+                  disabled={isCurrent || busy}
+                  onClick={() => void openBilling()}
+                  title={isCurrent ? 'Vous êtes sur ce plan' : 'Gérer via le portail sécurisé Stripe'}
                 >
-                  {isCurrent ? 'Plan actuel' : 'Choisir ce plan'}
+                  {isCurrent ? 'Plan actuel' : (busy ? '…' : 'Choisir ce plan')}
                 </button>
               </div>
             );
@@ -198,19 +230,30 @@ export default function SubscriptionView() {
                 </div>
               </div>
               <p className="mt-2 text-sm text-ink-soft">{a.description}</p>
-              <button className="btn-soft mt-3 text-sm w-full" disabled
-                      title="Demandez l'activation à contact@webpos.fr">
-                Activer l&apos;option
+              <button className="btn-soft mt-3 text-sm w-full" onClick={() => void openBilling()} disabled={busy}>
+                Gérer dans la facturation
               </button>
             </div>
           ))}
         </div>
-        <p className="mt-3 text-xs text-ink-soft">
-          Pour activer votre abonnement, contactez{' '}
-          <a href="mailto:contact@webpos.fr" className="text-accent-deep hover:underline">
-            contact@webpos.fr
-          </a>. Le paiement en ligne (Stripe) arrive prochainement.
-        </p>
+
+        {error && (
+          <div className="mt-4 rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>
+        )}
+      </div>
+
+      {/* Gestion de la facturation (portail Stripe) */}
+      <div className="card p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <div className="font-semibold">Facturation &amp; paiement</div>
+          <p className="mt-1 text-sm text-ink-soft">
+            Moyen de paiement, factures, changement d&apos;offre et résiliation,
+            via le portail sécurisé Stripe.
+          </p>
+        </div>
+        <button onClick={() => void openBilling()} disabled={busy} className="btn-primary shrink-0">
+          {busy ? 'Ouverture…' : 'Gérer mon abonnement'}
+        </button>
       </div>
     </div>
   );

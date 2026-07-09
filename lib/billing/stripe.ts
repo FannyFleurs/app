@@ -88,6 +88,21 @@ export async function createCheckoutSession(
 }
 
 /**
+ * Crée une session du portail de facturation Stripe (customer portal) :
+ * le client y gère son moyen de paiement, ses factures, un changement
+ * d'offre et la résiliation.
+ */
+export async function createBillingPortalSession(
+  c: PlatformSettings,
+  params: { customerId: string; returnUrl: string },
+): Promise<{ url: string }> {
+  return stripePost<{ url: string }>(c.stripe_secret_key, '/billing_portal/sessions', {
+    customer: params.customerId,
+    return_url: params.returnUrl,
+  });
+}
+
+/**
  * Vérifie la signature d'un webhook Stripe (header Stripe-Signature).
  * Retourne l'event parsé si valide, sinon lève.
  */
