@@ -110,6 +110,71 @@ export function verifyStripeWebhook(payload: string, sigHeader: string, secret: 
   return JSON.parse(payload);
 }
 
+async function stripeGet<T>(secretKey: string, path: string): Promise<T> {
+  const res = await fetch(`${STRIPE_API}${path}`, {
+    headers: { Authorization: `Bearer ${secretKey}` },
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json?.error?.message ?? `Stripe ${res.status}`);
+  return json as T;
+}
+
+export interface PromoInput {
+  code: string;
+  /** Type de remise. */
+  kind: 'percent' | 'amount';
+  /** Valeur : % (1-100) ou montant en euros. */
+  value: number;
+  /** Durée : once (1 mois), repeating (N mois), forever. */
+  duration: 'once' | 'repeating' | 'forever';
+  duration_in_months?: number;
+  /** Nombre max d'utilisations (optionnel). */
+  max_redemptions?: number;
+  name?: string;
+}
+
+/** Crée un coupon + un code promo Stripe. Retourne le code promo. */
+export async function createPromotionCode(c: PlatformSettings, p: PromoInput): Promise<{ id: string; code: string }> {
+  const couponBody: Record<string, string | number | undefined> = {
+    duration: p.duration,
+    name: p.name || p.code,
+  };
+  if (p.kind === 'percent') couponBody.percent_off = p.value;
+  else { couponBody.amount_off = Math.round(p.value * 100); couponBody.currency = 'eur'; }
+  if (p.duration === 'repeating') couponBody.duration_in_months = p.duration_in_months || 1;
+
+  const coupon = await stripePost<{ id: string }>(c.stripe_secret_key, '/coupons', couponBody);
+
+  const promoBody: Record<string, string | number | undefined> = {
+    coupon: coupon.id,
+    code: p.code.toUpperCase(),
+  };
+  if (p.max_redemptions) promoBody.max_redemptions = p.max_redemptions;
+
+  const promo = await stripePost<{ id: string; code: string }>(
+    c.stripe_secret_key, '/promotion_codes', promoBody,
+  );
+  return { id: promo.id, code: promo.code };
+}
+
+export interface PromoRow {
+  id: string;
+  code: string;
+  active: boolean;
+  times_redeemed: number;
+  max_redemptions: number | null;
+  coupon: { percent_off: number | null; amount_off: number | null; duration: string; name: string | null };
+}
+
+export async function listPromotionCodes(c: PlatformSettings): Promise<PromoRow[]> {
+  const r = await stripeGet<{ data: PromoRow[] }>(c.stripe_secret_key, '/promotion_codes?limit=100');
+  return r.data;
+}
+
+export async function setPromotionCodeActive(c: PlatformSettings, id: string, active: boolean): Promise<void> {
+  await stripePost(c.stripe_secret_key, `/promotion_codes/${id}`, { active: active ? 'true' : 'false' });
+}
+
 /** Mappe le plan interne (offre) vers son Price ID configuré. */
 export function priceForPlan(c: PlatformSettings, plan: 'essentiel' | 'croissance'): string {
   return plan === 'croissance' ? c.stripe_price_croissance : c.stripe_price_essentiel;

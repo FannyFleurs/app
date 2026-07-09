@@ -33,6 +33,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <nav className="ml-8 flex items-center gap-1">
           <AdminLink href="/admin">Dashboard</AdminLink>
           <AdminLink href="/admin/organizations">Organisations</AdminLink>
+          <AdminLink href="/admin/promo-codes">Codes</AdminLink>
           <AdminLink href="/admin/configuration">Configuration</AdminLink>
         </nav>
         <div className="ml-auto flex items-center gap-3 text-sm text-white/80">
