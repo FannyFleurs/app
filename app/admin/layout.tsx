@@ -1,6 +1,8 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { readSessionFromCookie } from '@/lib/auth/session';
+import { query } from '@/lib/db/client';
+import { mergePlatformDefaults, type PlatformSettings } from '@/lib/settings/platform';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,13 +24,30 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     );
   }
 
+  // Branding (logo + nom) depuis la config plateforme.
+  let brand: PlatformSettings = mergePlatformDefaults(null);
+  try {
+    const { rows } = await query<{ value: Partial<PlatformSettings> }>(
+      `SELECT value FROM platform_settings WHERE id = 1`,
+    );
+    brand = mergePlatformDefaults(rows[0]?.value ?? null);
+  } catch { /* migration 0029 absente */ }
+  const brandName = brand.brand_name || 'HelloPos';
+
   return (
     <div className="min-h-screen bg-white">
       {/* Topbar admin distincte de l'app */}
       <header className="sticky top-0 z-30 h-14 bg-ink text-white flex items-center px-4">
         <Link href="/admin" className="flex items-center gap-2.5">
-          <span className="grid h-9 w-9 place-items-center rounded-xl bg-white/10 font-semibold">F</span>
-          <span className="font-semibold tracking-tight">HelloPos — Admin SaaS</span>
+          {brand.logo_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={brand.logo_url} alt={brandName} className="h-9 w-9 rounded-xl object-contain bg-white/10" />
+          ) : (
+            <span className="grid h-9 w-9 place-items-center rounded-xl bg-white/10 font-semibold">
+              {brandName.charAt(0)}
+            </span>
+          )}
+          <span className="font-semibold tracking-tight">{brandName} — Admin SaaS</span>
         </Link>
         <nav className="ml-8 flex items-center gap-1">
           <AdminLink href="/admin">Dashboard</AdminLink>
