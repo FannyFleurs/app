@@ -38,9 +38,6 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         </nav>
         <div className="ml-auto flex items-center gap-3 text-sm text-white/80">
           <span>{user.fullName}</span>
-          <Link href="/caisse" className="text-xs text-white/60 hover:text-white">
-            ↩ Mode boutique
-          </Link>
         </div>
       </header>
       <main>{children}</main>
