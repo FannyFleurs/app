@@ -47,12 +47,20 @@ export async function createSession(args: {
   role: Role;
   ip?: string | null;
   userAgent?: string | null;
+  /**
+   * Type de session : 'pos' (poste de caisse, soumis à la limite
+   * multi-appareils) ou 'management' (back-office / CA / admin, hors
+   * limite). Défaut : 'pos'.
+   */
+  kind?: 'pos' | 'management';
 }): Promise<string> {
+  const kind = args.kind ?? 'pos';
   // Vérification de la limite multi-appareils.
   // - super_admin contourne la limite (besoin admin SaaS cross-tenant).
-  // - Sinon : compte les sessions actives de l'organisation et compare
-  //   à organizations.max_devices (par défaut 1 via migration 0015).
-  if (args.role !== 'super_admin') {
+  // - Les sessions de gestion (bo./ca./admin) ne consomment pas de poste.
+  // - Sinon : compte les sessions CAISSE actives et compare à
+  //   organizations.max_devices (par défaut 1 via migration 0015).
+  if (args.role !== 'super_admin' && kind === 'pos') {
     try {
       const orgRes = await query<{ max_devices: number }>(
         `SELECT COALESCE(max_devices, 1) AS max_devices
@@ -65,7 +73,8 @@ export async function createSession(args: {
            JOIN users u ON u.id = s.user_id
           WHERE u.organization_id = $1
             AND s.revoked_at IS NULL
-            AND s.expires_at > now()`,
+            AND s.expires_at > now()
+            AND COALESCE(s.kind, 'pos') = 'pos'`,
         [args.organizationId],
       );
       const active = Number(activeRes.rows[0]?.c ?? 0);
@@ -85,18 +94,24 @@ export async function createSession(args: {
   const tokenHash = createHash('sha256').update(raw).digest('hex');
   const expiresAt = new Date(Date.now() + ttlMinutes() * 60 * 1000);
 
-  await query(
-    `INSERT INTO sessions (id, user_id, token_hash, ip, user_agent, expires_at)
-     VALUES ($1,$2,$3,$4,$5,$6)`,
-    [
-      sessionId,
-      args.userId,
-      tokenHash,
-      args.ip ?? null,
-      args.userAgent ?? null,
-      expiresAt.toISOString(),
-    ],
-  );
+  try {
+    await query(
+      `INSERT INTO sessions (id, user_id, token_hash, ip, user_agent, expires_at, kind)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [sessionId, args.userId, tokenHash, args.ip ?? null, args.userAgent ?? null, expiresAt.toISOString(), kind],
+    );
+  } catch (err) {
+    // Migration 0032 (colonne kind) pas encore appliquée : fallback.
+    if ((err as Error).message?.includes('kind')) {
+      await query(
+        `INSERT INTO sessions (id, user_id, token_hash, ip, user_agent, expires_at)
+         VALUES ($1,$2,$3,$4,$5,$6)`,
+        [sessionId, args.userId, tokenHash, args.ip ?? null, args.userAgent ?? null, expiresAt.toISOString()],
+      );
+    } else {
+      throw err;
+    }
+  }
 
   const jwt = await new SignJWT({
     org: args.organizationId,

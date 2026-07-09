@@ -98,6 +98,14 @@ async function handleLogin(req: Request) {
     [user.id],
   );
 
+  // Session de gestion (back-office / CA / admin) = hors limite de
+  // postes de caisse. Détectée via le host du sous-domaine ou le cookie
+  // webpos_bo (fallback path-based).
+  const host = (headers().get('host') ?? '').toLowerCase();
+  const isManagement =
+    host.startsWith('bo.') || host.startsWith('admin.') || host.startsWith('ca.') ||
+    cookies().get('webpos_bo')?.value === '1';
+
   let token: string;
   try {
     token = await createSession({
@@ -106,6 +114,7 @@ async function handleLogin(req: Request) {
       role: user.role,
       ip,
       userAgent: ua,
+      kind: isManagement ? 'management' : 'pos',
     });
   } catch (err) {
     if (err instanceof DeviceLimitError) {
