@@ -29,8 +29,13 @@ interface TaxRate {
 
 type Tab = 'identity' | 'stores' | 'registers' | 'tax';
 
-export default function CompanyAdmin({ org: initialOrg, canWrite }: {
+export default function CompanyAdmin({
+  org: initialOrg, canWrite, planLabel, maxStores, maxRegistersPerStore,
+}: {
   org: Org; canWrite: boolean;
+  planLabel: string;
+  maxStores: number | null;
+  maxRegistersPerStore: number | null;
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>('identity');
@@ -71,10 +76,12 @@ export default function CompanyAdmin({ org: initialOrg, canWrite }: {
         <IdentityForm org={org} canWrite={canWrite} onSaved={(o) => { setOrg(o); router.refresh(); }} />
       )}
       {tab === 'stores' && (
-        <StoresPanel stores={stores} canWrite={canWrite} onChange={() => void reload()} />
+        <StoresPanel stores={stores} canWrite={canWrite} onChange={() => void reload()}
+                     planLabel={planLabel} maxStores={maxStores} />
       )}
       {tab === 'registers' && (
-        <RegistersPanel registers={registers} stores={stores} canWrite={canWrite} onChange={() => void reload()} />
+        <RegistersPanel registers={registers} stores={stores} canWrite={canWrite} onChange={() => void reload()}
+                        planLabel={planLabel} maxRegistersPerStore={maxRegistersPerStore} />
       )}
       {tab === 'tax' && (
         <TaxPanel taxRates={taxRates} canWrite={canWrite} onChange={() => void reload()} />
@@ -212,17 +219,27 @@ function IdentityForm({ org, canWrite, onSaved }: {
   );
 }
 
-function StoresPanel({ stores, canWrite, onChange }: {
+function StoresPanel({ stores, canWrite, onChange, planLabel, maxStores }: {
   stores: Store[]; canWrite: boolean; onChange: () => void;
+  planLabel: string; maxStores: number | null;
 }) {
   const [editing, setEditing] = useState<Store | null | undefined>(undefined);
+  const atLimit = maxStores !== null && stores.length >= maxStores;
 
   return (
     <div className="space-y-3">
       {canWrite && (
-        <button onClick={() => setEditing(null)} className="btn-primary">
-          + Ajouter une boutique
-        </button>
+        <div className="space-y-2">
+          <button onClick={() => setEditing(null)} className="btn-primary" disabled={atLimit}>
+            + Ajouter une boutique
+          </button>
+          {atLimit && (
+            <p className="text-xs text-ink-soft">
+              Votre offre <strong>{planLabel}</strong> est limitée à {maxStores} boutique(s).
+              {' '}<a href="/settings/subscription" className="text-accent-deep underline">Changer d&apos;offre</a>.
+            </p>
+          )}
+        </div>
       )}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {stores.map((s) => (
@@ -444,11 +461,15 @@ function StoreFormModal({ store, onClose, onSaved }: {
   );
 }
 
-function RegistersPanel({ registers, stores, canWrite, onChange }: {
+function RegistersPanel({ registers, stores, canWrite, onChange, planLabel, maxRegistersPerStore }: {
   registers: Register[]; stores: Store[]; canWrite: boolean; onChange: () => void;
+  planLabel: string; maxRegistersPerStore: number | null;
 }) {
   const [editing, setEditing] = useState<Register | null | undefined>(undefined);
   const [releasing, setReleasing] = useState<string | null>(null);
+  // Limite atteinte si CHAQUE boutique a déjà son quota de caisses.
+  const atLimit = maxRegistersPerStore !== null && stores.length > 0 &&
+    stores.every((s) => registers.filter((r) => r.store_id === s.id).length >= maxRegistersPerStore);
 
   async function release(r: Register) {
     const label = r.device_name ? `"${r.device_name}"` : 'ce poste';
@@ -474,11 +495,19 @@ function RegistersPanel({ registers, stores, canWrite, onChange }: {
   return (
     <div className="space-y-3">
       {canWrite && (
-        <button onClick={() => setEditing(null)} className="btn-primary"
-                disabled={stores.length === 0}
-                title={stores.length === 0 ? 'Créez d\'abord une boutique' : ''}>
-          + Ajouter une caisse
-        </button>
+        <div className="space-y-2">
+          <button onClick={() => setEditing(null)} className="btn-primary"
+                  disabled={stores.length === 0 || atLimit}
+                  title={stores.length === 0 ? 'Créez d\'abord une boutique' : ''}>
+            + Ajouter une caisse
+          </button>
+          {atLimit && (
+            <p className="text-xs text-ink-soft">
+              Votre offre <strong>{planLabel}</strong> est limitée à {maxRegistersPerStore} caisse(s) par boutique.
+              {' '}<a href="/settings/subscription" className="text-accent-deep underline">Passer à Croissance</a> pour des caisses illimitées.
+            </p>
+          )}
+        </div>
       )}
       <div className="card overflow-hidden">
         <table className="w-full text-sm">

@@ -4,6 +4,23 @@ import { query, withTransaction } from '@/lib/db/client';
 import { requirePermission } from '@/lib/auth/guards';
 import { parseJson, jsonError } from '@/lib/validation/api';
 import { audit } from '@/lib/audit/log';
+import { planLimits, effectivePlan } from '@/lib/billing/plan-limits';
+
+/** Plan effectif de l'organisation (subscription > organizations). */
+async function orgPlan(orgId: string): Promise<string> {
+  try {
+    const r = await query<{ sub_plan: string | null; org_plan: string | null }>(
+      `SELECT s.plan AS sub_plan, o.plan AS org_plan
+         FROM organizations o
+         LEFT JOIN subscriptions s ON s.organization_id = o.id
+        WHERE o.id = $1`,
+      [orgId],
+    );
+    return effectivePlan(r.rows[0]?.sub_plan ?? null, r.rows[0]?.org_plan ?? null);
+  } catch {
+    return 'trial';
+  }
+}
 
 const schema = z.object({
   code: z.string().max(40).optional(),
@@ -61,6 +78,21 @@ export async function POST(req: Request) {
   const parsed = await parseJson(req, schema);
   if ('response' in parsed) return parsed.response;
   const d = parsed.data;
+
+  // Limite d'offre : nombre de boutiques.
+  const limits = planLimits(await orgPlan(g.user.organizationId));
+  if (Number.isFinite(limits.maxStores)) {
+    const cnt = await query<{ c: string }>(
+      `SELECT COUNT(*)::text AS c FROM stores WHERE organization_id = $1`,
+      [g.user.organizationId],
+    );
+    if (Number(cnt.rows[0]?.c ?? 0) >= limits.maxStores) {
+      return NextResponse.json({
+        error: 'PLAN_LIMIT_REACHED',
+        message: `Votre offre ${limits.label} est limitée à ${limits.maxStores} boutique(s). Passez à une offre supérieure pour en ajouter.`,
+      }, { status: 403 });
+    }
+  }
 
   try {
     const result = await withTransaction(async (client) => {
