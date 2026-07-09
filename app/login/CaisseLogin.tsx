@@ -1,25 +1,52 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import PinLogin from './PinLogin';
 import { useBrand } from '@/components/BrandMark';
 
 /**
- * Écran de connexion caisse. Par défaut : un formulaire centré
- * email + mot de passe (identifiants de l'admin de la boutique), sans
- * colonnes. Un lien discret permet de basculer sur la connexion par
- * code PIN (tuiles utilisateurs) pour les postes qui l'utilisent au
- * quotidien.
+ * Écran de connexion caisse. La connexion EMAIL n'est nécessaire qu'à la
+ * PREMIÈRE connexion sur un poste (pour rattacher la boutique). Une fois
+ * la boutique connue sur cet appareil (cookie tenant), on affiche
+ * directement la connexion par PIN. Un lien discret permet de basculer
+ * manuellement d'un mode à l'autre.
  */
 export default function CaisseLogin() {
   const brand = useBrand();
   const APP_NAME = brand.brand_name || 'HelloPos';
-  const [mode, setMode] = useState<'email' | 'pin'>('email');
+  const [mode, setMode] = useState<'email' | 'pin' | 'loading'>('loading');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [forgot, setForgot] = useState(false);
+
+  // Décide du mode initial : PIN si la boutique est déjà rattachée à ce
+  // poste (des utilisateurs remontent), sinon email (première connexion).
+  useEffect(() => {
+    void (async () => {
+      try {
+        let q = '';
+        if (typeof window !== 'undefined') {
+          const dev = localStorage.getItem('webpos_device_id');
+          if (dev) q = `?device_id=${encodeURIComponent(dev)}`;
+        }
+        const r = await fetch(`/api/users/select${q}`);
+        const j = r.ok ? await r.json() : {};
+        if (!j.tenant_required && Array.isArray(j.users) && j.users.length > 0) {
+          setMode('pin');
+        } else {
+          setMode('email');
+        }
+      } catch {
+        setMode('email');
+      }
+    })();
+  }, []);
+
+  if (mode === 'loading') {
+    return <main className="min-h-screen grid place-items-center bg-gray-50 text-sm text-ink-soft">Chargement…</main>;
+  }
 
   if (mode === 'pin') {
     return (
