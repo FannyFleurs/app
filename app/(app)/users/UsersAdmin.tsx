@@ -189,7 +189,13 @@ function UserFormModal({ user, stores, onClose, onSaved }: {
   }
 
   async function submit() {
-    if (!fullName.trim() || !email.trim()) { setError('Nom et email obligatoires.'); return; }
+    if (!fullName.trim()) { setError('Nom obligatoire.'); return; }
+    // Email facultatif : requis seulement si l'utilisateur aura accès au
+    // back-office (email + mot de passe), c.-à-d. si un mot de passe est
+    // défini. Un vendeur caisse (PIN seul) n'a pas besoin d'email.
+    if (password && !email.trim()) {
+      setError('Un email est requis pour la connexion par mot de passe (back-office).'); return;
+    }
     if (!user && pinRequired && !/^\d{4}$/.test(pin)) {
       setError('Le PIN doit faire 4 chiffres.'); return;
     }
@@ -255,8 +261,11 @@ function UserFormModal({ user, stores, onClose, onSaved }: {
             <input className="input mt-1" value={fullName} onChange={(e) => setFullName(e.target.value)} />
           </div>
           <div>
-            <label className="text-sm font-medium text-ink-soft">Email</label>
-            <input type="email" className="input mt-1" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <label className="text-sm font-medium text-ink-soft">
+              Email <span className="text-xs text-ink-soft">(optionnel — requis seulement pour la connexion back-office)</span>
+            </label>
+            <input type="email" className="input mt-1" value={email} onChange={(e) => setEmail(e.target.value)}
+                   placeholder="Facultatif pour un vendeur (PIN seul)" />
           </div>
           <div>
             <label className="text-sm font-medium text-ink-soft">Rôle</label>

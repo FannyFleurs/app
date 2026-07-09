@@ -10,7 +10,8 @@ const ROLES = ['super_admin','owner','manager','vendeur','comptable','lecture_se
 
 const schema = z.object({
   full_name: z.string().min(1).max(120),
-  email: z.string().email().max(160),
+  // Email facultatif : un vendeur caisse se connecte par PIN seul.
+  email: z.string().email().max(160).optional().or(z.literal('')),
   role: z.enum(ROLES),
   pin: z.string().regex(/^\d{4}$/, 'PIN doit être 4 chiffres').optional(),
   password: z.string().min(8).max(120).optional(),
@@ -88,13 +89,18 @@ export async function POST(req: Request) {
   if ('response' in parsed) return parsed.response;
   const d = parsed.data;
 
+  // Email facultatif (vendeur PIN). Normalisé, null si absent.
+  const email = d.email && d.email.trim() ? d.email.trim().toLowerCase() : null;
+
   try {
-    // Vérifie unicité email dans l'organisation
-    const exists = await query(
-      `SELECT 1 FROM users WHERE organization_id = $1 AND email = $2`,
-      [g.user.organizationId, d.email],
-    );
-    if (exists.rowCount && exists.rowCount > 0) return jsonError('EMAIL_ALREADY_EXISTS', 409);
+    // Vérifie l'unicité de l'email seulement s'il est fourni.
+    if (email) {
+      const exists = await query(
+        `SELECT 1 FROM users WHERE organization_id = $1 AND lower(email) = $2`,
+        [g.user.organizationId, email],
+      );
+      if (exists.rowCount && exists.rowCount > 0) return jsonError('EMAIL_ALREADY_EXISTS', 409);
+    }
 
     const pinHash = d.pin ? await hashPassword(d.pin) : null;
     // Mot de passe applicatif (NOT NULL) :
@@ -112,7 +118,7 @@ export async function POST(req: Request) {
           pin_code_hash, pin_required)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
       [
-        g.user.organizationId, d.email.toLowerCase(), passwordHash, d.full_name.trim(),
+        g.user.organizationId, email, passwordHash, d.full_name.trim(),
         d.role, d.is_active ?? true, pinHash, d.pin_required ?? true,
       ],
     );
