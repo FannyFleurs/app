@@ -8,6 +8,7 @@ import AllPagesOverlay from './AllPagesOverlay';
 import WakeLockKeeper from './WakeLockKeeper';
 import PaidOrderNotifier from './PaidOrderNotifier';
 import SchoolModeBanner from './SchoolModeBanner';
+import PosteRefBadge from './PosteRefBadge';
 import type { Role, Permission } from '@/lib/auth/rbac';
 import { POS_THEME_COLOR_VALUES, type PosThemeColor, type ColorScheme, type AutoLogoutMode } from '@/lib/settings/pos-ui';
 
@@ -158,6 +159,9 @@ export default function AppShell({
           onLogout={() => void logout()}
         />
       )}
+
+      {/* Référence du poste (caisse + paramètres, en bas à droite) */}
+      <PosteRefBadge />
 
       {/* Maintient l'écran allumé tant que l'app est ouverte (iPad PWA) */}
       <WakeLockKeeper />

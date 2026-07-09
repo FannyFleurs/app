@@ -1,9 +1,9 @@
 import { redirect } from 'next/navigation';
 import { readSessionFromCookie } from '@/lib/auth/session';
-import PinLogin from './PinLogin';
+import CaisseLogin from './CaisseLogin';
 
 export default async function LoginPage() {
   const user = await readSessionFromCookie();
   if (user) redirect('/');
-  return <PinLogin />;
+  return <CaisseLogin />;
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { posteRef } from '@/lib/poste-ref';
 
 interface Data {
   organization: {
@@ -524,6 +525,9 @@ function BoundRegisters({ id, version }: { id: string; version: number }) {
             <div key={r.id} className="flex items-center gap-3 px-4 py-2.5">
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-medium truncate flex items-center gap-2">
+                  <span className="font-mono text-[11px] rounded bg-ink/5 px-1.5 py-0.5 text-ink-soft">
+                    {posteRef(r.id)}
+                  </span>
                   <span className="font-mono text-xs text-ink-soft">{r.code}</span>
                   {r.name}
                   <span className="text-ink-soft font-normal">· {r.store_name}</span>
