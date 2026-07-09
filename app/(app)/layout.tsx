@@ -8,6 +8,7 @@ import {
   type PosUiSettings,
 } from '@/lib/settings/pos-ui';
 import AppShell, { type SubscriptionInfo } from '@/components/AppShell';
+import BillingBlock from '@/components/BillingBlock';
 import { resolveEffectivePermissions } from '@/lib/auth/permissions';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -103,30 +104,3 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   );
 }
 
-/** Écran de blocage : abonnement non finalisé ou résilié. */
-function BillingBlock({ reason }: { reason: 'incomplete' | 'cancelled' }) {
-  const isIncomplete = reason === 'incomplete';
-  return (
-    <main className="min-h-screen grid place-items-center bg-gray-50 p-6">
-      <div className="card max-w-md w-full p-8 text-center">
-        <div className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-accent-soft text-accent-deep text-2xl">
-          {isIncomplete ? '⏳' : '🔒'}
-        </div>
-        <h1 className="text-xl font-semibold tracking-tight">
-          {isIncomplete ? 'Finalisez votre inscription' : 'Abonnement inactif'}
-        </h1>
-        <p className="mt-2 text-sm text-ink-soft">
-          {isIncomplete
-            ? 'Votre inscription n\'est pas terminée : ajoutez un moyen de paiement pour activer votre boutique (essai gratuit, aucun débit immédiat).'
-            : 'Votre abonnement a été résilié ou a expiré. Réactivez-le pour retrouver l\'accès à votre caisse.'}
-        </p>
-        <a href="/setup" className="btn-primary mt-5 inline-flex">
-          {isIncomplete ? 'Reprendre l\'inscription' : 'Réactiver mon abonnement'}
-        </a>
-        <p className="mt-3 text-xs text-ink-soft">
-          Besoin d&apos;aide ? Contactez le support.
-        </p>
-      </div>
-    </main>
-  );
-}
