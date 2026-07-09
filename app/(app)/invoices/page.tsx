@@ -5,6 +5,11 @@ import { formatEUR } from '@/lib/services/money';
 import PageHeader from '@/components/PageHeader';
 import Badge from '@/components/Badge';
 import EmptyState from '@/components/EmptyState';
+import {
+  EINVOICING_KEY,
+  mergeEInvoicingDefaults,
+  type EInvoicingSettings,
+} from '@/lib/settings/einvoicing';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,6 +49,14 @@ export default async function InvoicesPage() {
       ORDER BY COALESCE(i.issue_date, i.created_at::date) DESC LIMIT 200`,
     [user.organizationId],
   );
+
+  // E-facturation : le lien "Export e-facture (JSON)" n'apparait que si
+  // la preparation est activee dans les reglages.
+  const eRow = await query<{ value: Partial<EInvoicingSettings> }>(
+    `SELECT value FROM settings WHERE organization_id = $1 AND key = $2`,
+    [user.organizationId, EINVOICING_KEY],
+  );
+  const eInvoicing = mergeEInvoicingDefaults(eRow.rows[0]?.value ?? null);
 
   const totalTtc = invoices.rows.reduce((s, i) => s + Number(i.total_ttc), 0);
   const overdueCount = invoices.rows.filter((i) => i.status === 'overdue').length;
@@ -113,6 +126,15 @@ export default async function InvoicesPage() {
                       >
                         PDF
                       </a>
+                      {eInvoicing.enabled && (
+                        <a
+                          href={`/api/invoices/${i.id}/e-invoice?download=1`}
+                          className="text-accent-deep text-sm hover:underline mr-3"
+                          title="Export e-facture (JSON normalisé)"
+                        >
+                          JSON
+                        </a>
+                      )}
                       <Link href={`/invoices/${i.id}`} className="text-accent-deep text-sm hover:underline">
                         Détail
                       </Link>

@@ -35,7 +35,9 @@ interface CustomerDetail {
   customer: {
     id: string; type: string;
     first_name: string | null; last_name: string | null; company_name: string | null;
-    email: string | null; phone: string | null; siret: string | null; vat_number: string | null;
+    email: string | null; phone: string | null; siret: string | null; siren: string | null;
+    vat_number: string | null;
+    public_service_code: string | null; commitment_number: string | null;
     address: { line1?: string; zip?: string; city?: string; country?: string } | null;
     consent_email: boolean; consent_sms: boolean;
     internal_notes: string | null; loyalty_code: string | null;
@@ -329,8 +331,15 @@ function CustomerDetailContent({ tab, detail, canWrite, onEdit }: {
               <Item label="Code fidélité" value={c.loyalty_code ?? '—'} />
               {c.type !== 'particulier' && (
                 <>
+                  <Item label="SIREN" value={c.siren ?? '—'} />
                   <Item label="SIRET" value={c.siret ?? '—'} />
                   <Item label="TVA intra." value={c.vat_number ?? '—'} />
+                </>
+              )}
+              {c.type === 'collectivite' && (
+                <>
+                  <Item label="Code service (Chorus Pro)" value={c.public_service_code ?? '—'} />
+                  <Item label="N° d'engagement" value={c.commitment_number ?? '—'} />
                 </>
               )}
             </dl>

@@ -13,7 +13,12 @@ export const customerInputSchema = z.object({
   email: z.string().email().max(160).nullable().optional().or(z.literal('')),
   phone: z.string().max(40).nullable().optional(),
   siret: z.string().max(20).nullable().optional(),
+  // SIREN (9 chiffres) — racine entreprise, exigé par certains formats.
+  siren: z.string().max(15).nullable().optional(),
   vat_number: z.string().max(40).nullable().optional(),
+  // Chorus Pro (secteur public / B2G).
+  public_service_code: z.string().max(60).nullable().optional(),
+  commitment_number: z.string().max(60).nullable().optional(),
   address: z.object({
     line1: z.string().max(200).optional(),
     line2: z.string().max(200).optional(),

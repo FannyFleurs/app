@@ -29,7 +29,8 @@ export async function GET(req: Request) {
 
   const { rows } = await query(
     `SELECT id, type, first_name, last_name, company_name, email, phone,
-            siret, vat_number, address, loyalty_code, default_discount_pct,
+            siret, siren, vat_number, public_service_code, commitment_number,
+            address, loyalty_code, default_discount_pct,
             COALESCE(company_name, NULLIF(TRIM(CONCAT(first_name,' ',last_name)), '')) AS display_name,
             created_at
        FROM customers
@@ -53,16 +54,18 @@ export async function POST(req: Request) {
   const ins = await query<{ id: string }>(
     `INSERT INTO customers
        (organization_id, type, first_name, last_name, company_name,
-        email, phone, siret, vat_number, address,
+        email, phone, siret, siren, vat_number,
+        public_service_code, commitment_number, address,
         consent_email, consent_sms, internal_notes, loyalty_code,
         default_discount_pct,
         created_by, updated_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$16)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$19)
      RETURNING id`,
     [
       g.user.organizationId, c.type,
       c.first_name ?? null, c.last_name ?? null, c.company_name ?? null,
-      email, c.phone ?? null, c.siret ?? null, c.vat_number ?? null,
+      email, c.phone ?? null, c.siret ?? null, c.siren ?? null, c.vat_number ?? null,
+      c.public_service_code ?? null, c.commitment_number ?? null,
       JSON.stringify(c.address ?? {}),
       c.consent_email ?? false, c.consent_sms ?? false,
       c.internal_notes ?? null, c.loyalty_code ?? null,

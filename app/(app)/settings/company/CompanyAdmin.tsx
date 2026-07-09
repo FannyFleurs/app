@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Badge from '@/components/Badge';
 
 interface Org {
-  name: string; legal_name: string; siret: string | null; vat_number: string | null;
+  name: string; legal_name: string; siret: string | null; siren: string | null; vat_number: string | null;
   address: { line1?: string; line2?: string; zip?: string; city?: string; country?: string } | null;
   contact: { phone?: string; email?: string; website?: string } | null;
 }
@@ -113,6 +113,7 @@ function IdentityForm({ org, canWrite, onSaved }: {
         name: form.name,
         legal_name: form.legal_name,
         siret: form.siret || null,
+        siren: form.siren || null,
         vat_number: form.vat_number || null,
         address: form.address ?? {},
         contact: form.contact ?? {},
@@ -150,15 +151,21 @@ function IdentityForm({ org, canWrite, onSaved }: {
                    onChange={(e) => setForm({ ...form, legal_name: e.target.value })} />
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="SIRET">
-              <input className="input" value={form.siret ?? ''} disabled={!canWrite} maxLength={14}
-                     onChange={(e) => setForm({ ...form, siret: e.target.value })} />
+            <Field label="SIREN">
+              <input className="input" value={form.siren ?? ''} disabled={!canWrite} maxLength={11}
+                     placeholder="9 chiffres"
+                     onChange={(e) => setForm({ ...form, siren: e.target.value.replace(/\s/g, '') })} />
             </Field>
-            <Field label="N° TVA intra.">
-              <input className="input" value={form.vat_number ?? ''} disabled={!canWrite}
-                     onChange={(e) => setForm({ ...form, vat_number: e.target.value })} />
+            <Field label="SIRET">
+              <input className="input" value={form.siret ?? ''} disabled={!canWrite} maxLength={17}
+                     placeholder="14 chiffres"
+                     onChange={(e) => setForm({ ...form, siret: e.target.value.replace(/\s/g, '') })} />
             </Field>
           </div>
+          <Field label="N° TVA intra.">
+            <input className="input" value={form.vat_number ?? ''} disabled={!canWrite}
+                   onChange={(e) => setForm({ ...form, vat_number: e.target.value })} />
+          </Field>
         </div>
       </div>
 

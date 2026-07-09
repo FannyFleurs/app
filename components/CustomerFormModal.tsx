@@ -11,7 +11,10 @@ export interface CustomerLike {
   email?: string | null;
   phone?: string | null;
   siret?: string | null;
+  siren?: string | null;
   vat_number?: string | null;
+  public_service_code?: string | null;
+  commitment_number?: string | null;
   address?: { line1?: string; line2?: string; zip?: string; city?: string; country?: string } | null;
   consent_email?: boolean;
   consent_sms?: boolean;
@@ -41,7 +44,10 @@ export default function CustomerFormModal({ customer, onClose, onSaved }: Props)
   const [email, setEmail] = useState(customer?.email ?? '');
   const [phone, setPhone] = useState(customer?.phone ?? '');
   const [siret, setSiret] = useState(customer?.siret ?? '');
+  const [siren, setSiren] = useState(customer?.siren ?? '');
   const [vat, setVat] = useState(customer?.vat_number ?? '');
+  const [serviceCode, setServiceCode] = useState(customer?.public_service_code ?? '');
+  const [commitmentNumber, setCommitmentNumber] = useState(customer?.commitment_number ?? '');
   const [line1, setLine1] = useState(customer?.address?.line1 ?? '');
   const [zip, setZip] = useState(customer?.address?.zip ?? '');
   const [city, setCity] = useState(customer?.address?.city ?? '');
@@ -81,7 +87,10 @@ export default function CustomerFormModal({ customer, onClose, onSaved }: Props)
       email: email.trim() || null,
       phone: phone.trim() || null,
       siret: siret.trim() || null,
+      siren: siren.trim() || null,
       vat_number: vat.trim() || null,
+      public_service_code: serviceCode.trim() || null,
+      commitment_number: commitmentNumber.trim() || null,
       address: { line1: line1.trim(), zip: zip.trim(), city: city.trim(), country: 'FR' },
       consent_email: consentEmail,
       consent_sms: consentSms,
@@ -158,13 +167,48 @@ export default function CustomerFormModal({ customer, onClose, onSaved }: Props)
 
           {isPro && (
             <>
+              <div className="col-span-2 -mb-1 mt-1">
+                <div className="text-xs uppercase tracking-wider text-ink-soft">
+                  Identification légale
+                  <span className="ml-1 normal-case text-ink-soft/70">
+                    — requise pour la facturation électronique
+                  </span>
+                </div>
+              </div>
+              <Field label="SIREN">
+                <input className="input" value={siren}
+                       onChange={(e) => setSiren(e.target.value.replace(/\s/g, ''))}
+                       placeholder="9 chiffres" maxLength={11} />
+              </Field>
               <Field label="SIRET">
-                <input className="input" value={siret} onChange={(e) => setSiret(e.target.value)}
-                       placeholder="14 chiffres" maxLength={14} />
+                <input className="input" value={siret}
+                       onChange={(e) => setSiret(e.target.value.replace(/\s/g, ''))}
+                       placeholder="14 chiffres" maxLength={17} />
               </Field>
-              <Field label="N° TVA intra.">
-                <input className="input" value={vat} onChange={(e) => setVat(e.target.value)} />
+              <Field label="N° TVA intra." full>
+                <input className="input" value={vat} onChange={(e) => setVat(e.target.value)}
+                       placeholder="ex : FR 12 345678901" />
               </Field>
+
+              {type === 'collectivite' && (
+                <>
+                  <div className="col-span-2 -mb-1 mt-1">
+                    <div className="text-xs uppercase tracking-wider text-ink-soft">
+                      Secteur public (Chorus Pro)
+                    </div>
+                  </div>
+                  <Field label="Code service">
+                    <input className="input" value={serviceCode}
+                           onChange={(e) => setServiceCode(e.target.value)}
+                           placeholder="ex : service destinataire" />
+                  </Field>
+                  <Field label="N° d'engagement">
+                    <input className="input" value={commitmentNumber}
+                           onChange={(e) => setCommitmentNumber(e.target.value)}
+                           placeholder="bon de commande / engagement" />
+                  </Field>
+                </>
+              )}
             </>
           )}
 

@@ -12,11 +12,11 @@ export default async function CompanySettingsPage() {
   }
 
   const org = await query<{
-    name: string; legal_name: string; siret: string | null; vat_number: string | null;
+    name: string; legal_name: string; siret: string | null; siren: string | null; vat_number: string | null;
     address: { line1?: string; line2?: string; zip?: string; city?: string; country?: string } | null;
     contact: { phone?: string; email?: string; website?: string } | null;
   }>(
-    `SELECT name, legal_name, siret, vat_number, address, contact
+    `SELECT name, legal_name, siret, siren, vat_number, address, contact
        FROM organizations WHERE id = $1`,
     [user.organizationId],
   );
