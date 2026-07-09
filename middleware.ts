@@ -65,6 +65,18 @@ export function middleware(req: NextRequest) {
 
   // -------- admin. -> rewrite /admin
   if (host.startsWith('admin.')) {
+    // Login super-admin : email + mot de passe (comme le back-office),
+    // PAS le login PIN caisse. Le layout /admin redirige les visiteurs
+    // non connectes vers /login ; sur ce sous-domaine on sert donc la
+    // page /bo/login (formulaire email). Sans ca, /login etait reecrit
+    // en /admin/login -> page inexistante -> 404.
+    if (pathname === '/login' || pathname === '/bo/login') {
+      if (pathname !== '/bo/login') {
+        url.pathname = '/bo/login';
+        return NextResponse.rewrite(url);
+      }
+      return NextResponse.next();
+    }
     if (pathname.startsWith('/admin')) return NextResponse.next();
     url.pathname = '/admin' + (pathname === '/' ? '' : pathname);
     return NextResponse.rewrite(url);
