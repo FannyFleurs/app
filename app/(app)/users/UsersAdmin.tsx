@@ -12,7 +12,10 @@ interface User {
   pin_required?: boolean;
   last_login_at: string | null;
   color?: string | null;
+  store_ids?: string[];
 }
+
+interface Store { id: string; code: string; name: string; is_active: boolean; }
 
 const USER_COLORS = ['#F4A09B', '#7AD09A', '#F0C25A', '#8FD5DA', '#C58EC2', '#9DB4F0', '#F39A6A', '#B39DDB', '#4DB6AC'];
 
@@ -36,16 +39,24 @@ const ASSIGNABLE_ROLES = ['owner', 'manager', 'vendeur'];
 
 export default function UsersAdmin({ canWrite, currentUserId }: { canWrite: boolean; currentUserId: string }) {
   const [users, setUsers] = useState<User[]>([]);
+  const [stores, setStores] = useState<Store[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<User | null | undefined>(undefined);
 
   async function reload() {
     setLoading(true);
-    const r = await fetch('/api/users');
-    if (r.ok) setUsers((await r.json()).users);
+    const [uRes, sRes] = await Promise.all([
+      fetch('/api/users'),
+      fetch('/api/stores'),
+    ]);
+    if (uRes.ok) setUsers((await uRes.json()).users);
+    if (sRes.ok) setStores(((await sRes.json()).stores ?? []).filter((s: Store) => s.is_active));
     setLoading(false);
   }
   useEffect(() => { void reload(); }, []);
+
+  // Nom lisible des boutiques d'un user (pour la colonne du tableau).
+  const storeName = (id: string) => stores.find((s) => s.id === id)?.name ?? '—';
 
   return (
     <div className="p-8 space-y-5 max-w-5xl">
@@ -70,6 +81,7 @@ export default function UsersAdmin({ canWrite, currentUserId }: { canWrite: bool
                 <th className="text-left px-4 py-3">Nom</th>
                 <th className="text-left px-4 py-3">Email</th>
                 <th className="text-left px-4 py-3">Rôle</th>
+                <th className="text-left px-4 py-3">Boutiques</th>
                 <th className="text-center px-4 py-3">PIN</th>
                 <th className="text-left px-4 py-3">Dernière connexion</th>
                 <th className="text-center px-4 py-3">État</th>
@@ -85,6 +97,13 @@ export default function UsersAdmin({ canWrite, currentUserId }: { canWrite: bool
                   </td>
                   <td className="px-4 py-3 text-ink-soft">{u.email}</td>
                   <td className="px-4 py-3"><Badge tone="soft">{ROLE_LABELS[u.role] ?? u.role}</Badge></td>
+                  <td className="px-4 py-3 text-xs text-ink-soft">
+                    {!u.store_ids || u.store_ids.length === 0
+                      ? <span className="text-ink-soft/70">Toutes</span>
+                      : u.store_ids.length === stores.length
+                        ? 'Toutes'
+                        : u.store_ids.map(storeName).join(', ')}
+                  </td>
                   <td className="px-4 py-3 text-center">
                     {u.has_pin
                       ? <Badge tone="success">Défini</Badge>
@@ -125,6 +144,7 @@ export default function UsersAdmin({ canWrite, currentUserId }: { canWrite: bool
       {editing !== undefined && (
         <UserFormModal
           user={editing}
+          stores={stores}
           onClose={() => setEditing(undefined)}
           onSaved={() => { setEditing(undefined); void reload(); }}
         />
@@ -133,8 +153,9 @@ export default function UsersAdmin({ canWrite, currentUserId }: { canWrite: bool
   );
 }
 
-function UserFormModal({ user, onClose, onSaved }: {
+function UserFormModal({ user, stores, onClose, onSaved }: {
   user: User | null;
+  stores: Store[];
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -147,8 +168,24 @@ function UserFormModal({ user, onClose, onSaved }: {
   const [isActive, setIsActive] = useState(user?.is_active ?? true);
   const [pinRequired, setPinRequired] = useState(user?.pin_required ?? true);
   const [color, setColor] = useState<string | null>(user?.color ?? null);
+  // Boutiques rattachees. A la creation : toutes cochees par defaut.
+  // A l'edition : l'existant (vide = toutes, on precoche tout).
+  const [storeIds, setStoreIds] = useState<Set<string>>(() => {
+    if (user && user.store_ids && user.store_ids.length > 0) {
+      return new Set(user.store_ids);
+    }
+    return new Set(stores.map((s) => s.id));
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  function toggleStore(id: string) {
+    setStoreIds((cur) => {
+      const next = new Set(cur);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
 
   async function submit() {
     if (!fullName.trim() || !email.trim()) { setError('Nom et email obligatoires.'); return; }
@@ -158,6 +195,9 @@ function UserFormModal({ user, onClose, onSaved }: {
     if (pin && !/^\d{4}$/.test(pin)) { setError('Le PIN doit faire 4 chiffres.'); return; }
     if (password && password.length < 8) {
       setError('Mot de passe : 8 caractères minimum.'); return;
+    }
+    if (stores.length > 0 && storeIds.size === 0) {
+      setError('Sélectionnez au moins une boutique.'); return;
     }
     setSaving(true); setError(null);
     const payload: Record<string, unknown> = {
@@ -171,6 +211,8 @@ function UserFormModal({ user, onClose, onSaved }: {
     if (password) payload.password = password;
     // color: on envoie meme si null pour permettre de reset a l'auto
     payload.color = color;
+    // Boutiques : on transmet la liste exacte (l'API remplace les acces).
+    if (stores.length > 0) payload.store_ids = Array.from(storeIds);
     const url = user ? `/api/users/${user.id}` : '/api/users';
     const method = user ? 'PATCH' : 'POST';
     const r = await fetch(url, {
@@ -231,6 +273,52 @@ function UserFormModal({ user, onClose, onSaved }: {
             <p className="mt-1 text-xs text-ink-soft">{ROLE_DESC[role]}</p>
           </div>
 
+          {stores.length > 0 && (
+            <div>
+              <label className="text-sm font-medium text-ink-soft">
+                Boutiques
+                <span className="text-xs text-ink-soft ml-1">
+                  — où cet utilisateur apparaît sur l&apos;écran de connexion
+                </span>
+              </label>
+              <div className="mt-2 flex items-center gap-2 mb-2">
+                <button
+                  type="button"
+                  onClick={() => setStoreIds(new Set(stores.map((s) => s.id)))}
+                  className="text-xs text-accent-deep hover:underline"
+                >
+                  Tout cocher
+                </button>
+                <span className="text-ink-soft/50">·</span>
+                <button
+                  type="button"
+                  onClick={() => setStoreIds(new Set())}
+                  className="text-xs text-ink-soft hover:underline"
+                >
+                  Tout décocher
+                </button>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                {stores.map((s) => (
+                  <label
+                    key={s.id}
+                    className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm cursor-pointer ${
+                      storeIds.has(s.id) ? 'border-accent bg-accent-soft/40' : 'border-border'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={storeIds.has(s.id)}
+                      onChange={() => toggleStore(s.id)}
+                    />
+                    <span className="font-mono text-xs text-ink-soft">{s.code}</span>
+                    <span className="truncate">{s.name}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div>
             <label className="text-sm font-medium text-ink-soft">
               Couleur d&apos;étiquette
@@ -286,7 +374,8 @@ function UserFormModal({ user, onClose, onSaved }: {
               </button>
             </div>
             <p className="mt-1 text-xs text-ink-soft">
-              Sert à la connexion via « Accès admin et autres » (email + mot de passe).
+              Sert à la connexion au back-office (bo.) et au suivi du CA
+              (email + mot de passe). Le PIN sert uniquement en caisse.
             </p>
           </div>
 

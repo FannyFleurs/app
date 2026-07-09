@@ -259,11 +259,30 @@ function StoreFormModal({ store, onClose, onSaved }: {
   const [zip, setZip] = useState(store?.address?.zip ?? '');
   const [city, setCity] = useState(store?.address?.city ?? '');
   const [isActive, setIsActive] = useState(store?.is_active ?? true);
+  // Admin de la boutique (creation uniquement) : mot de passe pour le
+  // back-office + PIN pour la caisse. Rattache a la nouvelle boutique.
+  const [addAdmin, setAddAdmin] = useState(!store);
+  const [adminName, setAdminName] = useState('');
+  const [adminEmail, setAdminEmail] = useState('');
+  const [adminPassword, setAdminPassword] = useState('');
+  const [adminPin, setAdminPin] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function submit() {
     if (!name.trim()) { setError('Nom obligatoire.'); return; }
+    // Validation admin boutique (creation + case cochee).
+    if (!store && addAdmin) {
+      if (!adminName.trim() || !adminEmail.trim()) {
+        setError('Admin boutique : nom et email obligatoires.'); return;
+      }
+      if (adminPassword.length < 8) {
+        setError('Admin boutique : mot de passe de 8 caractères minimum.'); return;
+      }
+      if (!/^\d{4}$/.test(adminPin)) {
+        setError('Admin boutique : PIN de 4 chiffres obligatoire.'); return;
+      }
+    }
     setSaving(true); setError(null);
     const payload: Record<string, unknown> = {
       name: name.trim(),
@@ -282,12 +301,41 @@ function StoreFormModal({ store, onClose, onSaved }: {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
-    setSaving(false);
     if (!r.ok) {
+      setSaving(false);
       const j = await r.json().catch(() => ({}));
       setError(j.message ?? j.error ?? 'Erreur');
       return;
     }
+
+    // Creation de l'admin de la boutique, rattache uniquement a celle-ci.
+    if (!store && addAdmin) {
+      const created = await r.json().catch(() => ({}));
+      const newStoreId = created.id as string | undefined;
+      const ur = await fetch('/api/users', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          full_name: adminName.trim(),
+          email: adminEmail.trim(),
+          role: 'owner',
+          password: adminPassword,
+          pin: adminPin,
+          pin_required: true,
+          store_ids: newStoreId ? [newStoreId] : [],
+        }),
+      });
+      if (!ur.ok) {
+        setSaving(false);
+        const j = await ur.json().catch(() => ({}));
+        setError(
+          `Boutique créée, mais l'admin n'a pas pu être créé : ${
+            j.message ?? j.error ?? 'erreur'
+          }. Ajoutez-le manuellement dans Utilisateurs.`,
+        );
+        return;
+      }
+    }
+    setSaving(false);
     onSaved();
   }
 
@@ -332,6 +380,49 @@ function StoreFormModal({ store, onClose, onSaved }: {
               <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
               Active
             </label>
+          )}
+
+          {!store && (
+            <div className="pt-3 mt-1 border-t border-border space-y-3">
+              <label className="flex items-center gap-2 text-sm font-medium">
+                <input
+                  type="checkbox"
+                  checked={addAdmin}
+                  onChange={(e) => setAddAdmin(e.target.checked)}
+                />
+                Créer l&apos;administrateur de la boutique
+              </label>
+              {addAdmin && (
+                <>
+                  <p className="text-xs text-ink-soft">
+                    Il gèrera cette boutique : mot de passe pour le back-office
+                    (bo.) et PIN pour la caisse. Une fois la caisse connectée,
+                    il pourra créer les autres utilisateurs de la boutique.
+                  </p>
+                  <Field label="Nom complet">
+                    <input className="input" value={adminName}
+                           onChange={(e) => setAdminName(e.target.value)} placeholder="ex : Sophie Martin" />
+                  </Field>
+                  <Field label="Email">
+                    <input className="input" type="email" value={adminEmail}
+                           onChange={(e) => setAdminEmail(e.target.value)} placeholder="sophie@boutique.fr" />
+                  </Field>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Field label="Mot de passe (8+ car.)">
+                      <input className="input" type="password" value={adminPassword}
+                             onChange={(e) => setAdminPassword(e.target.value)}
+                             autoComplete="new-password" />
+                    </Field>
+                    <Field label="PIN caisse (4 chiffres)">
+                      <input className="input font-mono" inputMode="numeric" maxLength={4}
+                             value={adminPin}
+                             onChange={(e) => setAdminPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                             placeholder="••••" />
+                    </Field>
+                  </div>
+                </>
+              )}
+            </div>
           )}
         </div>
         {error && <div className="mt-3 rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}

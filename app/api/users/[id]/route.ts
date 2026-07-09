@@ -17,6 +17,8 @@ const patch = z.object({
   pin_required: z.boolean().optional(),
   is_active: z.boolean().optional(),
   color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).nullable().optional(),
+  /** Remplace la liste des boutiques auxquelles l'utilisateur a accès. */
+  store_ids: z.array(z.string().uuid()).optional(),
 });
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
@@ -46,7 +48,9 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     sets.push(`password_hash = $${i++}`); vals.push(h);
   }
   // color est UPDATE separement plus bas (silencieux si migration 0022 absente).
-  if (sets.length === 0 && d.color === undefined) return NextResponse.json({ ok: true });
+  if (sets.length === 0 && d.color === undefined && d.store_ids === undefined) {
+    return NextResponse.json({ ok: true });
+  }
 
   if (sets.length > 0) {
     sets.push('updated_at = now()');
@@ -70,6 +74,28 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       const m = (err as Error).message ?? '';
       // Migration 0022 pas appliquee : on ignore silencieusement le color.
       if (!(m.includes('column "color"') || m.includes('"users".color'))) throw err;
+    }
+  }
+
+  // Rattachement aux boutiques : on remplace integralement les lignes
+  // user_store_access par la nouvelle liste (verifiee cote org).
+  if (d.store_ids !== undefined) {
+    // Verifie que l'utilisateur cible appartient bien a l'org.
+    const owns = await query(
+      `SELECT 1 FROM users WHERE id = $1 AND organization_id = $2`,
+      [params.id, g.user.organizationId],
+    );
+    if (owns.rowCount === 0) return jsonError('NOT_FOUND', 404);
+
+    await query(`DELETE FROM user_store_access WHERE user_id = $1`, [params.id]);
+    if (d.store_ids.length > 0) {
+      await query(
+        `INSERT INTO user_store_access (user_id, store_id)
+           SELECT $1, id FROM stores
+            WHERE organization_id = $2 AND id = ANY($3::uuid[])
+         ON CONFLICT DO NOTHING`,
+        [params.id, g.user.organizationId, d.store_ids],
+      );
     }
   }
 

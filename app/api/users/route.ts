@@ -17,6 +17,12 @@ const schema = z.object({
   pin_required: z.boolean().optional(),
   is_active: z.boolean().optional(),
   color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Couleur invalide').nullable().optional(),
+  /**
+   * Boutiques auxquelles l'utilisateur est rattaché. Si omis à la
+   * création, on rattache à TOUTES les boutiques (compat mono-boutique).
+   * Si fourni (même vide), on applique exactement cette liste.
+   */
+  store_ids: z.array(z.string().uuid()).optional(),
 }).refine(
   (d) => d.pin_required === false || !!d.pin,
   { message: 'PIN obligatoire quand pin_required est activé', path: ['pin'] },
@@ -38,6 +44,22 @@ export async function GET() {
        ORDER BY full_name`,
     [g.user.organizationId],
   );
+
+  // Rattachement aux boutiques (user_store_access) agrege par user.
+  const accessRes = await query<{ user_id: string; store_id: string }>(
+    `SELECT usa.user_id, usa.store_id
+       FROM user_store_access usa
+       JOIN users u ON u.id = usa.user_id
+      WHERE u.organization_id = $1`,
+    [g.user.organizationId],
+  );
+  const storeMap = new Map<string, string[]>();
+  for (const a of accessRes.rows) {
+    const arr = storeMap.get(a.user_id) ?? [];
+    arr.push(a.store_id);
+    storeMap.set(a.user_id, arr);
+  }
+
   // Ajoute la colonne color a la reponse (silencieux si migration 0022 absente).
   try {
     const colorRes = await query<{ id: string; color: string | null }>(
@@ -46,10 +68,16 @@ export async function GET() {
     );
     const colorMap = new Map(colorRes.rows.map((r) => [r.id, r.color]));
     return NextResponse.json({
-      users: rows.map((u) => ({ ...u, color: colorMap.get(u.id) ?? null })),
+      users: rows.map((u) => ({
+        ...u,
+        color: colorMap.get(u.id) ?? null,
+        store_ids: storeMap.get(u.id) ?? [],
+      })),
     });
   } catch {
-    return NextResponse.json({ users: rows });
+    return NextResponse.json({
+      users: rows.map((u) => ({ ...u, store_ids: storeMap.get(u.id) ?? [] })),
+    });
   }
 }
 
@@ -100,17 +128,31 @@ export async function POST(req: Request) {
       } catch { /* ignore */ }
     }
 
-    // Rattache le nouvel utilisateur a toutes les boutiques actives de
-    // l'organisation courante. Sans ca, un role non-admin (vendeur,
-    // comptable...) tombe sur l'ecran "Caisse non configuree" au 1er
-    // login car aucune ligne dans user_store_access.
-    await query(
-      `INSERT INTO user_store_access (user_id, store_id)
-         SELECT $1, id FROM stores
-          WHERE organization_id = $2 AND is_active = TRUE
-       ON CONFLICT DO NOTHING`,
-      [newUserId, g.user.organizationId],
-    );
+    // Rattachement aux boutiques :
+    //   - store_ids fourni : on rattache exactement a ces boutiques
+    //     (apres verification qu'elles appartiennent bien a l'org).
+    //   - store_ids omis : compat mono-boutique, on rattache a TOUTES
+    //     les boutiques actives (sinon un vendeur tombe sur "Caisse non
+    //     configuree" au 1er login).
+    if (d.store_ids !== undefined) {
+      if (d.store_ids.length > 0) {
+        await query(
+          `INSERT INTO user_store_access (user_id, store_id)
+             SELECT $1, id FROM stores
+              WHERE organization_id = $2 AND id = ANY($3::uuid[])
+           ON CONFLICT DO NOTHING`,
+          [newUserId, g.user.organizationId, d.store_ids],
+        );
+      }
+    } else {
+      await query(
+        `INSERT INTO user_store_access (user_id, store_id)
+           SELECT $1, id FROM stores
+            WHERE organization_id = $2 AND is_active = TRUE
+         ON CONFLICT DO NOTHING`,
+        [newUserId, g.user.organizationId],
+      );
+    }
 
     await audit({
       organizationId: g.user.organizationId, userId: g.user.id,

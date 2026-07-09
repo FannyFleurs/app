@@ -47,7 +47,15 @@ export default function PinLogin() {
   const [tenantRequired, setTenantRequired] = useState(false);
 
   async function loadUsers() {
-    const r = await fetch('/api/users/select');
+    // On transmet le device_id du poste (localStorage) : le serveur
+    // resout la boutique liee a cette caisse et ne renvoie que les
+    // utilisateurs rattaches a cette boutique.
+    let deviceQuery = '';
+    if (typeof window !== 'undefined') {
+      const dev = localStorage.getItem('webpos_device_id');
+      if (dev) deviceQuery = `?device_id=${encodeURIComponent(dev)}`;
+    }
+    const r = await fetch(`/api/users/select${deviceQuery}`);
     if (r.ok) {
       const j = await r.json();
       setUsers(j.users);
