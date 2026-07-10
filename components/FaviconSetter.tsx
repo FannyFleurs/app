@@ -15,7 +15,10 @@ export default function FaviconSetter() {
 
   useEffect(() => {
     const host = typeof window !== 'undefined' ? window.location.hostname : '';
-    const isCA = host.startsWith('ca.') || path?.startsWith('/ca');
+    // Attention : '/caisse'.startsWith('/ca') est TRUE — on doit matcher le
+    // segment /ca exactement (ou /ca/…), sinon la caisse hérite du favicon CA.
+    const isCA =
+      host.startsWith('ca.') || path === '/ca' || (path?.startsWith('/ca/') ?? false);
 
     void (async () => {
       try {
@@ -37,9 +40,20 @@ export default function FaviconSetter() {
 function applyFavicon(url: string) {
   // IMPORTANT : ne JAMAIS supprimer les <link> gérés par React/Next
   // (métadonnées) — cela provoque un crash de réconciliation
-  // (removeChild sur un nœud disparu). On gère uniquement NOS propres
-  // éléments (identifiés par un id) : création unique + mise à jour du
-  // href. Placés en fin de <head>, ils priment sur les icônes statiques.
+  // (removeChild sur un nœud disparu). On NE supprime rien : on met à
+  // jour le href des icônes statiques existantes (icon-192, apple…) ET on
+  // ajoute nos propres <link> en fin de <head>. Ainsi, quel que soit le
+  // <link> retenu par le navigateur, il pointe vers la bonne image — sans
+  // retrait de nœud, donc sans crash.
+  const statics = document.querySelectorAll<HTMLLinkElement>(
+    'link[rel~="icon"], link[rel~="apple-touch-icon"], link[rel="shortcut icon"]',
+  );
+  statics.forEach((el) => {
+    if (el.id.startsWith('dyn-favicon')) return;
+    if (el.href !== url) el.href = url;
+    // Les tailles fixes peuvent primer selon le navigateur : on les neutralise.
+    el.removeAttribute('sizes');
+  });
   setOwnLink('dyn-favicon-icon', 'icon', url);
   setOwnLink('dyn-favicon-apple', 'apple-touch-icon', url);
 }
