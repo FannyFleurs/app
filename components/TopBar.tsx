@@ -6,6 +6,7 @@ import { SIDEBAR_ITEMS, type SidebarItem } from './Sidebar';
 import type { Role, Permission } from '@/lib/auth/rbac';
 import { HEADER_TABS_DEFAULT, HEADER_TABS_MAX } from '@/lib/settings/pos-ui';
 import Icon from './Icon';
+import { useBrand } from './BrandMark';
 
 export interface TopBarUser {
   fullName: string;
@@ -33,6 +34,7 @@ export default function TopBar({
   user, hiddenPaths, headerTabs, subscription, permissions, onOpenMenu, onLogout,
 }: Props) {
   const path = usePathname();
+  const brand = useBrand();
 
   // Liste effective des onglets : configuration utilisateur (max 10), filtrée
   // par permissions + paths masqués. Vide → on retombe sur la liste par défaut.
@@ -48,12 +50,19 @@ export default function TopBar({
 
   return (
     <header className="sticky top-0 z-40 shrink-0 flex items-stretch bg-white border-b border-border min-h-14">
-      {/* Logo */}
+      {/* Logo (personnalisé si défini, sinon monogramme de la marque) */}
       <Link href="/caisse" className="flex items-center gap-2.5 pl-4 pr-5 shrink-0 hover:bg-gray-50 transition-colors">
-        <span className="grid h-9 w-9 place-items-center rounded-xl accent-bar text-white font-semibold">
-          F
+        {brand.logo_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={brand.logo_url} alt={brand.brand_name || 'Logo'} className="h-9 w-9 rounded-xl object-contain" />
+        ) : (
+          <span className="grid h-9 w-9 place-items-center rounded-xl accent-bar text-white font-semibold">
+            {(brand.brand_name || 'H').charAt(0).toUpperCase()}
+          </span>
+        )}
+        <span className="font-semibold tracking-tight hidden sm:inline text-ink">
+          {brand.brand_name || 'HelloPos'}
         </span>
-        <span className="font-semibold tracking-tight hidden sm:inline text-ink">HelloPos</span>
       </Link>
 
       {/* Onglets — masqués sur mobile, alignés à gauche sur ≥ md (justify-start
