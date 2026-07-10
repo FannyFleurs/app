@@ -48,11 +48,15 @@ export async function GET(req: Request) {
     }
   }
 
-  // Filtre boutique : soit l'utilisateur a explicitement acces a cette
-  // boutique, soit il n'a AUCUN rattachement (acces global / admin).
+  // Filtre boutique. Un utilisateur est visible sur ce poste si :
+  //  - il a un rôle de gestion (admin/responsable) : accès à TOUTES les
+  //    boutiques, jamais restreint ;
+  //  - OU il a explicitement accès à cette boutique ;
+  //  - OU il n'a aucun rattachement (accès global / rétrocompat).
   const storeFilter = storeId
     ? `AND (
-         EXISTS (SELECT 1 FROM user_store_access usa
+         u.role IN ('super_admin','owner','manager')
+         OR EXISTS (SELECT 1 FROM user_store_access usa
                   WHERE usa.user_id = u.id AND usa.store_id = $2)
          OR NOT EXISTS (SELECT 1 FROM user_store_access usa
                          WHERE usa.user_id = u.id)
