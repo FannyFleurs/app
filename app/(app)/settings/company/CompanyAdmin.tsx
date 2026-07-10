@@ -247,6 +247,25 @@ function StoresPanel({ stores, canWrite, onChange, planLabel, maxStores }: {
     }
   }
 
+  // Réactive une boutique désactivée (sa caisse redevient sélectionnable).
+  async function reactivate(s: Store) {
+    setDeleting(s.id);
+    try {
+      const r = await fetch(`/api/stores/${s.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_active: true }),
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        alert(j.message ?? j.error ?? 'Réactivation impossible.');
+        return;
+      }
+      onChange();
+    } finally {
+      setDeleting(null);
+    }
+  }
+
   return (
     <div className="space-y-3">
       {canWrite && (
@@ -280,6 +299,15 @@ function StoresPanel({ stores, canWrite, onChange, planLabel, maxStores }: {
                 <button onClick={() => setEditing(s)} className="text-xs text-accent-deep hover:underline">
                   Modifier
                 </button>
+                {!s.is_active && (
+                  <button
+                    onClick={() => void reactivate(s)}
+                    disabled={deleting === s.id}
+                    className="text-xs text-success hover:underline disabled:opacity-50 font-medium"
+                  >
+                    {deleting === s.id ? '…' : 'Réactiver'}
+                  </button>
+                )}
                 {stores.length > 1 && (
                   <button
                     onClick={() => void remove(s)}
