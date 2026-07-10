@@ -260,26 +260,34 @@ export default function PlatformConfigForm({ initial }: { initial: FormData }) {
                  onChange={(e) => patch('stripe_webhook_secret', e.target.value)}
                  placeholder={s.stripe_webhook_secret_set ? 'Laisser vide pour conserver' : 'whsec_…'} />
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-3 gap-3">
           <div>
-            <label className="text-xs font-medium text-ink-soft">Price ID — Essentiel (29€)</label>
+            <label className="text-xs font-medium text-ink-soft">Price ID — Essentiel</label>
             <input className="input mt-1 font-mono text-sm" value={s.stripe_price_essentiel}
                    onChange={(e) => patch('stripe_price_essentiel', e.target.value)}
                    placeholder="price_…" />
           </div>
           <div>
-            <label className="text-xs font-medium text-ink-soft">Price ID — Croissance (59€)</label>
+            <label className="text-xs font-medium text-ink-soft">Price ID — Croissance</label>
             <input className="input mt-1 font-mono text-sm" value={s.stripe_price_croissance}
                    onChange={(e) => patch('stripe_price_croissance', e.target.value)}
                    placeholder="price_…" />
           </div>
+          <div>
+            <label className="text-xs font-medium text-ink-soft">Price ID — Réseau</label>
+            <input className="input mt-1 font-mono text-sm" value={s.stripe_price_reseau}
+                   onChange={(e) => patch('stripe_price_reseau', e.target.value)}
+                   placeholder="price_…" />
+          </div>
         </div>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="text-xs font-medium text-ink-soft">Jours d&apos;essai</label>
             <input type="number" min={0} max={90} className="input mt-1" value={s.trial_days}
                    onChange={(e) => patch('trial_days', Number(e.target.value) || 0)} />
           </div>
+        </div>
+        <div className="grid grid-cols-3 gap-3">
           <div>
             <label className="text-xs font-medium text-ink-soft">Prix affiché Essentiel (€)</label>
             <input className="input mt-1" value={s.plan_essentiel_price}
@@ -290,11 +298,42 @@ export default function PlatformConfigForm({ initial }: { initial: FormData }) {
             <input className="input mt-1" value={s.plan_croissance_price}
                    onChange={(e) => patch('plan_croissance_price', e.target.value)} placeholder="59" />
           </div>
+          <div>
+            <label className="text-xs font-medium text-ink-soft">Prix affiché Réseau</label>
+            <input className="input mt-1" value={s.plan_reseau_price}
+                   onChange={(e) => patch('plan_reseau_price', e.target.value)} placeholder="Sur mesure" />
+          </div>
         </div>
         <p className="text-xs text-ink-soft">
           Les montants affichés sont cosmétiques : ils doivent correspondre
-          aux prix réels définis dans Stripe (via les Price IDs).
+          aux prix réels définis dans Stripe (via les Price IDs). Réseau
+          accepte un texte libre (ex. « Sur mesure »).
         </p>
+
+        <div className="pt-2 border-t border-border">
+          <h3 className="text-sm font-semibold mb-2">Noms des offres</h3>
+          <p className="mb-2 text-xs text-ink-soft">
+            Personnalisez les libellés affichés dans l&apos;application et sur
+            la page d&apos;abonnement.
+          </p>
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="text-xs font-medium text-ink-soft">Offre 1</label>
+              <input className="input mt-1" value={s.plan_essentiel_name}
+                     onChange={(e) => patch('plan_essentiel_name', e.target.value)} placeholder="Essentiel" />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-ink-soft">Offre 2</label>
+              <input className="input mt-1" value={s.plan_croissance_name}
+                     onChange={(e) => patch('plan_croissance_name', e.target.value)} placeholder="Croissance" />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-ink-soft">Offre 3</label>
+              <input className="input mt-1" value={s.plan_reseau_name}
+                     onChange={(e) => patch('plan_reseau_name', e.target.value)} placeholder="Réseau" />
+            </div>
+          </div>
+        </div>
 
         <div className="pt-2 border-t border-border">
           <h3 className="text-sm font-semibold mb-2">Option — caisse supplémentaire</h3>

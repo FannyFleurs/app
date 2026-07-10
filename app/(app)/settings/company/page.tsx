@@ -2,7 +2,7 @@ import { readSessionFromCookie } from '@/lib/auth/session';
 import { userCan } from '@/lib/auth/permissions';
 import { query } from '@/lib/db/client';
 import { planLimits, effectivePlan } from '@/lib/billing/plan-limits';
-import { mergePlatformDefaults, type PlatformSettings } from '@/lib/settings/platform';
+import { mergePlatformDefaults, planDisplayName, type PlatformSettings } from '@/lib/settings/platform';
 import CompanyAdmin from './CompanyAdmin';
 
 export const dynamic = 'force-dynamic';
@@ -53,7 +53,7 @@ export default async function CompanySettingsPage() {
     <CompanyAdmin
       org={org.rows[0]!}
       canWrite={(await userCan(user, 'settings.write'))}
-      planLabel={limits.label}
+      planLabel={planDisplayName(plan, addon)}
       maxStores={Number.isFinite(limits.maxStores) ? limits.maxStores : null}
       maxRegistersPerStore={Number.isFinite(limits.maxRegistersPerStore) ? limits.maxRegistersPerStore : null}
       canBuyExtraRegister={canBuyExtraRegister}

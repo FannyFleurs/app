@@ -14,11 +14,17 @@ interface Data {
   extra_registers?: number;
   addon_register_price?: string;
   addon_register_available?: boolean;
+  current_plan_name?: string;
+  plans?: {
+    starter: { name: string; price: string };
+    pro: { name: string; price: string };
+    enterprise: { name: string; price: string; available: boolean };
+  };
   migration_required?: string;
 }
 
 interface Plan {
-  key: 'trial' | 'starter' | 'pro';
+  key: 'starter' | 'pro' | 'enterprise';
   label: string;
   price: string;
   features: string[];
@@ -48,6 +54,18 @@ const PLANS: Plan[] = [
       'Programme de fidélité',
       'Factures B2B, avoirs, exports',
       'Support prioritaire',
+    ],
+  },
+  {
+    key: 'enterprise',
+    label: 'Réseau',
+    price: 'Sur mesure',
+    features: [
+      'Boutiques illimitées · caisses illimitées',
+      'Gestion multi-boutiques centralisée',
+      'Suivi du CA consolidé',
+      'Toutes les fonctionnalités Croissance',
+      'Accompagnement dédié',
     ],
   },
 ];
@@ -151,8 +169,8 @@ export default function SubscriptionView() {
             <div className="text-xs uppercase tracking-widest text-ink-soft font-semibold">
               Plan actuel
             </div>
-            <div className="mt-1 text-3xl font-semibold tracking-tight capitalize">
-              {currentPlan}
+            <div className="mt-1 text-3xl font-semibold tracking-tight">
+              {data.current_plan_name ?? currentPlan}
             </div>
           </div>
           <div>
@@ -196,9 +214,20 @@ export default function SubscriptionView() {
         <h2 className="text-sm font-semibold uppercase tracking-widest text-ink-soft mb-3">
           Choisir un plan
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {PLANS.map((p) => {
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {PLANS
+            // Le plan Réseau n'apparaît que s'il est configuré côté Stripe.
+            .filter((p) => p.key !== 'enterprise' || data.plans?.enterprise.available)
+            .map((p) => {
             const isCurrent = p.key === currentPlan;
+            // Nom + prix éventuellement personnalisés en configuration.
+            const cfg = data.plans?.[p.key];
+            const label = cfg?.name || p.label;
+            const priceRaw = cfg?.price ?? p.price;
+            // Un prix purement numérique est suffixé « €/mois ».
+            const price = /^[0-9]+([.,][0-9]+)?$/.test(priceRaw.trim())
+              ? `${priceRaw.trim()} €/mois`
+              : priceRaw;
             return (
               <div
                 key={p.key}
@@ -209,8 +238,8 @@ export default function SubscriptionView() {
               >
                 <div className="flex items-start justify-between">
                   <div>
-                    <div className="font-semibold text-lg">{p.label}</div>
-                    <div className="text-2xl font-semibold tracking-tight mt-0.5">{p.price}</div>
+                    <div className="font-semibold text-lg">{label}</div>
+                    <div className="text-2xl font-semibold tracking-tight mt-0.5">{price}</div>
                   </div>
                   {p.highlight && <Badge tone="success">Recommandé</Badge>}
                 </div>

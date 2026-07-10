@@ -66,7 +66,8 @@ export async function POST(req: Request) {
         try {
           const items = (obj.items as { data?: Array<{ price?: { id?: string } }> })?.data ?? [];
           const priceIds = items.map((i) => i.price?.id).filter(Boolean) as string[];
-          if (priceIds.includes(platform.stripe_price_croissance)) planFromStripe = 'pro';
+          if (platform.stripe_price_reseau && priceIds.includes(platform.stripe_price_reseau)) planFromStripe = 'enterprise';
+          else if (priceIds.includes(platform.stripe_price_croissance)) planFromStripe = 'pro';
           else if (priceIds.includes(platform.stripe_price_essentiel)) planFromStripe = 'starter';
         } catch { /* pas d'items exploitables */ }
 

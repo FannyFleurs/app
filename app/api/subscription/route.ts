@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db/client';
 import { requirePermission } from '@/lib/auth/guards';
-import { mergePlatformDefaults, type PlatformSettings } from '@/lib/settings/platform';
+import { mergePlatformDefaults, planDisplayName, type PlatformSettings } from '@/lib/settings/platform';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,6 +49,16 @@ export async function GET() {
       addon_register_price: addon.addon_register_price,
       addon_register_available:
         plan === 'starter' && !!addon.stripe_secret_key && !!addon.stripe_price_extra_register,
+      // Nom d'affichage de l'offre courante + catalogue (noms/prix/dispo).
+      current_plan_name: planDisplayName(plan, addon),
+      plans: {
+        starter: { name: addon.plan_essentiel_name, price: addon.plan_essentiel_price },
+        pro: { name: addon.plan_croissance_name, price: addon.plan_croissance_price },
+        enterprise: {
+          name: addon.plan_reseau_name, price: addon.plan_reseau_price,
+          available: !!addon.stripe_price_reseau,
+        },
+      },
     });
   } catch (err) {
     const m = (err as Error).message ?? '';

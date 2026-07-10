@@ -186,12 +186,19 @@ export default async function LandingPage() {
             </p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            {PLANS.map((p) => {
-              const price = p.name === 'Essentiel'
+            {PLANS.map((p, i) => {
+              // Noms/prix personnalisables en configuration (ordre : Essentiel,
+              // Croissance, Réseau).
+              const name = i === 0
+                ? (platform.plan_essentiel_name || p.name)
+                : i === 1
+                  ? (platform.plan_croissance_name || p.name)
+                  : (platform.plan_reseau_name || p.name);
+              const price = i === 0
                 ? (platform.plan_essentiel_price || p.price)
-                : p.name === 'Croissance'
+                : i === 1
                   ? (platform.plan_croissance_price || p.price)
-                  : p.price;
+                  : (platform.plan_reseau_price || p.price);
               return (
               <div
                 key={p.name}
@@ -204,10 +211,10 @@ export default async function LandingPage() {
                 <div className="text-xs uppercase tracking-widest text-ink-soft font-semibold">
                   {p.tag}
                 </div>
-                <h3 className="mt-2 text-xl font-semibold">{p.name}</h3>
+                <h3 className="mt-2 text-xl font-semibold">{name}</h3>
                 <div className="mt-4 flex items-baseline gap-1">
                   <span className="text-4xl font-semibold">{price}</span>
-                  {price !== 'Sur mesure' && (
+                  {/^[0-9]+([.,][0-9]+)?$/.test(String(price).trim()) && (
                     <span className="text-ink-soft">€ HT / mois</span>
                   )}
                 </div>

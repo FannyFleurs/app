@@ -38,18 +38,34 @@ export interface PlatformSettings {
   stripe_secret_key: string;
   stripe_publishable_key: string;
   stripe_webhook_secret: string;
-  /** Price IDs Stripe des 2 offres (mode subscription). */
+  /** Price IDs Stripe des offres (mode subscription). */
   stripe_price_essentiel: string;
   stripe_price_croissance: string;
+  stripe_price_reseau: string;
+  /** Noms affichés des offres (modifiables). */
+  plan_essentiel_name: string;
+  plan_croissance_name: string;
+  plan_reseau_name: string;
   /** Durée de l'essai gratuit avant le 1er débit. */
   trial_days: number;
   /** Montants affichés des 2 offres (€ HT/mois) — cosmétique, doivent
    *  correspondre aux prix Stripe. */
   plan_essentiel_price: string;
   plan_croissance_price: string;
+  plan_reseau_price: string;
   /** Option caisse supplémentaire : Price ID Stripe + montant affiché. */
   stripe_price_extra_register: string;
   addon_register_price: string;
+}
+
+/** Nom d'affichage d'une offre selon la config (fallback intégré). */
+export function planDisplayName(plan: string | null | undefined, p: PlatformSettings): string {
+  switch (plan) {
+    case 'starter': return p.plan_essentiel_name || 'Essentiel';
+    case 'pro': return p.plan_croissance_name || 'Croissance';
+    case 'enterprise': return p.plan_reseau_name || 'Réseau';
+    default: return 'Essai';
+  }
 }
 
 export const PLATFORM_DEFAULTS: PlatformSettings = {
@@ -74,9 +90,14 @@ export const PLATFORM_DEFAULTS: PlatformSettings = {
   stripe_webhook_secret: '',
   stripe_price_essentiel: '',
   stripe_price_croissance: '',
+  stripe_price_reseau: '',
+  plan_essentiel_name: 'Essentiel',
+  plan_croissance_name: 'Croissance',
+  plan_reseau_name: 'Réseau',
   trial_days: 14,
   plan_essentiel_price: '29',
   plan_croissance_price: '59',
+  plan_reseau_price: 'Sur mesure',
   stripe_price_extra_register: '',
   addon_register_price: '9',
 };
