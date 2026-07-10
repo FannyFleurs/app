@@ -43,7 +43,7 @@ function isStaticOrApi(pathname: string): boolean {
     pathname.startsWith('/_next') ||
     pathname.startsWith('/icons') ||
     pathname === '/favicon.ico' ||
-    pathname === '/manifest.json'
+    pathname.startsWith('/manifest') // /manifest.json ET /manifest-ca.json
   );
 }
 
