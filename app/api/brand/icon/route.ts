@@ -40,9 +40,10 @@ export async function GET(req: Request) {
   const m = /^data:([^;,]+)(;base64)?,([\s\S]*)$/.exec(src);
   if (!m) return new NextResponse(null, { status: 404 });
   const contentType = m[1] || 'image/png';
+  const data = m[3] ?? '';
   const body = m[2]
-    ? Buffer.from(m[3], 'base64')
-    : Buffer.from(decodeURIComponent(m[3]), 'utf-8');
+    ? Buffer.from(data, 'base64')
+    : Buffer.from(decodeURIComponent(data), 'utf-8');
 
   return new NextResponse(body, {
     headers: {
