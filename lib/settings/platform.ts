@@ -13,6 +13,12 @@ export interface PlatformSettings {
    * affiche le monogramme par défaut.
    */
   logo_url: string;
+  /** Favicon de l'app (onglet navigateur). Vide = utilise le logo. */
+  favicon_url: string;
+  /** Logo distinct pour l'espace CA (ca.). Vide = utilise le logo principal. */
+  ca_logo_url: string;
+  /** Favicon de l'espace CA. Vide = utilise le logo CA. */
+  ca_favicon_url: string;
   /** Identité légale de l'éditeur (pour le site + mentions légales). */
   company_legal_name: string;
   company_siren: string;
@@ -49,6 +55,9 @@ export interface PlatformSettings {
 export const PLATFORM_DEFAULTS: PlatformSettings = {
   brand_name: 'HelloPos',
   logo_url: '',
+  favicon_url: '',
+  ca_logo_url: '',
+  ca_favicon_url: '',
   company_legal_name: '',
   company_siren: '',
   company_siret: '',

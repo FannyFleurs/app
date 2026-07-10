@@ -22,6 +22,9 @@ export async function GET() {
   return NextResponse.json({
     brand_name: p.brand_name,
     logo_url: p.logo_url,
+    favicon_url: p.favicon_url,
+    ca_logo_url: p.ca_logo_url,
+    ca_favicon_url: p.ca_favicon_url,
     plan_essentiel_price: p.plan_essentiel_price,
     plan_croissance_price: p.plan_croissance_price,
   }, {

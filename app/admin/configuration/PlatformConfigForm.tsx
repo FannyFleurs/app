@@ -20,14 +20,19 @@ export default function PlatformConfigForm({ initial }: { initial: FormData }) {
   }
 
   function onLogoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    onImageFile(e, 'logo_url');
+  }
+
+  // Upload générique d'image (logo, favicon, logo CA…) -> data URL.
+  function onImageFile(e: React.ChangeEvent<HTMLInputElement>, key: keyof FormData) {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 1_000_000) {
-      setError('Logo trop volumineux (max 1 Mo). Compressez l\'image.');
+      setError('Image trop volumineuse (max 1 Mo). Compressez le fichier.');
       return;
     }
     const reader = new FileReader();
-    reader.onload = () => patch('logo_url', String(reader.result));
+    reader.onload = () => patch(key, String(reader.result) as FormData[typeof key]);
     reader.readAsDataURL(file);
   }
 
@@ -104,6 +109,42 @@ export default function PlatformConfigForm({ initial }: { initial: FormData }) {
             affiché quand vous l&apos;aurez.
           </p>
         </div>
+
+        <ImageField
+          label="Favicon (onglet navigateur)"
+          hint="Icône affichée dans l'onglet. Vide = le logo est utilisé."
+          value={s.favicon_url}
+          onFile={(e) => onImageFile(e, 'favicon_url')}
+          onUrl={(v) => patch('favicon_url', v)}
+          onClear={() => patch('favicon_url', '')}
+        />
+      </section>
+
+      {/* Espace CA (couleur / logo distincts) */}
+      <section className="card p-5 space-y-4">
+        <div>
+          <h2 className="font-semibold">Espace CA (suivi du chiffre d&apos;affaires)</h2>
+          <p className="mt-1 text-xs text-ink-soft">
+            Logo et favicon distincts pour le sous-domaine <code>ca.</code>
+            (couleur différente). Vides = le logo principal est utilisé.
+          </p>
+        </div>
+        <ImageField
+          label="Logo CA"
+          hint="Affiché sur l'espace CA."
+          value={s.ca_logo_url}
+          onFile={(e) => onImageFile(e, 'ca_logo_url')}
+          onUrl={(v) => patch('ca_logo_url', v)}
+          onClear={() => patch('ca_logo_url', '')}
+        />
+        <ImageField
+          label="Favicon CA"
+          hint="Onglet navigateur sur ca. Vide = le logo CA est utilisé."
+          value={s.ca_favicon_url}
+          onFile={(e) => onImageFile(e, 'ca_favicon_url')}
+          onUrl={(v) => patch('ca_favicon_url', v)}
+          onClear={() => patch('ca_favicon_url', '')}
+        />
       </section>
 
       {/* Société éditrice */}
@@ -289,6 +330,43 @@ export default function PlatformConfigForm({ initial }: { initial: FormData }) {
           {saving ? 'Enregistrement…' : 'Enregistrer'}
         </button>
       </div>
+    </div>
+  );
+}
+
+/** Champ d'image réutilisable : aperçu + upload fichier + URL + effacer. */
+function ImageField({ label, hint, value, onFile, onUrl, onClear }: {
+  label: string; hint: string; value: string;
+  onFile: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onUrl: (v: string) => void;
+  onClear: () => void;
+}) {
+  return (
+    <div>
+      <label className="text-sm font-medium text-ink-soft">{label}</label>
+      <div className="mt-2 flex items-center gap-4">
+        <div className="h-12 w-12 rounded-xl border border-border bg-gray-50 grid place-items-center overflow-hidden shrink-0">
+          {value
+            // eslint-disable-next-line @next/next/no-img-element
+            ? <img src={value} alt={label} className="max-h-full max-w-full object-contain" />
+            : <span className="text-ink-soft text-xs">—</span>}
+        </div>
+        <div className="flex-1 space-y-2">
+          <input type="file" accept="image/*" onChange={onFile} className="block text-sm" />
+          <input
+            className="input text-sm"
+            value={value.startsWith('data:') ? '' : value}
+            onChange={(e) => onUrl(e.target.value)}
+            placeholder="…ou collez une URL (https://…)"
+          />
+          {value && (
+            <button type="button" onClick={onClear} className="text-xs text-danger hover:underline">
+              Retirer
+            </button>
+          )}
+        </div>
+      </div>
+      <p className="mt-1 text-xs text-ink-soft">{hint}</p>
     </div>
   );
 }

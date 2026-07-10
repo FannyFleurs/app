@@ -16,6 +16,9 @@ const schema = z.object({
   // Logo : URL http(s) ou data URL. On limite la taille pour eviter de
   // stocker une image enorme dans la ligne JSONB (~1 Mo max).
   logo_url: z.string().max(1_500_000).optional(),
+  favicon_url: z.string().max(1_500_000).optional(),
+  ca_logo_url: z.string().max(1_500_000).optional(),
+  ca_favicon_url: z.string().max(1_500_000).optional(),
   company_legal_name: z.string().max(160).optional(),
   company_siren: z.string().max(15).optional(),
   company_siret: z.string().max(20).optional(),

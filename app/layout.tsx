@@ -1,6 +1,7 @@
 import './globals.css';
 import type { Metadata, Viewport } from 'next';
 import InstallPrompt from '@/components/InstallPrompt';
+import FaviconSetter from '@/components/FaviconSetter';
 
 export const metadata: Metadata = {
   title: 'HelloPos',
@@ -54,6 +55,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="format-detection" content="telephone=no,email=no,address=no" />
       </head>
       <body className="min-h-screen bg-bg text-ink antialiased select-none touch-manipulation">
+        <FaviconSetter />
         {children}
         <InstallPrompt />
       </body>

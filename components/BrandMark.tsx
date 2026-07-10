@@ -5,6 +5,9 @@ import { useEffect, useState } from 'react';
 export interface Brand {
   brand_name: string;
   logo_url: string;
+  favicon_url?: string;
+  ca_logo_url?: string;
+  ca_favicon_url?: string;
   plan_essentiel_price?: string;
   plan_croissance_price?: string;
 }

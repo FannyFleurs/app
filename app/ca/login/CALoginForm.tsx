@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useBrand } from '@/components/BrandMark';
 
 /**
  * Connexion email + mot de passe — reutilise /api/auth/login qui gere
@@ -8,6 +9,8 @@ import { useState } from 'react';
  * bascule sur /ca (dashboard).
  */
 export default function CALoginForm() {
+  const brand = useBrand();
+  const caLogo = brand.ca_logo_url || brand.logo_url;
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -41,9 +44,14 @@ export default function CALoginForm() {
         className="card w-full max-w-md p-8 space-y-5"
       >
         <div className="text-center">
-          <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl accent-bar text-white text-2xl font-semibold">
-            €
-          </div>
+          {caLogo ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={caLogo} alt="CA" className="mx-auto h-14 w-14 rounded-2xl object-contain" />
+          ) : (
+            <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl accent-bar text-white text-2xl font-semibold">
+              €
+            </div>
+          )}
           <h1 className="mt-4 text-2xl font-semibold tracking-tight">Chiffre d&apos;affaires</h1>
           <p className="mt-1 text-sm text-ink-soft">
             Connectez-vous avec votre email et votre mot de passe.
