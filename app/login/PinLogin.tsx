@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useBrand } from '@/components/BrandMark';
+import { readDeviceId } from '@/lib/device';
 
 interface User {
   id: string;
@@ -53,7 +54,7 @@ export default function PinLogin() {
     // utilisateurs rattaches a cette boutique.
     let deviceQuery = '';
     if (typeof window !== 'undefined') {
-      const dev = localStorage.getItem('webpos_device_id');
+      const dev = readDeviceId();
       if (dev) deviceQuery = `?device_id=${encodeURIComponent(dev)}`;
     }
     const r = await fetch(`/api/users/select${deviceQuery}`);

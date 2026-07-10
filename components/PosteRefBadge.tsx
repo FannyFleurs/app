@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { posteRef } from '@/lib/poste-ref';
+import { readDeviceId } from '@/lib/device';
 
 /**
  * Petit badge fixe en bas à droite affichant la référence du poste
@@ -17,7 +18,7 @@ export default function PosteRefBadge() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const dev = localStorage.getItem('webpos_device_id');
+    const dev = readDeviceId();
     if (!dev) return;
     void (async () => {
       const r = await fetch(`/api/registers/mine?device_id=${encodeURIComponent(dev)}`);

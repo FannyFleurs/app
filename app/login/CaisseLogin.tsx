@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import PinLogin from './PinLogin';
 import { useBrand } from '@/components/BrandMark';
+import { readDeviceId } from '@/lib/device';
 
 /**
  * Écran de connexion caisse. La connexion EMAIL n'est nécessaire qu'à la
@@ -28,7 +29,7 @@ export default function CaisseLogin() {
       try {
         let q = '';
         if (typeof window !== 'undefined') {
-          const dev = localStorage.getItem('webpos_device_id');
+          const dev = readDeviceId();
           if (dev) q = `?device_id=${encodeURIComponent(dev)}`;
         }
         const r = await fetch(`/api/users/select${q}`);

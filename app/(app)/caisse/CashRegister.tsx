@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatEUR, round2 } from '@/lib/services/money';
+import { getOrCreateDeviceId } from '@/lib/device';
 import PaymentModal from './PaymentModal';
 import RegisterPicker from './RegisterPicker';
 import ReceiptPreviewModal from './ReceiptPreviewModal';
@@ -106,15 +107,10 @@ export default function CashRegister({
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    let id = localStorage.getItem('webpos_device_id');
-    if (!id) {
-      // crypto.randomUUID est dispo dans tous les navigateurs modernes
-      // (Safari 15.4+, Chrome 92+, Firefox 95+).
-      id = (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
-        ? crypto.randomUUID()
-        : `dev-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      localStorage.setItem('webpos_device_id', id);
-    }
+    // Identifiant durable (cookie + localStorage) : survit aux
+    // redémarrages à froid de la PWA iOS, sinon le poste redemanderait sa
+    // caisse à chaque réouverture.
+    const id = getOrCreateDeviceId();
     setDeviceId(id);
     const bound = registers.find((r) => r.device_id === id);
     if (bound) {
