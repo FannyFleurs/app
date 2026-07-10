@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useBrand } from '@/components/BrandMark';
 
 interface User {
   id: string;
@@ -11,8 +12,6 @@ interface User {
   pin_required?: boolean;
   color?: string | null;
 }
-
-const APP_NAME = 'HelloPos';
 
 const ROLE_LABELS: Record<string, string> = {
   super_admin: 'Super Admin',
@@ -35,6 +34,8 @@ function userColor(name: string): string {
 
 export default function PinLogin() {
   const router = useRouter();
+  const brand = useBrand();
+  const APP_NAME = brand.brand_name || 'HelloPos';
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -172,7 +173,14 @@ export default function PinLogin() {
       <aside className={`${selected ? 'hidden lg:flex' : 'flex'} flex-col border-r border-border bg-white overflow-hidden`}>
         {/* Header */}
         <div className="px-6 py-5 border-b border-border flex items-center gap-3 shrink-0">
-          <div className="grid h-11 w-11 place-items-center rounded-2xl accent-bar text-white text-lg font-semibold">F</div>
+          {brand.logo_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={brand.logo_url} alt={APP_NAME} className="h-11 w-11 rounded-2xl object-contain" />
+          ) : (
+            <div className="grid h-11 w-11 place-items-center rounded-2xl accent-bar text-white text-lg font-semibold">
+              {APP_NAME.charAt(0)}
+            </div>
+          )}
           <div>
             <div className="text-lg font-semibold tracking-tight">{APP_NAME}</div>
             <div className="text-xs text-ink-soft">Connexion utilisateur</div>
