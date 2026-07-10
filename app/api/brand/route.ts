@@ -24,5 +24,8 @@ export async function GET() {
     logo_url: p.logo_url,
     plan_essentiel_price: p.plan_essentiel_price,
     plan_croissance_price: p.plan_croissance_price,
+  }, {
+    // Jamais mis en cache : le logo/nom doit se refléter immédiatement.
+    headers: { 'Cache-Control': 'no-store, max-age=0' },
   });
 }

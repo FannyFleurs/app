@@ -18,7 +18,7 @@ export function useBrand(): Brand {
     if (cached) { setBrand(cached); return; }
     void (async () => {
       try {
-        const r = await fetch('/api/brand');
+        const r = await fetch('/api/brand', { cache: 'no-store' });
         if (r.ok) {
           const j = await r.json();
           cached = j;
