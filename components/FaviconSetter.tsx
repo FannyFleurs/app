@@ -35,17 +35,22 @@ export default function FaviconSetter() {
 }
 
 function applyFavicon(url: string) {
-  // Supprime les icônes existantes déclarées statiquement puis pose la nôtre.
-  const head = document.head;
-  head.querySelectorAll('link[rel~="icon"], link[rel="apple-touch-icon"]').forEach((el) => el.remove());
+  // IMPORTANT : ne JAMAIS supprimer les <link> gérés par React/Next
+  // (métadonnées) — cela provoque un crash de réconciliation
+  // (removeChild sur un nœud disparu). On gère uniquement NOS propres
+  // éléments (identifiés par un id) : création unique + mise à jour du
+  // href. Placés en fin de <head>, ils priment sur les icônes statiques.
+  setOwnLink('dyn-favicon-icon', 'icon', url);
+  setOwnLink('dyn-favicon-apple', 'apple-touch-icon', url);
+}
 
-  const icon = document.createElement('link');
-  icon.rel = 'icon';
-  icon.href = url;
-  head.appendChild(icon);
-
-  const apple = document.createElement('link');
-  apple.rel = 'apple-touch-icon';
-  apple.href = url;
-  head.appendChild(apple);
+function setOwnLink(id: string, rel: string, url: string) {
+  let el = document.getElementById(id) as HTMLLinkElement | null;
+  if (!el) {
+    el = document.createElement('link');
+    el.id = id;
+    el.rel = rel;
+    document.head.appendChild(el);
+  }
+  if (el.href !== url) el.href = url;
 }
