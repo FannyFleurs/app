@@ -27,15 +27,16 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     [params.id],
   );
 
-  const loyalty = await query<{ points_balance: number }>(
-    `SELECT points_balance FROM loyalty_accounts WHERE customer_id = $1`,
+  // Total fidélité tous groupes (fidélité segmentée possible en Croissance+).
+  const loyalty = await query<{ total: string | null }>(
+    `SELECT SUM(points_balance)::text AS total FROM loyalty_accounts WHERE customer_id = $1`,
     [params.id],
   );
 
   return NextResponse.json({
     customer: cust.rows[0],
     sales: sales.rows,
-    loyalty_points: loyalty.rows[0]?.points_balance ?? null,
+    loyalty_points: loyalty.rows[0]?.total != null ? Number(loyalty.rows[0].total) : null,
   });
 }
 

@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db/client';
 import { requirePermission } from '@/lib/auth/guards';
+import {
+  mergeWithDefaults, POS_UI_KEY, loyaltyGroupKey, type PosUiSettings,
+} from '@/lib/settings/pos-ui';
 
 /**
  * Renvoie tous les soldes du client utiles à afficher dans la zone ticket :
@@ -11,14 +14,43 @@ import { requirePermission } from '@/lib/auth/guards';
  *
  * Fallback gracieux si une migration n'est pas encore appliquée.
  */
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+export async function GET(req: Request, { params }: { params: { id: string } }) {
   const g = await requirePermission('customers.read');
   if ('response' in g) return g.response;
 
-  const loyalty = await query<{ points_balance: string }>(
-    `SELECT points_balance::text FROM loyalty_accounts WHERE customer_id = $1`,
-    [params.id],
-  );
+  // Fidélité : solde du GROUPE de la boutique du poste (si store_id fourni),
+  // sinon total tous groupes. Compatible avec l'ancien schéma (sans group_key).
+  const storeId = new URL(req.url).searchParams.get('store_id');
+  let loyaltyBalance = 0;
+  try {
+    if (storeId) {
+      const st = await query<{ value: Partial<PosUiSettings> }>(
+        `SELECT value FROM settings WHERE organization_id = $1 AND key = $2`,
+        [g.user.organizationId, POS_UI_KEY],
+      );
+      const ui = mergeWithDefaults(st.rows[0]?.value ?? null);
+      const groupKey = loyaltyGroupKey(ui.loyalty, storeId);
+      const r = await query<{ points_balance: string }>(
+        `SELECT points_balance::text FROM loyalty_accounts
+          WHERE customer_id = $1 AND group_key = $2`,
+        [params.id, groupKey],
+      );
+      loyaltyBalance = Number(r.rows[0]?.points_balance ?? 0);
+    } else {
+      const r = await query<{ total: string }>(
+        `SELECT COALESCE(SUM(points_balance),0)::text AS total
+           FROM loyalty_accounts WHERE customer_id = $1`,
+        [params.id],
+      );
+      loyaltyBalance = Number(r.rows[0]?.total ?? 0);
+    }
+  } catch {
+    const r = await query<{ points_balance: string }>(
+      `SELECT points_balance::text FROM loyalty_accounts WHERE customer_id = $1`,
+      [params.id],
+    ).catch(() => ({ rows: [] as { points_balance: string }[] }));
+    loyaltyBalance = Number(r.rows[0]?.points_balance ?? 0);
+  }
 
   const giftCards = await query<{ id: string; code: string; balance: string }>(
     `SELECT id, code, balance::text
@@ -75,7 +107,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   } catch { /* migration 0012 absente : 0 */ }
 
   return NextResponse.json({
-    loyalty_balance: Number(loyalty.rows[0]?.points_balance ?? 0),
+    loyalty_balance: loyaltyBalance,
     gift_card_balance: giftCards.rows.reduce((s, c) => s + Number(c.balance), 0),
     gift_cards: giftCards.rows,
     account_balance: accountBalance,

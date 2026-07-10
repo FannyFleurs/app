@@ -81,12 +81,12 @@ export async function GET(req: Request, { params }: { params: Params }) {
 
   let balanceEuros = 0, points = 0;
   try {
-    const bal = await query<{ points_balance: number }>(
-      `SELECT points_balance FROM loyalty_accounts
+    const bal = await query<{ total: string | null }>(
+      `SELECT SUM(points_balance)::text AS total FROM loyalty_accounts
         WHERE customer_id = $1 AND organization_id = $2`,
       [p.customer_id, p.organization_id],
     );
-    points = Number(bal.rows[0]?.points_balance ?? 0);
+    points = Number(bal.rows[0]?.total ?? 0);
     balanceEuros = points; // 1 point = 1 €
   } catch { /* pas de table : reste a 0 */ }
 

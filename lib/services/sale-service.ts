@@ -5,6 +5,8 @@ import {
   computeTotals,
   type LineComputed,
 } from './money';
+import { loyaltyGroupKey, type LoyaltySettings } from '@/lib/settings/pos-ui';
+import { loyaltyGroupReady } from './loyalty-schema';
 import type { PoolClient } from 'pg';
 
 export interface SaleLineInput {
@@ -433,32 +435,50 @@ export class SaleService {
       // 7. Fidélité (auto-earn + redemption éventuelle)
       let loyaltyResult: { earned: number; redeemed: number; new_balance: number } | null = null;
       if (sale.customer_id) {
-        const cfgRes = await client.query<{ value: { enabled?: boolean; euros_earned?: number; per_euros_spent?: number } }>(
+        const cfgRes = await client.query<{ value: { loyalty?: LoyaltySettings } & Partial<LoyaltySettings> }>(
           `SELECT value FROM settings WHERE organization_id = $1 AND key = 'pos_ui'`,
           [args.organizationId],
         );
-        const loyaltyCfg = cfgRes.rows[0]?.value?.enabled !== undefined
-          ? cfgRes.rows[0]!.value
-          : (cfgRes.rows[0]?.value as { loyalty?: { enabled?: boolean; euros_earned?: number; per_euros_spent?: number } } | undefined)?.loyalty;
+        // Compat : ancien format où loyalty était au niveau racine.
+        const rawVal = cfgRes.rows[0]?.value;
+        const loyaltyCfg = (rawVal?.enabled !== undefined ? rawVal : rawVal?.loyalty) as Partial<LoyaltySettings> | undefined;
         const enabled = loyaltyCfg?.enabled === true;
         const earnedPer = Number(loyaltyCfg?.euros_earned ?? 0);
         const perSpent = Number(loyaltyCfg?.per_euros_spent ?? 0);
         const redeemed = Number(args.loyaltyRedemptionAmount ?? 0);
+        // Groupe fidélité selon le périmètre configuré + boutique de la vente.
+        // Repli sur le modèle historique tant que la migration 0034 (colonne
+        // group_key) n'est pas appliquée : on ne casse jamais l'encaissement.
+        const grouped = await loyaltyGroupReady(client);
+        const groupKey = loyaltyGroupKey(loyaltyCfg, sale.store_id);
 
         if (enabled || redeemed > 0) {
-          // S'assure que le compte fidélité existe
+          // S'assure que le compte fidélité (du bon groupe) existe.
           let accId: string | null = null;
-          const accSel = await client.query<{ id: string; points_balance: number }>(
-            `SELECT id, points_balance FROM loyalty_accounts WHERE customer_id = $1 FOR UPDATE`,
-            [sale.customer_id],
-          );
+          const accSel = grouped
+            ? await client.query<{ id: string; points_balance: number }>(
+                `SELECT id, points_balance FROM loyalty_accounts
+                  WHERE customer_id = $1 AND group_key = $2 FOR UPDATE`,
+                [sale.customer_id, groupKey],
+              )
+            : await client.query<{ id: string; points_balance: number }>(
+                `SELECT id, points_balance FROM loyalty_accounts
+                  WHERE customer_id = $1 FOR UPDATE`,
+                [sale.customer_id],
+              );
           let currentBalance = 0;
           if (accSel.rowCount === 0) {
-            const accIns = await client.query<{ id: string }>(
-              `INSERT INTO loyalty_accounts (organization_id, customer_id, points_balance)
-               VALUES ($1,$2,0) RETURNING id`,
-              [args.organizationId, sale.customer_id],
-            );
+            const accIns = grouped
+              ? await client.query<{ id: string }>(
+                  `INSERT INTO loyalty_accounts (organization_id, customer_id, points_balance, group_key)
+                   VALUES ($1,$2,0,$3) RETURNING id`,
+                  [args.organizationId, sale.customer_id, groupKey],
+                )
+              : await client.query<{ id: string }>(
+                  `INSERT INTO loyalty_accounts (organization_id, customer_id, points_balance)
+                   VALUES ($1,$2,0) RETURNING id`,
+                  [args.organizationId, sale.customer_id],
+                );
             accId = accIns.rows[0]!.id;
           } else {
             accId = accSel.rows[0]!.id;

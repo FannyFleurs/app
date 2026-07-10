@@ -70,12 +70,12 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
   let balanceEuros = 0;
   let points = 0;
   try {
-    const bal = await query<{ points_balance: number }>(
-      `SELECT points_balance FROM loyalty_accounts
+    const bal = await query<{ total: string | null }>(
+      `SELECT SUM(points_balance)::text AS total FROM loyalty_accounts
         WHERE customer_id = $1 AND organization_id = $2`,
       [params.id, g.user.organizationId],
     );
-    points = Number(bal.rows[0]?.points_balance ?? 0);
+    points = Number(bal.rows[0]?.total ?? 0);
     balanceEuros = points; // 1 point = 1 €
   } catch { /* table optionnelle : reste a 0 */ }
 

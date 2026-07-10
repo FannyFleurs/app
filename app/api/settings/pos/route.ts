@@ -35,6 +35,9 @@ const loyaltySchema = z.object({
   min_redeem: z.number().min(0).optional(),
   stackable: z.boolean().optional(),
   on_excluded_categories: z.array(z.string()).optional(),
+  // Périmètre multi-boutiques (Croissance+).
+  scope: z.enum(['shared', 'per_store', 'grouped']).optional(),
+  store_groups: z.record(z.string(), z.string().max(60)).optional(),
   wallet: walletSchema.optional(),
 }).partial();
 

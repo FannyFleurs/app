@@ -1,9 +1,19 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db/client';
 import { requirePermission } from '@/lib/auth/guards';
-import { mergeWithDefaults, POS_UI_KEY, type PosUiSettings } from '@/lib/settings/pos-ui';
+import {
+  mergeWithDefaults, POS_UI_KEY, loyaltyGroupKey, type PosUiSettings,
+} from '@/lib/settings/pos-ui';
 
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+/**
+ * Solde fidélité d'un client.
+ *
+ * Fidélité segmentée (offre Croissance+) : le solde dépend du GROUPE de la
+ * boutique. La caisse transmet donc `?store_id=…` (boutique du poste) pour
+ * obtenir le solde du bon groupe — c'est celui-là qui peut être utilisé.
+ * Sans `store_id` (back-office), on renvoie le TOTAL tous groupes confondus.
+ */
+export async function GET(req: Request, { params }: { params: { id: string } }) {
   const g = await requirePermission('customers.read');
   if ('response' in g) return g.response;
 
@@ -13,15 +23,43 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   );
   const ui = mergeWithDefaults(settings.rows[0]?.value ?? null);
 
-  const acc = await query<{ id: string; points_balance: number }>(
-    `SELECT id, points_balance FROM loyalty_accounts WHERE customer_id = $1`,
-    [params.id],
-  );
-  const account = acc.rows[0] ?? { id: null, points_balance: 0 };
+  const storeId = new URL(req.url).searchParams.get('store_id');
+
+  let accountId: string | null = null;
+  let balance = 0;
+  try {
+    if (storeId) {
+      // Solde du groupe correspondant à cette boutique (utilisable ici).
+      const groupKey = loyaltyGroupKey(ui.loyalty, storeId);
+      const acc = await query<{ id: string; points_balance: number }>(
+        `SELECT id, points_balance FROM loyalty_accounts
+          WHERE customer_id = $1 AND group_key = $2`,
+        [params.id, groupKey],
+      );
+      accountId = acc.rows[0]?.id ?? null;
+      balance = Number(acc.rows[0]?.points_balance ?? 0);
+    } else {
+      // Total tous groupes (vue back-office).
+      const acc = await query<{ total: string }>(
+        `SELECT COALESCE(SUM(points_balance),0)::text AS total
+           FROM loyalty_accounts WHERE customer_id = $1`,
+        [params.id],
+      );
+      balance = Number(acc.rows[0]?.total ?? 0);
+    }
+  } catch {
+    // Colonne group_key absente (migration 0034 non appliquée) : repli.
+    const acc = await query<{ id: string; points_balance: number }>(
+      `SELECT id, points_balance FROM loyalty_accounts WHERE customer_id = $1`,
+      [params.id],
+    );
+    accountId = acc.rows[0]?.id ?? null;
+    balance = Number(acc.rows[0]?.points_balance ?? 0);
+  }
 
   return NextResponse.json({
     loyalty: ui.loyalty,
-    account_id: account.id ?? null,
-    balance_euros: Number(account.points_balance ?? 0), // on stocke en € directement (1 point = 1 €)
+    account_id: accountId,
+    balance_euros: balance, // on stocke en € directement (1 point = 1 €)
   });
 }

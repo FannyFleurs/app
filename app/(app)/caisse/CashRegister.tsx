@@ -658,8 +658,11 @@ export default function CashRegister({
         }
       }
     } catch { /* ignore */ }
+    // Périmètre fidélité : on transmet la boutique du poste pour obtenir le
+    // solde du bon groupe (fidélité segmentée possible en Croissance+).
+    const storeQ = storeId ? `?store_id=${encodeURIComponent(storeId)}` : '';
     try {
-      const lr = await fetch(`/api/customers/${customerId}/loyalty`);
+      const lr = await fetch(`/api/customers/${customerId}/loyalty${storeQ}`);
       if (lr.ok) {
         const lj = await lr.json();
         if (lj.loyalty?.enabled) {
@@ -673,7 +676,7 @@ export default function CashRegister({
       }
     } catch { /* ignore */ }
     try {
-      const br = await fetch(`/api/customers/${customerId}/balances`);
+      const br = await fetch(`/api/customers/${customerId}/balances${storeQ}`);
       if (br.ok) {
         const bj = await br.json();
         setCustomerBalances({

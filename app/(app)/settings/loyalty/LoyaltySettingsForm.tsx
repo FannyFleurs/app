@@ -1,10 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import type { PosUiSettings, LoyaltySettings, WalletPassSettings } from '@/lib/settings/pos-ui';
+import type { PosUiSettings, LoyaltySettings, LoyaltyScope, WalletPassSettings } from '@/lib/settings/pos-ui';
 
-export default function LoyaltySettingsForm({ initial, canEdit }: {
+interface StoreLite { id: string; name: string }
+
+export default function LoyaltySettingsForm({ initial, canEdit, stores = [], scopeAvailable = false }: {
   initial: PosUiSettings; canEdit: boolean;
+  stores?: StoreLite[];
+  scopeAvailable?: boolean;
 }) {
   const [loyalty, setLoyalty] = useState<LoyaltySettings>(initial.loyalty);
   const [saving, setSaving] = useState(false);
@@ -21,6 +25,20 @@ export default function LoyaltySettingsForm({ initial, canEdit }: {
     setLoyalty((s) => ({ ...s, wallet: { ...s.wallet, [k]: v } }));
   }
   const wallet = loyalty.wallet;
+
+  // Périmètre multi-boutiques.
+  function setStoreGroup(storeId: string, group: string) {
+    if (!canEdit) return;
+    setLoyalty((s) => {
+      const next = { ...(s.store_groups ?? {}) };
+      const g = group.trim();
+      if (g) next[storeId] = g;
+      else delete next[storeId];
+      return { ...s, store_groups: next };
+    });
+  }
+  const scope: LoyaltyScope = loyalty.scope ?? 'shared';
+  const showScope = stores.length >= 2;
 
   async function submit() {
     setSaving(true); setError(null); setSaved(false);
@@ -110,6 +128,77 @@ export default function LoyaltySettingsForm({ initial, canEdit }: {
           </p>
         )}
       </div>
+
+      {/* -------- Périmètre multi-boutiques (Croissance+) -------- */}
+      {showScope && (
+        <div className="card p-5 space-y-4">
+          <div>
+            <h2 className="text-base font-semibold">Périmètre de la fidélité</h2>
+            <p className="text-xs text-ink-soft mt-0.5">
+              Choisissez si la carte de fidélité est commune à toutes vos
+              boutiques ou séparée. Les comptes clients, eux, restent toujours
+              communs.
+            </p>
+          </div>
+
+          {!scopeAvailable ? (
+            <div className="rounded-xl bg-warning/10 border border-warning/30 p-3 text-sm">
+              La fidélité multi-boutiques est disponible à partir de l&apos;offre{' '}
+              <strong>Croissance</strong>.{' '}
+              <a href="/settings/subscription" className="underline text-accent-deep">Changer d&apos;offre</a>.
+            </div>
+          ) : (
+            <>
+              <div className="space-y-2">
+                <ScopeRadio
+                  checked={scope === 'shared'} disabled={!canEdit}
+                  onSelect={() => patch('scope', 'shared')}
+                  title="Commune à toutes les boutiques"
+                  desc="Une seule carte : les achats et les points se cumulent partout."
+                />
+                <ScopeRadio
+                  checked={scope === 'per_store'} disabled={!canEdit}
+                  onSelect={() => patch('scope', 'per_store')}
+                  title="Chaque boutique la sienne"
+                  desc="Solde de points séparé par boutique. Rien ne se cumule d'une boutique à l'autre."
+                />
+                <ScopeRadio
+                  checked={scope === 'grouped'} disabled={!canEdit}
+                  onSelect={() => patch('scope', 'grouped')}
+                  title="Groupes personnalisés"
+                  desc="Les boutiques d'un même groupe partagent la carte ; une boutique sans groupe a la sienne."
+                />
+              </div>
+
+              {scope === 'grouped' && (
+                <div className="rounded-xl border border-border divide-y divide-border overflow-hidden">
+                  <div className="px-3 py-2 text-xs text-ink-soft bg-gray-50">
+                    Donnez le même nom de groupe aux boutiques qui doivent
+                    partager la même carte.
+                  </div>
+                  {stores.map((s) => (
+                    <div key={s.id} className="flex items-center gap-3 px-3 py-2.5">
+                      <div className="flex-1 min-w-0 truncate text-sm font-medium">{s.name}</div>
+                      <input
+                        className="input h-9 max-w-[180px] text-sm"
+                        placeholder="Groupe (ex. Centre-ville)"
+                        value={loyalty.store_groups?.[s.id] ?? ''}
+                        disabled={!canEdit}
+                        onChange={(e) => setStoreGroup(s.id, e.target.value)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <p className="text-xs text-ink-soft">
+                ⚠ Changer le périmètre ne fusionne pas les soldes existants :
+                les points déjà acquis restent sur leur carte d&apos;origine.
+              </p>
+            </>
+          )}
+        </div>
+      )}
 
       {/* -------- Carte fidélité Apple Wallet -------- */}
       <div className="card p-5 space-y-4">
@@ -289,6 +378,33 @@ export default function LoyaltySettingsForm({ initial, canEdit }: {
         </button>
       )}
     </div>
+  );
+}
+
+/** Option radio du périmètre fidélité (carte cliquable). */
+function ScopeRadio({ checked, disabled, onSelect, title, desc }: {
+  checked: boolean; disabled: boolean; onSelect: () => void;
+  title: string; desc: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      disabled={disabled}
+      className={`w-full text-left rounded-xl border p-3 flex items-start gap-3 transition ${
+        checked ? 'border-accent bg-accent-soft/50' : 'border-border hover:bg-gray-50'
+      } disabled:opacity-60`}
+    >
+      <span className={`mt-0.5 h-4 w-4 rounded-full border-2 shrink-0 grid place-items-center ${
+        checked ? 'border-accent-deep' : 'border-ink-soft/40'
+      }`}>
+        {checked && <span className="h-2 w-2 rounded-full" style={{ backgroundColor: 'var(--primary)' }} />}
+      </span>
+      <span className="min-w-0">
+        <span className="block text-sm font-medium">{title}</span>
+        <span className="block text-xs text-ink-soft mt-0.5">{desc}</span>
+      </span>
+    </button>
   );
 }
 

@@ -49,6 +49,15 @@ export interface WalletPassSettings {
   back_message: string;
 }
 
+/**
+ * Périmètre de la fidélité (offre Croissance+) :
+ *   - 'shared'    : une carte commune à TOUTES les boutiques (défaut).
+ *   - 'per_store' : chaque boutique a sa propre carte (soldes séparés).
+ *   - 'grouped'   : groupes personnalisés — les boutiques d'un même groupe
+ *                   partagent la carte ; une boutique non assignée a la sienne.
+ */
+export type LoyaltyScope = 'shared' | 'per_store' | 'grouped';
+
 export interface LoyaltySettings {
   enabled: boolean;
   euros_earned: number;      // ex 5 : on gagne 5 € de fidélité
@@ -56,8 +65,28 @@ export interface LoyaltySettings {
   min_redeem: number;        // seuil mini d'utilisation (ex 5 €)
   stackable: boolean;        // cumulable avec d'autres remises ?
   on_excluded_categories: string[];
+  /** Périmètre (multi-boutiques) — voir LoyaltyScope. Défaut 'shared'. */
+  scope: LoyaltyScope;
+  /** Mode 'grouped' : boutique (store_id) -> identifiant de groupe. */
+  store_groups: Record<string, string>;
   /** Carte fidelite Apple Wallet (facultatif). */
   wallet: WalletPassSettings;
+}
+
+/**
+ * Clé du groupe fidélité pour une boutique donnée. Les comptes fidélité
+ * sont cloisonnés par cette clé. '*' = groupe commun (toutes boutiques).
+ */
+export function loyaltyGroupKey(
+  loyalty: { scope?: LoyaltyScope; store_groups?: Record<string, string> } | null | undefined,
+  storeId: string | null | undefined,
+): string {
+  const scope = loyalty?.scope ?? 'shared';
+  if (scope === 'shared' || !storeId) return '*';
+  if (scope === 'per_store') return `s:${storeId}`;
+  // grouped : groupe assigné, sinon la boutique constitue son propre groupe.
+  const g = loyalty?.store_groups?.[storeId];
+  return g ? `g:${g}` : `s:${storeId}`;
 }
 
 export interface PosUiSettings {
@@ -126,6 +155,8 @@ export const POS_UI_DEFAULTS: PosUiSettings = {
     min_redeem: 5,
     stackable: false,
     on_excluded_categories: [],
+    scope: 'shared',
+    store_groups: {},
     wallet: {
       enabled: false,
       pass_type_id: '',

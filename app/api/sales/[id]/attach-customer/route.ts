@@ -5,6 +5,8 @@ import { FiscalCore } from '@/lib/fiscal/core';
 import { requirePermission } from '@/lib/auth/guards';
 import { parseJson, jsonError } from '@/lib/validation/api';
 import { audit } from '@/lib/audit/log';
+import { loyaltyGroupKey, type LoyaltySettings } from '@/lib/settings/pos-ui';
+import { loyaltyGroupReady } from '@/lib/services/loyalty-schema';
 
 const schema = z.object({
   customer_id: z.string().uuid(),
@@ -54,7 +56,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
       // Fidélité : auto-earn si activée
       let loyaltyResult: { earned: number; new_balance: number } | null = null;
-      const cfgRes = await client.query<{ value: { loyalty?: { enabled?: boolean; euros_earned?: number; per_euros_spent?: number } } }>(
+      const cfgRes = await client.query<{ value: { loyalty?: LoyaltySettings } }>(
         `SELECT value FROM settings WHERE organization_id = $1 AND key = 'pos_ui'`,
         [g.user.organizationId],
       );
@@ -62,22 +64,38 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       const enabled = loyaltyCfg?.enabled === true;
       const earnedPer = Number(loyaltyCfg?.euros_earned ?? 0);
       const perSpent = Number(loyaltyCfg?.per_euros_spent ?? 0);
+      // Groupe fidélité selon la boutique de la vente (repli si migration
+      // 0034 non appliquée).
+      const grouped = await loyaltyGroupReady(client);
+      const groupKey = loyaltyGroupKey(loyaltyCfg, sale.store_id);
 
       if (enabled && earnedPer > 0 && perSpent > 0) {
-        // Compte fidélité (créé si besoin)
+        // Compte fidélité du bon groupe (créé si besoin)
         let accId: string;
         let balance = 0;
-        const accSel = await client.query<{ id: string; points_balance: number }>(
-          `SELECT id, points_balance FROM loyalty_accounts
-            WHERE customer_id = $1 FOR UPDATE`,
-          [customer_id],
-        );
+        const accSel = grouped
+          ? await client.query<{ id: string; points_balance: number }>(
+              `SELECT id, points_balance FROM loyalty_accounts
+                WHERE customer_id = $1 AND group_key = $2 FOR UPDATE`,
+              [customer_id, groupKey],
+            )
+          : await client.query<{ id: string; points_balance: number }>(
+              `SELECT id, points_balance FROM loyalty_accounts
+                WHERE customer_id = $1 FOR UPDATE`,
+              [customer_id],
+            );
         if (accSel.rowCount === 0) {
-          const ins = await client.query<{ id: string }>(
-            `INSERT INTO loyalty_accounts (organization_id, customer_id, points_balance)
-             VALUES ($1,$2,0) RETURNING id`,
-            [g.user.organizationId, customer_id],
-          );
+          const ins = grouped
+            ? await client.query<{ id: string }>(
+                `INSERT INTO loyalty_accounts (organization_id, customer_id, points_balance, group_key)
+                 VALUES ($1,$2,0,$3) RETURNING id`,
+                [g.user.organizationId, customer_id, groupKey],
+              )
+            : await client.query<{ id: string }>(
+                `INSERT INTO loyalty_accounts (organization_id, customer_id, points_balance)
+                 VALUES ($1,$2,0) RETURNING id`,
+                [g.user.organizationId, customer_id],
+              );
           accId = ins.rows[0]!.id;
         } else {
           accId = accSel.rows[0]!.id;
