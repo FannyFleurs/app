@@ -67,7 +67,21 @@ export async function createSession(args: {
            FROM organizations WHERE id = $1`,
         [args.organizationId],
       );
-      const limit = Number(orgRes.rows[0]?.max_devices ?? 1);
+      // Chaque caisse est prévue pour tourner sur son propre poste : la
+      // limite de sessions simultanées est donc au moins égale au nombre
+      // de caisses actives de l'organisation (le nombre de caisses est
+      // déjà plafonné par l'offre). max_devices reste un plancher qu'un
+      // super-admin peut relever manuellement (option multi-appareils).
+      let registerCount = 0;
+      try {
+        const regRes = await query<{ c: string }>(
+          `SELECT COUNT(*)::text AS c FROM registers
+            WHERE organization_id = $1 AND COALESCE(is_active, true) = true`,
+          [args.organizationId],
+        );
+        registerCount = Number(regRes.rows[0]?.c ?? 0);
+      } catch { /* table/col absente : on ignore */ }
+      const limit = Math.max(Number(orgRes.rows[0]?.max_devices ?? 1), registerCount);
       const activeRes = await query<{ c: string }>(
         `SELECT COUNT(*)::text AS c FROM sessions s
            JOIN users u ON u.id = s.user_id

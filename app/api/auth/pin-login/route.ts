@@ -80,23 +80,48 @@ export async function POST(req: Request) {
     [user.id],
   );
 
-  let token: string;
-  try {
-    token = await createSession({
-      userId: user.id,
-      organizationId: user.organization_id,
-      role: user.role,
+  const authUser = user; // capture non-null (narrowing perdu dans les closures)
+  async function openSession() {
+    return createSession({
+      userId: authUser.id,
+      organizationId: authUser.organization_id,
+      role: authUser.role,
       ip,
       userAgent: ua,
     });
+  }
+
+  const limitMsg = (limit: number) =>
+    `Limite d'appareils atteinte (${limit}). Un autre poste est déjà connecté : libérez-le depuis Réglages ▸ Société & boutiques ▸ Caisses, ou augmentez la limite multi-appareils.`;
+
+  let token: string;
+  try {
+    token = await openSession();
   } catch (err) {
     if (err instanceof DeviceLimitError) {
-      return jsonError('DEVICE_LIMIT_REACHED', 403, {
-        limit: err.limit,
-        message: `Limite d'appareils atteinte (${err.limit}). Déconnectez-vous d'un autre poste pour continuer.`,
-      });
+      // Libère une éventuelle session caisse fantôme du même utilisateur
+      // (onglet fermé sans déconnexion) puis réessaie une fois.
+      const freed = await query(
+        `UPDATE sessions SET revoked_at = now()
+          WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > now()
+            AND COALESCE(kind, 'pos') = 'pos'`,
+        [user.id],
+      );
+      if ((freed.rowCount ?? 0) > 0) {
+        try {
+          token = await openSession();
+        } catch (err2) {
+          if (err2 instanceof DeviceLimitError) {
+            return jsonError('DEVICE_LIMIT_REACHED', 403, { limit: err2.limit, message: limitMsg(err2.limit) });
+          }
+          throw err2;
+        }
+      } else {
+        return jsonError('DEVICE_LIMIT_REACHED', 403, { limit: err.limit, message: limitMsg(err.limit) });
+      }
+    } else {
+      throw err;
     }
-    throw err;
   }
 
   cookies().set({ ...sessionCookieOptions(), value: token });

@@ -110,7 +110,7 @@ export default function PinLogin() {
       if (!r.ok) {
         setSubmitting(false);
         const j = await r.json().catch(() => ({}));
-        setError(prettyError(j.error));
+        setError(prettyError(j.error, j.message));
         setPin('');
         return;
       }
@@ -423,11 +423,12 @@ function PinKey({ label, onPress, disabled, small }: {
   );
 }
 
-function prettyError(code?: string): string {
+function prettyError(code?: string, message?: string): string {
   switch (code) {
     case 'INVALID_PIN': return 'Code incorrect. Réessayez.';
     case 'ACCOUNT_LOCKED': return 'Compte verrouillé temporairement.';
     case 'NO_PIN_SET': return 'Aucun code configuré pour cet utilisateur.';
-    default: return 'Connexion impossible.';
+    case 'DEVICE_LIMIT_REACHED': return message || 'Limite d\'appareils atteinte.';
+    default: return message || 'Connexion impossible.';
   }
 }

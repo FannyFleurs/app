@@ -72,7 +72,7 @@ export default function CaisseLogin() {
       });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
-        setError(prettyError(j.error));
+        setError(prettyError(j.error, j.message));
         return;
       }
       // Navigation "dure" : le cookie de session est pris en compte et
@@ -156,11 +156,14 @@ export default function CaisseLogin() {
   );
 }
 
-function prettyError(code?: string): string {
+function prettyError(code?: string, message?: string): string {
   switch (code) {
     case 'INVALID_CREDENTIALS': return 'Email ou mot de passe incorrect.';
     case 'ACCOUNT_LOCKED': return 'Compte verrouillé temporairement. Réessayez plus tard.';
     case 'NO_PASSWORD_SET': return 'Aucun mot de passe défini pour ce compte. Contactez un administrateur.';
-    default: return 'Connexion impossible.';
+    // Le serveur fournit un message explicite (limite d'appareils…) : on
+    // l'affiche tel quel plutôt qu'un générique peu utile.
+    case 'DEVICE_LIMIT_REACHED': return message || 'Limite d\'appareils atteinte.';
+    default: return message || 'Connexion impossible.';
   }
 }

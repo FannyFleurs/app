@@ -106,24 +106,56 @@ async function handleLogin(req: Request) {
     host.startsWith('bo.') || host.startsWith('admin.') || host.startsWith('ca.') ||
     cookies().get('webpos_bo')?.value === '1';
 
-  let token: string;
-  try {
-    token = await createSession({
-      userId: user.id,
-      organizationId: user.organization_id,
-      role: user.role,
+  const kind: 'pos' | 'management' = isManagement ? 'management' : 'pos';
+  const authUser = user; // capture non-null (narrowing perdu dans les closures)
+
+  async function openSession() {
+    return createSession({
+      userId: authUser.id,
+      organizationId: authUser.organization_id,
+      role: authUser.role,
       ip,
       userAgent: ua,
-      kind: isManagement ? 'management' : 'pos',
+      kind,
     });
+  }
+
+  let token: string;
+  try {
+    token = await openSession();
   } catch (err) {
     if (err instanceof DeviceLimitError) {
-      return jsonError('DEVICE_LIMIT_REACHED', 403, {
-        limit: err.limit,
-        message: `Limite d'appareils atteinte (${err.limit}). Déconnectez-vous d'un autre poste, ou activez l'option Multi-appareils.`,
-      });
+      // Cas courant : une ancienne session caisse de CE MÊME utilisateur
+      // occupe encore la place (onglet fermé sans déconnexion). On la
+      // libère automatiquement et on réessaie une fois — se reconnecter
+      // sur son propre compte ne doit jamais être bloqué par son fantôme.
+      const freed = await query(
+        `UPDATE sessions SET revoked_at = now()
+          WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > now()
+            AND COALESCE(kind, 'pos') = 'pos'`,
+        [user.id],
+      );
+      if ((freed.rowCount ?? 0) > 0) {
+        try {
+          token = await openSession();
+        } catch (err2) {
+          if (err2 instanceof DeviceLimitError) {
+            return jsonError('DEVICE_LIMIT_REACHED', 403, {
+              limit: err2.limit,
+              message: `Limite d'appareils atteinte (${err2.limit}). Un autre poste est déjà connecté : libérez-le depuis Réglages ▸ Société & boutiques ▸ Caisses, ou augmentez la limite multi-appareils.`,
+            });
+          }
+          throw err2;
+        }
+      } else {
+        return jsonError('DEVICE_LIMIT_REACHED', 403, {
+          limit: err.limit,
+          message: `Limite d'appareils atteinte (${err.limit}). Un autre poste est déjà connecté : libérez-le depuis Réglages ▸ Société & boutiques ▸ Caisses, ou augmentez la limite multi-appareils.`,
+        });
+      }
+    } else {
+      throw err;
     }
-    throw err;
   }
 
   cookies().set({
