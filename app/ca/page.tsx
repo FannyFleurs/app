@@ -1,6 +1,7 @@
 import { readSessionFromCookie } from '@/lib/auth/session';
 import { redirect } from 'next/navigation';
 import { query } from '@/lib/db/client';
+import { mergePlatformDefaults, type PlatformSettings } from '@/lib/settings/platform';
 import CADashboard from './CADashboard';
 
 export const dynamic = 'force-dynamic';
@@ -21,10 +22,21 @@ export default async function CAPage() {
     [user.organizationId],
   );
 
+  // Logo de l'espace CA : logo CA dédié si défini, sinon logo principal.
+  let cfg: PlatformSettings = mergePlatformDefaults(null);
+  try {
+    const pr = await query<{ value: Partial<PlatformSettings> }>(
+      `SELECT value FROM platform_settings WHERE id = 1`,
+    );
+    cfg = mergePlatformDefaults(pr.rows[0]?.value ?? null);
+  } catch { /* défauts */ }
+  const logoUrl = cfg.ca_logo_url || cfg.logo_url || '';
+
   return (
     <CADashboard
       stores={stores.rows}
       orgName={org.rows[0]?.name ?? 'Boutique'}
+      logoUrl={logoUrl}
       user={{ fullName: user.fullName, email: user.email }}
     />
   );

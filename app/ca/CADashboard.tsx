@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatEUR } from '@/lib/services/money';
-import Icon from '@/components/Icon';
 
 interface Store { id: string; name: string }
 interface Summary {
@@ -39,9 +38,9 @@ function periodDates(p: Period, from: string, to: string): { from: string; to: s
 }
 
 export default function CADashboard({
-  stores, orgName, user,
+  stores, orgName, logoUrl, user,
 }: {
-  stores: Store[]; orgName: string;
+  stores: Store[]; orgName: string; logoUrl?: string;
   user: { fullName: string; email: string };
 }) {
   const [storeId, setStoreId] = useState<string>('');
@@ -134,6 +133,7 @@ export default function CADashboard({
         currentStore={currentStore}
         stores={stores}
         orgName={orgName}
+        logoUrl={logoUrl}
         onStoreChange={setStoreId}
         loading={loading}
         onRefresh={() => void reload()}
@@ -195,43 +195,52 @@ export default function CADashboard({
 /* ------------------------------------------------------------------ */
 
 function TopBar({
-  currentStore, stores, orgName, onStoreChange, loading, onRefresh,
+  currentStore, stores, orgName, logoUrl, onStoreChange, loading, onRefresh,
 }: {
-  currentStore: Store | null; stores: Store[]; orgName: string;
+  currentStore: Store | null; stores: Store[]; orgName: string; logoUrl?: string;
   onStoreChange: (id: string) => void;
   loading: boolean; onRefresh: () => void;
 }) {
   return (
-    <div className="shrink-0 bg-white border-b border-border px-4 py-3 flex items-center gap-3">
-      <div className="h-10 w-10 rounded-xl bg-accent-soft grid place-items-center text-accent-deep">
-        <Icon name="pos" size={20} />
+    <div
+      className="shrink-0 bg-white border-b border-border px-4 pb-3 flex items-center gap-3"
+      // Respecte l'encoche / la barre d'état iOS (viewport-fit=cover).
+      style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 0.75rem)' }}
+    >
+      <div className="h-10 w-10 rounded-xl overflow-hidden grid place-items-center shrink-0 bg-accent-soft">
+        {logoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={logoUrl} alt={orgName} className="h-full w-full object-contain" />
+        ) : (
+          <span className="text-accent-deep font-semibold text-lg">
+            {(orgName || 'F').charAt(0).toUpperCase()}
+          </span>
+        )}
       </div>
       <div className="flex-1 min-w-0">
-        <label className="sr-only" htmlFor="storeSel">Boutique</label>
-        <select
-          id="storeSel"
-          value={currentStore?.id ?? ''}
-          onChange={(e) => onStoreChange(e.target.value)}
-          className="font-semibold text-base bg-transparent border-none outline-none appearance-none pr-6 truncate max-w-full"
-          style={{
-            backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'8\' viewBox=\'0 0 12 8\'%3E%3Cpath fill=\'none\' stroke=\'%236B6F73\' stroke-width=\'2\' d=\'M1 1l5 5 5-5\'/%3E%3C/svg%3E")',
-            backgroundRepeat: 'no-repeat',
-            backgroundPosition: 'right 0 center',
-            backgroundSize: '10px',
-          }}
-        >
-          <option value="">Toutes les boutiques</option>
-          {stores.map((s) => (
-            <option key={s.id} value={s.id}>{s.name}</option>
-          ))}
-        </select>
-        <div className="text-xs text-ink-soft truncate">{orgName}</div>
+        <label className="sr-only" htmlFor="storeSel">Filtrer par boutique</label>
+        {/* Pilule cliquable : rend le filtre boutique évident. */}
+        <div className="relative inline-flex max-w-full items-center rounded-lg bg-gray-50 border border-border pl-2.5 pr-7 h-8">
+          <select
+            id="storeSel"
+            value={currentStore?.id ?? ''}
+            onChange={(e) => onStoreChange(e.target.value)}
+            className="font-semibold text-sm bg-transparent border-none outline-none appearance-none truncate max-w-full w-full"
+          >
+            <option value="">Toutes les boutiques</option>
+            {stores.map((s) => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+          <span className="pointer-events-none absolute right-2 text-ink-soft text-[10px]">▼</span>
+        </div>
+        <div className="text-xs text-ink-soft truncate mt-0.5">{orgName}</div>
       </div>
       <button
         onClick={onRefresh}
         disabled={loading}
         aria-label="Actualiser"
-        className="h-10 w-10 grid place-items-center rounded-xl border border-border hover:bg-gray-50 text-ink-soft disabled:opacity-50"
+        className="h-10 w-10 grid place-items-center rounded-xl border border-border hover:bg-gray-50 text-ink-soft disabled:opacity-50 shrink-0"
       >
         <span className={`inline-block ${loading ? 'animate-spin' : ''}`}>↻</span>
       </button>
