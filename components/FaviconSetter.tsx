@@ -20,18 +20,9 @@ export default function FaviconSetter() {
     const isCA =
       host.startsWith('ca.') || path === '/ca' || (path?.startsWith('/ca/') ?? false);
 
-    void (async () => {
-      try {
-        const r = await fetch('/api/brand', { cache: 'no-store' });
-        if (!r.ok) return;
-        const b = await r.json();
-        const url = isCA
-          ? (b.ca_favicon_url || b.ca_logo_url || b.favicon_url || b.logo_url)
-          : (b.favicon_url || b.logo_url);
-        if (!url) return;
-        applyFavicon(url);
-      } catch { /* garde le favicon par défaut */ }
-    })();
+    // On pointe vers une VRAIE URL image (endpoint qui décode la data: URL),
+    // car iOS Safari ignore les data: URLs pour le favicon / l'icône d'accueil.
+    applyFavicon(`/api/brand/icon?scope=${isCA ? 'ca' : 'app'}`);
   }, [path]);
 
   return null;
