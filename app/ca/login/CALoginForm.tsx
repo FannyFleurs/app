@@ -29,7 +29,9 @@ export default function CALoginForm() {
         setErr(j.error ?? j.message ?? 'Connexion impossible');
         return;
       }
-      window.location.assign('/');
+      // Toujours rester dans l'espace CA (jamais la caisse) : on cible
+      // /ca explicitement, quel que soit le host (PWA, app., apex…).
+      window.location.assign('/ca');
     } catch (e) {
       setErr((e as Error).message || 'Réseau indisponible');
     } finally {
