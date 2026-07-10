@@ -28,10 +28,10 @@ interface Plan {
 const PLANS: Plan[] = [
   {
     key: 'starter',
-    label: 'Starter',
+    label: 'Essentiel',
     price: '29 €/mois',
     features: [
-      '1 boutique, 1 caisse',
+      '1 boutique · 1 caisse (+ caisses en option)',
       'Catalogue illimité',
       'Tickets fiscaux conformes',
       'Support email',
@@ -39,11 +39,12 @@ const PLANS: Plan[] = [
   },
   {
     key: 'pro',
-    label: 'Pro',
+    label: 'Croissance',
     price: '59 €/mois',
     highlight: true,
     features: [
-      'Jusqu\'à 3 boutiques, 5 caisses',
+      '1 boutique · jusqu\'à 5 caisses',
+      'Écran & Livraison (commande différée)',
       'Programme de fidélité',
       'Factures B2B, avoirs, exports',
       'Support prioritaire',

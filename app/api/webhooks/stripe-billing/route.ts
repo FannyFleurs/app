@@ -59,13 +59,26 @@ export async function POST(req: Request) {
         const subId = obj.id as string;
         const status = mapStatus(obj.status as string);
         const periodEnd = obj.current_period_end as number | undefined;
+        const cancelAtEnd = !!(obj.cancel_at_period_end as boolean | undefined);
+        // Plan effectif depuis Stripe : on mappe le Price ID de l'article
+        // principal vers l'offre interne (evite tout desync app/Stripe).
+        let planFromStripe: string | null = null;
+        try {
+          const items = (obj.items as { data?: Array<{ price?: { id?: string } }> })?.data ?? [];
+          const priceIds = items.map((i) => i.price?.id).filter(Boolean) as string[];
+          if (priceIds.includes(platform.stripe_price_croissance)) planFromStripe = 'pro';
+          else if (priceIds.includes(platform.stripe_price_essentiel)) planFromStripe = 'starter';
+        } catch { /* pas d'items exploitables */ }
+
         await query(
           `UPDATE subscriptions
               SET status = $2,
                   current_period_end = COALESCE(to_timestamp($3), current_period_end),
+                  cancel_at_period_end = $4,
+                  plan = COALESCE($5, plan),
                   updated_at = now()
             WHERE external_ref = $1`,
-          [subId, status, periodEnd ?? null],
+          [subId, status, periodEnd ?? null, cancelAtEnd, planFromStripe],
         );
         // Si l'abonnement redevient sain, on s'assure que l'org est débloquée.
         if (status === 'active' || status === 'trialing') {

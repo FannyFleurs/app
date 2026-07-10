@@ -22,7 +22,7 @@ export function planLimits(
       // Essentiel : 1 caisse de base + caisses supplémentaires achetées.
       return { maxStores: 1, maxRegistersPerStore: 1 + Math.max(0, extraRegisters), label: 'Essentiel' };
     case 'pro':
-      return { maxStores: 1, maxRegistersPerStore: Infinity, label: 'Croissance' };
+      return { maxStores: 1, maxRegistersPerStore: 5, label: 'Croissance' };
     case 'enterprise':
       return { maxStores: Infinity, maxRegistersPerStore: Infinity, label: 'Réseau' };
     default:
