@@ -56,6 +56,9 @@ export default function PlatformConfigForm({ initial }: { initial: FormData }) {
 
   return (
     <div className="space-y-5">
+      {/* Disposition en colonnes (masonry) sur grand écran pour éviter la
+          longue colonne unique. Chaque section reste insécable. */}
+      <div className="lg:columns-2 lg:gap-5 [&>section]:mb-5 [&>section]:break-inside-avoid space-y-5 lg:space-y-0">
       {/* Branding */}
       <section className="card p-5 space-y-4">
         <h2 className="font-semibold">Marque &amp; logo</h2>
@@ -360,6 +363,7 @@ export default function PlatformConfigForm({ initial }: { initial: FormData }) {
           renseignés, l&apos;inscription reste en essai gratuit sans paiement.
         </p>
       </section>
+      </div>
 
       {error && <div className="rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
       {saved && <div className="rounded-xl bg-success/10 px-3 py-2 text-sm text-success">✓ Configuration enregistrée</div>}

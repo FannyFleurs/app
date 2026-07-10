@@ -35,7 +35,21 @@ interface Data {
   }>;
 }
 
-export default function OrganizationDetail({ id }: { id: string }) {
+interface PlanNames { starter: string; pro: string; enterprise: string }
+
+/** Nom lisible d'un plan interne selon la config (fallback intégré). */
+function planLabel(plan: string | null | undefined, names?: PlanNames): string {
+  switch (plan) {
+    case 'starter': return names?.starter || 'Essentiel';
+    case 'pro': return names?.pro || 'Croissance';
+    case 'enterprise': return names?.enterprise || 'Réseau';
+    case 'trial': return 'Essai';
+    case 'cancelled': return 'Résilié';
+    default: return plan ?? '—';
+  }
+}
+
+export default function OrganizationDetail({ id, planNames }: { id: string; planNames?: PlanNames }) {
   const [data, setData] = useState<Data | null>(null);
   const [loading, setLoading] = useState(true);
   // Compteur incrémenté à chaque action — force le re-fetch d'ActiveSessions
@@ -77,7 +91,7 @@ export default function OrganizationDetail({ id }: { id: string }) {
       </div>
 
       <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Kpi label="Plan" value={s?.plan ?? o.plan} />
+        <Kpi label="Plan" value={planLabel(s?.plan ?? o.plan, planNames)} />
         <Kpi
           label="Échéance"
           value={due
@@ -108,7 +122,7 @@ export default function OrganizationDetail({ id }: { id: string }) {
           <h3 className="font-semibold mb-3">Abonnement</h3>
           {s ? (
             <dl className="text-sm space-y-1.5">
-              <Item label="Plan" value={s.plan} />
+              <Item label="Plan" value={planLabel(s.plan, planNames)} />
               <Item label="Statut" value={s.status} />
               <Item label="Période en cours" value={[s.current_period_start, s.current_period_end].map((d) => d ? new Date(d).toLocaleDateString('fr-FR') : '—').join(' → ')} />
               <Item label="Résiliation à échéance" value={s.cancel_at_period_end ? 'Oui' : 'Non'} />
@@ -120,7 +134,7 @@ export default function OrganizationDetail({ id }: { id: string }) {
         </div>
       </section>
 
-      <AdminActions id={o.id} maxDevicesFromServer={o.max_devices ?? 1} onChange={() => void reload()} />
+      <AdminActions id={o.id} maxDevicesFromServer={o.max_devices ?? 1} planNames={planNames} onChange={() => void reload()} />
 
       <ActiveSessions id={o.id} version={version} onChange={() => void reload()} />
 
@@ -165,14 +179,14 @@ export default function OrganizationDetail({ id }: { id: string }) {
   );
 }
 
-function AdminActions({ id, maxDevicesFromServer, onChange }: {
-  id: string; maxDevicesFromServer: number; onChange: () => void;
+function AdminActions({ id, maxDevicesFromServer, planNames, onChange }: {
+  id: string; maxDevicesFromServer: number; planNames?: PlanNames; onChange: () => void;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [extendDays, setExtendDays] = useState<number>(30);
   const [extendReason, setExtendReason] = useState('');
-  const [newPlan, setNewPlan] = useState<'starter'|'pro'>('pro');
+  const [newPlan, setNewPlan] = useState<'starter'|'pro'|'enterprise'>('pro');
   const [maxDevices, setMaxDevices] = useState<number>(maxDevicesFromServer);
   const [note, setNote] = useState('');
 
@@ -228,8 +242,9 @@ function AdminActions({ id, maxDevicesFromServer, onChange }: {
           <div className="font-medium text-sm">Changer de plan</div>
           <select className="input mt-2 h-9" value={newPlan}
                   onChange={(e) => setNewPlan(e.target.value as typeof newPlan)}>
-            <option value="starter">Starter (29 €/mois)</option>
-            <option value="pro">Pro (59 €/mois)</option>
+            <option value="starter">{planLabel('starter', planNames)}</option>
+            <option value="pro">{planLabel('pro', planNames)}</option>
+            <option value="enterprise">{planLabel('enterprise', planNames)}</option>
           </select>
           <button onClick={() => void call({ action: 'change_plan', plan: newPlan })}
                   disabled={busy !== null} className="btn-soft text-xs w-full mt-2">
