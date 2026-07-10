@@ -207,40 +207,43 @@ function TopBar({
       // Respecte l'encoche / la barre d'état iOS (viewport-fit=cover).
       style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 0.75rem)' }}
     >
-      <div className="h-10 w-10 rounded-xl overflow-hidden grid place-items-center shrink-0 bg-accent-soft">
-        {logoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={logoUrl} alt={orgName} className="h-full w-full object-contain" />
-        ) : (
-          <span className="text-accent-deep font-semibold text-lg">
-            {(orgName || 'F').charAt(0).toUpperCase()}
-          </span>
-        )}
-      </div>
+      {/* Logo, sans fond (transparent sur blanc). */}
+      {logoUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={logoUrl} alt={orgName} className="h-9 w-9 object-contain shrink-0" />
+      ) : (
+        <div className="h-9 w-9 rounded-lg grid place-items-center shrink-0 text-white font-semibold text-base"
+             style={{ backgroundColor: 'var(--primary)' }}>
+          {(orgName || 'F').charAt(0).toUpperCase()}
+        </div>
+      )}
+
       <div className="flex-1 min-w-0">
+        {/* Identité : nom de l'enseigne en titre. */}
+        <div className="font-semibold text-base leading-tight truncate">{orgName}</div>
+        {/* Filtre boutique : contrôle secondaire discret et cliquable. */}
         <label className="sr-only" htmlFor="storeSel">Filtrer par boutique</label>
-        {/* Pilule cliquable : rend le filtre boutique évident. */}
-        <div className="relative inline-flex max-w-full items-center rounded-lg bg-gray-50 border border-border pl-2.5 pr-7 h-8">
+        <div className="relative inline-flex max-w-full items-center -ml-0.5">
           <select
             id="storeSel"
             value={currentStore?.id ?? ''}
             onChange={(e) => onStoreChange(e.target.value)}
-            className="font-semibold text-sm bg-transparent border-none outline-none appearance-none truncate max-w-full w-full"
+            className="text-xs text-ink-soft bg-transparent border-none outline-none appearance-none truncate max-w-full pr-4 pl-0.5 py-0.5"
           >
             <option value="">Toutes les boutiques</option>
             {stores.map((s) => (
               <option key={s.id} value={s.id}>{s.name}</option>
             ))}
           </select>
-          <span className="pointer-events-none absolute right-2 text-ink-soft text-[10px]">▼</span>
+          <span className="pointer-events-none absolute right-0 text-ink-soft text-[9px]">▼</span>
         </div>
-        <div className="text-xs text-ink-soft truncate mt-0.5">{orgName}</div>
       </div>
+
       <button
         onClick={onRefresh}
         disabled={loading}
         aria-label="Actualiser"
-        className="h-10 w-10 grid place-items-center rounded-xl border border-border hover:bg-gray-50 text-ink-soft disabled:opacity-50 shrink-0"
+        className="h-10 w-10 grid place-items-center rounded-full border border-border hover:bg-gray-50 text-ink-soft disabled:opacity-50 shrink-0"
       >
         <span className={`inline-block ${loading ? 'animate-spin' : ''}`}>↻</span>
       </button>
