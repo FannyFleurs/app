@@ -93,8 +93,18 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
   } catch { /* table sales absente : on continue */ }
 
   try {
-    // Les caisses sont supprimées en cascade explicitement (pas de sales).
+    // Nettoie les dépendances non fiscales avant suppression : caisses du
+    // poste, droits d'accès boutique, et retire la boutique des produits
+    // multi-boutiques. (Aucune vente validée à ce stade — vérifié plus haut.)
     await query(`DELETE FROM registers WHERE store_id = $1`, [params.id]);
+    try { await query(`DELETE FROM user_store_access WHERE store_id = $1`, [params.id]); } catch { /* table absente */ }
+    try {
+      await query(
+        `UPDATE products SET store_ids = array_remove(store_ids, $1)
+          WHERE organization_id = $2 AND $1 = ANY(store_ids)`,
+        [params.id, g.user.organizationId],
+      );
+    } catch { /* colonne store_ids absente ou type différent : on ignore */ }
     await query(`DELETE FROM stores WHERE id = $1 AND organization_id = $2`,
       [params.id, g.user.organizationId]);
   } catch (err) {
