@@ -1,9 +1,22 @@
 import './layout.css';
+import type { Metadata } from 'next';
 import FaviconSetter from '@/components/FaviconSetter';
 
-export const metadata = {
+export const metadata: Metadata = {
   title: 'Chiffre d\'affaires — HelloPos',
   description: 'Suivi du chiffre d\'affaires en direct.',
+  // Manifest PWA dédié à l'espace CA : start_url /ca (jamais la caisse) +
+  // icônes CA. Surcharge le manifest racine (start_url /caisse).
+  manifest: '/manifest-ca.json',
+  // Icône d'écran d'accueil iOS = favicon CA servi en vraie image.
+  icons: {
+    icon: '/api/brand/icon?scope=ca',
+    apple: '/api/brand/icon?scope=ca',
+  },
+  appleWebApp: {
+    capable: true,
+    title: 'CA en direct',
+  },
 };
 
 /**

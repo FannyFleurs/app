@@ -1,0 +1,27 @@
+{
+  "name": "Chiffre d'affaires",
+  "short_name": "CA en direct",
+  "description": "Suivi du chiffre d'affaires en direct.",
+  "start_url": "/ca",
+  "scope": "/ca",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#FFFFFF",
+  "theme_color": "#556B3E",
+  "lang": "fr",
+  "categories": ["business", "finance"],
+  "icons": [
+    {
+      "src": "/api/brand/icon?scope=ca",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/api/brand/icon?scope=ca",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
