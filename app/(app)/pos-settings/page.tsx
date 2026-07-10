@@ -8,6 +8,7 @@ import {
 } from '@/lib/settings/pos-ui';
 import PageHeader from '@/components/PageHeader';
 import POSSettingsForm from './POSSettingsForm';
+import PosteRefCard from '@/components/PosteRefCard';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,6 +32,7 @@ export default async function POSSettingsPage() {
         subtitle="Personnalisez l'interface de vente. Vos réglages sont enregistrés au niveau de votre organisation et appliqués sur toutes les caisses."
         badge={!canWrite ? { label: 'Lecture seule pour votre rôle', tone: 'soft' } : undefined}
       />
+      <PosteRefCard />
       <POSSettingsForm initial={initial} canWrite={canWrite} />
     </div>
   );
