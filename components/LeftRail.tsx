@@ -146,21 +146,27 @@ export default function LeftRail({
 
   return (
     <aside
-      className="hidden md:flex flex-col shrink-0 w-20 lg:w-24 bg-white border-r border-border h-full"
+      // Pas de bordure droite : le logo peut déborder du rail vers le
+      // contenu (rendu plus « premium »). overflow-visible + z-30 pour que
+      // le logo passe au-dessus du contenu adjacent.
+      className="hidden md:flex flex-col shrink-0 w-20 lg:w-24 bg-white h-full relative z-30 overflow-visible"
     >
-      {/* Logo — occupe toute la largeur du rail pour rester lisible (un
-          logo « wordmark » ne tient pas dans un petit carré). */}
+      {/* Logo — grand et débordant vers la droite pour être bien visible. */}
       <Link
         href="/caisse"
-        className="flex items-center justify-center h-20 px-2 shrink-0"
+        className="flex items-center h-20 pl-3 shrink-0 overflow-visible"
         title="Caisse"
       >
         {brand.logo_url ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={brand.logo_url} alt={brand.brand_name} className="w-full max-h-14 object-contain" />
+          <img
+            src={brand.logo_url}
+            alt={brand.brand_name}
+            className="h-16 w-auto max-w-[180px] object-contain object-left"
+          />
         ) : (
           <span
-            className="grid h-12 w-12 place-items-center rounded-2xl text-white font-semibold text-lg"
+            className="grid h-14 w-14 place-items-center rounded-2xl text-white font-semibold text-xl"
             style={{ backgroundColor: 'var(--primary)' }}
           >
             {(brand.brand_name || 'H').charAt(0)}

@@ -25,10 +25,13 @@ export const metadata: Metadata = {
  * FaviconSetter applique le favicon CA dédié (distinct de la caisse).
  */
 export default function CALayout({ children }: { children: React.ReactNode }) {
+  // Pas de div englobante : le <body> (root layout) fournit déjà
+  // min-h-screen + fond. Éviter un double conteneur garantit que l'écran
+  // de connexion CA est positionné EXACTEMENT comme les autres.
   return (
-    <div className="min-h-screen bg-bg text-ink">
+    <>
       <FaviconSetter />
       {children}
-    </div>
+    </>
   );
 }
