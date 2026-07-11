@@ -36,18 +36,18 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <div className="min-h-screen bg-white">
-      {/* Topbar admin distincte de l'app */}
-      <header className="sticky top-0 z-30 h-14 bg-ink text-white flex items-center px-4">
+      {/* Topbar admin — fond clair, texte sombre (pas de vert). */}
+      <header className="sticky top-0 z-30 h-16 bg-white text-ink border-b border-border flex items-center px-4">
         <Link href="/admin" className="flex items-center gap-2.5">
           {brand.logo_url ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={brand.logo_url} alt={brandName} className="h-9 w-9 rounded-xl object-contain bg-white/10" />
+            <img src={brand.logo_url} alt={brandName} className="h-10 w-auto max-w-[170px] object-contain" />
           ) : (
-            <span className="grid h-9 w-9 place-items-center rounded-xl bg-white/10 font-semibold">
+            <span className="grid h-10 w-10 place-items-center rounded-xl accent-bar text-white font-semibold">
               {brandName.charAt(0)}
             </span>
           )}
-          <span className="font-semibold tracking-tight">{brandName} — Admin SaaS</span>
+          <span className="text-sm font-semibold tracking-tight text-ink-soft hidden sm:inline">Admin SaaS</span>
         </Link>
         <nav className="ml-8 flex items-center gap-1">
           <AdminLink href="/admin">Dashboard</AdminLink>
@@ -55,7 +55,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <AdminLink href="/admin/promo-codes">Codes</AdminLink>
           <AdminLink href="/admin/configuration">Configuration</AdminLink>
         </nav>
-        <div className="ml-auto flex items-center gap-3 text-sm text-white/80">
+        <div className="ml-auto flex items-center gap-3 text-sm text-ink-soft">
           <span>{user.fullName}</span>
         </div>
       </header>
@@ -66,7 +66,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
 function AdminLink({ href, children }: { href: string; children: React.ReactNode }) {
   return (
-    <Link href={href} className="px-3 py-1.5 rounded-lg text-sm font-medium text-white/85 hover:bg-white/10 hover:text-white transition-colors">
+    <Link href={href} className="px-3 py-1.5 rounded-lg text-sm font-medium text-ink-soft hover:bg-gray-100 hover:text-ink transition-colors">
       {children}
     </Link>
   );

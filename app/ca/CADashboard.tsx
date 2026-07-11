@@ -207,12 +207,13 @@ function TopBar({
       // Respecte l'encoche / la barre d'état iOS (viewport-fit=cover).
       style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 0.75rem)' }}
     >
-      {/* Logo, sans fond (transparent sur blanc). */}
+      {/* Logo, sans fond (transparent sur blanc) — hauteur fixe, largeur
+          automatique pour rester lisible (logo « wordmark »). */}
       {logoUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={logoUrl} alt={orgName} className="h-9 w-9 object-contain shrink-0" />
+        <img src={logoUrl} alt={orgName} className="h-11 w-auto max-w-[150px] object-contain shrink-0" />
       ) : (
-        <div className="h-9 w-9 rounded-lg grid place-items-center shrink-0 text-white font-semibold text-base"
+        <div className="h-11 w-11 rounded-lg grid place-items-center shrink-0 text-white font-semibold text-lg"
              style={{ backgroundColor: 'var(--primary)' }}>
           {(orgName || 'F').charAt(0).toUpperCase()}
         </div>

@@ -48,7 +48,7 @@ export default function CALoginForm() {
         <div className="text-center">
           {caLogo ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={caLogo} alt="CA" className="mx-auto h-14 w-14 rounded-2xl object-contain" />
+            <img src={caLogo} alt="CA" className="mx-auto h-16 w-auto max-w-[220px] object-contain" />
           ) : (
             <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl accent-bar text-white text-2xl font-semibold">
               €
