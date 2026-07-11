@@ -12,22 +12,35 @@ export interface Brand {
   plan_croissance_price?: string;
 }
 
+const CACHE_KEY = 'webpos_brand_cache';
 let cached: Brand | null = null;
+
+// Amorce le cache depuis localStorage AVANT le 1er rendu : après une
+// première visite, le logo correct s'affiche immédiatement (plus de flash
+// du monogramme le temps du fetch réseau).
+if (typeof window !== 'undefined' && !cached) {
+  try {
+    const s = window.localStorage.getItem(CACHE_KEY);
+    if (s) cached = JSON.parse(s) as Brand;
+  } catch { /* ignore */ }
+}
 
 /** Hook partagé : charge le branding public (nom + logo) une fois. */
 export function useBrand(): Brand {
   const [brand, setBrand] = useState<Brand>(cached ?? { brand_name: 'HelloPos', logo_url: '' });
   useEffect(() => {
-    if (cached) { setBrand(cached); return; }
+    // Même si on a un cache, on rafraîchit en arrière-plan (le logo peut
+    // avoir changé). L'affichage reste stable car on part déjà du cache.
     void (async () => {
       try {
         const r = await fetch('/api/brand', { cache: 'no-store' });
         if (r.ok) {
-          const j = await r.json();
+          const j = (await r.json()) as Brand;
           cached = j;
+          try { window.localStorage.setItem(CACHE_KEY, JSON.stringify(j)); } catch { /* quota */ }
           setBrand(j);
         }
-      } catch { /* garde le défaut */ }
+      } catch { /* garde le défaut / cache */ }
     })();
   }, []);
   return brand;

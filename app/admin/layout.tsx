@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { readSessionFromCookie } from '@/lib/auth/session';
 import { query } from '@/lib/db/client';
 import { mergePlatformDefaults, type PlatformSettings } from '@/lib/settings/platform';
+import AdminLogoutButton from './AdminLogoutButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -56,7 +57,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <AdminLink href="/admin/configuration">Configuration</AdminLink>
         </nav>
         <div className="ml-auto flex items-center gap-3 text-sm text-ink-soft">
-          <span>{user.fullName}</span>
+          <span className="hidden sm:inline">{user.fullName}</span>
+          <AdminLogoutButton />
         </div>
       </header>
       <main>{children}</main>

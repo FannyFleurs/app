@@ -1,37 +1,30 @@
 import { redirect } from 'next/navigation';
 import { readSessionFromCookie } from '@/lib/auth/session';
-import BackOfficeLoginForm from './BackOfficeLoginForm';
-import BrandMark from '@/components/BrandMark';
+import AuthForm from '@/components/AuthForm';
+import { getServerBrand } from '@/lib/settings/brand-server';
 
 export const dynamic = 'force-dynamic';
 
 /**
  * Ecran de connexion du back-office (sous-domaine bo. ou path /bo).
- * On utilise ici email + mot de passe (identifiants admin), pas le
- * PIN — le back-office est accessible depuis n'importe ou (mobile,
- * ordinateur perso...) et n'est donc pas lie a un poste physique.
+ * Email + mot de passe (identifiants admin), pas le PIN — le back-office
+ * est accessible depuis n'importe où et n'est pas lié à un poste physique.
+ * Rendu identique aux autres pages de connexion (composant AuthForm).
  */
 export default async function BackOfficeLoginPage() {
   const user = await readSessionFromCookie();
   if (user) redirect('/');
+  const brand = await getServerBrand();
 
   return (
-    <main className="min-h-screen grid place-items-center bg-gray-50 px-4">
-      <div className="w-full max-w-md">
-        <div className="flex flex-col items-center text-center mb-6">
-          <BrandMark size={56} showName={false} className="mb-3" />
-          <h1 className="text-2xl font-semibold tracking-tight">Back-office</h1>
-          <p className="mt-1 text-sm text-ink-soft">
-            Connectez-vous avec votre email et votre mot de passe administrateur.
-          </p>
-        </div>
-        <div className="card p-6">
-          <BackOfficeLoginForm />
-        </div>
-        <p className="mt-4 text-center text-xs text-ink-soft">
-          Retour à la <a href="/login" className="underline hover:text-ink">caisse</a>
-        </p>
-      </div>
-    </main>
+    <AuthForm
+      logoUrl={brand.logoUrl}
+      brandName={brand.brandName}
+      title="Back-office"
+      subtitle="Connectez-vous avec votre email et votre mot de passe administrateur."
+      submitLabel="Entrer dans le back-office"
+      redirectTo="/"
+      footer={<>Retour à la <a href="/login" className="underline hover:text-ink">caisse</a></>}
+    />
   );
 }
