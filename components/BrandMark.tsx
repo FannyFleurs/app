@@ -58,12 +58,14 @@ export default function BrandMark({
   return (
     <div className={`flex items-center gap-3 ${className}`}>
       {brand.logo_url ? (
+        // Hauteur fixe, largeur automatique : un logo « wordmark » reste
+        // lisible (au lieu d'être écrasé dans un carré).
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={brand.logo_url}
           alt={name}
-          style={{ height: size, width: size }}
-          className="rounded-2xl object-contain shrink-0"
+          style={{ height: size, maxWidth: size * 4.5 }}
+          className="w-auto object-contain object-left shrink-0"
         />
       ) : (
         <span

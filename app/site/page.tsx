@@ -106,17 +106,21 @@ export default async function LandingPage() {
         <div className="max-w-6xl mx-auto flex items-center justify-between px-6 py-4">
           <Link href="/" className="flex items-center gap-2">
             {platform.logo_url ? (
+              // Logo « wordmark » : hauteur fixe, largeur auto, sans dupliquer
+              // le nom en texte.
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={platform.logo_url} alt={brand} className="h-9 w-9 rounded-xl object-contain" />
+              <img src={platform.logo_url} alt={brand} className="h-10 w-auto max-w-[180px] object-contain" />
             ) : (
-              <span
-                className="grid h-9 w-9 place-items-center rounded-xl text-white font-semibold"
-                style={{ backgroundColor: 'var(--primary, #6d5b3f)' }}
-              >
-                {brand.charAt(0)}
-              </span>
+              <>
+                <span
+                  className="grid h-9 w-9 place-items-center rounded-xl text-white font-semibold"
+                  style={{ backgroundColor: 'var(--primary, #6d5b3f)' }}
+                >
+                  {brand.charAt(0)}
+                </span>
+                <span className="font-semibold tracking-tight">{brand}</span>
+              </>
             )}
-            <span className="font-semibold tracking-tight">{brand}</span>
           </Link>
           <nav className="hidden md:flex items-center gap-6 text-sm">
             <a href="#features" className="text-ink-soft hover:text-ink">Fonctionnalités</a>
