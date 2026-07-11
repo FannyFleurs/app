@@ -35,6 +35,7 @@ export type IconName =
   | 'package'
   | 'truck'
   | 'pause'
+  | 'search'
   | 'card'
   | 'gift'
   | 'calendar'
@@ -223,6 +224,12 @@ const ICONS: Record<IconName, React.ReactNode> = {
     <>
       <rect x="6" y="4" width="4" height="16" rx="1" />
       <rect x="14" y="4" width="4" height="16" rx="1" />
+    </>
+  ),
+  search: (
+    <>
+      <circle cx="11" cy="11" r="7" />
+      <path d="M21 21l-4.3-4.3" />
     </>
   ),
   card: (

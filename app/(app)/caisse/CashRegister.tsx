@@ -158,6 +158,9 @@ export default function CashRegister({
   const [showOrderModal, setShowOrderModal] = useState(false);
   const [heldCount, setHeldCount] = useState(0);
   const [showScanner, setShowScanner] = useState(false);
+  // Recherche repliée par défaut : ouverte via la loupe (près du panier
+  // en attente) ou la touche « / ».
+  const [searchOpen, setSearchOpen] = useState(false);
   // Panier glissé en mode mobile : ouvert via le bouton flottant OU via
   // un swipe horizontal (gauche = ouvrir, droite = fermer).
   const [mobileCartOpen, setMobileCartOpen] = useState(false);
@@ -905,7 +908,10 @@ export default function CashRegister({
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === '/' && document.activeElement !== searchRef.current) {
-        e.preventDefault(); searchRef.current?.focus();
+        e.preventDefault();
+        setSearchOpen(true);
+        // Le champ est monté au prochain render : on le focuse juste après.
+        setTimeout(() => searchRef.current?.focus(), 0);
       } else if (e.key === 'F2') { e.preventDefault(); setShowFreePrice({}); }
       else if (e.key === 'F4') { e.preventDefault(); setShowHeld(true); }
       else if (e.key === 'F9' && lines.length > 0) { e.preventDefault(); setShowPayment(true); }
@@ -1095,28 +1101,37 @@ export default function CashRegister({
         onTouchEnd={(e) => onTouchEnd(e, 'open')}
       >
         <div className="flex items-center gap-2 px-3 md:px-5 h-14 shrink-0 border-b border-border bg-white">
-          <input
-            ref={searchRef}
-            className="input h-10 flex-1 md:max-w-[16rem]"
-            placeholder="Rechercher / scanner…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && search.trim()) {
-                const raw = search.trim();
-                // Detection carte fidelite : "FID..." (normalise pour
-                // gerer le mangling clavier iPad AZERTY qui remplace '-' par '§').
-                const normalized = raw.replace(/[^A-Z0-9]/gi, '').toUpperCase();
-                if (normalized.startsWith('FID') && normalized.length >= 6) {
-                  void attachCustomerBySerial(normalized);
-                  setSearch('');
-                  return;
+          {/* Champ de recherche : ouvert seulement à la demande (via la loupe
+              ci-dessous ou « / »). Sinon, l'espace reste libre pour le
+              catalogue. */}
+          {searchOpen && (
+            <input
+              ref={searchRef}
+              autoFocus
+              className="input h-10 flex-1 md:flex-none md:w-64"
+              placeholder="Rechercher / scanner…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onBlur={() => { if (!search.trim()) setSearchOpen(false); }}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') { setSearch(''); setSearchOpen(false); return; }
+                if (e.key === 'Enter' && search.trim()) {
+                  const raw = search.trim();
+                  // Detection carte fidelite : "FID..." (normalise pour
+                  // gerer le mangling clavier iPad AZERTY qui remplace '-' par '§').
+                  const normalized = raw.replace(/[^A-Z0-9]/gi, '').toUpperCase();
+                  if (normalized.startsWith('FID') && normalized.length >= 6) {
+                    void attachCustomerBySerial(normalized);
+                    setSearch('');
+                    return;
+                  }
+                  const match = products.find((p) => p.barcode === raw);
+                  if (match) { addProduct(match); setSearch(''); }
                 }
-                const match = products.find((p) => p.barcode === raw);
-                if (match) { addProduct(match); setSearch(''); }
-              }
-            }}
-          />
+              }}
+            />
+          )}
+          <div className="flex-1" />
           {/* Scanner caméra : uniquement sur mobile/tablette (BarcodeDetector
               n'est pas disponible sur la plupart des navigateurs desktop). */}
           <button
@@ -1127,7 +1142,17 @@ export default function CashRegister({
           >
             <Icon name="camera" size={18} />
           </button>
-          <div className="hidden md:block flex-1" />
+          {/* Loupe : ouvre le champ de recherche (à gauche du panier en attente) */}
+          {!searchOpen && (
+            <button
+              className="btn-ghost px-3"
+              onClick={() => setSearchOpen(true)}
+              title="Rechercher / scanner ( / )"
+              aria-label="Rechercher"
+            >
+              <Icon name="search" size={18} />
+            </button>
+          )}
           <button className="btn-ghost px-3 inline-flex items-center gap-1" onClick={() => setShowHeld(true)} title="F4">
             <span className="hidden md:inline">Panier en attente</span>
             <span className="md:hidden"><Icon name="pause" size={18} /></span>
