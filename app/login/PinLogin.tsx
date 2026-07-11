@@ -172,20 +172,22 @@ export default function PinLogin() {
       {/* COLONNE GAUCHE — sélection utilisateur. Sur mobile, on masque la
           liste quand un user est sélectionné, pour laisser place au PIN. */}
       <aside className={`${selected ? 'hidden lg:flex' : 'flex'} flex-col border-r border-border bg-white overflow-hidden`}>
-        {/* Header */}
-        <div className="px-6 py-5 border-b border-border flex items-center gap-3 shrink-0">
+        {/* Header : le logo remplace le nom de la marque (on ne le devine
+            pas, on le voit). Hauteur généreuse, largeur automatique pour un
+            logo « wordmark ». */}
+        <div className="px-6 py-5 border-b border-border shrink-0">
           {brand.logo_url ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={brand.logo_url} alt={APP_NAME} className="h-11 w-11 rounded-2xl object-contain" />
+            <img src={brand.logo_url} alt={APP_NAME} className="h-14 w-auto max-w-[220px] object-contain" />
           ) : (
-            <div className="grid h-11 w-11 place-items-center rounded-2xl accent-bar text-white text-lg font-semibold">
-              {APP_NAME.charAt(0)}
+            <div className="flex items-center gap-3">
+              <div className="grid h-12 w-12 place-items-center rounded-2xl accent-bar text-white text-xl font-semibold">
+                {APP_NAME.charAt(0)}
+              </div>
+              <div className="text-xl font-semibold tracking-tight">{APP_NAME}</div>
             </div>
           )}
-          <div>
-            <div className="text-lg font-semibold tracking-tight">{APP_NAME}</div>
-            <div className="text-xs text-ink-soft">Connexion utilisateur</div>
-          </div>
+          <div className="text-xs text-ink-soft mt-2">Connexion utilisateur</div>
         </div>
 
         {/* Liste users (scrollable) */}

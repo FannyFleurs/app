@@ -50,20 +50,23 @@ export default function TopBar({
 
   return (
     <header className="sticky top-0 z-40 shrink-0 flex items-stretch bg-white border-b border-border min-h-16">
-      {/* Logo (personnalisé si défini, sinon monogramme de la marque) —
-          agrandi et bien visible, avec le nom de la marque à côté. */}
+      {/* Logo — bien visible. Si un logo est défini (souvent un « wordmark »),
+          on l'affiche en grand et sans dupliquer le nom en texte. Sinon,
+          monogramme + nom de la marque. */}
       <Link href="/caisse" className="flex items-center gap-2.5 pl-3 pr-4 md:pl-4 md:pr-5 shrink-0 hover:bg-gray-50 transition-colors">
         {brand.logo_url ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={brand.logo_url} alt={brand.brand_name || 'Logo'} className="h-12 w-12 rounded-2xl object-contain" />
+          <img src={brand.logo_url} alt={brand.brand_name || 'Logo'} className="h-11 w-auto max-w-[180px] object-contain" />
         ) : (
-          <span className="grid h-12 w-12 place-items-center rounded-2xl accent-bar text-white font-semibold text-xl">
-            {(brand.brand_name || 'H').charAt(0).toUpperCase()}
-          </span>
+          <>
+            <span className="grid h-12 w-12 place-items-center rounded-2xl accent-bar text-white font-semibold text-xl">
+              {(brand.brand_name || 'H').charAt(0).toUpperCase()}
+            </span>
+            <span className="font-semibold tracking-tight text-lg text-ink">
+              {brand.brand_name || 'HelloPos'}
+            </span>
+          </>
         )}
-        <span className="font-semibold tracking-tight text-lg text-ink truncate max-w-[8.5rem] sm:max-w-none">
-          {brand.brand_name || 'HelloPos'}
-        </span>
       </Link>
 
       {/* Onglets — masqués sur mobile, alignés à gauche sur ≥ md (justify-start

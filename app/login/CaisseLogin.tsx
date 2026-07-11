@@ -91,14 +91,18 @@ export default function CaisseLogin() {
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center text-center mb-6">
           {brand.logo_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={brand.logo_url} alt={APP_NAME} className="h-14 w-14 rounded-2xl object-contain mb-3" />
+            <>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={brand.logo_url} alt={APP_NAME} className="h-16 w-auto max-w-[240px] object-contain mb-2" />
+            </>
           ) : (
-            <div className="grid h-14 w-14 place-items-center rounded-2xl accent-bar text-white text-2xl font-semibold mb-3">
-              {APP_NAME.charAt(0)}
-            </div>
+            <>
+              <div className="grid h-14 w-14 place-items-center rounded-2xl accent-bar text-white text-2xl font-semibold mb-3">
+                {APP_NAME.charAt(0)}
+              </div>
+              <h1 className="text-2xl font-semibold tracking-tight">{APP_NAME}</h1>
+            </>
           )}
-          <h1 className="text-2xl font-semibold tracking-tight">{APP_NAME}</h1>
           <p className="mt-1 text-sm text-ink-soft">Connexion à la caisse</p>
         </div>
 

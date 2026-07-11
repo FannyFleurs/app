@@ -148,18 +148,19 @@ export default function LeftRail({
     <aside
       className="hidden md:flex flex-col shrink-0 w-20 lg:w-24 bg-white border-r border-border h-full"
     >
-      {/* Logo */}
+      {/* Logo — occupe toute la largeur du rail pour rester lisible (un
+          logo « wordmark » ne tient pas dans un petit carré). */}
       <Link
         href="/caisse"
-        className="grid place-items-center h-16 shrink-0"
+        className="flex items-center justify-center h-20 px-2 shrink-0"
         title="Caisse"
       >
         {brand.logo_url ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={brand.logo_url} alt={brand.brand_name} className="h-11 w-11 rounded-2xl object-contain" />
+          <img src={brand.logo_url} alt={brand.brand_name} className="w-full max-h-14 object-contain" />
         ) : (
           <span
-            className="grid h-11 w-11 place-items-center rounded-2xl text-white font-semibold text-lg"
+            className="grid h-12 w-12 place-items-center rounded-2xl text-white font-semibold text-lg"
             style={{ backgroundColor: 'var(--primary)' }}
           >
             {(brand.brand_name || 'H').charAt(0)}
