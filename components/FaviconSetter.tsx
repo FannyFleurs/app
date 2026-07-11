@@ -19,13 +19,39 @@ export default function FaviconSetter() {
     // segment /ca exactement (ou /ca/…), sinon la caisse hérite du favicon CA.
     const isCA =
       host.startsWith('ca.') || path === '/ca' || (path?.startsWith('/ca/') ?? false);
+    const scope = isCA ? 'ca' : 'app';
 
-    // On pointe vers une VRAIE URL image (endpoint qui décode la data: URL),
-    // car iOS Safari ignore les data: URLs pour le favicon / l'icône d'accueil.
-    applyFavicon(`/api/brand/icon?scope=${isCA ? 'ca' : 'app'}`);
+    void (async () => {
+      // On calcule un jeton de version basé sur l'image effective : l'URL du
+      // favicon ne change QUE lorsque le logo change. Indispensable car les
+      // navigateurs mettent le favicon en cache très agressivement par URL —
+      // sans ce jeton, un ancien favicon resterait affiché indéfiniment.
+      let v = '0';
+      try {
+        const r = await fetch('/api/brand', { cache: 'no-store' });
+        if (r.ok) {
+          const b = await r.json();
+          const eff = isCA
+            ? (b.ca_favicon_url || b.ca_logo_url || b.favicon_url || b.logo_url || '')
+            : (b.favicon_url || b.logo_url || '');
+          v = hashStr(String(eff));
+        }
+      } catch { /* on garde v=0 : au pire, pas de cache-busting */ }
+
+      // On pointe vers une VRAIE URL image (endpoint qui décode la data: URL),
+      // car iOS Safari ignore les data: URLs pour le favicon / l'icône d'accueil.
+      applyFavicon(`/api/brand/icon?scope=${scope}&v=${v}`);
+    })();
   }, [path]);
 
   return null;
+}
+
+/** Petit hash déterministe (djb2) -> base36, pour un jeton de version court. */
+function hashStr(s: string): string {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
 }
 
 function applyFavicon(url: string) {
