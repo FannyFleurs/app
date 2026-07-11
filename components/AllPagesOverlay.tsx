@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { SIDEBAR_ITEMS } from './Sidebar';
 import type { Role, Permission } from '@/lib/auth/rbac';
 import Icon from './Icon';
+import { useBrand } from './BrandMark';
 import { useSchoolMode, activateSchoolMode, deactivateSchoolMode } from '@/lib/school-mode';
 
 interface Props {
@@ -19,6 +20,7 @@ const GROUP_ORDER = ['Vente', 'Relation', 'Catalogue', 'Pilotage', 'Système'];
 
 export default function AllPagesOverlay({ role, hiddenPaths, permissions, onClose, onLogout }: Props) {
   const schoolActive = useSchoolMode();
+  const brand = useBrand();
 
   function toggleSchool() {
     if (schoolActive) {
@@ -57,8 +59,17 @@ export default function AllPagesOverlay({ role, hiddenPaths, permissions, onClos
     <div className="fixed inset-0 z-[60] flex flex-col bg-white animate-[fadeIn_120ms_ease-out] pt-safe pb-safe pl-safe pr-safe">
       <div className="h-14 flex items-center px-4 shrink-0 border-b border-border bg-white">
         <div className="flex items-center gap-2.5">
-          <span className="grid h-9 w-9 place-items-center rounded-xl accent-bar text-white font-semibold">F</span>
-          <span className="font-semibold tracking-tight text-ink">HelloPos</span>
+          {brand.logo_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={brand.logo_url} alt={brand.brand_name || 'Logo'} className="h-10 w-auto max-w-[170px] object-contain" />
+          ) : (
+            <>
+              <span className="grid h-9 w-9 place-items-center rounded-xl accent-bar text-white font-semibold">
+                {(brand.brand_name || 'H').charAt(0).toUpperCase()}
+              </span>
+              <span className="font-semibold tracking-tight text-ink">{brand.brand_name || 'HelloPos'}</span>
+            </>
+          )}
         </div>
         <div className="ml-auto flex items-center gap-2">
           <button onClick={onLogout} className="btn-ghost text-sm text-danger">
