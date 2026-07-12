@@ -4,6 +4,7 @@ import { readSessionFromCookie } from '@/lib/auth/session';
 import { query } from '@/lib/db/client';
 import { mergePlatformDefaults, type PlatformSettings } from '@/lib/settings/platform';
 import AdminLogoutButton from './AdminLogoutButton';
+import AdminNav from './AdminNav';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,41 +37,34 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const brandName = brand.brand_name || 'HelloPos';
 
   return (
-    <div className="min-h-screen bg-white">
-      {/* Topbar admin — fond clair, texte sombre (pas de vert). */}
-      <header className="sticky top-0 z-30 h-16 bg-white text-ink border-b border-border flex items-center px-4">
-        <Link href="/admin" className="flex items-center gap-2.5">
-          {brand.logo_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={brand.logo_url} alt={brandName} className="h-10 w-auto max-w-[170px] object-contain" />
-          ) : (
-            <span className="grid h-10 w-10 place-items-center rounded-xl accent-bar text-white font-semibold">
-              {brandName.charAt(0)}
-            </span>
-          )}
-          <span className="text-sm font-semibold tracking-tight text-ink-soft hidden sm:inline">Admin SaaS</span>
-        </Link>
-        <nav className="ml-8 flex items-center gap-1">
-          <AdminLink href="/admin">Dashboard</AdminLink>
-          <AdminLink href="/admin/organizations">Organisations</AdminLink>
-          <AdminLink href="/admin/promo-codes">Codes</AdminLink>
-          <AdminLink href="/admin/configuration">Configuration</AdminLink>
-          <AdminLink href="/admin/health">Santé</AdminLink>
-        </nav>
-        <div className="ml-auto flex items-center gap-3 text-sm text-ink-soft">
-          <span className="hidden sm:inline">{user.fullName}</span>
+    <div className="min-h-screen bg-white flex">
+      {/* Sidebar admin — fond clair, texte sombre (pas de vert). */}
+      <aside className="sticky top-0 h-screen w-60 shrink-0 border-r border-border bg-white flex flex-col">
+        <div className="h-16 flex items-center px-4 border-b border-border">
+          <Link href="/admin" className="flex items-center gap-2.5">
+            {brand.logo_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={brand.logo_url} alt={brandName} className="h-9 w-auto max-w-[150px] object-contain" />
+            ) : (
+              <span className="grid h-9 w-9 place-items-center rounded-xl accent-bar text-white font-semibold">
+                {brandName.charAt(0)}
+              </span>
+            )}
+            <span className="text-sm font-semibold tracking-tight text-ink-soft">Admin SaaS</span>
+          </Link>
+        </div>
+
+        <div className="flex-1 overflow-y-auto py-3">
+          <AdminNav />
+        </div>
+
+        <div className="border-t border-border p-3">
+          <div className="px-3 pb-2 text-xs text-ink-soft truncate">{user.fullName}</div>
           <AdminLogoutButton />
         </div>
-      </header>
-      <main>{children}</main>
-    </div>
-  );
-}
+      </aside>
 
-function AdminLink({ href, children }: { href: string; children: React.ReactNode }) {
-  return (
-    <Link href={href} className="px-3 py-1.5 rounded-lg text-sm font-medium text-ink-soft hover:bg-gray-100 hover:text-ink transition-colors">
-      {children}
-    </Link>
+      <main className="flex-1 min-w-0">{children}</main>
+    </div>
   );
 }
