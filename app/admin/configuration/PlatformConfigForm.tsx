@@ -82,13 +82,13 @@ export default function PlatformConfigForm({ initial }: { initial: FormData }) {
                     {(s.brand_name || 'H').charAt(0)}
                   </span>}
             </div>
-            <div className="flex-1 space-y-2">
+            <div className="flex-1 min-w-0 space-y-2">
               <input
                 ref={fileRef}
                 type="file"
                 accept="image/*"
                 onChange={onLogoFile}
-                className="block text-sm"
+                className="block w-full max-w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-gray-100 file:px-3 file:py-1.5 file:text-sm file:font-medium"
               />
               <input
                 className="input text-sm"
@@ -162,7 +162,7 @@ export default function PlatformConfigForm({ initial }: { initial: FormData }) {
           <input className="input mt-1" value={s.company_legal_name}
                  onChange={(e) => patch('company_legal_name', e.target.value)} />
         </div>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
             <label className="text-sm font-medium text-ink-soft">SIREN</label>
             <input className="input mt-1" value={s.company_siren}
@@ -184,7 +184,7 @@ export default function PlatformConfigForm({ initial }: { initial: FormData }) {
           <input className="input mt-1" value={s.address_line1}
                  onChange={(e) => patch('address_line1', e.target.value)} placeholder="N°, rue" />
         </div>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
             <label className="text-sm font-medium text-ink-soft">Code postal</label>
             <input className="input mt-1" value={s.address_zip}
@@ -206,7 +206,7 @@ export default function PlatformConfigForm({ initial }: { initial: FormData }) {
       {/* Contact */}
       <section className="card p-5 space-y-4">
         <h2 className="font-semibold">Contact public</h2>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="text-sm font-medium text-ink-soft">Email</label>
             <input className="input mt-1" type="email" value={s.contact_email}
@@ -234,10 +234,10 @@ export default function PlatformConfigForm({ initial }: { initial: FormData }) {
             2 produits/prix récurrents (Essentiel 29€, Croissance 59€) dans
             votre dashboard Stripe et collez leurs <strong>Price ID</strong>
             (price_…) ci-dessous. Webhook à déclarer :
-            <code className="bg-gray-100 px-1 rounded ml-1">https://VOTRE-DOMAINE/api/webhooks/stripe-billing</code>
+            <code className="bg-gray-100 px-1 rounded ml-1 break-all">https://VOTRE-DOMAINE/api/webhooks/stripe-billing</code>
           </p>
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="text-xs font-medium text-ink-soft">Clé publique (pk_…)</label>
             <input className="input mt-1 font-mono text-sm" value={s.stripe_publishable_key}
@@ -263,7 +263,7 @@ export default function PlatformConfigForm({ initial }: { initial: FormData }) {
                  onChange={(e) => patch('stripe_webhook_secret', e.target.value)}
                  placeholder={s.stripe_webhook_secret_set ? 'Laisser vide pour conserver' : 'whsec_…'} />
         </div>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
             <label className="text-xs font-medium text-ink-soft">Price ID — Essentiel</label>
             <input className="input mt-1 font-mono text-sm" value={s.stripe_price_essentiel}
@@ -283,14 +283,14 @@ export default function PlatformConfigForm({ initial }: { initial: FormData }) {
                    placeholder="price_…" />
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="text-xs font-medium text-ink-soft">Jours d&apos;essai</label>
             <input type="number" min={0} max={90} className="input mt-1" value={s.trial_days}
                    onChange={(e) => patch('trial_days', Number(e.target.value) || 0)} />
           </div>
         </div>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
             <label className="text-xs font-medium text-ink-soft">Prix affiché Essentiel (€)</label>
             <input className="input mt-1" value={s.plan_essentiel_price}
@@ -319,7 +319,7 @@ export default function PlatformConfigForm({ initial }: { initial: FormData }) {
             Personnalisez les libellés affichés dans l&apos;application et sur
             la page d&apos;abonnement.
           </p>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="text-xs font-medium text-ink-soft">Offre 1</label>
               <input className="input mt-1" value={s.plan_essentiel_name}
@@ -340,7 +340,7 @@ export default function PlatformConfigForm({ initial }: { initial: FormData }) {
 
         <div className="pt-2 border-t border-border">
           <h3 className="text-sm font-semibold mb-2">Option — caisse supplémentaire</h3>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-medium text-ink-soft">Price ID (récurrent /mois)</label>
               <input className="input mt-1 font-mono text-sm" value={s.stripe_price_extra_register}
@@ -394,8 +394,8 @@ function ImageField({ label, hint, value, onFile, onUrl, onClear }: {
             ? <img src={value} alt={label} className="max-h-full max-w-full object-contain" />
             : <span className="text-ink-soft text-xs">—</span>}
         </div>
-        <div className="flex-1 space-y-2">
-          <input type="file" accept="image/*" onChange={onFile} className="block text-sm" />
+        <div className="flex-1 min-w-0 space-y-2">
+          <input type="file" accept="image/*" onChange={onFile} className="block w-full max-w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-gray-100 file:px-3 file:py-1.5 file:text-sm file:font-medium" />
           <input
             className="input text-sm"
             value={value.startsWith('data:') ? '' : value}
