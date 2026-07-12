@@ -2,6 +2,7 @@ import './globals.css';
 import type { Metadata, Viewport } from 'next';
 import InstallPrompt from '@/components/InstallPrompt';
 import FaviconSetter from '@/components/FaviconSetter';
+import ServiceWorkerRegister from '@/components/ServiceWorkerRegister';
 
 export const metadata: Metadata = {
   title: 'HelloPos',
@@ -56,6 +57,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="min-h-screen bg-bg text-ink antialiased select-none touch-manipulation">
         <FaviconSetter />
+        <ServiceWorkerRegister />
         {children}
         <InstallPrompt />
       </body>
