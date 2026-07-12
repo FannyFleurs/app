@@ -7,6 +7,7 @@ interface Health {
   postgres_version: string | null;
   db_bytes: number;
   db_pretty: string;
+  avg_ticket_bytes: number;
   counts: Record<string, number>;
   top_tables: Array<{ name: string; bytes: number; pretty: string }>;
 }
@@ -52,8 +53,10 @@ export default function HealthView() {
   if (error || !data) return <div className="p-8 text-sm text-danger">{error ?? 'Erreur.'}</div>;
 
   const tickets = data.counts.tickets || 0;
-  // Estimation du poids moyen d'un ticket (toute la base rapportée aux tickets).
-  const perTicket = tickets > 0 ? data.db_bytes / tickets : 0;
+  // Poids RÉEL d'un ticket (mesuré serveur), et non la base entière divisée
+  // par le nb de tickets — la base contient une grosse part fixe (catalogue,
+  // config, système) qui ne grossit PAS avec les ventes.
+  const perTicket = data.avg_ticket_bytes || 4096;
 
   return (
     <div className="p-8 max-w-5xl space-y-6">
@@ -104,7 +107,13 @@ export default function HealthView() {
         <div className="text-4xl font-semibold tracking-tight tabular-nums">{data.db_pretty}</div>
         <p className="mt-1 text-sm text-ink-soft">
           {tickets.toLocaleString('fr-FR')} tickets validés
-          {perTicket > 0 && <> · ~{Math.round(perTicket / 1024)} Ko / ticket (base entière rapportée)</>}
+          {' · '}~{Math.max(1, Math.round(perTicket / 1024))} Ko / ticket (poids réel)
+        </p>
+        <p className="mt-1 text-xs text-ink-soft">
+          La taille actuelle est surtout du <strong>fixe</strong> (catalogue,
+          config, système) : elle ne grossit quasiment pas avec les ventes.
+          Les projections ci-dessous n&apos;ajoutent que le poids réel des
+          nouveaux tickets.
         </p>
 
         <div className="mt-4 space-y-3">

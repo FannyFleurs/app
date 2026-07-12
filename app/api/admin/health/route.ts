@@ -61,6 +61,21 @@ export async function GET() {
     invoices:      await count(`SELECT COUNT(*)::text AS c FROM invoices`),
   };
 
+  // --- Poids RÉEL d'un ticket ---
+  // On ne divise PAS la base entière par le nb de tickets (elle contient
+  // une grosse part FIXE : catalogue, config, système…). On mesure la
+  // taille moyenne du snapshot d'un reçu + une marge pour les lignes /
+  // paiements / événement fiscal associés. Défaut ~4 Ko si pas de reçus.
+  let avgTicket = 4096;
+  try {
+    const a = await query<{ avg: string | null }>(
+      `SELECT AVG(pg_column_size(snapshot))::text AS avg FROM receipts`,
+    );
+    const snap = Number(a.rows[0]?.avg ?? 0);
+    if (snap > 0) avgTicket = Math.round(snap + 1500);
+  } catch { /* défaut */ }
+  out.avg_ticket_bytes = avgTicket;
+
   // --- Plus grosses tables ---
   try {
     const t = await query<{ name: string; bytes: string; pretty: string }>(
