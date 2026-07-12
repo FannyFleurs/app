@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 
 interface Health {
   connection: { host_masked: string; pooled: boolean; ssl: boolean };
+  rls?: { enforced: boolean; tables: number };
   postgres_version: string | null;
   db_bytes: number;
   db_pretty: string;
@@ -91,6 +92,19 @@ export default function HealthView() {
             <div className="font-medium truncate">{data.connection.host_masked || '—'}</div>
             <div className="text-xs text-ink-soft mt-0.5">PostgreSQL {data.postgres_version ?? '?'}</div>
           </div>
+          {data.rls && (
+            <div className={`rounded-xl border p-3 ${data.rls.enforced ? 'border-success/40 bg-success/5' : 'border-border'}`}>
+              <div className="text-xs text-ink-soft flex items-center gap-1.5">
+                <span className={data.rls.enforced ? 'text-success' : 'text-ink-soft'}>{data.rls.enforced ? '✓' : '○'}</span>
+                Isolation RLS ({data.rls.tables} tables)
+              </div>
+              <div className={`text-sm font-medium mt-0.5 ${data.rls.enforced ? 'text-success' : 'text-ink'}`}>
+                {data.rls.enforced
+                  ? 'Active — cloisonnement strict par boutique'
+                  : 'Prête (définir RLS_ENFORCE=1 pour forcer)'}
+              </div>
+            </div>
+          )}
         </div>
         {!data.connection.pooled && (
           <p className="mt-3 text-xs text-danger">

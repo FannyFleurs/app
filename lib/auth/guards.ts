@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { readSessionFromCookie, type AuthUser } from './session';
 import { hasPermission, type Permission } from './rbac';
 import { hasEffectivePermission } from './permissions';
+import { setTenant } from '@/lib/db/client';
 
 /**
  * À utiliser dans les API routes : renvoie soit { user }, soit une Response 401/403.
@@ -18,6 +19,9 @@ export async function requireSession(): Promise<
       ),
     };
   }
+  // Contexte tenant pour la Row-Level Security. Les super-admin passent en
+  // « bypass » (accès cross-tenant légitime : back-office SaaS).
+  setTenant(user.organizationId, user.role === 'super_admin');
   return { user };
 }
 

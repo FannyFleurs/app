@@ -26,6 +26,18 @@ export async function GET() {
     connection: { host_masked: hostMasked, pooled, ssl: sslmode },
   };
 
+  // --- Row-Level Security ---
+  let rlsTables = 0;
+  try {
+    const r = await query<{ c: string }>(
+      `SELECT COUNT(*)::text AS c FROM pg_class c
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relrowsecurity`,
+    );
+    rlsTables = Number(r.rows[0]?.c ?? 0);
+  } catch { /* pré-0036 */ }
+  out.rls = { enforced: process.env.RLS_ENFORCE === '1', tables: rlsTables };
+
   // --- Version Postgres ---
   // `SHOW server_version` renvoie une colonne « server_version » (l'alias
   // n'est pas supporté) ; on passe par current_setting() qui accepte un
