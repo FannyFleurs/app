@@ -27,8 +27,11 @@ export async function GET() {
   };
 
   // --- Version Postgres ---
+  // `SHOW server_version` renvoie une colonne « server_version » (l'alias
+  // n'est pas supporté) ; on passe par current_setting() qui accepte un
+  // alias et fonctionne à travers PgBouncer.
   try {
-    const v = await query<{ v: string }>(`SHOW server_version`);
+    const v = await query<{ v: string }>(`SELECT current_setting('server_version') AS v`);
     out.postgres_version = v.rows[0]?.v ?? null;
   } catch { out.postgres_version = null; }
 
