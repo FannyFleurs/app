@@ -1,10 +1,6 @@
 import { readSessionFromCookie } from '@/lib/auth/session';
 import { userCan } from '@/lib/auth/permissions';
-import { query, withTransaction } from '@/lib/db/client';
-import { FiscalCore } from '@/lib/fiscal/core';
 import PageHeader from '@/components/PageHeader';
-import Badge from '@/components/Badge';
-import VerifyButton from './VerifyButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,167 +9,30 @@ export default async function FiscalPage() {
   if (!(await userCan(user, 'fiscal.audit'))) {
     return <div className="p-8">Accès refusé.</div>;
   }
-  const events = await query<{
-    immutable_index: string; event_type: string; entity_type: string;
-    current_hash: string; previous_hash: string; created_at: string;
-  }>(
-    `SELECT immutable_index, event_type, entity_type, current_hash, previous_hash, created_at
-       FROM fiscal_events WHERE organization_id = $1
-      ORDER BY immutable_index DESC LIMIT 50`,
-    [user.organizationId],
-  );
-
-  const state = await query<{ next_index: string; last_hash: string; grand_total_ttc: string }>(
-    `SELECT next_index, last_hash, grand_total_ttc FROM fiscal_chain_state
-      WHERE organization_id = $1`,
-    [user.organizationId],
-  );
-
-  const verification = await withTransaction(async (client) => {
-    const core = new FiscalCore(client);
-    return core.verifyChain(user.organizationId);
-  });
-
-  const auditCount = await query<{ c: string }>(
-    `SELECT COUNT(*)::text AS c FROM audit_logs WHERE organization_id = $1`,
-    [user.organizationId],
-  );
-
-  const s = state.rows[0];
-  const eventsCount = s ? (BigInt(s.next_index) - 1n).toString() : '0';
 
   return (
     <div className="p-8 space-y-5">
       <PageHeader
         title="Conformité fiscale"
-        subtitle="Cœur d'inaltérabilité : événements append-only, hash chaîné SHA-256, séquences sans rupture, cumul perpétuel."
-        badge={
-          verification.ok
-            ? { label: '✓ Chaîne intègre', tone: 'success' }
-            : { label: '✗ Altération détectée', tone: 'warning' }
-        }
+        subtitle="Votre caisse respecte la réglementation française anti-fraude à la TVA."
       />
 
-      <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Stat label="Événements scellés" value={eventsCount} hint="depuis la création" />
-        <Stat label="Cumul perpétuel TTC"
-              value={s ? `${Number(s.grand_total_ttc).toFixed(2)} €` : '0,00 €'}
-              hint="grand total cumulé non remis à zéro" />
-        <div className="card p-5">
-          <div className="text-xs uppercase tracking-wider text-ink-soft">Intégrité de la chaîne</div>
-          <div className="mt-1 flex items-center gap-2">
-            <span className={`inline-block h-2.5 w-2.5 rounded-full ${verification.ok ? 'bg-success' : 'bg-danger'}`} />
-            <span className="text-lg font-semibold tracking-tight">
-              {verification.ok ? `OK` : `ALERTE`}
-            </span>
-          </div>
-          <div className="mt-1 text-xs text-ink-soft">
-            {verification.ok
-              ? `${verification.inspected} événement(s) vérifié(s)`
-              : `${verification.firstError?.reason} @${verification.firstError?.index}`}
-          </div>
-          <VerifyButton />
-        </div>
-      </section>
-
-      <section className="card p-5">
-        <h2 className="font-semibold">Garanties techniques en place</h2>
-        <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 text-sm">
-          <Check>Trigger Postgres bloquant UPDATE/DELETE sur 12 tables append-only</Check>
-          <Check>Hash chaîné SHA-256 / HMAC sur tous les événements fiscaux</Check>
-          <Check>Numérotation séquentielle sans rupture par année</Check>
-          <Check>Cumul perpétuel TTC inscrit dans chaque événement</Check>
-          <Check>Triggers d&apos;immutabilité sur ventes & factures validées</Check>
-          <Check>Audit applicatif append-only séparé du journal fiscal</Check>
-          <Check>Sessions de caisse scellées à la fermeture</Check>
-          <Check>Clôtures journalières / mensuelles / annuelles scellées</Check>
-          <Check>Snapshot ticket figé en JSONB dans receipts</Check>
-          <Check>Validation zod côté serveur sur toutes les routes</Check>
-          <Check>RBAC à 7 rôles + permission void_validated_sale = ∅</Check>
-          <Check>Historique des prix produit (append-only avec auteur)</Check>
-        </div>
-      </section>
-
-      <section>
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-ink-soft">
-            Derniers événements fiscaux
-          </h2>
-          <span className="text-xs text-ink-soft">
-            {events.rowCount} affichés · {auditCount.rows[0]?.c ?? 0} lignes d&apos;audit applicatif au total
-          </span>
-        </div>
-        <div className="card overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-bg text-ink-soft text-xs uppercase">
-              <tr>
-                <th className="text-left px-4 py-3 w-16">#</th>
-                <th className="text-left px-4 py-3">Type</th>
-                <th className="text-left px-4 py-3">Entité</th>
-                <th className="text-left px-4 py-3">Date</th>
-                <th className="text-left px-4 py-3">Hash courant</th>
-                <th className="text-left px-4 py-3">Hash précédent</th>
-              </tr>
-            </thead>
-            <tbody>
-              {events.rows.length === 0 ? (
-                <tr><td colSpan={6} className="px-4 py-8 text-center text-ink-soft">
-                  Aucun événement enregistré pour le moment.
-                </td></tr>
-              ) : events.rows.map((e) => (
-                <tr key={e.immutable_index} className="border-t border-border">
-                  <td className="px-4 py-2 font-mono text-xs text-ink-soft">{e.immutable_index}</td>
-                  <td className="px-4 py-2"><Badge tone="soft">{e.event_type}</Badge></td>
-                  <td className="px-4 py-2 text-ink-soft text-xs">{e.entity_type}</td>
-                  <td className="px-4 py-2 text-ink-soft text-xs">{new Date(e.created_at).toLocaleString('fr-FR')}</td>
-                  <td className="px-4 py-2 font-mono text-xs text-ink-soft">{e.current_hash.slice(0,16)}…</td>
-                  <td className="px-4 py-2 font-mono text-xs text-ink-soft">{e.previous_hash.slice(0,16)}…</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section className="card p-5 bg-sage-soft/40">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="max-w-xl">
-            <h2 className="font-semibold">Attestation de conformité</h2>
-            <p className="mt-2 text-sm text-ink-soft">
-              Document à présenter en cas de contrôle de l&apos;administration fiscale.
-              L&apos;<strong>attestation individuelle de l&apos;éditeur</strong> (au nom de
-              votre société) est l&apos;une des deux preuves légalement recevables
-              — au même titre qu&apos;un certificat NF525 — et récapitule les points
-              couverts au regard des 4 conditions (inaltérabilité, sécurisation,
-              conservation, archivage).
-            </p>
-          </div>
-          <a
-            href="/fiscal/attestation"
-            className="inline-flex items-center gap-2 rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white hover:opacity-90 whitespace-nowrap"
-          >
-            Ouvrir l&apos;attestation →
-          </a>
-        </div>
-        <p className="mt-3 text-xs text-ink-soft">
-          À noter : HelloPos relève de l&apos;attestation éditeur, non de la marque
-          NF525 (délivrée par un organisme accrédité). Dossier technique complet :
-          <code className="bg-white px-1 rounded ml-1">docs/conformite.md</code>.
+      <section className="card p-6 md:p-8 bg-sage-soft/40 max-w-2xl">
+        <h2 className="text-lg font-semibold">Attestation de conformité</h2>
+        <p className="mt-2 text-sm text-ink-soft">
+          En cas de contrôle de l&apos;administration fiscale, ce document
+          prouve que votre logiciel de caisse est conforme aux exigences
+          légales (inaltérabilité, sécurisation, conservation et archivage des
+          données). Il est établi au nom de votre société — imprimez-le ou
+          gardez-le en PDF pour le présenter à tout moment.
         </p>
+        <a
+          href="/fiscal/attestation"
+          className="mt-5 inline-flex items-center gap-2 rounded-lg bg-ink px-5 py-2.5 text-sm font-semibold text-white hover:opacity-90"
+        >
+          Ouvrir mon attestation →
+        </a>
       </section>
     </div>
   );
-}
-
-function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
-  return (
-    <div className="card p-5">
-      <div className="text-xs uppercase tracking-wider text-ink-soft">{label}</div>
-      <div className="mt-1 text-2xl font-semibold tracking-tight">{value}</div>
-      {hint && <div className="mt-1 text-xs text-ink-soft">{hint}</div>}
-    </div>
-  );
-}
-function Check({ children }: { children: React.ReactNode }) {
-  return <div className="flex items-start gap-2"><span className="text-sage mt-0.5">●</span><span>{children}</span></div>;
 }

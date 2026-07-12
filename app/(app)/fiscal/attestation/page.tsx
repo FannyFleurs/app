@@ -151,9 +151,10 @@ export default async function AttestationPage() {
         <Section title="Vérifiable en direct">
           <p className="text-sm">
             L&apos;intégrité de la chaîne fiscale peut être recalculée séance
-            tenante depuis l&apos;écran <strong>Conformité fiscale</strong>
-            (bouton « Vérifier la chaîne ») : chaque empreinte est recalculée et
-            la continuité des index et des hachages est contrôlée.
+            tenante par l&apos;éditeur : chaque empreinte est recalculée et la
+            continuité des index et des hachages est contrôlée
+            (<code className="text-xs">npm run fiscal:verify</code> /
+            <code className="text-xs"> GET /api/fiscal/verify</code>).
           </p>
         </Section>
 
