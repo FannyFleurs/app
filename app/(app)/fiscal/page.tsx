@@ -136,12 +136,29 @@ export default async function FiscalPage() {
       </section>
 
       <section className="card p-5 bg-sage-soft/40">
-        <h2 className="font-semibold">À noter</h2>
-        <p className="mt-2 text-sm text-ink-soft">
-          HelloPos est conçu <em>certification-ready</em> mais n&apos;est pas certifié par cette
-          implémentation seule. Une attestation individuelle éditeur ou une démarche
-          NF525 / LNE reste à effectuer par un organisme habilité. Le dossier technique
-          détaillé est disponible dans <code className="bg-white px-1 rounded">docs/conformite.md</code>.
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="max-w-xl">
+            <h2 className="font-semibold">Attestation de conformité</h2>
+            <p className="mt-2 text-sm text-ink-soft">
+              Document à présenter en cas de contrôle de l&apos;administration fiscale.
+              L&apos;<strong>attestation individuelle de l&apos;éditeur</strong> (au nom de
+              votre société) est l&apos;une des deux preuves légalement recevables
+              — au même titre qu&apos;un certificat NF525 — et récapitule les points
+              couverts au regard des 4 conditions (inaltérabilité, sécurisation,
+              conservation, archivage).
+            </p>
+          </div>
+          <a
+            href="/fiscal/attestation"
+            className="inline-flex items-center gap-2 rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white hover:opacity-90 whitespace-nowrap"
+          >
+            Ouvrir l&apos;attestation →
+          </a>
+        </div>
+        <p className="mt-3 text-xs text-ink-soft">
+          À noter : HelloPos relève de l&apos;attestation éditeur, non de la marque
+          NF525 (délivrée par un organisme accrédité). Dossier technique complet :
+          <code className="bg-white px-1 rounded ml-1">docs/conformite.md</code>.
         </p>
       </section>
     </div>
