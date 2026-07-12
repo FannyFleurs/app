@@ -42,6 +42,9 @@ export interface CreateDraftArgs {
   registerId: string;
   userId: string;
   customerId?: string | null;
+  /** Ventes hors-ligne : idempotence + horodatage réel de l'encaissement. */
+  clientRef?: string | null;
+  occurredAt?: string | null;
 }
 
 export class SaleService {
@@ -62,8 +65,9 @@ export class SaleService {
 
       const res = await client.query<{ id: string }>(
         `INSERT INTO sales
-           (organization_id, store_id, register_id, cash_session_id, user_id, customer_id, status)
-         VALUES ($1,$2,$3,$4,$5,$6,'draft')
+           (organization_id, store_id, register_id, cash_session_id, user_id, customer_id, status,
+            client_ref, occurred_at)
+         VALUES ($1,$2,$3,$4,$5,$6,'draft',$7,$8)
          RETURNING id`,
         [
           args.organizationId,
@@ -72,6 +76,8 @@ export class SaleService {
           session.rows[0]!.id,
           args.userId,
           args.customerId ?? null,
+          args.clientRef ?? null,
+          args.occurredAt ?? null,
         ],
       );
       return { id: res.rows[0]!.id };

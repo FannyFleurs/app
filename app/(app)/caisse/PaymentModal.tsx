@@ -29,11 +29,18 @@ interface Props {
   loyaltyRedemption?: number;
   /** Si true, on génère un faux ticket localement sans appel serveur. */
   schoolMode?: boolean;
+  /** Mode hors-ligne disponible (flag). Si true et réseau coupé, on
+   *  enregistre la vente en local au lieu d'appeler le serveur. */
+  offlineEnabled?: boolean;
+  onOfflineFinalize?: (
+    payments: Array<{ method: 'cash'|'card'|'check'|'transfer'|'gift_card'|'credit_note'|'deferred'|'other'; amount: number; given_amount?: number; reference?: string }>,
+    loyaltyUsed: number,
+  ) => Promise<void>;
   onClose: () => void;
   onValidated: (receiptId: string, receiptNumber: string, loyalty?: { earned: number; redeemed: number; new_balance: number } | null) => void;
 }
 
-export default function PaymentModal({ saleId, totalTtc, loyaltyRedemption, schoolMode, onClose, onValidated }: Props) {
+export default function PaymentModal({ saleId, totalTtc, loyaltyRedemption, schoolMode, offlineEnabled, onOfflineFinalize, onClose, onValidated }: Props) {
   const [methods, setMethods] = useState<Array<{ kind: Method; label: string }>>(FALLBACK_METHODS);
   const [amountStr, setAmountStr] = useState<string>('');
   const [payments, setPayments] = useState<RegisteredPayment[]>([]);
@@ -178,6 +185,24 @@ export default function PaymentModal({ saleId, totalTtc, loyaltyRedemption, scho
       const fakeId = `school-receipt-${Date.now()}`;
       const fakeNumber = `ECOLE-${new Date().toISOString().slice(11, 19).replace(/:/g, '')}`;
       onValidated(fakeId, fakeNumber, null);
+      return;
+    }
+    // Hors-ligne : on enregistre en local (scellement à la reprise réseau).
+    if (offlineEnabled && onOfflineFinalize && typeof navigator !== 'undefined' && !navigator.onLine) {
+      if (payments.some((p) => p.method === 'payment_link')) {
+        setError('Le paiement en ligne (lien Stripe) est indisponible hors-ligne.');
+        return;
+      }
+      setLoading(true); setError(null);
+      try {
+        await onOfflineFinalize(
+          payments.map((p) => ({
+            method: p.method as 'cash'|'card'|'check'|'transfer'|'gift_card'|'credit_note'|'deferred'|'other',
+            amount: p.amount, given_amount: p.given_amount, reference: p.reference,
+          })),
+          loyaltyRedemption && loyaltyRedemption > 0 ? loyaltyRedemption : 0,
+        );
+      } finally { setLoading(false); }
       return;
     }
     setLoading(true); setError(null);

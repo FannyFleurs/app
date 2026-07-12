@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatEUR, round2 } from '@/lib/services/money';
 import { getOrCreateDeviceId } from '@/lib/device';
+import OfflineBanner from '@/components/OfflineBanner';
+import { enqueueSale } from '@/lib/offline/queue';
+import { offlinePosEnabled } from '@/lib/offline/sync';
 import PaymentModal from './PaymentModal';
 import RegisterPicker from './RegisterPicker';
 import ReceiptPreviewModal from './ReceiptPreviewModal';
@@ -720,9 +723,54 @@ export default function CashRegister({
    * cas (paiement multiple, lien Stripe, remise fidélité…), l'utilisateur
    * clique sur "Autres" qui rouvre PaymentModal.
    */
+  /**
+   * Encaissement HORS-LIGNE : enregistre la vente complète en local
+   * (IndexedDB), remet un ticket provisoire, et laisse la synchro rejouer
+   * vers le serveur (qui scellera) à la reprise réseau. Idempotent.
+   */
+  async function finalizeOffline(
+    payments: Array<{ method: 'cash'|'card'|'check'|'transfer'|'gift_card'|'credit_note'|'deferred'|'other'; amount: number; given_amount?: number; reference?: string }>,
+    loyaltyUsed: number,
+  ) {
+    const clientRef = (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
+      ? crypto.randomUUID()
+      : `off-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const occurredAt = new Date().toISOString();
+    await enqueueSale({
+      client_ref: clientRef,
+      occurred_at: occurredAt,
+      store_id: storeId,
+      register_id: registerId,
+      customer_id: customer?.id ?? null,
+      lines: lines.map((l) => ({
+        product_id: l.product_id, variant_id: l.variant_id, label: l.label,
+        unit_price_ttc: l.unit_price_ttc, quantity: l.quantity,
+        discount_amount: l.discount_amount, tax_rate: l.tax_rate,
+        tax_rate_code: l.tax_rate_code, metadata: l.metadata,
+      })),
+      payments,
+      loyalty_redemption_amount: loyaltyUsed > 0 ? loyaltyUsed : undefined,
+      total_ttc: totals.ttc,
+      created_at: Date.now(),
+    });
+    // Ticket provisoire (scellé à la reprise réseau).
+    const provisional = `HORS-LIGNE-${occurredAt.slice(11, 19).replace(/:/g, '')}`;
+    await onValidated(`offline-${clientRef}`, provisional, null);
+  }
+
+  /** True si on doit basculer en encaissement hors-ligne. */
+  function shouldGoOffline(): boolean {
+    return offlinePosEnabled() && typeof navigator !== 'undefined' && !navigator.onLine;
+  }
+
   async function quickPay(method: 'cash' | 'card') {
     if (lines.length === 0 || totals.ttc <= 0) return;
     setError(null);
+    // Hors-ligne : on n'appelle pas le serveur, on enregistre en local.
+    if (shouldGoOffline()) {
+      await finalizeOffline([{ method, amount: totals.ttc }], loyalty.used);
+      return;
+    }
     const id = await ensureSale();
     if (!id) return;
     await syncLines();
@@ -762,7 +810,7 @@ export default function CashRegister({
   ) {
     setReceipt({
       id: receiptId, number: receiptNumber,
-      saleId: saleId!,
+      saleId: saleId ?? '',
       customerId: customer?.id ?? null,
       loyalty: loyaltyInfo ?? null,
     });
@@ -1100,6 +1148,7 @@ export default function CashRegister({
         onTouchStart={onTouchStart}
         onTouchEnd={(e) => onTouchEnd(e, 'open')}
       >
+        <OfflineBanner />
         <div className="flex items-center gap-2 px-3 md:px-5 h-14 shrink-0 border-b border-border bg-white">
           {/* Champ de recherche : ouvert seulement à la demande (via la loupe
               ci-dessous ou « / »). Sinon, l'espace reste libre pour le
@@ -1511,7 +1560,10 @@ export default function CashRegister({
             </button>
             <button
               disabled={lines.length === 0 || totals.ttc <= 0}
-              onClick={async () => { const id = await ensureSale(); if (id) { await syncLines(); setShowPayment(true); } }}
+              onClick={async () => {
+                if (shouldGoOffline()) { setShowPayment(true); return; }
+                const id = await ensureSale(); if (id) { await syncLines(); setShowPayment(true); }
+              }}
               className="col-start-1 row-start-2 btn-soft text-base font-semibold rounded-[5px] flex flex-col items-center justify-center gap-0.5 disabled:opacity-40"
               title="Choisir le mode de règlement (multiple, chèque, lien Stripe…)"
             >
@@ -1537,12 +1589,14 @@ export default function CashRegister({
         )}
       </aside>
 
-      {showPayment && saleId && (
+      {showPayment && (saleId || shouldGoOffline()) && (
         <PaymentModal
-          saleId={saleId}
+          saleId={saleId ?? ''}
           totalTtc={totals.ttc}
           loyaltyRedemption={loyalty.used > 0 ? loyalty.used : undefined}
           schoolMode={schoolMode}
+          offlineEnabled={offlinePosEnabled()}
+          onOfflineFinalize={(payments, loyaltyUsed) => finalizeOffline(payments, loyaltyUsed)}
           onClose={() => setShowPayment(false)}
           onValidated={onValidated}
         />
