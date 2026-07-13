@@ -293,7 +293,7 @@ function OrderDetail({
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-end md:place-items-center bg-ink/30 backdrop-blur-sm p-0 md:p-4" onClick={onClose}>
-      <div className="card w-full md:max-w-2xl max-h-[95vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+      <div className="card w-full max-w-2xl lg:max-w-4xl max-h-[95vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-4 md:px-6 py-3 border-b border-border shrink-0">
           <div>
             <h2 className="text-lg font-semibold">

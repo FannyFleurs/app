@@ -101,7 +101,7 @@ export default function ProductImportModal({
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-ink/30 backdrop-blur-sm p-2 md:p-4">
-      <div className="card w-full max-w-4xl max-h-[95vh] flex flex-col overflow-hidden">
+      <div className="card w-full max-w-2xl lg:max-w-4xl max-h-[95vh] flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-4 md:px-6 py-3 border-b border-border shrink-0">
           <div>
             <h2 className="text-base md:text-lg font-semibold">Importer des produits</h2>

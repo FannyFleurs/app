@@ -401,7 +401,7 @@ function FinalizedReportModal({ report, onClose }: {
 }) {
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-ink/40 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="card max-w-lg w-full p-6" onClick={(e) => e.stopPropagation()}>
+      <div className="card w-full max-w-2xl lg:max-w-4xl p-6" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-lg font-semibold">Inventaire validé</h3>
         <p className="text-sm text-ink-soft mt-1">
           Les mouvements de stock ont été enregistrés.

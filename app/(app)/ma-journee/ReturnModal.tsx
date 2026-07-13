@@ -78,7 +78,7 @@ export default function ReturnModal({ saleId, receiptNumber, lines, onClose, onS
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-ink/30 backdrop-blur-sm p-4 overflow-auto">
-      <div className="card max-w-2xl w-full p-6 my-8">
+      <div className="card w-full max-w-2xl lg:max-w-4xl p-6 my-8">
         <div className="flex items-center justify-between mb-3">
           <div>
             <h2 className="text-lg font-semibold">Retour produit</h2>

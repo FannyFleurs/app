@@ -50,7 +50,7 @@ export default function BankDepositModal({ registerId, maxAmount, onClose, onSav
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-ink/30 backdrop-blur-sm p-4">
-      <div className="card max-w-md w-full p-6">
+      <div className="card w-full max-w-2xl lg:max-w-4xl p-6">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Remise en banque</h2>
           <button onClick={onClose} className="text-ink-soft hover:text-ink">✕</button>

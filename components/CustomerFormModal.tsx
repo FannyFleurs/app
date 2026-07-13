@@ -120,7 +120,7 @@ export default function CustomerFormModal({ customer, onClose, onSaved }: Props)
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-ink/30 backdrop-blur-sm p-4 overflow-auto">
-      <div className="card max-w-2xl w-full p-6 my-8">
+      <div className="card w-full max-w-2xl lg:max-w-4xl p-6 my-8">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold">{customer ? 'Modifier le client' : 'Nouveau client'}</h2>
           <button onClick={onClose} className="text-ink-soft hover:text-ink">✕</button>

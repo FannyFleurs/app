@@ -261,8 +261,6 @@ export default function ProductFormModal({
                      onChange={(v) => setForm({ ...form, visible_in_pos: v })} />
               <Check label="Actif" checked={form.is_active}
                      onChange={(v) => setForm({ ...form, is_active: v })} />
-              <Check label="Personnalisable" checked={form.is_customizable}
-                     onChange={(v) => setForm({ ...form, is_customizable: v })} />
             </div>
             {form.is_top_product && (
               <p className="mt-2 text-xs text-ink-soft">

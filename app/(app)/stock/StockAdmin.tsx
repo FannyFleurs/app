@@ -491,7 +491,7 @@ function QuantityKeypadModal({ product, onClose, onConfirm }: {
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-ink/30 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="card max-w-md w-full p-5" onClick={(e) => e.stopPropagation()}>
+      <div className="card w-full max-w-2xl lg:max-w-4xl p-5" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-2">
           <div>
             <div className="text-xs uppercase tracking-widest text-ink-soft font-semibold">Quantité</div>
@@ -607,7 +607,7 @@ function TypeAndReasonModal({ product, delta, storeId, onClose, onSaved }: {
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-ink/30 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="card max-w-md w-full p-5" onClick={(e) => e.stopPropagation()}>
+      <div className="card w-full max-w-2xl lg:max-w-4xl p-5" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-3">
           <div>
             <div className="text-xs uppercase tracking-widest text-ink-soft font-semibold">Mouvement</div>

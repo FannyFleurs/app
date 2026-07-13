@@ -117,7 +117,7 @@ Le solde se met à jour automatiquement après chaque passage en caisse.
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-ink/40 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="card max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+      <div className="card w-full max-w-2xl lg:max-w-4xl p-6" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-3 mb-4">
           <div>
             <h3 className="text-lg font-semibold">Partager la carte fidélité</h3>

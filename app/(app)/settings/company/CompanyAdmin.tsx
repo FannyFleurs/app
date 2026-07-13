@@ -425,7 +425,7 @@ function StoreFormModal({ store, onClose, onSaved }: {
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-ink/30 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="card max-w-md w-full p-5" onClick={(e) => e.stopPropagation()}>
+      <div className="card w-full max-w-2xl lg:max-w-4xl p-5" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-lg font-semibold">{store ? 'Modifier boutique' : 'Nouvelle boutique'}</h2>
           <button onClick={onClose} className="text-ink-soft hover:text-ink">✕</button>
@@ -728,7 +728,7 @@ function RegisterFormModal({ register, stores, onClose, onSaved }: {
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-ink/30 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="card max-w-md w-full p-5" onClick={(e) => e.stopPropagation()}>
+      <div className="card w-full max-w-2xl lg:max-w-4xl p-5" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-lg font-semibold">{register ? 'Modifier caisse' : 'Nouvelle caisse'}</h2>
           <button onClick={onClose} className="text-ink-soft hover:text-ink">✕</button>
@@ -847,7 +847,7 @@ function TaxFormModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-ink/30 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="card max-w-md w-full p-5" onClick={(e) => e.stopPropagation()}>
+      <div className="card w-full max-w-2xl lg:max-w-4xl p-5" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-lg font-semibold">Nouveau taux de TVA</h2>
           <button onClick={onClose} className="text-ink-soft hover:text-ink">✕</button>

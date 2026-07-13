@@ -388,7 +388,7 @@ function InlineEmailModal({ invoiceNumber, busy, onClose, onSend }: {
   const [email, setEmail] = useState('');
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-ink/30 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="card max-w-sm w-full p-5" onClick={(e) => e.stopPropagation()}>
+      <div className="card w-full max-w-2xl lg:max-w-4xl p-5" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-lg font-semibold">Envoyer la facture</h2>
           <button onClick={onClose} className="text-ink-soft hover:text-ink">✕</button>
