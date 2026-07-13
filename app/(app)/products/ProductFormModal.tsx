@@ -20,6 +20,12 @@ interface Product {
 
 // Palette de couleurs pré-définies pour les tuiles caisse — cohérente
 // avec celle utilisée pour les catégories.
+// Parse un montant saisi à la française (virgule ou point décimal).
+function parseAmount(s: string): number {
+  const n = Number(String(s).replace(',', '.'));
+  return Number.isFinite(n) ? n : 0;
+}
+
 const PRODUCT_COLORS = [
   { value: null,      label: 'Aucune' },
   { value: '#F4D7D7', label: 'Rose pâle' },
@@ -62,8 +68,8 @@ export default function ProductFormModal({
     short_description: product?.short_description ?? '',
     sku: product?.sku ?? '',
     barcode: product?.barcode ?? '',
-    sale_price_ttc: product?.sale_price_ttc ?? 0,
-    purchase_price_ht: product?.purchase_price_ht ?? 0,
+    sale_price_ttc: product?.sale_price_ttc != null ? String(product.sale_price_ttc) : '',
+    purchase_price_ht: product?.purchase_price_ht != null ? String(product.purchase_price_ht) : '',
     price_is_free: product?.price_is_free ?? false,
     tax_rate_id: product?.tax_rate_id ?? (defaultTax?.id ?? ''),
     category_id: product?.category_id ?? '',
@@ -88,8 +94,8 @@ export default function ProductFormModal({
       short_description: form.short_description || null,
       sku: form.sku || null,
       barcode: form.barcode || null,
-      sale_price_ttc: Number(form.sale_price_ttc),
-      purchase_price_ht: form.purchase_price_ht > 0 ? Number(form.purchase_price_ht) : null,
+      sale_price_ttc: parseAmount(form.sale_price_ttc),
+      purchase_price_ht: parseAmount(form.purchase_price_ht) > 0 ? parseAmount(form.purchase_price_ht) : null,
       price_is_free: form.price_is_free,
       tax_rate_id: form.tax_rate_id,
       category_id: form.category_id || null,
@@ -123,7 +129,7 @@ export default function ProductFormModal({
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-ink/30 backdrop-blur-sm p-2 sm:p-4 overflow-auto">
-      <div className="card max-w-2xl w-full p-4 sm:p-6 my-4 sm:my-8">
+      <div className="card w-full max-w-2xl lg:max-w-4xl p-4 sm:p-6 my-4 sm:my-8">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold">{product ? 'Modifier produit' : 'Nouveau produit'}</h2>
           <button onClick={onClose} className="text-ink-soft hover:text-ink text-xl leading-none">✕</button>
@@ -205,26 +211,27 @@ export default function ProductFormModal({
           </Field>
           <Field label="Prix TTC (€)">
             <input
-              type="number" step="0.01" min={0}
+              type="text" inputMode="decimal"
               className="input h-11 text-base"
               value={form.sale_price_ttc}
-              onChange={(e) => setForm({ ...form, sale_price_ttc: Number(e.target.value) })}
+              onChange={(e) => setForm({ ...form, sale_price_ttc: e.target.value.replace(/[^0-9.,]/g, '') })}
               disabled={form.price_is_free}
+              placeholder="0,00"
             />
           </Field>
           <Field label="Prix d'achat HT (€)">
             <input
-              type="number" step="0.01" min={0}
+              type="text" inputMode="decimal"
               className="input h-11 text-base"
               value={form.purchase_price_ht}
-              onChange={(e) => setForm({ ...form, purchase_price_ht: Number(e.target.value) })}
-              placeholder="0.00"
+              onChange={(e) => setForm({ ...form, purchase_price_ht: e.target.value.replace(/[^0-9.,]/g, '') })}
+              placeholder="0,00"
             />
           </Field>
           <Field label="Marge calculée" full>
             {(() => {
-              const purchase = Number(form.purchase_price_ht);
-              const sellTtc = Number(form.sale_price_ttc);
+              const purchase = parseAmount(form.purchase_price_ht);
+              const sellTtc = parseAmount(form.sale_price_ttc);
               const taxRate = taxRates.find((t) => t.id === form.tax_rate_id)?.rate ?? 0;
               const sellHt = sellTtc / (1 + taxRate / 100);
               if (purchase <= 0 || sellHt <= 0) {
@@ -247,15 +254,11 @@ export default function ProductFormModal({
           <Field label="Options" full>
             <div className="grid grid-cols-2 gap-y-1.5 gap-x-4 mt-2">
               <Check label="Prix libre (bouquet)" checked={form.price_is_free}
-                     onChange={(v) => setForm({ ...form, price_is_free: v, sale_price_ttc: v ? 0 : form.sale_price_ttc })} />
+                     onChange={(v) => setForm({ ...form, price_is_free: v, sale_price_ttc: v ? '' : form.sale_price_ttc })} />
               <Check label="Top produit (épinglé en grille)" checked={form.is_top_product}
                      onChange={(v) => setForm({ ...form, is_top_product: v })} />
-              <Check label="Prix fort (aucune remise applicable)" checked={form.no_discount}
-                     onChange={(v) => setForm({ ...form, no_discount: v })} />
               <Check label="Visible en caisse" checked={form.visible_in_pos}
                      onChange={(v) => setForm({ ...form, visible_in_pos: v })} />
-              <Check label="Saisonnier" checked={form.is_seasonal}
-                     onChange={(v) => setForm({ ...form, is_seasonal: v })} />
               <Check label="Actif" checked={form.is_active}
                      onChange={(v) => setForm({ ...form, is_active: v })} />
               <Check label="Personnalisable" checked={form.is_customizable}
