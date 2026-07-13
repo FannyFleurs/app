@@ -10,6 +10,7 @@ const patchSchema = z.object({
   short_description: z.string().max(500).nullable().optional(),
   long_description: z.string().max(5000).nullable().optional(),
   category_id: z.string().uuid().nullable().optional(),
+  supplier_id: z.string().uuid().nullable().optional(),
   sku: z.string().max(80).nullable().optional(),
   barcode: z.string().max(80).nullable().optional(),
   image_url: z.string().max(500).nullable().optional(),
@@ -76,18 +77,21 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     let hasNdCol = true;
     let hasColorCol = true;
     let hasStoreIdsCol = true;
+    let hasSupplierCol = true;
     if (patch.is_top_product != null || patch.no_discount != null
-        || patch.color !== undefined || patch.store_ids !== undefined) {
+        || patch.color !== undefined || patch.store_ids !== undefined
+        || patch.supplier_id !== undefined) {
       const colCheck = await client.query<{ column_name: string }>(
         `SELECT column_name FROM information_schema.columns
           WHERE table_name = 'products'
-            AND column_name IN ('is_top_product','no_discount','color','store_ids')`,
+            AND column_name IN ('is_top_product','no_discount','color','store_ids','supplier_id')`,
       );
       const set = new Set(colCheck.rows.map((r) => r.column_name));
       hasTopCol = set.has('is_top_product');
       hasNdCol = set.has('no_discount');
       hasColorCol = set.has('color');
       hasStoreIdsCol = set.has('store_ids');
+      hasSupplierCol = set.has('supplier_id');
     }
 
     const setParts: string[] = ['updated_by = $1', 'updated_at = now()'];
@@ -99,6 +103,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       if (k === 'no_discount' && !hasNdCol) continue;
       if (k === 'color' && !hasColorCol) continue;
       if (k === 'store_ids' && !hasStoreIdsCol) continue;
+      if (k === 'supplier_id' && !hasSupplierCol) continue;
       setParts.push(`${k} = $${i++}`);
       values.push(v);
     }

@@ -28,6 +28,7 @@ export const SIDEBAR_ITEMS: SidebarItem[] = [
   // Catalogue
   { href: '/products',     label: 'Produits',             icon: 'products',     group: 'Catalogue',perm: 'products.read' },
   { href: '/categories',   label: 'Catégories',           icon: 'categories',   group: 'Catalogue',perm: 'products.read' },
+  { href: '/suppliers',    label: 'Fournisseurs',         icon: 'truck',        group: 'Catalogue',perm: 'products.read' },
   { href: '/stock',        label: 'Stock',                icon: 'stock',        group: 'Catalogue' },
   { href: '/stock/transfer', label: 'Transfert stock',    icon: 'transfer',     group: 'Catalogue' },
   { href: '/inventory',    label: 'Inventaire',           icon: 'closures',     group: 'Catalogue' },

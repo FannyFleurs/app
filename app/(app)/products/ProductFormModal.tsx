@@ -10,6 +10,7 @@ interface Product {
   sale_price_ttc: number; price_is_free: boolean;
   purchase_price_ht?: number | null;
   tax_rate_id: string; category_id: string | null;
+  supplier_id?: string | null;
   visible_in_pos: boolean; is_active: boolean;
   is_seasonal: boolean; is_customizable: boolean;
   is_top_product?: boolean;
@@ -51,15 +52,26 @@ export default function ProductFormModal({
 }) {
   const defaultTax = taxRates.find((t) => t.is_default) ?? taxRates[0];
   const [liveCategories, setLiveCategories] = useState(categories);
+  const [suppliers, setSuppliers] = useState<{ id: string; name: string }[]>([]);
   const [stores, setStores] = useState<{ id: string; name: string }[]>([]);
-  // Recharge la liste des catégories + boutiques à l'ouverture.
+  // Recharge la liste des catégories + fournisseurs + boutiques à l'ouverture.
+  async function refetchCategories() {
+    const r = await fetch('/api/categories');
+    if (r.ok) setLiveCategories((await r.json()).categories);
+  }
+  async function refetchSuppliers() {
+    const r = await fetch('/api/suppliers');
+    if (r.ok) setSuppliers((await r.json()).suppliers);
+  }
   useEffect(() => {
     void (async () => {
-      const [rC, rS] = await Promise.all([
+      const [rC, rSup, rS] = await Promise.all([
         fetch('/api/categories'),
+        fetch('/api/suppliers'),
         fetch('/api/me'),
       ]);
       if (rC.ok) setLiveCategories((await rC.json()).categories);
+      if (rSup.ok) setSuppliers((await rSup.json()).suppliers);
       if (rS.ok) setStores((await rS.json()).stores ?? []);
     })();
   }, []);
@@ -73,6 +85,7 @@ export default function ProductFormModal({
     price_is_free: product?.price_is_free ?? false,
     tax_rate_id: product?.tax_rate_id ?? (defaultTax?.id ?? ''),
     category_id: product?.category_id ?? '',
+    supplier_id: product?.supplier_id ?? '',
     visible_in_pos: product?.visible_in_pos ?? true,
     is_active: product?.is_active ?? true,
     is_seasonal: product?.is_seasonal ?? false,
@@ -87,6 +100,53 @@ export default function ProductFormModal({
   const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState<'details' | 'history'>('details');
 
+  // Création rapide en ligne (catégorie / fournisseur inexistant).
+  const [newCat, setNewCat] = useState<string | null>(null);   // null = fermé
+  const [newSup, setNewSup] = useState<string | null>(null);
+  const [inlineBusy, setInlineBusy] = useState(false);
+
+  async function addCategory() {
+    const name = (newCat ?? '').trim();
+    if (!name) return;
+    setInlineBusy(true);
+    try {
+      const r = await fetch('/api/categories', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, position: 0, visible_in_pos: true }),
+      });
+      if (r.ok) {
+        const { id } = await r.json();
+        await refetchCategories();
+        setForm((f) => ({ ...f, category_id: id }));
+        setNewCat(null);
+      } else {
+        const j = await r.json().catch(() => ({}));
+        setError(j.message ?? 'Création catégorie impossible');
+      }
+    } finally { setInlineBusy(false); }
+  }
+
+  async function addSupplier() {
+    const name = (newSup ?? '').trim();
+    if (!name) return;
+    setInlineBusy(true);
+    try {
+      const r = await fetch('/api/suppliers', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      if (r.ok) {
+        const { id } = await r.json();
+        await refetchSuppliers();
+        setForm((f) => ({ ...f, supplier_id: id }));
+        setNewSup(null);
+      } else {
+        const j = await r.json().catch(() => ({}));
+        setError(j.message ?? 'Création fournisseur impossible');
+      }
+    } finally { setInlineBusy(false); }
+  }
+
   async function submit() {
     setSaving(true); setError(null);
     const payload: Record<string, unknown> = {
@@ -99,6 +159,7 @@ export default function ProductFormModal({
       price_is_free: form.price_is_free,
       tax_rate_id: form.tax_rate_id,
       category_id: form.category_id || null,
+      supplier_id: form.supplier_id || null,
       visible_in_pos: form.visible_in_pos,
       is_active: form.is_active,
       is_seasonal: form.is_seasonal,
@@ -188,15 +249,57 @@ export default function ProductFormModal({
               </button>
             </div>
           </Field>
-          <Field label="Catégorie" full>
-            <select
-              className="input h-11 text-base"
-              value={form.category_id ?? ''}
-              onChange={(e) => setForm({ ...form, category_id: e.target.value })}
-            >
-              <option value="">— Aucune catégorie —</option>
-              {liveCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+          <Field label="Catégorie">
+            {newCat === null ? (
+              <div className="flex gap-2">
+                <select
+                  className="input h-11 text-base flex-1"
+                  value={form.category_id ?? ''}
+                  onChange={(e) => setForm({ ...form, category_id: e.target.value })}
+                >
+                  <option value="">— Aucune catégorie —</option>
+                  {liveCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+                <button type="button" className="btn-soft whitespace-nowrap"
+                        onClick={() => setNewCat('')} title="Créer une catégorie">+ Créer</button>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <input className="input h-11 flex-1" autoFocus value={newCat}
+                       placeholder="Nom de la catégorie"
+                       onChange={(e) => setNewCat(e.target.value)}
+                       onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void addCategory(); } }} />
+                <button type="button" className="btn-primary whitespace-nowrap"
+                        disabled={inlineBusy || !newCat.trim()} onClick={() => void addCategory()}>Ajouter</button>
+                <button type="button" className="btn-ghost" onClick={() => setNewCat(null)}>✕</button>
+              </div>
+            )}
+          </Field>
+          <Field label="Fournisseur">
+            {newSup === null ? (
+              <div className="flex gap-2">
+                <select
+                  className="input h-11 text-base flex-1"
+                  value={form.supplier_id ?? ''}
+                  onChange={(e) => setForm({ ...form, supplier_id: e.target.value })}
+                >
+                  <option value="">— Aucun fournisseur —</option>
+                  {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+                <button type="button" className="btn-soft whitespace-nowrap"
+                        onClick={() => setNewSup('')} title="Créer un fournisseur">+ Créer</button>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <input className="input h-11 flex-1" autoFocus value={newSup}
+                       placeholder="Nom du fournisseur"
+                       onChange={(e) => setNewSup(e.target.value)}
+                       onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void addSupplier(); } }} />
+                <button type="button" className="btn-primary whitespace-nowrap"
+                        disabled={inlineBusy || !newSup.trim()} onClick={() => void addSupplier()}>Ajouter</button>
+                <button type="button" className="btn-ghost" onClick={() => setNewSup(null)}>✕</button>
+              </div>
+            )}
           </Field>
           <Field label="Taux TVA">
             <select

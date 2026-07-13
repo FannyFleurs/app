@@ -10,6 +10,7 @@ const productSchema = z.object({
   short_description: z.string().max(500).optional().nullable(),
   long_description: z.string().max(5000).optional().nullable(),
   category_id: z.string().uuid().optional().nullable(),
+  supplier_id: z.string().uuid().optional().nullable(),
   sku: z.string().max(80).optional().nullable(),
   barcode: z.string().max(80).optional().nullable(),
   supplier_ref: z.string().max(80).optional().nullable(),
@@ -53,6 +54,20 @@ async function hasStoreIdsColumn(): Promise<boolean> {
   );
   _hasStoreIds = !!r.rows[0]?.exists;
   return _hasStoreIds;
+}
+
+// Cache d'introspection : colonne products.supplier_id (migration 0038).
+let _hasSupplier: boolean | null = null;
+async function hasSupplierColumn(): Promise<boolean> {
+  if (_hasSupplier !== null) return _hasSupplier;
+  const r = await query<{ exists: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'products' AND column_name = 'supplier_id'
+     ) AS exists`,
+  );
+  _hasSupplier = !!r.rows[0]?.exists;
+  return _hasSupplier;
 }
 
 // Cache d'introspection : indique si la colonne products.is_top_product
@@ -122,6 +137,11 @@ export async function GET(req: Request) {
   const storeIdsCol = (await hasStoreIdsColumn())
     ? `p.store_ids`
     : `'{}'::uuid[] AS store_ids`;
+  const hasSupplier = await hasSupplierColumn();
+  const supplierCols = hasSupplier
+    ? `p.supplier_id, sup.name AS supplier_name`
+    : `NULL AS supplier_id, NULL AS supplier_name`;
+  const supplierJoin = hasSupplier ? `LEFT JOIN suppliers sup ON sup.id = p.supplier_id` : '';
 
   const { rows } = await query(
     `SELECT p.id, p.name, p.short_description, p.sku, p.barcode, p.image_url, p.unit,
@@ -131,12 +151,14 @@ export async function GET(req: Request) {
             ${ndCol},
             ${colorCol},
             ${storeIdsCol},
+            ${supplierCols},
             p.tags, p.is_seasonal, p.is_customizable,
             t.rate AS tax_rate, t.id AS tax_rate_id, t.code AS tax_rate_code, t.label AS tax_rate_label,
             c.name AS category_name, c.color AS category_color
        FROM products p
        JOIN tax_rates t ON t.id = p.tax_rate_id
        LEFT JOIN product_categories c ON c.id = p.category_id
+       ${supplierJoin}
       WHERE ${where}
       ORDER BY p.name ASC
       LIMIT 500`,
@@ -204,6 +226,10 @@ export async function POST(req: Request) {
     if (await hasStoreIdsColumn()) {
       cols.push('store_ids');
       values.push(p.store_ids);
+    }
+    if (await hasSupplierColumn()) {
+      cols.push('supplier_id');
+      values.push(p.supplier_id ?? null);
     }
     // created_by + updated_by partagent la même valeur
     cols.push('created_by', 'updated_by');

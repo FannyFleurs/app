@@ -14,6 +14,7 @@ interface Product {
   sale_price_ttc: number; price_is_free: boolean;
   tax_rate: number; tax_rate_id: string; tax_rate_code: string;
   category_id: string | null; category_name: string | null;
+  supplier_id: string | null; supplier_name: string | null;
   visible_in_pos: boolean; is_active: boolean;
   is_seasonal: boolean; is_customizable: boolean;
   is_top_product?: boolean;
