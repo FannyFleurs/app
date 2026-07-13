@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { generateEan13 } from '@/lib/services/ean';
+import ProductHistory from './ProductHistory';
 
 interface Product {
   id: string; name: string; short_description: string | null;
@@ -78,6 +79,7 @@ export default function ProductFormModal({
   });
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [tab, setTab] = useState<'details' | 'history'>('details');
 
   async function submit() {
     setSaving(true); setError(null);
@@ -120,13 +122,37 @@ export default function ProductFormModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-ink/30 backdrop-blur-sm p-4 overflow-auto">
-      <div className="card max-w-2xl w-full p-6 my-8">
+    <div className="fixed inset-0 z-50 grid place-items-center bg-ink/30 backdrop-blur-sm p-2 sm:p-4 overflow-auto">
+      <div className="card max-w-2xl w-full p-4 sm:p-6 my-4 sm:my-8">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold">{product ? 'Modifier produit' : 'Nouveau produit'}</h2>
-          <button onClick={onClose} className="text-ink-soft hover:text-ink">✕</button>
+          <button onClick={onClose} className="text-ink-soft hover:text-ink text-xl leading-none">✕</button>
         </div>
-        <div className="grid grid-cols-2 gap-4">
+
+        {/* Onglets Détails / Historique (l'historique n'existe que pour un
+            produit déjà créé). */}
+        {product && (
+          <div className="mb-4 flex gap-1 border-b border-border">
+            {(['details', 'history'] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={`-mb-px px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                  tab === t
+                    ? 'border-[color:var(--primary)] text-ink'
+                    : 'border-transparent text-ink-soft hover:text-ink'
+                }`}
+              >
+                {t === 'details' ? 'Détails' : 'Historique'}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {tab === 'history' && product ? (
+          <ProductHistory productId={product.id} />
+        ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label="Nom" full>
             <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           </Field>
@@ -210,7 +236,7 @@ export default function ProductFormModal({
               const marginPct = (margin / sellHt) * 100;
               const coeff = sellHt / purchase;
               return (
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-3 gap-2 sm:gap-3">
                   <Stat label="Marge brute" value={`${margin.toFixed(2)} €`} tone={margin > 0 ? 'success' : 'danger'} />
                   <Stat label="Taux de marge" value={`${marginPct.toFixed(1)} %`} tone={marginPct >= 50 ? 'success' : marginPct >= 30 ? 'warning' : 'danger'} />
                   <Stat label="Coefficient" value={`× ${coeff.toFixed(2)}`} />
@@ -335,13 +361,20 @@ export default function ProductFormModal({
             </Field>
           )}
         </div>
-        {error && <div className="mt-3 rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
-        <div className="mt-4 flex justify-end gap-2">
-          <button onClick={onClose} className="btn-ghost">Annuler</button>
-          <button disabled={saving || !form.name.trim()} onClick={() => void submit()} className="btn-primary">
-            {saving ? 'Enregistrement…' : (product ? 'Enregistrer' : 'Créer')}
-          </button>
-        </div>
+        )}
+        {error && tab === 'details' && <div className="mt-3 rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
+        {tab === 'details' ? (
+          <div className="mt-4 flex justify-end gap-2">
+            <button onClick={onClose} className="btn-ghost">Annuler</button>
+            <button disabled={saving || !form.name.trim()} onClick={() => void submit()} className="btn-primary">
+              {saving ? 'Enregistrement…' : (product ? 'Enregistrer' : 'Créer')}
+            </button>
+          </div>
+        ) : (
+          <div className="mt-4 flex justify-end">
+            <button onClick={onClose} className="btn-ghost">Fermer</button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -349,7 +382,7 @@ export default function ProductFormModal({
 
 function Field({ label, children, full }: { label: string; children: React.ReactNode; full?: boolean }) {
   return (
-    <div className={full ? 'col-span-2' : ''}>
+    <div className={full ? 'sm:col-span-2' : ''}>
       <label className="text-sm font-medium text-ink-soft">{label}</label>
       <div className="mt-1">{children}</div>
     </div>
