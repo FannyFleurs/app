@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { generateEan13 } from '@/lib/services/ean';
 import ProductHistory from './ProductHistory';
+import LabelPrintModal from './LabelPrintModal';
 
 interface Product {
   id: string; name: string; short_description: string | null;
@@ -11,6 +12,8 @@ interface Product {
   purchase_price_ht?: number | null;
   tax_rate_id: string; category_id: string | null;
   supplier_id?: string | null;
+  discount_type?: 'percent' | 'amount' | null;
+  discount_value?: number | null;
   visible_in_pos: boolean; is_active: boolean;
   is_seasonal: boolean; is_customizable: boolean;
   is_top_product?: boolean;
@@ -86,6 +89,8 @@ export default function ProductFormModal({
     tax_rate_id: product?.tax_rate_id ?? (defaultTax?.id ?? ''),
     category_id: product?.category_id ?? '',
     supplier_id: product?.supplier_id ?? '',
+    discount_type: (product?.discount_type ?? '') as '' | 'percent' | 'amount',
+    discount_value: product?.discount_value != null ? String(product.discount_value) : '',
     visible_in_pos: product?.visible_in_pos ?? true,
     is_active: product?.is_active ?? true,
     is_seasonal: product?.is_seasonal ?? false,
@@ -99,6 +104,7 @@ export default function ProductFormModal({
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState<'details' | 'history'>('details');
+  const [showLabel, setShowLabel] = useState(false);
 
   // Création rapide en ligne (catégorie / fournisseur inexistant).
   const [newCat, setNewCat] = useState<string | null>(null);   // null = fermé
@@ -160,6 +166,8 @@ export default function ProductFormModal({
       tax_rate_id: form.tax_rate_id,
       category_id: form.category_id || null,
       supplier_id: form.supplier_id || null,
+      discount_type: form.discount_type || null,
+      discount_value: form.discount_type ? parseAmount(form.discount_value) : null,
       visible_in_pos: form.visible_in_pos,
       is_active: form.is_active,
       is_seasonal: form.is_seasonal,
@@ -331,6 +339,41 @@ export default function ProductFormModal({
               placeholder="0,00"
             />
           </Field>
+          <Field label="Remise (affichée sur l'étiquette)" full>
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                className="input h-11 w-auto"
+                value={form.discount_type}
+                onChange={(e) => setForm({ ...form, discount_type: e.target.value as '' | 'percent' | 'amount' })}
+              >
+                <option value="">Aucune remise</option>
+                <option value="percent">Pourcentage (%)</option>
+                <option value="amount">Montant (€)</option>
+              </select>
+              {form.discount_type && (
+                <input
+                  type="text" inputMode="decimal"
+                  className="input h-11 w-28"
+                  value={form.discount_value}
+                  onChange={(e) => setForm({ ...form, discount_value: e.target.value.replace(/[^0-9.,]/g, '') })}
+                  placeholder={form.discount_type === 'percent' ? 'ex : 20' : 'ex : 5,00'}
+                />
+              )}
+              {form.discount_type && parseAmount(form.discount_value) > 0 && (() => {
+                const price = parseAmount(form.sale_price_ttc);
+                const raw = form.discount_type === 'percent'
+                  ? price * (1 - parseAmount(form.discount_value) / 100)
+                  : price - parseAmount(form.discount_value);
+                const disc = Math.max(0, raw);
+                return (
+                  <span className="text-sm">
+                    <span className="text-ink-soft line-through mr-1">{price.toFixed(2)} €</span>
+                    <span className="font-semibold text-success">{disc.toFixed(2)} €</span>
+                  </span>
+                );
+              })()}
+            </div>
+          </Field>
           <Field label="Marge calculée" full>
             {(() => {
               const purchase = parseAmount(form.purchase_price_ht);
@@ -468,11 +511,17 @@ export default function ProductFormModal({
         )}
         {error && tab === 'details' && <div className="mt-3 rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
         {tab === 'details' ? (
-          <div className="mt-4 flex justify-end gap-2">
-            <button onClick={onClose} className="btn-ghost">Annuler</button>
-            <button disabled={saving || !form.name.trim()} onClick={() => void submit()} className="btn-primary">
-              {saving ? 'Enregistrement…' : (product ? 'Enregistrer' : 'Créer')}
+          <div className="mt-4 flex flex-wrap justify-between gap-2">
+            <button type="button" onClick={() => setShowLabel(true)}
+                    className="btn-soft" title="Imprimer une étiquette avec code-barres et prix">
+              🏷️ Imprimer étiquette
             </button>
+            <div className="flex gap-2">
+              <button onClick={onClose} className="btn-ghost">Annuler</button>
+              <button disabled={saving || !form.name.trim()} onClick={() => void submit()} className="btn-primary">
+                {saving ? 'Enregistrement…' : (product ? 'Enregistrer' : 'Créer')}
+              </button>
+            </div>
           </div>
         ) : (
           <div className="mt-4 flex justify-end">
@@ -480,6 +529,19 @@ export default function ProductFormModal({
           </div>
         )}
       </div>
+
+      {showLabel && (
+        <LabelPrintModal
+          product={{
+            name: form.name,
+            barcode: form.barcode || null,
+            sale_price_ttc: parseAmount(form.sale_price_ttc),
+            discount_type: form.discount_type || null,
+            discount_value: form.discount_type ? parseAmount(form.discount_value) : null,
+          }}
+          onClose={() => setShowLabel(false)}
+        />
+      )}
     </div>
   );
 }

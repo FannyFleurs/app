@@ -11,6 +11,8 @@ const productSchema = z.object({
   long_description: z.string().max(5000).optional().nullable(),
   category_id: z.string().uuid().optional().nullable(),
   supplier_id: z.string().uuid().optional().nullable(),
+  discount_type: z.enum(['percent', 'amount']).optional().nullable(),
+  discount_value: z.number().min(0).optional().nullable(),
   sku: z.string().max(80).optional().nullable(),
   barcode: z.string().max(80).optional().nullable(),
   supplier_ref: z.string().max(80).optional().nullable(),
@@ -68,6 +70,20 @@ async function hasSupplierColumn(): Promise<boolean> {
   );
   _hasSupplier = !!r.rows[0]?.exists;
   return _hasSupplier;
+}
+
+// Cache d'introspection : colonnes de remise article (migration 0039).
+let _hasDiscount: boolean | null = null;
+async function hasDiscountColumns(): Promise<boolean> {
+  if (_hasDiscount !== null) return _hasDiscount;
+  const r = await query<{ exists: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'products' AND column_name = 'discount_type'
+     ) AS exists`,
+  );
+  _hasDiscount = !!r.rows[0]?.exists;
+  return _hasDiscount;
 }
 
 // Cache d'introspection : indique si la colonne products.is_top_product
@@ -142,6 +158,9 @@ export async function GET(req: Request) {
     ? `p.supplier_id, sup.name AS supplier_name`
     : `NULL AS supplier_id, NULL AS supplier_name`;
   const supplierJoin = hasSupplier ? `LEFT JOIN suppliers sup ON sup.id = p.supplier_id` : '';
+  const discountCols = (await hasDiscountColumns())
+    ? `p.discount_type, p.discount_value`
+    : `NULL AS discount_type, NULL AS discount_value`;
 
   const { rows } = await query(
     `SELECT p.id, p.name, p.short_description, p.sku, p.barcode, p.image_url, p.unit,
@@ -152,6 +171,7 @@ export async function GET(req: Request) {
             ${colorCol},
             ${storeIdsCol},
             ${supplierCols},
+            ${discountCols},
             p.tags, p.is_seasonal, p.is_customizable,
             t.rate AS tax_rate, t.id AS tax_rate_id, t.code AS tax_rate_code, t.label AS tax_rate_label,
             c.name AS category_name, c.color AS category_color
@@ -230,6 +250,10 @@ export async function POST(req: Request) {
     if (await hasSupplierColumn()) {
       cols.push('supplier_id');
       values.push(p.supplier_id ?? null);
+    }
+    if (await hasDiscountColumns()) {
+      cols.push('discount_type', 'discount_value');
+      values.push(p.discount_type ?? null, p.discount_value ?? null);
     }
     // created_by + updated_by partagent la même valeur
     cols.push('created_by', 'updated_by');

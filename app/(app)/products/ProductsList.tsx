@@ -15,6 +15,7 @@ interface Product {
   tax_rate: number; tax_rate_id: string; tax_rate_code: string;
   category_id: string | null; category_name: string | null;
   supplier_id: string | null; supplier_name: string | null;
+  discount_type: 'percent' | 'amount' | null; discount_value: number | null;
   visible_in_pos: boolean; is_active: boolean;
   is_seasonal: boolean; is_customizable: boolean;
   is_top_product?: boolean;
