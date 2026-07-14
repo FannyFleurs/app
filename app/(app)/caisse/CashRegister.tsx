@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { formatEUR, round2 } from '@/lib/services/money';
 import { getOrCreateDeviceId } from '@/lib/device';
 import OfflineBanner from '@/components/OfflineBanner';
@@ -492,7 +492,7 @@ export default function CashRegister({
     return { ttc, ht, tva, discount, breakdown: Array.from(byRate.entries()).sort((a,b)=>b[0]-a[0]) };
   }, [lines]);
 
-  function addProduct(p: PosProduct) {
+  const addProduct = useCallback((p: PosProduct) => {
     void ensureSale();
     if (p.price_is_free) { setShowFreePrice({ label: p.name }); return; }
     // Remise systématique du client : appliquée automatiquement à chaque ajout
@@ -527,21 +527,19 @@ export default function CashRegister({
         metadata: autoPct > 0 ? { auto_discount_pct: autoPct } : {},
       }];
     });
-  }
+  }, [ensureSale, customer]);
 
   function useLoyalty(amountEuros: number) {
     if (!customer || amountEuros <= 0) return;
     const subtotal = lines.reduce((s, l) => s + round2(l.unit_price_ttc * l.quantity - l.discount_amount), 0);
     const apply = Math.min(round2(amountEuros), round2(subtotal));
     if (apply <= 0) return;
-    // Le montant utilisé est réparti proportionnellement sur les lignes (pour conserver la TVA).
+    // Réparti proportionnellement sur les lignes (pour conserver la TVA), au
+    // centime près : la somme des parts vaut exactement `apply` (plus fort reste).
     setLines((cur) => {
-      const ratio = apply / subtotal;
-      return cur.map((l) => {
-        const lineSub = round2(l.unit_price_ttc * l.quantity - l.discount_amount);
-        const add = round2(lineSub * ratio);
-        return { ...l, discount_amount: round2(l.discount_amount + add) };
-      });
+      const weights = cur.map((l) => round2(l.unit_price_ttc * l.quantity - l.discount_amount));
+      const parts = distributeProrata(apply, weights);
+      return cur.map((l, i) => ({ ...l, discount_amount: round2(l.discount_amount + (parts[i] ?? 0)) }));
     });
     setLoyalty((cur) => ({ ...cur, used: apply, balance_euros: cur.balance_euros - apply }));
   }
@@ -1250,29 +1248,16 @@ export default function CashRegister({
                     {searchQ ? 'Aucun produit trouvé pour cette recherche.' : 'Aucun produit dans cette catégorie.'}
                   </div>
                 ) : visibleProducts.map((p) => (
-                  <button
+                  <ProductTile
                     key={p.id}
-                    onClick={() => addProduct(p)}
-                    className={`card ${metrics.padding} hover:shadow-md hover:border-gray-300 transition-all active:scale-[0.98] aspect-[5/3] grid place-items-center text-center`}
-                    style={p.color ? { backgroundColor: p.color } : undefined}
-                  >
-                    <div className="flex flex-col items-center justify-center gap-1.5 max-w-full">
-                      {posUi.show_product_image && p.image_url && (
-                        <img src={p.image_url} alt="" className="h-12 w-12 rounded-md object-cover mb-1" />
-                      )}
-                      <span className={`${metrics.titleFontSize} font-semibold text-ink leading-tight line-clamp-2`}>
-                        {p.name}
-                      </span>
-                      {posUi.show_price && (
-                        <span className="text-sm font-medium text-ink-soft">
-                          {p.price_is_free ? 'prix libre' : formatEUR(p.sale_price_ttc)}
-                        </span>
-                      )}
-                      {posUi.show_tax_badge && (
-                        <span className="chip text-[10px] px-1.5 py-0">{p.tax_rate}%</span>
-                      )}
-                    </div>
-                  </button>
+                    product={p}
+                    onPick={addProduct}
+                    padding={metrics.padding}
+                    titleFontSize={metrics.titleFontSize}
+                    showImage={posUi.show_product_image}
+                    showPrice={posUi.show_price}
+                    showTaxBadge={posUi.show_tax_badge}
+                  />
                 ))}
               </div>
             </>
@@ -1741,15 +1726,15 @@ export default function CashRegister({
               } else if (a.kind === 'cartDiscount') {
                 const subtotal = lines.reduce((s, l) => s + round2(l.unit_price_ttc * l.quantity - l.discount_amount), 0);
                 if (subtotal > 0) {
-                  const ratio = a.amount / subtotal;
-                  setLines((cur) => cur.map((l) => {
-                    const lineSub = round2(l.unit_price_ttc * l.quantity - l.discount_amount);
-                    return {
+                  setLines((cur) => {
+                    const weights = cur.map((l) => round2(l.unit_price_ttc * l.quantity - l.discount_amount));
+                    const parts = distributeProrata(a.amount, weights);
+                    return cur.map((l, i) => ({
                       ...l,
-                      discount_amount: round2(l.discount_amount + lineSub * ratio),
+                      discount_amount: round2(l.discount_amount + (parts[i] ?? 0)),
                       metadata: { ...l.metadata, cart_discount: true, cart_discount_reason: reason },
-                    };
-                  }));
+                    }));
+                  });
                 }
               }
               setJustifyAction(null);
@@ -1880,3 +1865,69 @@ function cryptoKey(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID();
   return Math.random().toString(36).slice(2);
 }
+
+/**
+ * Répartit `target` € sur des poids, au centime près, sans dérive : méthode du
+ * plus fort reste → la somme des parts vaut EXACTEMENT `target` (arrondi au
+ * centime). Évite qu'une remise de 10,00 € tombe en 9,99 / 10,01 €.
+ */
+function distributeProrata(target: number, weights: number[]): number[] {
+  const total = weights.reduce((s, w) => s + w, 0);
+  if (total <= 0) return weights.map(() => 0);
+  const targetCents = Math.round(target * 100);
+  const raw = weights.map((w) => (w / total) * targetCents);
+  const cents = raw.map((r) => Math.floor(r));
+  let remainder = targetCents - cents.reduce((s, c) => s + c, 0);
+  const order = raw
+    .map((r, i) => ({ i, frac: r - Math.floor(r) }))
+    .sort((a, b) => b.frac - a.frac);
+  for (let k = 0; k < order.length && remainder > 0; k++) {
+    const idx = order[k]!.i;
+    cents[idx] = (cents[idx] ?? 0) + 1;
+    remainder--;
+  }
+  return cents.map((c) => c / 100);
+}
+
+/**
+ * Tuile produit mémoïsée : ne se re-render que si ses props changent (produit,
+ * réglages d'affichage). Empêche le re-render de toute la grille (jusqu'à 500
+ * tuiles) à chaque modification du panier.
+ */
+const ProductTile = memo(function ProductTile({
+  product, onPick, padding, titleFontSize, showImage, showPrice, showTaxBadge,
+}: {
+  product: PosProduct;
+  onPick: (p: PosProduct) => void;
+  padding: string;
+  titleFontSize: string;
+  showImage: boolean;
+  showPrice: boolean;
+  showTaxBadge: boolean;
+}) {
+  return (
+    <button
+      onClick={() => onPick(product)}
+      className={`card ${padding} hover:shadow-md hover:border-gray-300 transition-all active:scale-[0.98] aspect-[5/3] grid place-items-center text-center`}
+      style={product.color ? { backgroundColor: product.color } : undefined}
+    >
+      <div className="flex flex-col items-center justify-center gap-1.5 max-w-full">
+        {showImage && product.image_url && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={product.image_url} alt="" className="h-12 w-12 rounded-md object-cover mb-1" />
+        )}
+        <span className={`${titleFontSize} font-semibold text-ink leading-tight line-clamp-2`}>
+          {product.name}
+        </span>
+        {showPrice && (
+          <span className="text-sm font-medium text-ink-soft">
+            {product.price_is_free ? 'prix libre' : formatEUR(product.sale_price_ttc)}
+          </span>
+        )}
+        {showTaxBadge && (
+          <span className="chip text-[10px] px-1.5 py-0">{product.tax_rate}%</span>
+        )}
+      </div>
+    </button>
+  );
+});
