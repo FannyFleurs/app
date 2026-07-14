@@ -89,6 +89,13 @@ export async function POST(req: Request) {
   if ('response' in parsed) return parsed.response;
   const d = parsed.data;
 
+  // Sécurité : seul un super_admin peut créer/attribuer un rôle plateforme
+  // (super_admin, support_technique). Empêche un owner de tenant de
+  // s'auto-élever et d'accéder à toutes les organisations.
+  if ((d.role === 'super_admin' || d.role === 'support_technique') && g.user.role !== 'super_admin') {
+    return jsonError('FORBIDDEN_ROLE', 403);
+  }
+
   // Email facultatif (vendeur PIN). Normalisé, null si absent.
   const email = d.email && d.email.trim() ? d.email.trim().toLowerCase() : null;
 

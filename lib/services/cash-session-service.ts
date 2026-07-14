@@ -34,13 +34,23 @@ export class CashSessionService {
       if (existing.rowCount && existing.rowCount > 0) {
         throw new Error('CASH_SESSION_ALREADY_OPEN');
       }
-      const ins = await client.query<{ id: string }>(
-        `INSERT INTO cash_sessions
-           (organization_id, store_id, register_id, opened_by, opening_float)
-         VALUES ($1,$2,$3,$4,$5)
-         RETURNING id`,
-        [args.organizationId, args.storeId, args.registerId, args.userId, args.openingFloat],
-      );
+      let ins: { rows: { id: string }[] };
+      try {
+        ins = await client.query<{ id: string }>(
+          `INSERT INTO cash_sessions
+             (organization_id, store_id, register_id, opened_by, opening_float)
+           VALUES ($1,$2,$3,$4,$5)
+           RETURNING id`,
+          [args.organizationId, args.storeId, args.registerId, args.userId, args.openingFloat],
+        );
+      } catch (e) {
+        // Course « double-tap » : l'index unique partiel (migration 0041)
+        // rejette une 2ᵉ session ouverte pour ce poste → erreur propre.
+        if ((e as { code?: string }).code === '23505') {
+          throw new Error('CASH_SESSION_ALREADY_OPEN');
+        }
+        throw e;
+      }
 
       const fiscal = new FiscalCore(client);
       await fiscal.recordEvent({

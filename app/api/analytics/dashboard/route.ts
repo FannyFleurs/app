@@ -80,7 +80,7 @@ export async function GET(req: Request) {
               COUNT(DISTINCT customer_id)::int AS customers
          FROM sales s
         WHERE s.organization_id = $1 AND s.status = 'validated'
-          AND s.validated_at::date BETWEEN $2::date AND $3::date ${storeSql}`,
+          AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date ${storeSql}`,
       args,
     )).rows[0]!;
     const m = (await query<{ revenue_ht: string; cost_ht: string }>(
@@ -89,7 +89,7 @@ export async function GET(req: Request) {
          FROM sale_lines sl JOIN sales s ON s.id = sl.sale_id
          LEFT JOIN products p ON p.id = sl.product_id
         WHERE s.organization_id = $1 AND s.status = 'validated'
-          AND s.validated_at::date BETWEEN $2::date AND $3::date ${storeSql}`,
+          AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date ${storeSql}`,
       args,
     )).rows[0]!;
     const ca_ttc = Number(s.ca_ttc), ca_ht = Number(s.ca_ht), tickets = Number(s.tickets);
@@ -105,25 +105,25 @@ export async function GET(req: Request) {
   // ---- Séries journalières (revenu + marge) --------------------------------
   async function dailyRevenue(args: unknown[]) {
     return (await query<{ d: string; ttc: string; ht: string; n: number }>(
-      `SELECT s.validated_at::date::text AS d,
+      `SELECT (s.validated_at AT TIME ZONE 'Europe/Paris')::date::text AS d,
               COALESCE(SUM(total_ttc),0)::text AS ttc,
               COALESCE(SUM(total_ht),0)::text  AS ht,
               COUNT(*)::int AS n
          FROM sales s
         WHERE s.organization_id = $1 AND s.status = 'validated'
-          AND s.validated_at::date BETWEEN $2::date AND $3::date ${storeSql}
+          AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date ${storeSql}
         GROUP BY 1`,
       args,
     )).rows;
   }
   async function dailyMarge(args: unknown[]) {
     return (await query<{ d: string; marge: string }>(
-      `SELECT s.validated_at::date::text AS d,
+      `SELECT (s.validated_at AT TIME ZONE 'Europe/Paris')::date::text AS d,
               COALESCE(SUM(sl.line_ht - COALESCE(p.purchase_price_ht,0)*sl.quantity),0)::text AS marge
          FROM sale_lines sl JOIN sales s ON s.id = sl.sale_id
          LEFT JOIN products p ON p.id = sl.product_id
         WHERE s.organization_id = $1 AND s.status = 'validated'
-          AND s.validated_at::date BETWEEN $2::date AND $3::date ${storeSql}
+          AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date ${storeSql}
         GROUP BY 1`,
       args,
     )).rows;
@@ -132,12 +132,12 @@ export async function GET(req: Request) {
   // ---- CA par heure --------------------------------------------------------
   async function hourly(args: unknown[]) {
     return (await query<{ h: number; ttc: string; ht: string }>(
-      `SELECT EXTRACT(HOUR FROM s.validated_at)::int AS h,
+      `SELECT EXTRACT(HOUR FROM (s.validated_at AT TIME ZONE 'Europe/Paris'))::int AS h,
               COALESCE(SUM(total_ttc),0)::text AS ttc,
               COALESCE(SUM(total_ht),0)::text  AS ht
          FROM sales s
         WHERE s.organization_id = $1 AND s.status = 'validated'
-          AND s.validated_at::date BETWEEN $2::date AND $3::date ${storeSql}
+          AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date ${storeSql}
         GROUP BY 1`,
       args,
     )).rows;
@@ -146,12 +146,12 @@ export async function GET(req: Request) {
   // ---- CA par jour de semaine ---------------------------------------------
   async function weekday(args: unknown[]) {
     return (await query<{ dow: number; ttc: string; ht: string }>(
-      `SELECT EXTRACT(DOW FROM s.validated_at)::int AS dow,
+      `SELECT EXTRACT(DOW FROM (s.validated_at AT TIME ZONE 'Europe/Paris'))::int AS dow,
               COALESCE(SUM(total_ttc),0)::text AS ttc,
               COALESCE(SUM(total_ht),0)::text  AS ht
          FROM sales s
         WHERE s.organization_id = $1 AND s.status = 'validated'
-          AND s.validated_at::date BETWEEN $2::date AND $3::date ${storeSql}
+          AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date ${storeSql}
         GROUP BY 1`,
       args,
     )).rows;
@@ -172,7 +172,7 @@ export async function GET(req: Request) {
       `SELECT pay.method, COALESCE(SUM(pay.amount),0)::text AS amount
          FROM payments pay JOIN sales s ON s.id = pay.sale_id
         WHERE s.organization_id = $1 AND s.status = 'validated'
-          AND s.validated_at::date BETWEEN $2::date AND $3::date ${storeSql}
+          AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date ${storeSql}
         GROUP BY pay.method
         ORDER BY 2 DESC`,
       argsCur,
@@ -185,7 +185,7 @@ export async function GET(req: Request) {
               COALESCE(SUM(sl.line_ttc),0)::text AS ttc
          FROM sale_lines sl JOIN sales s ON s.id = sl.sale_id
         WHERE s.organization_id = $1 AND s.status = 'validated'
-          AND s.validated_at::date BETWEEN $2::date AND $3::date ${storeSql}
+          AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date ${storeSql}
         GROUP BY sl.tax_rate ORDER BY sl.tax_rate`,
       argsCur,
     ),
@@ -197,7 +197,7 @@ export async function GET(req: Request) {
               COALESCE(SUM(sl.line_ht),0)::text  AS ht
          FROM sale_lines sl JOIN sales s ON s.id = sl.sale_id
         WHERE s.organization_id = $1 AND s.status = 'validated'
-          AND s.validated_at::date BETWEEN $2::date AND $3::date ${storeSql}
+          AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date ${storeSql}
         GROUP BY sl.label ORDER BY SUM(sl.line_ttc) DESC`,
       argsCur,
     ),

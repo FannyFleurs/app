@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { SignJWT, jwtVerify } from 'jose';
 import { createHash, randomBytes } from 'node:crypto';
 import { cookies } from 'next/headers';
@@ -153,12 +154,14 @@ export function sessionCookieOptions() {
   };
 }
 
-export async function readSessionFromCookie(): Promise<AuthUser | null> {
+// Mémoïsé par requête (React cache) : le layout, la page et les guards qui
+// lisent la session pendant le même rendu partagent une seule requête DB.
+export const readSessionFromCookie = cache(async (): Promise<AuthUser | null> => {
   const store = cookies();
   const cookie = store.get(COOKIE_NAME);
   if (!cookie) return null;
   return readSessionFromToken(cookie.value);
-}
+});
 
 export async function readSessionFromToken(token: string): Promise<AuthUser | null> {
   try {

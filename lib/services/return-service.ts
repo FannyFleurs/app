@@ -233,18 +233,33 @@ export class ReturnService {
           [d.product_id],
         );
         if (!trackRes.rows[0]?.track_stock) continue;
-        const lvl = await client.query<{ id: string; quantity: string }>(
-          `INSERT INTO stock_levels (organization_id, store_id, product_id, variant_id, quantity)
-           VALUES ($1,$2,$3,$4,0)
-           ON CONFLICT (store_id, product_id, variant_id) DO UPDATE SET store_id = EXCLUDED.store_id
-           RETURNING id, quantity`,
-          [args.organizationId, sale.store_id, d.product_id, d.variant_id],
+        // Voir sale-service : ON CONFLICT ne matche pas les variant_id NULL,
+        // d'où lecture verrouillée NULL-safe puis update/insert.
+        const existing = await client.query<{ id: string; quantity: string }>(
+          `SELECT id, quantity FROM stock_levels
+            WHERE store_id = $1 AND product_id = $2
+              AND variant_id IS NOT DISTINCT FROM $3
+            FOR UPDATE`,
+          [sale.store_id, d.product_id, d.variant_id],
         );
-        const prev = Number(lvl.rows[0]!.quantity);
+        let levelId: string;
+        let prev: number;
+        if (existing.rows[0]) {
+          levelId = existing.rows[0].id;
+          prev = Number(existing.rows[0].quantity);
+        } else {
+          const ins = await client.query<{ id: string }>(
+            `INSERT INTO stock_levels (organization_id, store_id, product_id, variant_id, quantity)
+             VALUES ($1,$2,$3,$4,0) RETURNING id`,
+            [args.organizationId, sale.store_id, d.product_id, d.variant_id],
+          );
+          levelId = ins.rows[0]!.id;
+          prev = 0;
+        }
         const next = prev + d.quantity;
         await client.query(
           `UPDATE stock_levels SET quantity = $1, updated_at = now() WHERE id = $2`,
-          [next, lvl.rows[0]!.id],
+          [next, levelId],
         );
         await client.query(
           `INSERT INTO stock_movements

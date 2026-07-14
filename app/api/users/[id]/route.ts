@@ -29,6 +29,11 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   if ('response' in parsed) return parsed.response;
   const d = parsed.data;
 
+  // Sécurité : seul un super_admin peut attribuer un rôle plateforme.
+  if ((d.role === 'super_admin' || d.role === 'support_technique') && g.user.role !== 'super_admin') {
+    return jsonError('FORBIDDEN_ROLE', 403);
+  }
+
   const sets: string[] = [];
   const vals: unknown[] = [];
   let i = 1;

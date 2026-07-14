@@ -6,24 +6,26 @@ import { getOrCreateDeviceId } from '@/lib/device';
 import OfflineBanner from '@/components/OfflineBanner';
 import { enqueueSale } from '@/lib/offline/queue';
 import { offlinePosEnabled } from '@/lib/offline/sync';
-import PaymentModal from './PaymentModal';
 import RegisterPicker from './RegisterPicker';
-import ReceiptPreviewModal from './ReceiptPreviewModal';
-import HoldListModal from './HoldListModal';
-import OpenSessionModal from './OpenSessionModal';
-import FreePriceModal from './FreePriceModal';
-import CustomerPickerModal, { type PickedCustomer } from './CustomerPickerModal';
-import LineDiscountModal from './LineDiscountModal';
-import JustificationModal from './JustificationModal';
-import CartActionsModal from './CartActionsModal';
-import OrderModal from './OrderModal';
+import { type PickedCustomer } from './CustomerPickerModal';
 import dynamic from 'next/dynamic';
 import Icon from '@/components/Icon';
 import { useSchoolMode } from '@/lib/school-mode';
 import { tileMetrics, type PosUiSettings } from '@/lib/settings/pos-ui';
 
-// Chargé uniquement à l'ouverture (le bundle ZXing pèse ~200 ko).
+// Modales chargées à la demande : aucune ne s'affiche au premier rendu, donc
+// on les sort du bundle initial de la caisse (temps d'affichage plus court).
 const BarcodeScannerModal = dynamic(() => import('./BarcodeScannerModal'), { ssr: false });
+const PaymentModal = dynamic(() => import('./PaymentModal'), { ssr: false });
+const ReceiptPreviewModal = dynamic(() => import('./ReceiptPreviewModal'), { ssr: false });
+const HoldListModal = dynamic(() => import('./HoldListModal'), { ssr: false });
+const OpenSessionModal = dynamic(() => import('./OpenSessionModal'), { ssr: false });
+const FreePriceModal = dynamic(() => import('./FreePriceModal'), { ssr: false });
+const CustomerPickerModal = dynamic(() => import('./CustomerPickerModal'), { ssr: false });
+const LineDiscountModal = dynamic(() => import('./LineDiscountModal'), { ssr: false });
+const JustificationModal = dynamic(() => import('./JustificationModal'), { ssr: false });
+const CartActionsModal = dynamic(() => import('./CartActionsModal'), { ssr: false });
+const OrderModal = dynamic(() => import('./OrderModal'), { ssr: false });
 
 export interface PosProduct {
   id: string;

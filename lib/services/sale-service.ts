@@ -586,19 +586,37 @@ export class SaleService {
       for (const line of lineProductRes.rows) {
         if (!line.track_stock) continue;
         const qty = Number(line.quantity);
-        // Lit ou crée le niveau stock pour ce store / produit / variant
-        const lvl = await client.query<{ id: string; quantity: string }>(
-          `INSERT INTO stock_levels (organization_id, store_id, product_id, variant_id, quantity)
-           VALUES ($1,$2,$3,$4,0)
-           ON CONFLICT (store_id, product_id, variant_id) DO UPDATE SET store_id = EXCLUDED.store_id
-           RETURNING id, quantity`,
-          [args.organizationId, sale.store_id, line.product_id, line.variant_id],
+        // Lit (avec verrou) ou crée le niveau de stock pour ce store / produit
+        // / variant. IMPORTANT : `variant_id` peut être NULL et un ON CONFLICT
+        // sur (store_id, product_id, variant_id) ne matche JAMAIS quand
+        // variant_id est NULL (les NULL SQL sont distincts) — ce qui créait un
+        // nouveau niveau à 0 à chaque vente et ne débitait jamais le vrai
+        // stock. On utilise donc `IS NOT DISTINCT FROM` + FOR UPDATE.
+        const existing = await client.query<{ id: string; quantity: string }>(
+          `SELECT id, quantity FROM stock_levels
+            WHERE store_id = $1 AND product_id = $2
+              AND variant_id IS NOT DISTINCT FROM $3
+            FOR UPDATE`,
+          [sale.store_id, line.product_id, line.variant_id],
         );
-        const prev = Number(lvl.rows[0]!.quantity);
+        let levelId: string;
+        let prev: number;
+        if (existing.rows[0]) {
+          levelId = existing.rows[0].id;
+          prev = Number(existing.rows[0].quantity);
+        } else {
+          const ins = await client.query<{ id: string }>(
+            `INSERT INTO stock_levels (organization_id, store_id, product_id, variant_id, quantity)
+             VALUES ($1,$2,$3,$4,0) RETURNING id`,
+            [args.organizationId, sale.store_id, line.product_id, line.variant_id],
+          );
+          levelId = ins.rows[0]!.id;
+          prev = 0;
+        }
         const next = prev - qty;
         await client.query(
           `UPDATE stock_levels SET quantity = $1, updated_at = now() WHERE id = $2`,
-          [next, lvl.rows[0]!.id],
+          [next, levelId],
         );
         await client.query(
           `INSERT INTO stock_movements

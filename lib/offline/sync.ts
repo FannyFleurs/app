@@ -23,9 +23,13 @@ export async function syncOfflineSales(): Promise<number> {
   try {
     const pending = await allQueuedSales();
     for (const sale of pending) {
-      const ok = await pushOne(sale);
-      if (ok) { await removeQueuedSale(sale.client_ref); done++; }
-      else break; // erreur réseau : on arrête, on retentera plus tard
+      const res = await pushOne(sale);
+      if (res === 'ok') { await removeQueuedSale(sale.client_ref); done++; }
+      else if (res === 'skip') continue; // erreur métier propre à CETTE vente :
+                                         // on la laisse en file et on continue
+                                         // (ne bloque plus toute la file).
+      else break;                        // 'stop' : réseau/serveur/journée
+                                         // fermée → on réessaiera plus tard.
     }
   } finally {
     syncing = false;
@@ -33,20 +37,23 @@ export async function syncOfflineSales(): Promise<number> {
   return done;
 }
 
-async function pushOne(sale: QueuedSale): Promise<boolean> {
+type PushResult = 'ok' | 'skip' | 'stop';
+
+async function pushOne(sale: QueuedSale): Promise<PushResult> {
   try {
     const r = await fetch('/api/sales/offline', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(sale),
     });
-    if (r.ok) return true;               // scellée (ou duplicate = déjà scellée)
-    // 409 journée fermée / 4xx métier : on garde la vente en file (l'admin
-    // rouvrira la journée). On ne boucle pas dessus indéfiniment ici : on
-    // s'arrête pour ne pas spammer, elle repartira à la prochaine passe.
-    if (r.status >= 400 && r.status < 500) return false;
-    return false;                         // 5xx : on réessaiera
+    if (r.ok) return 'ok';                // scellée (ou duplicate = déjà scellée)
+    // 409 = journée fermée : concerne toute la file → on arrête la passe.
+    if (r.status === 409) return 'stop';
+    // Autre 4xx = erreur métier propre à cette vente : on la saute pour ne
+    // pas bloquer les ventes suivantes (elle reste en file, retentée plus tard).
+    if (r.status >= 400 && r.status < 500) return 'skip';
+    return 'stop';                        // 5xx : on réessaiera toute la passe
   } catch {
-    return false;                         // hors-ligne / réseau coupé
+    return 'stop';                        // hors-ligne / réseau coupé
   }
 }

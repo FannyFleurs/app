@@ -86,6 +86,24 @@ async function hasDiscountColumns(): Promise<boolean> {
   return _hasDiscount;
 }
 
+// Introspection générique mise en cache (module-level) pour éviter de
+// requêter information_schema à chaque appel POS.
+const _colCache = new Map<string, boolean>();
+async function hasProductColumn(col: string): Promise<boolean> {
+  const cached = _colCache.get(col);
+  if (cached !== undefined) return cached;
+  const r = await query<{ exists: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'products' AND column_name = $1
+     ) AS exists`,
+    [col],
+  );
+  const has = !!r.rows[0]?.exists;
+  _colCache.set(col, has);
+  return has;
+}
+
 // Cache d'introspection : indique si la colonne products.is_top_product
 // existe (migration 0008 appliquée). Évite de planter si la migration n'a
 // pas encore tourné sur la base.
@@ -131,25 +149,12 @@ export async function GET(req: Request) {
     ? `COALESCE(p.is_top_product, FALSE) AS is_top_product`
     : `FALSE AS is_top_product`;
 
-  // Détection optionnelle de la colonne no_discount (migration 0012).
-  const ndRes = await query<{ exists: boolean }>(
-    `SELECT EXISTS (
-       SELECT 1 FROM information_schema.columns
-        WHERE table_name = 'products' AND column_name = 'no_discount'
-     ) AS exists`,
-  );
-  const ndCol = ndRes.rows[0]?.exists
+  // Détection optionnelle des colonnes no_discount (0012) et color (0018),
+  // mise en cache module-level (plus de requête information_schema par appel).
+  const ndCol = (await hasProductColumn('no_discount'))
     ? `COALESCE(p.no_discount, FALSE) AS no_discount`
     : `FALSE AS no_discount`;
-
-  // Détection optionnelle de la colonne color (migration 0018).
-  const colorRes = await query<{ exists: boolean }>(
-    `SELECT EXISTS (
-       SELECT 1 FROM information_schema.columns
-        WHERE table_name = 'products' AND column_name = 'color'
-     ) AS exists`,
-  );
-  const colorCol = colorRes.rows[0]?.exists ? `p.color` : `NULL AS color`;
+  const colorCol = (await hasProductColumn('color')) ? `p.color` : `NULL AS color`;
   const storeIdsCol = (await hasStoreIdsColumn())
     ? `p.store_ids`
     : `'{}'::uuid[] AS store_ids`;

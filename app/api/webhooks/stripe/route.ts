@@ -51,11 +51,13 @@ export async function POST(req: Request) {
   );
   const cfg = mergeStripeDefaults(cfgRes.rows[0]?.value ?? null);
 
-  // Validation de la signature Stripe (HMAC SHA256)
-  if (cfg.webhook_secret && sigHeader) {
-    if (!verifyStripeSignature(raw, sigHeader, cfg.webhook_secret)) {
-      return NextResponse.json({ error: 'INVALID_SIGNATURE' }, { status: 400 });
-    }
+  // Validation de la signature Stripe (HMAC SHA256) — OBLIGATOIRE.
+  // Sans secret configuré ou sans en-tête de signature, on refuse : sinon un
+  // acteur malveillant pourrait POSTer un faux événement « paid » sans
+  // signature et marquer une vente/commande comme payée gratuitement.
+  if (!cfg.webhook_secret || !sigHeader
+      || !verifyStripeSignature(raw, sigHeader, cfg.webhook_secret)) {
+    return NextResponse.json({ error: 'INVALID_SIGNATURE' }, { status: 400 });
   }
 
   let newStatus: 'paid' | 'failed' | null = null;

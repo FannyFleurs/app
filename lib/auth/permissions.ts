@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { query } from '@/lib/db/client';
 import { PERMISSIONS, type Permission, type Role } from './rbac';
 import type { AuthUser } from './session';
@@ -12,11 +13,11 @@ import type { AuthUser } from './session';
  *
  * `super_admin` court-circuite toujours : accès total cross-orga.
  */
-export async function resolveEffectivePermissions(
+export const resolveEffectivePermissions = cache(async (
   userId: string,
   role: Role,
   organizationId: string,
-): Promise<Set<Permission>> {
+): Promise<Set<Permission>> => {
   const result = new Set<Permission>();
 
   if (role === 'super_admin') {
@@ -60,7 +61,7 @@ export async function resolveEffectivePermissions(
   }
 
   return result;
-}
+});
 
 export async function hasEffectivePermission(
   userId: string,
