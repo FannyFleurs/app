@@ -8,7 +8,7 @@ import { query } from '@/lib/db/client';
 import { pushWalletUpdateForCustomer } from '@/lib/wallet/notify';
 
 const paymentSchema = z.object({
-  method: z.enum(['cash','card','check','transfer','gift_card','credit_note','deferred','other']),
+  method: z.enum(['cash','card','check','transfer','gift_card','credit_note','deferred','other','payment_link']),
   amount: z.number().positive(),
   given_amount: z.number().min(0).optional(),
   reference: z.string().max(80).optional(),

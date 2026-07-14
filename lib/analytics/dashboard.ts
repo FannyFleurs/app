@@ -86,5 +86,6 @@ export const PAYMENT_LABELS: Record<string, string> = {
   gift_card: 'Bon cadeau',
   credit_note: 'Avoir',
   deferred: 'En compte',
+  payment_link: 'Lien de paiement',
   other: 'Autre',
 };

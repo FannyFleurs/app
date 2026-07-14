@@ -30,7 +30,8 @@ export interface SalePaymentInput {
     | 'gift_card'
     | 'credit_note'
     | 'deferred'
-    | 'other';
+    | 'other'
+    | 'payment_link';
   amount: number;
   given_amount?: number;
   reference?: string;
@@ -333,8 +334,12 @@ export class SaleService {
                 WHERE id = $1`,
               [sale.customer_id, p.amount],
             );
-          } catch {
-            // Migration 0012 pas encore appliquée : on ignore silencieusement.
+          } catch (e) {
+            // On ne tolère QUE le cas « colonne absente » (migration 0012 pas
+            // appliquée, code 42703). Toute autre erreur doit faire échouer
+            // la transaction — sinon la vente serait scellée « payée » sans
+            // que l'ardoise du client soit débitée (dette non enregistrée).
+            if ((e as { code?: string }).code !== '42703') throw e;
           }
         }
       }

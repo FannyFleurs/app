@@ -277,18 +277,30 @@ export class ReturnService {
       }
 
       // 9. Effet selon le mode de remboursement
-      if (args.refundMethod === 'cash' && sale.cash_session_id) {
-        // Sortie immédiate du tiroir-caisse
-        await client.query(
-          `INSERT INTO cash_movements
-             (organization_id, cash_session_id, movement_type, amount, reason, user_id)
-           VALUES ($1,$2,'out',$3,$4,$5)`,
-          [
-            args.organizationId, sale.cash_session_id, refundAmount,
-            `Remboursement espèces avoir ${number}`,
-            args.userId,
-          ],
+      if (args.refundMethod === 'cash') {
+        // La sortie d'espèces doit impacter le tiroir ACTUELLEMENT ouvert sur
+        // ce poste, pas la session d'origine de la vente (souvent déjà close
+        // si le remboursement a lieu un autre jour). À défaut de session
+        // ouverte, on retombe sur la session d'origine.
+        const openSess = await client.query<{ id: string }>(
+          `SELECT id FROM cash_sessions
+            WHERE register_id = $1 AND status = 'open'
+            ORDER BY opened_at DESC LIMIT 1`,
+          [sale.register_id],
         );
+        const targetSession = openSess.rows[0]?.id ?? sale.cash_session_id;
+        if (targetSession) {
+          await client.query(
+            `INSERT INTO cash_movements
+               (organization_id, cash_session_id, movement_type, amount, reason, user_id)
+             VALUES ($1,$2,'out',$3,$4,$5)`,
+            [
+              args.organizationId, targetSession, refundAmount,
+              `Remboursement espèces avoir ${number}`,
+              args.userId,
+            ],
+          );
+        }
       } else if (args.refundMethod === 'on_account' && sale.customer_id) {
         // Crédite le solde "en compte" du client (positif = avoir un crédit)
         try {
@@ -299,8 +311,9 @@ export class ReturnService {
               WHERE id = $1`,
             [sale.customer_id, refundAmount],
           );
-        } catch {
-          // Migration 0012 pas appliquée : on tracera l'audit, c'est tout.
+        } catch (e) {
+          // Seule la colonne absente (migration 0012, code 42703) est tolérée.
+          if ((e as { code?: string }).code !== '42703') throw e;
         }
       }
       // Pour 'card', 'transfer', 'check' : aucune écriture automatique

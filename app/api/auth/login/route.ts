@@ -13,6 +13,10 @@ const schema = z.object({
   password: z.string().min(1).max(200),
 });
 
+// Hash bcrypt factice (coût 12) pour la comparaison anti-timing sur un email
+// inconnu. Ne correspond à aucun mot de passe réel.
+const DUMMY_HASH = '$2a$12$Hjd8qPaVU68FTG4AeK1aI.22TcxVK4cuCs9dKKClAsPKerUohCmzq';
+
 const MAX_ATTEMPTS = 8;
 const LOCK_MINUTES = 15;
 
@@ -62,6 +66,10 @@ async function handleLogin(req: Request) {
   );
   const user = userRes.rows[0];
   if (!user || !user.is_active) {
+    // Compare bcrypt « à vide » pour égaliser le temps de réponse avec le cas
+    // « utilisateur connu, mauvais mot de passe » → empêche l'énumération des
+    // emails valides par mesure de latence.
+    await verifyPassword(password, DUMMY_HASH).catch(() => false);
     await audit({
       organizationId: null, userId: null, action: 'auth.login.failed',
       ip, userAgent: ua, payload: { email, reason: 'unknown_user' }, severity: 'security',

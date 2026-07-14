@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { formatEUR, round2 } from '@/lib/services/money';
 import { getOrCreateDeviceId } from '@/lib/device';
 import OfflineBanner from '@/components/OfflineBanner';
@@ -448,8 +448,12 @@ export default function CashRegister({
     return { cats, uncategorized: uncat };
   }, [products, categories]);
 
-  // Liste des produits affichés (en mode recherche OU dans une catégorie)
-  const searchQ = search.trim().toLowerCase();
+  // Liste des produits affichés (en mode recherche OU dans une catégorie).
+  // On filtre sur une valeur DIFFÉRÉE de la recherche : la frappe reste
+  // fluide même avec plusieurs centaines de produits (le recalcul de la
+  // grille ne bloque plus chaque touche).
+  const deferredSearch = useDeferredValue(search);
+  const searchQ = deferredSearch.trim().toLowerCase();
   const visibleProducts = useMemo(() => {
     if (searchQ) {
       return products.filter((p) =>
@@ -964,7 +968,14 @@ export default function CashRegister({
         setTimeout(() => searchRef.current?.focus(), 0);
       } else if (e.key === 'F2') { e.preventDefault(); setShowFreePrice({}); }
       else if (e.key === 'F4') { e.preventDefault(); setShowHeld(true); }
-      else if (e.key === 'F9' && lines.length > 0) { e.preventDefault(); setShowPayment(true); }
+      else if (e.key === 'F9' && lines.length > 0) {
+        e.preventDefault();
+        // Comme le bouton « Payer » : on synchronise les lignes avec le
+        // serveur avant d'ouvrir le paiement, sinon un F9 dans la fenêtre de
+        // debounce (250 ms) validerait un total périmé (PAYMENTS_MISMATCH).
+        if (shouldGoOffline()) { setShowPayment(true); }
+        else { void (async () => { const id = await ensureSale(); if (id) { await syncLines(); setShowPayment(true); } })(); }
+      }
       else if (e.key === 'Escape' && view.kind === 'products' && !searchQ) {
         e.preventDefault(); setView({ kind: 'categories' });
       }
