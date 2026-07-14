@@ -19,6 +19,16 @@ interface Product {
   cost_ht: number; marge_ht: number; marge_pct: number;
 }
 interface TvaRow { rate: number; base_ht: number; tva: number; ttc: number }
+interface ReturnsInfo {
+  count: number;
+  cancelled_sales: number;
+  total: number;
+  items: Array<{
+    id: string; number: string; amount: string; reason: string;
+    created_at: string; receipt_number: string | null;
+    sale_status: string | null; store_name: string | null;
+  }>;
+}
 interface Vendor {
   user_id: string; full_name: string;
   tickets_count: number; ca_ttc: number; ca_ht: number; avg_ticket_ttc: number;
@@ -60,6 +70,7 @@ export default function CADashboard({
   const [products, setProducts] = useState<Product[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [tva, setTva] = useState<TvaRow[]>([]);
+  const [returnsInfo, setReturnsInfo] = useState<ReturnsInfo | null>(null);
   const [loading, setLoading] = useState(false);
   const [refreshedAt, setRefreshedAt] = useState<Date | null>(null);
   const [showFullSales, setShowFullSales] = useState(false);
@@ -74,18 +85,20 @@ export default function CADashboard({
     const qs = new URLSearchParams({ from: range.from, to: range.to });
     if (storeId) qs.set('store_id', storeId);
     try {
-      const [rS, rH, rP, rV, rT] = await Promise.all([
+      const [rS, rH, rP, rV, rT, rR] = await Promise.all([
         fetch(`/api/ca/summary?${qs.toString()}`),
         fetch(`/api/ca/hourly?${qs.toString()}`),
         fetch(`/api/ca/products?${qs.toString()}&sort=ca_ttc&order=desc&limit=100`),
         fetch(`/api/ca/vendors?${qs.toString()}`),
         fetch(`/api/ca/tva?${qs.toString()}`),
+        fetch(`/api/ca/returns?${qs.toString()}`),
       ]);
       if (rS.ok) setSummary(await rS.json());
       if (rH.ok) setHours((await rH.json()).hours);
       if (rP.ok) setProducts((await rP.json()).products);
       if (rV.ok) setVendors((await rV.json()).vendors);
       if (rT.ok) setTva((await rT.json()).tva);
+      if (rR.ok) setReturnsInfo(await rR.json());
       setRefreshedAt(new Date());
     } finally {
       setLoading(false);
@@ -168,6 +181,7 @@ export default function CADashboard({
             products={products}
             vendors={vendors}
             tva={tva}
+            returnsInfo={returnsInfo}
             period={period}
             setPeriod={setPeriod}
             customFrom={customFrom} setCustomFrom={setCustomFrom}
@@ -257,7 +271,7 @@ function TopBar({
 /* ------------------------------------------------------------------ */
 
 function XzView({
-  summary, hours, products, vendors, tva,
+  summary, hours, products, vendors, tva, returnsInfo,
   period, setPeriod, customFrom, setCustomFrom, customTo, setCustomTo, today,
   showFullSales, setShowFullSales, refreshedAt,
 }: {
@@ -266,6 +280,7 @@ function XzView({
   products: Product[];
   vendors: Vendor[];
   tva: TvaRow[];
+  returnsInfo: ReturnsInfo | null;
   period: Period; setPeriod: (p: Period) => void;
   customFrom: string; setCustomFrom: (v: string) => void;
   customTo: string;   setCustomTo: (v: string) => void;
@@ -294,6 +309,11 @@ function XzView({
         <div className="mt-2 text-sm text-accent-deep/70 tabular-nums">
           {summary ? `${formatEUR(summary.ca_ht)} HT` : ''}
         </div>
+        {returnsInfo && returnsInfo.total > 0 && (
+          <div className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-warning/15 text-warning px-2.5 py-1 text-xs font-semibold tabular-nums">
+            ↩ {formatEUR(returnsInfo.total)} de retours ({returnsInfo.count})
+          </div>
+        )}
       </div>
 
       {/* 2 KPIs */}
@@ -315,6 +335,60 @@ function XzView({
                   value={summary ? String(summary.items_sold) : '—'}
                   hint={summary ? `${summary.unique_products_sold} produits` : undefined} />
       </div>
+
+      {/* Retours & annulations — visibles à distance, avec les motifs */}
+      {returnsInfo && returnsInfo.count > 0 && (
+        <div className="rounded-2xl bg-white border border-warning/40 p-4">
+          <div className="flex items-baseline justify-between mb-3">
+            <h3 className="font-semibold">↩ Retours & annulations</h3>
+            <span className="text-sm font-semibold text-warning tabular-nums">
+              -{formatEUR(returnsInfo.total)}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            <div className="rounded-xl bg-warning/10 px-3 py-2">
+              <div className="text-xs text-ink-soft">Retours</div>
+              <div className="text-xl font-semibold tabular-nums">{returnsInfo.count}</div>
+            </div>
+            <div className="rounded-xl bg-danger/10 px-3 py-2">
+              <div className="text-xs text-ink-soft">Ventes annulées</div>
+              <div className="text-xl font-semibold tabular-nums text-danger">{returnsInfo.cancelled_sales}</div>
+            </div>
+          </div>
+          <ul className="divide-y divide-border">
+            {returnsInfo.items.map((r) => (
+              <li key={r.id} className="py-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium flex items-center gap-1.5 flex-wrap">
+                      {r.sale_status === 'cancelled_by_credit_note' && (
+                        <span className="rounded-full bg-danger/10 text-danger px-1.5 py-0.5 text-[10px] font-semibold uppercase">
+                          Annulée
+                        </span>
+                      )}
+                      <span className="truncate">
+                        {r.receipt_number ? `Ticket ${r.receipt_number}` : `Avoir ${r.number}`}
+                      </span>
+                    </div>
+                    <div className="text-xs text-ink-soft truncate">
+                      {new Date(r.created_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                      {r.store_name && ` · ${r.store_name}`}
+                    </div>
+                  </div>
+                  <span className="tabular-nums font-medium text-warning whitespace-nowrap">
+                    -{formatEUR(Number(r.amount))}
+                  </span>
+                </div>
+                {r.reason && (
+                  <div className="mt-1 text-xs text-ink-soft italic">
+                    Motif : {r.reason}
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* CA par heure */}
       <HourlyChart hours={hours} />
