@@ -281,10 +281,10 @@ export default function PaymentModal({ saleId, totalTtc, loyaltyRedemption, scho
         <div className="lg:grid lg:grid-cols-[1fr_240px_280px] lg:gap-5 flex-1 overflow-y-auto px-3 py-3 lg:p-0">
           {/* Colonne 1 : montant + numpad */}
           <div>
-            <div className="rounded-xl border border-border p-3 lg:p-4 bg-gray-50">
+            <div className="rounded-xl border border-border p-2 lg:p-4 bg-gray-50">
               <div className="text-[10px] lg:text-xs uppercase tracking-wider text-ink-soft">Montant à saisir</div>
               <div className="mt-0.5 flex items-baseline justify-between">
-                <span className="text-2xl lg:text-4xl font-semibold tabular-nums">
+                <span className="text-xl lg:text-4xl font-semibold tabular-nums">
                   {amountStr === '' ? '—' : formatEUR(Number(amountStr) || 0)}
                 </span>
                 <button onClick={() => setAmountStr('')}
@@ -295,12 +295,12 @@ export default function PaymentModal({ saleId, totalTtc, loyaltyRedemption, scho
               </div>
             </div>
 
-            <div className="mt-2 lg:mt-3 grid grid-cols-3 gap-2 lg:gap-3">
+            <div className="mt-1.5 lg:mt-3 grid grid-cols-3 gap-1.5 lg:gap-3">
               {['7','8','9','4','5','6','1','2','3','.','0','⌫'].map((k) => (
                 <button
                   key={k}
                   onClick={() => press(k)}
-                  className="h-14 lg:h-20 rounded-xl border border-border bg-white text-2xl lg:text-3xl font-medium hover:bg-gray-50 active:scale-95 transition"
+                  className="h-11 lg:h-20 rounded-xl border border-border bg-white text-xl lg:text-3xl font-medium hover:bg-gray-50 active:scale-95 transition"
                 >
                   {k}
                 </button>
@@ -309,18 +309,18 @@ export default function PaymentModal({ saleId, totalTtc, loyaltyRedemption, scho
           </div>
 
           {/* Colonne 2 : méthodes */}
-          <div className="mt-3 lg:mt-0">
-            <div className="text-[10px] lg:text-xs uppercase tracking-wider text-ink-soft mb-1.5">
+          <div className="mt-2 lg:mt-0">
+            <div className="text-[10px] lg:text-xs uppercase tracking-wider text-ink-soft mb-1">
               Mode de règlement
             </div>
             {/* Mobile : grille 2 colonnes pour gagner de la place. Desktop : pile verticale. */}
-            <div className="grid grid-cols-2 lg:grid-cols-1 gap-2 lg:gap-2.5">
+            <div className="grid grid-cols-2 lg:grid-cols-1 gap-1.5 lg:gap-2.5">
               {methods.map((m) => (
                 <button
                   key={m.kind + m.label}
                   onClick={() => tapMethod(m)}
                   disabled={remaining <= 0 && Number(amountStr || '0') <= 0}
-                  className="btn-soft h-14 lg:h-16 text-base font-medium px-3"
+                  className="btn-soft h-11 lg:h-16 text-sm lg:text-base font-medium px-2 leading-tight"
                 >
                   {m.label}
                 </button>
@@ -329,7 +329,7 @@ export default function PaymentModal({ saleId, totalTtc, loyaltyRedemption, scho
           </div>
 
           {/* Colonne 3 : récap + paiements */}
-          <div className="flex flex-col mt-3 lg:mt-0">
+          <div className="flex flex-col mt-2 lg:mt-0">
             <div className="rounded-xl border border-border p-2.5 lg:p-4 bg-white space-y-1 text-sm">
               <div className="flex justify-between">
                 <span className="text-ink-soft text-xs lg:text-sm">Total dû</span>

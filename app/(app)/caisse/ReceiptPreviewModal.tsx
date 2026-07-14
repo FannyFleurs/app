@@ -158,24 +158,24 @@ export default function ReceiptPreviewModal({ receipt, onClose }: Props) {
             </button>
           </div>
         ) : (
-          <div className="mt-4 grid grid-cols-3 gap-3">
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-2.5">
             <a
               href={pdfUrl}
               target="_blank"
               rel="noreferrer"
-              className="btn-primary h-14 text-base font-semibold grid place-items-center"
+              className="btn-primary h-12 sm:h-14 text-base font-semibold grid place-items-center text-center leading-tight"
             >
               Imprimer / PDF
             </a>
             <button
               onClick={() => setShowEmailModal(true)}
-              className="btn-soft h-14 text-base font-semibold"
+              className="btn-soft h-12 sm:h-14 text-base font-semibold grid place-items-center text-center leading-tight"
             >
               Envoyer par mail
             </button>
             <button
               onClick={onClose}
-              className="btn-ghost h-14 text-base font-semibold"
+              className="btn-ghost h-12 sm:h-14 text-base font-semibold grid place-items-center text-center leading-tight"
             >
               Nouvelle vente
             </button>

@@ -267,7 +267,8 @@ export default function MaJourneeClient() {
               />
             ) : (
               <div className="card overflow-hidden">
-                <table className="w-full text-sm">
+                <div className="overflow-x-auto">
+                <table className="w-full text-sm min-w-[26rem]">
                   <thead className="text-ink-soft text-[10px] uppercase tracking-widest border-b border-border">
                     <tr>
                       <th className="text-left px-4 py-3 font-semibold">Ticket</th>
@@ -300,6 +301,7 @@ export default function MaJourneeClient() {
                     ))}
                   </tbody>
                 </table>
+                </div>
               </div>
             )}
           </div>
@@ -548,34 +550,38 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
         <div className="px-4 py-3 border-b border-border">
           <h3 className="font-semibold text-sm">Articles ({detail.lines.length})</h3>
         </div>
-        <table className="w-full text-sm">
-          <thead className="text-ink-soft text-xs uppercase">
-            <tr>
-              <th className="text-left px-4 py-2">Article</th>
-              <th className="text-right px-4 py-2">Qté</th>
-              <th className="text-right px-4 py-2">PU TTC</th>
-              <th className="text-right px-4 py-2">Remise</th>
-              <th className="text-right px-4 py-2">TVA</th>
-              <th className="text-right px-4 py-2">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {detail.lines.map((l) => (
-              <tr key={l.line_index} className="border-t border-border">
-                <td className="px-4 py-2">{l.label}</td>
-                <td className="px-4 py-2 text-right">{l.quantity}</td>
-                <td className="px-4 py-2 text-right">{formatEUR(Number(l.unit_price_ttc))}</td>
-                <td className="px-4 py-2 text-right">
-                  {Number(l.discount_amount) > 0
-                    ? <span className="text-warning">-{formatEUR(Number(l.discount_amount))}</span>
-                    : <span className="text-ink-soft">—</span>}
-                </td>
-                <td className="px-4 py-2 text-right text-ink-soft">{l.tax_rate}%</td>
-                <td className="px-4 py-2 text-right font-medium">{formatEUR(Number(l.line_ttc))}</td>
+        {/* Défilement horizontal sur mobile : le tableau (6 colonnes) ne
+            déborde plus de l'écran, il glisse dans sa carte. */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[34rem]">
+            <thead className="text-ink-soft text-xs uppercase">
+              <tr>
+                <th className="text-left px-3 py-2">Article</th>
+                <th className="text-right px-3 py-2">Qté</th>
+                <th className="text-right px-3 py-2">PU TTC</th>
+                <th className="text-right px-3 py-2">Remise</th>
+                <th className="text-right px-3 py-2">TVA</th>
+                <th className="text-right px-3 py-2">Total</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {detail.lines.map((l) => (
+                <tr key={l.line_index} className="border-t border-border">
+                  <td className="px-3 py-2">{l.label}</td>
+                  <td className="px-3 py-2 text-right">{l.quantity}</td>
+                  <td className="px-3 py-2 text-right whitespace-nowrap">{formatEUR(Number(l.unit_price_ttc))}</td>
+                  <td className="px-3 py-2 text-right whitespace-nowrap">
+                    {Number(l.discount_amount) > 0
+                      ? <span className="text-warning">-{formatEUR(Number(l.discount_amount))}</span>
+                      : <span className="text-ink-soft">—</span>}
+                  </td>
+                  <td className="px-3 py-2 text-right text-ink-soft">{l.tax_rate}%</td>
+                  <td className="px-3 py-2 text-right font-medium whitespace-nowrap">{formatEUR(Number(l.line_ttc))}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
