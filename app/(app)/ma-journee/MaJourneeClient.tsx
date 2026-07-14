@@ -717,6 +717,7 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
           saleId={s.id}
           receiptNumber={s.receipt_number}
           lines={detail.lines}
+          payments={detail.payments.map((p) => ({ method: p.method, amount: Number(p.amount) }))}
           onClose={() => setShowReturn(false)}
           onSuccess={(cn) => {
             setCreditNote(cn);

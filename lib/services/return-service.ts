@@ -27,6 +27,15 @@ export class ReturnService {
     lines: ReturnLineInput[];
     reason: string;
     refundMethod: 'credit_note' | 'cash' | 'card' | 'transfer' | 'check' | 'on_account';
+    /**
+     * Remboursement multi-modes (ex. vente payée espèces + CB → remboursée
+     * espèces + CB). Si fourni, la somme doit valoir le montant remboursé.
+     * Sinon on retombe sur `refundMethod` seul (compat).
+     */
+    refunds?: Array<{
+      method: 'credit_note' | 'cash' | 'card' | 'transfer' | 'check' | 'on_account';
+      amount: number;
+    }>;
   }): Promise<{
     credit_note_id: string;
     number: string;
@@ -146,9 +155,23 @@ export class ReturnService {
       // Pour tout autre mode (cash/card/transfer/check/on_account) :
       //   l'avoir est immédiatement consommé par le remboursement effectif,
       //   donc status='used' et used_amount = refundAmount.
-      const immediateRefund = args.refundMethod !== 'credit_note';
-      const usedAmount = immediateRefund ? refundAmount : 0;
-      const status = immediateRefund ? 'used' : 'open';
+      // Répartition du remboursement par mode. Multi-modes si `refunds` fourni,
+      // sinon un seul mode (compat). La somme doit égaler le montant remboursé.
+      const refundLines = (args.refunds && args.refunds.length > 0)
+        ? args.refunds.map((r) => ({ method: r.method, amount: round2(r.amount) }))
+        : [{ method: args.refundMethod, amount: refundAmount }];
+      const sumRefunds = round2(refundLines.reduce((s, r) => s + r.amount, 0));
+      if (Math.abs(sumRefunds - refundAmount) > 0.01) throw new Error('REFUND_ALLOCATION_MISMATCH');
+      // Portion réglée immédiatement (tout sauf ce qui reste en avoir).
+      const usedAmount = round2(
+        refundLines.filter((r) => r.method !== 'credit_note').reduce((s, r) => s + r.amount, 0),
+      );
+      // Mode « représentatif » stocké sur l'avoir (colonne unique) : espèces si
+      // présent, sinon le premier mode. Le détail complet part dans l'audit.
+      const primaryMethod = refundLines.length === 1
+        ? refundLines[0]!.method
+        : (refundLines.find((r) => r.method === 'cash')?.method ?? refundLines[0]!.method);
+      const status = usedAmount >= refundAmount - 0.01 ? 'used' : 'open';
 
       // Détection runtime des colonnes ajoutées par migration 0014
       const colsRes = await client.query<{ column_name: string }>(
@@ -169,7 +192,7 @@ export class ReturnService {
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'pending')
            RETURNING id`,
           [
-            args.organizationId, sale.id, sale.customer_id, args.refundMethod,
+            args.organizationId, sale.id, sale.customer_id, primaryMethod,
             number, seqValue.toString(),
             refundAmount, args.reason.trim(),
             status, usedAmount,
@@ -276,49 +299,50 @@ export class ReturnService {
         );
       }
 
-      // 9. Effet selon le mode de remboursement
-      if (args.refundMethod === 'cash') {
-        // La sortie d'espèces doit impacter le tiroir ACTUELLEMENT ouvert sur
-        // ce poste, pas la session d'origine de la vente (souvent déjà close
-        // si le remboursement a lieu un autre jour). À défaut de session
-        // ouverte, on retombe sur la session d'origine.
+      // 9. Effets par mode de remboursement (un ou plusieurs, ex. espèces + CB).
+      // Session ouverte du poste (pour toute sortie espèces), résolue une fois.
+      let cashSessionId: string | null = null;
+      if (refundLines.some((r) => r.method === 'cash')) {
         const openSess = await client.query<{ id: string }>(
           `SELECT id FROM cash_sessions
             WHERE register_id = $1 AND status = 'open'
             ORDER BY opened_at DESC LIMIT 1`,
           [sale.register_id],
         );
-        const targetSession = openSess.rows[0]?.id ?? sale.cash_session_id;
-        if (targetSession) {
+        cashSessionId = openSess.rows[0]?.id ?? sale.cash_session_id ?? null;
+      }
+      for (const rf of refundLines) {
+        if (rf.amount <= 0) continue;
+        if (rf.method === 'cash' && cashSessionId) {
+          // Sortie du tiroir ACTUELLEMENT ouvert (pas la session d'origine,
+          // souvent close).
           await client.query(
             `INSERT INTO cash_movements
                (organization_id, cash_session_id, movement_type, amount, reason, user_id)
              VALUES ($1,$2,'out',$3,$4,$5)`,
             [
-              args.organizationId, targetSession, refundAmount,
+              args.organizationId, cashSessionId, rf.amount,
               `Remboursement espèces avoir ${number}`,
               args.userId,
             ],
           );
+        } else if (rf.method === 'on_account' && sale.customer_id) {
+          // Crédite le solde "en compte" du client (positif = crédit).
+          try {
+            await client.query(
+              `UPDATE customers
+                  SET account_balance = COALESCE(account_balance, 0) + $2,
+                      updated_at = now()
+                WHERE id = $1`,
+              [sale.customer_id, rf.amount],
+            );
+          } catch (e) {
+            if ((e as { code?: string }).code !== '42703') throw e;
+          }
         }
-      } else if (args.refundMethod === 'on_account' && sale.customer_id) {
-        // Crédite le solde "en compte" du client (positif = avoir un crédit)
-        try {
-          await client.query(
-            `UPDATE customers
-                SET account_balance = COALESCE(account_balance, 0) + $2,
-                    updated_at = now()
-              WHERE id = $1`,
-            [sale.customer_id, refundAmount],
-          );
-        } catch (e) {
-          // Seule la colonne absente (migration 0012, code 42703) est tolérée.
-          if ((e as { code?: string }).code !== '42703') throw e;
-        }
+        // 'card' / 'transfer' / 'check' / 'credit_note' : aucune écriture
+        // automatique (opération physique hors caisse, ou avoir conservé).
       }
-      // Pour 'card', 'transfer', 'check' : aucune écriture automatique
-      // (l'opération physique a lieu hors caisse). L'avoir est marqué
-      // "used" pour qu'il n'apparaisse plus comme disponible.
 
       // 10. Si retour total, marque la vente comme annulée par avoir
       if (isFullReturn) {

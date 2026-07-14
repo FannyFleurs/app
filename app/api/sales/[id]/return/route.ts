@@ -12,6 +12,11 @@ const schema = z.object({
   })).min(1),
   reason: z.string().min(1).max(500),
   refund_method: z.enum(['credit_note', 'cash', 'card', 'transfer', 'check', 'on_account']),
+  // Remboursement multi-modes optionnel (ex. espèces + CB).
+  refunds: z.array(z.object({
+    method: z.enum(['credit_note', 'cash', 'card', 'transfer', 'check', 'on_account']),
+    amount: z.number().positive(),
+  })).optional(),
 });
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
@@ -27,6 +32,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       lines: parsed.data.lines,
       reason: parsed.data.reason,
       refundMethod: parsed.data.refund_method,
+      refunds: parsed.data.refunds,
     });
     await audit({
       organizationId: g.user.organizationId, userId: g.user.id,
@@ -48,7 +54,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       msg === 'SALE_NOT_REFUNDABLE' ? 409 :
       msg.startsWith('QUANTITY_EXCEEDS') ? 422 :
       msg.startsWith('LINE_NOT_FOUND') ? 422 :
-      msg === 'NOTHING_TO_REFUND' || msg === 'NO_LINES' || msg === 'REASON_REQUIRED' ? 422 :
+      msg === 'NOTHING_TO_REFUND' || msg === 'NO_LINES' || msg === 'REASON_REQUIRED'
+        || msg === 'REFUND_ALLOCATION_MISMATCH' ? 422 :
       400;
     return jsonError(msg, status);
   }
