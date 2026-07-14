@@ -14,6 +14,8 @@ interface Sale {
   id: string; receipt_number: string;
   total_ttc: string; total_ht: string; total_tva: string; total_discount: string;
   validated_at: string;
+  status: string;
+  refunded_total: string;
   fiscal_hash: string;
   cashier: string;
   customer: string | null;
@@ -37,6 +39,8 @@ interface SaleDetail {
     id: string; number: string; amount: string; used_amount: string;
     status: string; reason: string; created_at: string;
   }>;
+  /** Quantités déjà retournées par ligne (line_index → qté). */
+  returned_by_line?: Record<number, number>;
 }
 
 type SummaryMode = 'simple' | 'complet';
@@ -46,8 +50,9 @@ export default function MaJourneeClient() {
   const [date, setDate] = useState(today);
   const [sales, setSales] = useState<Sale[]>([]);
   const [cashSummary, setCashSummary] = useState<{
-    cash_sales: number; bank_deposits: number; expected_cash: number;
-  }>({ cash_sales: 0, bank_deposits: 0, expected_cash: 0 });
+    cash_sales: number; bank_deposits: number; cash_refunds?: number; expected_cash: number;
+  }>({ cash_sales: 0, bank_deposits: 0, cash_refunds: 0, expected_cash: 0 });
+  const [returnsTotal, setReturnsTotal] = useState(0);
   const [sealedAt, setSealedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<string | null>(null);
@@ -56,23 +61,30 @@ export default function MaJourneeClient() {
   const [search, setSearch] = useState('');
   const [mode, setMode] = useState<SummaryMode>('simple');
 
-  useEffect(() => {
+  // Recharge la liste + synthèse du jour (aussi appelé après un retour,
+  // pour défalquer le CA et afficher les badges sans recharger la page).
+  function reloadDay(clearSelection = true) {
     setLoading(true);
-    setSelected(null);
-    setDetail(null);
+    if (clearSelection) { setSelected(null); setDetail(null); }
     fetch(`/api/sales/today?date=${date}`)
       .then((r) => r.json())
       .then((j) => {
         setSales(j.sales ?? []);
         if (j.cash_summary) setCashSummary(j.cash_summary);
+        setReturnsTotal(Number(j.returns_total ?? 0));
       })
       .finally(() => setLoading(false));
+  }
+
+  useEffect(() => {
+    reloadDay();
     // Indicateur "journée fermée" : check la clôture du jour
     setSealedAt(null);
     void fetch(`/api/closures/daily/today?date=${date}`)
       .then((r) => r.ok ? r.json() : null)
       .then((j) => { if (j?.sealed_at) setSealedAt(j.sealed_at); })
       .catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date]);
 
   async function pickSale(id: string) {
@@ -94,8 +106,11 @@ export default function MaJourneeClient() {
       discount += Number(s.total_discount);
     }
     const avg = sales.length > 0 ? ttc / sales.length : 0;
-    return { ttc, ht, tva, discount, count: sales.length, avg };
-  }, [sales]);
+    // CA net = ventes brutes − retours/avoirs émis ce jour (une vente
+    // entièrement retournée s'annule donc, un retour partiel se défalque).
+    const netTtc = ttc - returnsTotal;
+    return { ttc, netTtc, ht, tva, discount, count: sales.length, avg };
+  }, [sales, returnsTotal]);
 
   const filtered = useMemo(() => {
     const needle = search.trim().toLowerCase();
@@ -167,7 +182,12 @@ export default function MaJourneeClient() {
           <div className="inline-flex items-center gap-1 text-xs text-ink-soft">
             <Icon name="dashboard" size={14} /> CA TTC
           </div>
-          <div className="mt-1 text-4xl font-semibold tracking-tight">{formatEUR(totals.ttc)}</div>
+          <div className="mt-1 text-4xl font-semibold tracking-tight">{formatEUR(totals.netTtc)}</div>
+          {returnsTotal > 0 && (
+            <div className="mt-1 text-xs text-ink-soft">
+              {formatEUR(totals.ttc)} de ventes − {formatEUR(returnsTotal)} de retours
+            </div>
+          )}
           {sealedAt && (
             <div
               className="mt-3 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold text-white"
@@ -182,6 +202,9 @@ export default function MaJourneeClient() {
         <div className="px-5 pb-4 space-y-3">
           <KpiRow label="CA HT" value={formatEUR(totals.ht)} />
           <KpiRow label="Ventes" value={totals.count.toString()} />
+          {returnsTotal > 0 && (
+            <KpiRow label="Retours / avoirs" value={`-${formatEUR(returnsTotal)}`} tone="warning" />
+          )}
           <KpiRow label="Panier moyen" value={formatEUR(totals.avg)} />
           {mode === 'complet' && (
             <>
@@ -199,6 +222,13 @@ export default function MaJourneeClient() {
               <KpiRow
                 label="Remise en banque"
                 value={`-${formatEUR(cashSummary.bank_deposits)}`}
+                tone="warning"
+              />
+            )}
+            {(cashSummary.cash_refunds ?? 0) > 0 && (
+              <KpiRow
+                label="Remboursements espèces"
+                value={`-${formatEUR(cashSummary.cash_refunds ?? 0)}`}
                 tone="warning"
               />
             )}
@@ -285,7 +315,18 @@ export default function MaJourneeClient() {
                         className="border-t border-border hover:bg-gray-50 cursor-pointer"
                       >
                         <td className="px-4 py-3">
-                          <div className="font-mono font-medium">{s.receipt_number}</div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-medium">{s.receipt_number}</span>
+                            {s.status === 'cancelled_by_credit_note' ? (
+                              <span className="rounded-full bg-danger/10 text-danger px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide whitespace-nowrap">
+                                Annulée
+                              </span>
+                            ) : Number(s.refunded_total) > 0 ? (
+                              <span className="rounded-full bg-warning/10 text-warning px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide whitespace-nowrap">
+                                Retour −{formatEUR(Number(s.refunded_total))}
+                              </span>
+                            ) : null}
+                          </div>
                           <div className="text-xs text-ink-soft">
                             {new Date(s.validated_at).toLocaleTimeString('fr-FR', {
                               hour: '2-digit', minute: '2-digit', second: '2-digit',
@@ -296,7 +337,9 @@ export default function MaJourneeClient() {
                           {s.customer ?? '—'}
                         </td>
                         <td className="px-4 py-3 text-ink-soft">{s.cashier}</td>
-                        <td className="px-4 py-3 text-right font-medium">{formatEUR(Number(s.total_ttc))}</td>
+                        <td className={`px-4 py-3 text-right font-medium ${
+                          s.status === 'cancelled_by_credit_note' ? 'line-through text-ink-soft' : ''
+                        }`}>{formatEUR(Number(s.total_ttc))}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -318,7 +361,10 @@ export default function MaJourneeClient() {
             ) : detail ? (
               <SaleDetailPanel
                 detail={detail}
-                onInvoiceGenerated={() => void pickSale(detail.sale.id)}
+                onInvoiceGenerated={() => {
+                  void pickSale(detail.sale.id);
+                  reloadDay(false); // rafraîchit CA / badges sans fermer le détail
+                }}
               />
             ) : (
               <EmptyState icon="⚠" title="Erreur de chargement" />
@@ -453,6 +499,15 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
       .map(([method, amount]) => ({ method, amount: Number(amount.toFixed(2)) }));
   }, [detail.payments]);
 
+  // Vente entièrement retournée ? (statut annulé, ou toutes les quantités
+  // déjà rendues) → le bouton « Retour produit » est désactivé.
+  const returnedByLine = detail.returned_by_line ?? {};
+  const fullyReturned =
+    s.status === 'cancelled_by_credit_note' ||
+    (detail.lines.length > 0 && detail.lines.every(
+      (l) => (returnedByLine[l.line_index] ?? 0) >= Number(l.quantity) - 0.0001,
+    ));
+
   // Marge sur les lignes ayant un product_purchase_price_ht connu.
   const marginInfo = useMemo(() => {
     let costHt = 0, revenueHt = 0, withCost = 0, total = detail.lines.length;
@@ -535,8 +590,13 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
           <button onClick={() => setShowCorrection(true)} className="btn-soft text-sm">
             ⇄ Changer règlement
           </button>
-          <button onClick={() => setShowReturn(true)} className="btn-soft text-sm text-danger">
-            ↩ Retour produit
+          <button
+            onClick={() => setShowReturn(true)}
+            disabled={fullyReturned}
+            title={fullyReturned ? 'Tous les articles de cette vente ont déjà été retournés.' : undefined}
+            className="btn-soft text-sm text-danger disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            ↩ Retour produit{fullyReturned ? ' (déjà retourné)' : ''}
           </button>
           {!s.customer_id && (
             <button onClick={() => setShowAttach(true)} className="btn-soft text-sm">
@@ -718,6 +778,7 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
           receiptNumber={s.receipt_number}
           lines={detail.lines}
           payments={detail.payments.map((p) => ({ method: p.method, amount: Number(p.amount) }))}
+          returnedByLine={returnedByLine}
           onClose={() => setShowReturn(false)}
           onSuccess={(cn) => {
             setCreditNote(cn);

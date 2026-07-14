@@ -446,18 +446,21 @@ export default function ClosuresAdmin({ stores, registers }: { stores: Store[]; 
               <p className="mt-1 text-sm text-ink-soft">
                 Saisissez le nombre de billets et pièces présents dans le tiroir.
               </p>
-              <div className="mt-4 grid grid-cols-2 gap-2">
+              {/* 1 colonne sur mobile : le champ de saisie garde une vraie
+                  largeur (sur 2 colonnes il était écrasé, saisie invisible). */}
+              <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {DENOMINATIONS.map((d) => {
                   const qty = denomCount[String(d.value)] ?? 0;
                   const sub = qty * d.value;
                   return (
                     <div key={d.value} className="flex items-center gap-2 rounded-lg border border-border p-2">
-                      <span className="w-16 text-sm font-medium tabular-nums">{d.label}</span>
+                      <span className="w-16 shrink-0 text-sm font-medium tabular-nums">{d.label}</span>
                       <input
                         type="number"
+                        inputMode="numeric"
                         min={0}
                         step={1}
-                        className="input h-9 flex-1 text-right tabular-nums"
+                        className="input h-10 flex-1 min-w-[4.5rem] text-center text-base tabular-nums"
                         value={qty || ''}
                         placeholder="0"
                         onChange={(e) => {
@@ -466,7 +469,7 @@ export default function ClosuresAdmin({ stores, registers }: { stores: Store[]; 
                         }}
                         disabled={alreadySealed}
                       />
-                      <span className="w-20 text-right text-xs text-ink-soft tabular-nums">
+                      <span className="w-20 shrink-0 text-right text-xs text-ink-soft tabular-nums">
                         {formatEUR(sub)}
                       </span>
                     </div>

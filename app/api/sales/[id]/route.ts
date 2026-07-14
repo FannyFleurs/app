@@ -40,11 +40,28 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
       ORDER BY created_at DESC`,
     [params.id, g.user.organizationId],
   ).catch(() => ({ rows: [] }));
+  // Quantités déjà retournées par ligne (agrégées depuis les événements
+  // fiscaux CREDIT_NOTE_ISSUED, qui portent le détail des lignes). Sert à
+  // plafonner un nouveau retour et à désactiver le bouton si tout est rendu.
+  const returnedRes = await query<{ line_index: number; qty: string }>(
+    `SELECT (l->>'line_index')::int AS line_index,
+            COALESCE(SUM((l->>'quantity')::numeric), 0)::text AS qty
+       FROM fiscal_events fe,
+            jsonb_array_elements(fe.payload->'lines') AS l
+      WHERE fe.organization_id = $2
+        AND fe.event_type = 'CREDIT_NOTE_ISSUED'
+        AND fe.payload->>'origin_sale_id' = $1
+      GROUP BY 1`,
+    [params.id, g.user.organizationId],
+  ).catch(() => ({ rows: [] as { line_index: number; qty: string }[] }));
+  const returned_by_line: Record<number, number> = {};
+  for (const r of returnedRes.rows) returned_by_line[r.line_index] = Number(r.qty);
   return NextResponse.json({
     sale: sale.rows[0],
     lines: lines.rows,
     payments: payments.rows,
     invoice: invoice.rows[0] ?? null,
     returns: returns.rows,
+    returned_by_line,
   });
 }

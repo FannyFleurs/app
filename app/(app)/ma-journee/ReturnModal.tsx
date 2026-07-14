@@ -31,6 +31,8 @@ interface Props {
   receiptNumber: string;
   lines: SaleLine[];
   payments?: { method: string; amount: number }[];
+  /** Quantités déjà retournées par ligne (line_index → qté) : plafonne le retour. */
+  returnedByLine?: Record<number, number>;
   onClose: () => void;
   onSuccess: (creditNote: { id: string; number: string; amount: number }) => void;
 }
@@ -55,7 +57,7 @@ function toRefundMethod(payMethod: string): RefundMethod {
   }
 }
 
-export default function ReturnModal({ saleId, receiptNumber, lines, payments = [], onClose, onSuccess }: Props) {
+export default function ReturnModal({ saleId, receiptNumber, lines, payments = [], returnedByLine = {}, onClose, onSuccess }: Props) {
   const [quantities, setQuantities] = useState<Record<number, number>>({});
   const [reason, setReason] = useState('');
   const [refundMethod, setRefundMethod] = useState<RefundMethod>('credit_note');
@@ -145,8 +147,14 @@ export default function ReturnModal({ saleId, receiptNumber, lines, payments = [
     const v = Math.max(0, Math.min(max, qty));
     setQuantities((cur) => ({ ...cur, [line_index]: v }));
   }
+  // Quantité restant retournable pour une ligne (origine − déjà retourné).
+  function remainingFor(line: SaleLine): number {
+    return Math.max(0, Number(line.quantity) - (returnedByLine[line.line_index] ?? 0));
+  }
+
   function setAll(line: SaleLine) {
-    setQty(line.line_index, Number(line.quantity), Number(line.quantity));
+    const rem = remainingFor(line);
+    setQty(line.line_index, rem, rem);
   }
 
   return (
@@ -162,17 +170,24 @@ export default function ReturnModal({ saleId, receiptNumber, lines, payments = [
 
         <div className="space-y-2 max-h-[40vh] overflow-auto">
           {lines.map((l) => {
-            const max = Number(l.quantity);
+            const already = returnedByLine[l.line_index] ?? 0;
+            const max = remainingFor(l);
             const qty = quantities[l.line_index] ?? 0;
             return (
-              <div key={l.line_index} className="rounded-xl border border-border p-3">
+              <div key={l.line_index} className={`rounded-xl border border-border p-3 ${max <= 0 ? 'opacity-50' : ''}`}>
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                   <div className="min-w-0">
                     <div className="font-medium text-sm truncate">{l.label}</div>
                     <div className="text-xs text-ink-soft">
-                      {max} × {formatEUR(Number(l.unit_price_ttc))} · TVA {l.tax_rate}%
+                      {Number(l.quantity)} × {formatEUR(Number(l.unit_price_ttc))} · TVA {l.tax_rate}%
+                      {already > 0 && (
+                        <span className="text-warning"> · {already} déjà retourné{already > 1 ? 's' : ''}</span>
+                      )}
                     </div>
                   </div>
+                  {max <= 0 ? (
+                    <span className="text-xs font-medium text-ink-soft shrink-0">Entièrement retourné</span>
+                  ) : (
                   <div className="flex items-center gap-2 shrink-0">
                     <button onClick={() => setQty(l.line_index, qty - 1, max)} className="h-8 w-8 rounded-lg border border-border">-</button>
                     <input
@@ -186,6 +201,7 @@ export default function ReturnModal({ saleId, receiptNumber, lines, payments = [
                     <button onClick={() => setQty(l.line_index, qty + 1, max)} className="h-8 w-8 rounded-lg border border-border">+</button>
                     <button onClick={() => setAll(l)} className="text-xs text-accent-deep hover:underline ml-1">Tout</button>
                   </div>
+                  )}
                 </div>
               </div>
             );
