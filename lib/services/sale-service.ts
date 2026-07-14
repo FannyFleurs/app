@@ -224,6 +224,35 @@ export class SaleService {
       if (sale.status !== 'draft' && sale.status !== 'on_hold') {
         throw new Error('SALE_NOT_VALIDATABLE');
       }
+
+      // La session de caisse doit être OUVERTE pour sceller. Si la journée a
+      // été clôturée entre la création du brouillon et l'encaissement :
+      //   - si le poste a été ROUVERT (nouvelle session), on y rattache la
+      //     vente (le brouillon survit à la clôture) ;
+      //   - sinon on refuse : il faut rouvrir la caisse avant d'encaisser.
+      const sess = await client.query<{ status: string }>(
+        `SELECT status FROM cash_sessions WHERE id = $1`,
+        [sale.cash_session_id],
+      );
+      if (!sess.rows[0] || sess.rows[0].status !== 'open') {
+        const reopen = await client.query<{ id: string }>(
+          `SELECT id FROM cash_sessions
+            WHERE register_id = $1 AND status = 'open'
+            ORDER BY opened_at DESC LIMIT 1`,
+          [sale.register_id],
+        );
+        if (!reopen.rows[0]) {
+          const err = new Error('CASH_SESSION_CLOSED');
+          (err as Error & { status?: number }).status = 409;
+          throw err;
+        }
+        await client.query(
+          `UPDATE sales SET cash_session_id = $1 WHERE id = $2`,
+          [reopen.rows[0].id, sale.id],
+        );
+        sale.cash_session_id = reopen.rows[0].id;
+      }
+
       const totalTtc = Number(sale.total_ttc);
       if (totalTtc <= 0) throw new Error('SALE_EMPTY');
 

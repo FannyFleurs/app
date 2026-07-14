@@ -222,7 +222,12 @@ export default function PaymentModal({ saleId, totalTtc, loyaltyRedemption, scho
       });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
-        setError(j.error ?? j.message ?? 'Erreur d\'encaissement');
+        const code = j.error ?? j.message;
+        setError(
+          code === 'CASH_SESSION_CLOSED' || code === 'NO_OPEN_CASH_SESSION'
+            ? 'Journée clôturée : rouvrez la caisse (fonds de caisse) avant d\'encaisser.'
+            : code ?? 'Erreur d\'encaissement',
+        );
         return;
       }
       const j = await res.json();

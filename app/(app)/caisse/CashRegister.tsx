@@ -280,14 +280,25 @@ export default function CashRegister({
 
   useEffect(() => { void refreshSession(); }, [refreshSession]);
 
-  // Première arrivée du jour sans session ouverte : on déclenche
-  // automatiquement la modale "Ouvrir la caisse" pour pousser le
-  // commerçant à démarrer la journée. Ne se redéclenche pas après
-  // une fermeture manuelle de la modale.
+  // Re-vérifie la session au retour sur l'onglet / réveil de la tablette :
+  // détecte une clôture faite entre-temps depuis un autre poste ou le BO
+  // (sinon la caisse gardait l'ancienne session en mémoire et ne demandait
+  // jamais la réouverture).
+  useEffect(() => {
+    function onVisible() {
+      if (document.visibilityState === 'visible') void refreshSession();
+    }
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [refreshSession]);
+
+  // Arrivée sans session ouverte : on déclenche automatiquement la modale
+  // "Ouvrir la caisse". Réarmé dès qu'une session redevient active, pour
+  // se redéclencher après une clôture de journée.
   const autoPromptOnceRef = useRef(false);
   useEffect(() => {
     if (sessionLoading) return;
-    if (sessionId) return;
+    if (sessionId) { autoPromptOnceRef.current = false; return; }
     if (autoPromptOnceRef.current) return;
     autoPromptOnceRef.current = true;
     setShowOpenSession(true);
@@ -390,7 +401,15 @@ export default function CashRegister({
     });
     if (!res.ok) {
       const j = await res.json().catch(() => ({}));
-      setError(j.error ?? 'Création vente impossible');
+      if (j.error === 'NO_OPEN_CASH_SESSION') {
+        // La journée a été clôturée (potentiellement depuis un autre poste) :
+        // on invalide la session mémorisée et on invite à rouvrir la caisse.
+        setSessionId(null);
+        setShowOpenSession(true);
+        setError('Journée clôturée : rouvrez la caisse pour encaisser.');
+      } else {
+        setError(j.error ?? 'Création vente impossible');
+      }
       return null;
     }
     const { id } = await res.json();
