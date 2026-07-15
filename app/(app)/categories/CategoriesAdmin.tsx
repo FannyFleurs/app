@@ -49,12 +49,13 @@ export default function CategoriesAdmin({ canEdit }: { canEdit: boolean }) {
           action={canEdit ? <button className="btn-primary" onClick={() => setEditing(null)}>+ Créer la première</button> : undefined}
         />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+        {/* Deux fois plus de colonnes = tuiles ~50 % plus petites. */}
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3">
           {items.map((c) => (
             <button
               key={c.id}
               onClick={() => canEdit && setEditing(c)}
-              className={`card p-4 text-left ${canEdit ? 'hover:shadow-md hover:border-gray-300' : 'cursor-default'}`}
+              className={`card p-2.5 text-left ${canEdit ? 'hover:shadow-md hover:border-gray-300' : 'cursor-default'}`}
             >
               {/* Tuile carrée ; sans photo, simple aplat de couleur (pas de losange). */}
               <div className="aspect-square w-full rounded-xl overflow-hidden"
@@ -64,8 +65,8 @@ export default function CategoriesAdmin({ canEdit }: { canEdit: boolean }) {
                   <img src={c.image_url} alt="" className="h-full w-full object-cover" />
                 )}
               </div>
-              <div className="mt-3 flex items-center justify-between">
-                <div className="font-medium truncate">{c.name}</div>
+              <div className="mt-2 flex items-center justify-between gap-1">
+                <div className="font-medium text-sm truncate">{c.name}</div>
                 {c.visible_in_pos ? <Badge tone="soft">Caisse</Badge> : <Badge tone="neutral">Masquée</Badge>}
               </div>
             </button>
