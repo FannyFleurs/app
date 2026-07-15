@@ -13,7 +13,7 @@ UPDATE stock_levels sl
    SET quantity = agg.total, updated_at = now()
   FROM (
     SELECT store_id, product_id, variant_id,
-           MIN(id) AS keep_id, SUM(quantity) AS total
+           MIN(id::text)::uuid AS keep_id, SUM(quantity) AS total
       FROM stock_levels
      GROUP BY store_id, product_id, variant_id
     HAVING COUNT(*) > 1
@@ -23,7 +23,7 @@ UPDATE stock_levels sl
 -- 2. Supprime les lignes en doublon (toutes sauf la conservée).
 DELETE FROM stock_levels sl
  USING (
-    SELECT store_id, product_id, variant_id, MIN(id) AS keep_id
+    SELECT store_id, product_id, variant_id, MIN(id::text)::uuid AS keep_id
       FROM stock_levels
      GROUP BY store_id, product_id, variant_id
     HAVING COUNT(*) > 1
