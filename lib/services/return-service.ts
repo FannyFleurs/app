@@ -1,6 +1,7 @@
 import { withTransaction } from '@/lib/db/client';
 import { FiscalCore } from '@/lib/fiscal/core';
 import { round2 } from './money';
+import { STOCK_TRACKED_SQL } from './stock-tracking';
 
 export interface ReturnLineInput {
   line_index: number;
@@ -248,11 +249,24 @@ export class ReturnService {
         [event.currentHash, creditNoteId],
       );
 
-      // 8. Recrédit stock pour TOUS les produits retournés (symétrique de la
-      //    vente) : chaque retour trace un mouvement (+), y compris pour un
-      //    produit non suivi en stock. Le niveau est créé à 0 si absent.
+      // 8. Recrédit stock pour les produits « suivis en stock » (symétrique de
+      //    la vente, cf. stock-tracking.ts : EAN + hors catégorie Livraison).
+      //    On pré-calcule l'ensemble des produits suivis parmi ceux retournés.
+      const detailProductIds = Array.from(
+        new Set(detail.map((d) => d.product_id).filter((x): x is string => !!x)),
+      );
+      const trackedSet = new Set<string>();
+      if (detailProductIds.length > 0) {
+        const tr = await client.query<{ id: string }>(
+          `SELECT p.id FROM products p
+             LEFT JOIN product_categories c ON c.id = p.category_id
+            WHERE p.id = ANY($1::uuid[]) AND ${STOCK_TRACKED_SQL}`,
+          [detailProductIds],
+        );
+        for (const row of tr.rows) trackedSet.add(row.id);
+      }
       for (const d of detail) {
-        if (!d.product_id) continue;
+        if (!d.product_id || !trackedSet.has(d.product_id)) continue;
         // Voir sale-service : ON CONFLICT ne matche pas les variant_id NULL,
         // d'où lecture verrouillée NULL-safe puis update/insert.
         const existing = await client.query<{ id: string; quantity: string }>(

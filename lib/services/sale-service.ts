@@ -7,6 +7,7 @@ import {
 } from './money';
 import { loyaltyGroupKey, type LoyaltySettings } from '@/lib/settings/pos-ui';
 import { loyaltyGroupReady } from './loyalty-schema';
+import { STOCK_TRACKED_SQL } from './stock-tracking';
 import type { PoolClient } from 'pg';
 
 export interface SaleLineInput {
@@ -605,18 +606,21 @@ export class SaleService {
         }
       }
 
-      // 8. Décrément stock pour TOUS les produits vendus.
-      //    L'historique article doit tracer chaque mouvement (+ ou -). On
-      //    n'exclut donc plus les produits « non suivis » (track_stock=false) :
-      //    un produit sans stock informatique passe simplement en négatif
-      //    (ex. -1) au lieu d'être ignoré. Le niveau est créé à 0 si absent.
+      // 8. Décrément stock pour les produits « suivis en stock ».
+      //    Règle (cf. stock-tracking.ts) : produit avec EAN et hors catégorie
+      //    « Livraison ». Un tel produit sans stock informatique passe en
+      //    négatif (ex. -1) au lieu d'être ignoré ; le niveau est créé à 0 si
+      //    absent. Cartes cadeaux / services (sans EAN) sont exclus de fait.
       let stockMovementCount = 0;
       const lineProductRes = await client.query<{
         product_id: string; variant_id: string | null; quantity: string;
       }>(
         `SELECT sl.product_id, sl.variant_id, sl.quantity
            FROM sale_lines sl
-          WHERE sl.sale_id = $1 AND sl.product_id IS NOT NULL`,
+           JOIN products p ON p.id = sl.product_id
+           LEFT JOIN product_categories c ON c.id = p.category_id
+          WHERE sl.sale_id = $1 AND sl.product_id IS NOT NULL
+            AND ${STOCK_TRACKED_SQL}`,
         [sale.id],
       );
       for (const line of lineProductRes.rows) {

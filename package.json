@@ -22,6 +22,7 @@
     "list:users": "tsx scripts/list-users.ts",
     "revoke:sessions": "tsx scripts/revoke-sessions.ts",
     "fiscal:verify": "tsx scripts/verify-fiscal-chain.ts",
+    "stock:backfill": "tsx scripts/backfill-stock-movements.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
