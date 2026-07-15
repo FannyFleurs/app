@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { formatEUR } from '@/lib/services/money';
 import type { DashboardData } from '@/lib/analytics/dashboard';
 import { LineCompare, Bars, StackedBar, HalfDonut } from '@/components/analytics/charts';
+import PageHeader from '@/components/PageHeader';
 
 interface Store { id: string; name: string }
 type Mode = 'ttc' | 'ht';
@@ -70,26 +71,23 @@ export default function DashboardClient({ firstName, stores }: { firstName: stri
 
   return (
     <div className="p-6 md:p-8 space-y-5">
-      {/* En-tête + bascule TTC/HT */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Bonjour {firstName} ✿</h1>
-          <p className="mt-1 text-sm text-ink-soft">
-            {data ? `${data.periodLabel} · comparé à ${data.prevLabel}` : 'Chargement…'}
-          </p>
-        </div>
-        <div className="inline-flex rounded-full border border-border bg-white p-0.5">
-          {(['ttc', 'ht'] as Mode[]).map((m) => (
-            <button
-              key={m}
-              onClick={() => setMode(m)}
-              className={`h-9 px-4 rounded-full text-sm font-semibold transition-colors ${
-                mode === m ? 'accent-bar text-white' : 'text-ink-soft'
-              }`}
-            >{m === 'ttc' ? 'TTC' : 'HT'}</button>
-          ))}
-        </div>
-      </div>
+      <PageHeader
+        title={`Bonjour ${firstName} ✿`}
+        subtitle={data ? `${data.periodLabel} · comparé à ${data.prevLabel}` : 'Chargement…'}
+        actions={
+          <div className="inline-flex rounded-full border border-border bg-white p-0.5">
+            {(['ttc', 'ht'] as Mode[]).map((m) => (
+              <button
+                key={m}
+                onClick={() => setMode(m)}
+                className={`h-9 px-4 rounded-full text-sm font-semibold transition-colors ${
+                  mode === m ? 'accent-bar text-white' : 'text-ink-soft'
+                }`}
+              >{m === 'ttc' ? 'TTC' : 'HT'}</button>
+            ))}
+          </div>
+        }
+      />
 
       {/* Filtres période + boutique */}
       <div className="flex flex-wrap items-center gap-2">

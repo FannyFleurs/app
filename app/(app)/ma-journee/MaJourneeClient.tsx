@@ -6,6 +6,7 @@ import { PAYMENT_LABELS } from '@/components/labels';
 import EmptyState from '@/components/EmptyState';
 import Badge from '@/components/Badge';
 import Icon from '@/components/Icon';
+import PageHeader from '@/components/PageHeader';
 import ReturnModal from './ReturnModal';
 import PaymentCorrectionModal from './PaymentCorrectionModal';
 import AttachCustomerAfterSaleModal from './AttachCustomerAfterSaleModal';
@@ -127,16 +128,13 @@ export default function MaJourneeClient() {
   });
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-[360px_1fr] md:h-full md:overflow-hidden min-h-full">
-      {/* SIDEBAR GAUCHE — synthèse journée */}
-      <aside className="border-r border-border bg-white overflow-y-auto flex flex-col">
-        <div className="px-5 py-4 border-b border-border">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-xs uppercase tracking-widest text-ink-soft font-semibold">Synthèse</div>
-              <div className="text-lg font-semibold tracking-tight capitalize">{dateLabel}</div>
-            </div>
-            <label className="inline-flex items-center cursor-pointer relative">
+    <div className="flex flex-col md:h-full md:overflow-hidden min-h-full">
+      <div className="px-6 md:px-8 pt-6 md:pt-8 pb-4 shrink-0 border-b border-border">
+        <PageHeader
+          title="Ma journée"
+          subtitle={`${dateLabel} · ${totals.count} vente(s) ce jour`}
+          actions={
+            <label className="inline-flex items-center gap-2 cursor-pointer relative rounded-xl border border-border px-3 h-10 text-sm text-ink-soft hover:bg-gray-50">
               <input
                 type="date"
                 value={date}
@@ -144,17 +142,14 @@ export default function MaJourneeClient() {
                 onChange={(e) => setDate(e.target.value)}
                 className="absolute inset-0 opacity-0 cursor-pointer"
               />
-              <span className="grid h-9 w-9 place-items-center rounded-xl border border-border text-ink-soft hover:bg-gray-50">
-                <Icon name="my-day" size={18} />
-              </span>
+              <Icon name="my-day" size={18} /> Changer de date
             </label>
-          </div>
-          <div className="mt-2 inline-flex items-center gap-1.5 text-xs">
-            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: 'var(--primary)' }} />
-            <span className="text-ink-soft">{totals.count} vente(s) ce jour</span>
-          </div>
-        </div>
-
+          }
+        />
+      </div>
+      <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[360px_1fr] md:overflow-hidden">
+      {/* SIDEBAR GAUCHE — synthèse journée */}
+      <aside className="border-r border-border bg-white overflow-y-auto flex flex-col">
         {/* Switch X Simple / X Complet */}
         <div className="px-5 pt-4">
           <div className="grid grid-cols-2 gap-1 rounded-2xl bg-gray-50 p-1">
@@ -372,6 +367,7 @@ export default function MaJourneeClient() {
           </div>
         )}
       </main>
+      </div>
     </div>
   );
 }

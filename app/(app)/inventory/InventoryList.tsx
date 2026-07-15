@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import Badge from '@/components/Badge';
 import EmptyState from '@/components/EmptyState';
+import PageHeader from '@/components/PageHeader';
 
 interface Inventory {
   id: string;
@@ -45,18 +46,16 @@ export default function InventoryList({ defaultStoreId: _defaultStoreId }: { def
   }, []);
 
   return (
-    <div className="p-6 md:p-8 max-w-5xl">
-      <div className="flex items-start justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Inventaires</h1>
-          <p className="mt-1 text-sm text-ink-soft">
-            Sessions de comptage — total, par catégorie ou par fournisseur.
-          </p>
-        </div>
-        <Link href="/inventory/new" className="btn-primary h-11 px-5 text-sm font-semibold whitespace-nowrap">
-          + Nouvel inventaire
-        </Link>
-      </div>
+    <div className="p-6 md:p-8 max-w-5xl space-y-5">
+      <PageHeader
+        title="Inventaires"
+        subtitle="Sessions de comptage — total, par catégorie ou par fournisseur."
+        actions={
+          <Link href="/inventory/new" className="btn-primary h-11 px-5 text-sm font-semibold whitespace-nowrap">
+            + Nouvel inventaire
+          </Link>
+        }
+      />
 
       {loading ? (
         <div className="text-sm text-ink-soft">Chargement…</div>

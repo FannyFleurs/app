@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Badge from '@/components/Badge';
 import EmptyState from '@/components/EmptyState';
 import Icon, { type IconName } from '@/components/Icon';
+import PageHeader from '@/components/PageHeader';
 import { formatEUR } from '@/lib/services/money';
 
 interface Store { id: string; name: string }
@@ -99,13 +100,13 @@ export default function StockAdmin({ canAdjust, stores }: { canAdjust: boolean; 
   }, {} as Record<string, typeof NAV>);
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] md:h-full md:overflow-hidden">
+    <div className="flex flex-col md:h-full md:overflow-hidden">
+      <div className="px-6 md:px-8 pt-6 md:pt-8 pb-4 shrink-0">
+        <PageHeader title="Stock" subtitle="Valeur du stock, mouvements et inventaires, par boutique." />
+      </div>
+      <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[260px_1fr] md:overflow-hidden">
       {/* SIDEBAR */}
       <aside className="border-r border-border bg-white overflow-y-auto">
-        <div className="px-5 py-4 border-b border-border">
-          <div className="text-[10px] uppercase tracking-widest text-ink-soft font-semibold">Section</div>
-          <div className="text-lg font-semibold tracking-tight">Stock</div>
-        </div>
         <div className="p-3 space-y-4">
           {Object.entries(groups).map(([g, items]) => (
             <div key={g}>
@@ -308,6 +309,7 @@ export default function StockAdmin({ canAdjust, stores }: { canAdjust: boolean; 
           </div>
         )}
       </main>
+      </div>
     </div>
   );
 }

@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import PageHeader from '@/components/PageHeader';
 
 interface Store { id: string; name: string }
 interface Product {
@@ -146,15 +147,11 @@ export default function StockTransferForm({ stores }: { stores: Store[] }) {
 
   return (
     <div className="p-6 md:p-8 w-full space-y-5">
-      <div>
-        <Link href="/stock" className="text-sm text-ink-soft hover:text-ink">← Stock</Link>
-        <h1 className="text-2xl font-semibold tracking-tight mt-1">Transfert de stock</h1>
-        <p className="mt-1 text-sm text-ink-soft max-w-3xl">
-          Déplacez du stock d&apos;une boutique à l&apos;autre. Si le produit
-          n&apos;est pas encore disponible dans la boutique destination, il y
-          est ajouté automatiquement.
-        </p>
-      </div>
+      <PageHeader
+        title="Transfert de stock"
+        subtitle="Déplacez du stock d'une boutique à l'autre. Si le produit n'est pas encore disponible dans la boutique destination, il y est ajouté automatiquement."
+        actions={<Link href="/stock" className="btn-ghost text-sm">← Stock</Link>}
+      />
 
       {/* Boutiques — pleine largeur en haut */}
       <div className="card p-5 space-y-3">

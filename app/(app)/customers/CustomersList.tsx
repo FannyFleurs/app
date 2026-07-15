@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Badge from '@/components/Badge';
 import EmptyState from '@/components/EmptyState';
 import CustomerFormModal, { type CustomerLike } from '@/components/CustomerFormModal';
+import PageHeader from '@/components/PageHeader';
 import { formatEUR } from '@/lib/services/money';
 import WalletActions from './[id]/WalletActions';
 
@@ -117,16 +118,17 @@ export default function CustomersList({ customers: initialCustomers, canWrite }:
 
   return (
     <>
-      <div className="grid grid-cols-1 md:grid-cols-[320px_240px_1fr] md:h-full md:overflow-hidden">
+      <div className="flex flex-col md:h-full md:overflow-hidden">
+        <div className="px-6 md:px-8 pt-6 md:pt-8 pb-4 shrink-0 border-b border-border">
+          <PageHeader
+            title="Comptes clients"
+            subtitle="Fiches clients, fidélité et historique d'achat."
+            actions={<span className="text-sm text-ink-soft whitespace-nowrap">{customers.length} clients</span>}
+          />
+        </div>
+        <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[320px_240px_1fr] md:overflow-hidden">
         {/* COLONNE 1 — Liste clients */}
         <aside className="border-r border-border bg-white flex flex-col overflow-hidden">
-          <div className="px-5 py-3 border-b border-border flex items-center justify-between">
-            <div>
-              <div className="text-[10px] uppercase tracking-widest text-ink-soft font-semibold">Section</div>
-              <div className="text-lg font-semibold tracking-tight">Comptes clients</div>
-            </div>
-            <span className="text-xs text-ink-soft">{customers.length} clients</span>
-          </div>
           <div className="p-3 space-y-2 border-b border-border">
             <div className="relative">
               <input
@@ -240,6 +242,7 @@ export default function CustomersList({ customers: initialCustomers, canWrite }:
             />
           )}
         </main>
+        </div>
       </div>
 
       {editing !== undefined && (
