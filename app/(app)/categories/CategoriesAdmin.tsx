@@ -56,11 +56,13 @@ export default function CategoriesAdmin({ canEdit }: { canEdit: boolean }) {
               onClick={() => canEdit && setEditing(c)}
               className={`card p-4 text-left ${canEdit ? 'hover:shadow-md hover:border-gray-300' : 'cursor-default'}`}
             >
-              <div className="h-24 w-full rounded-xl overflow-hidden grid place-items-center"
+              {/* Tuile carrée ; sans photo, simple aplat de couleur (pas de losange). */}
+              <div className="aspect-square w-full rounded-xl overflow-hidden"
                    style={{ background: c.color ?? '#F5F5F5' }}>
-                {c.image_url
-                  ? <img src={c.image_url} alt="" className="h-full w-full object-cover" />
-                  : <span className="text-3xl text-ink-soft">◊</span>}
+                {c.image_url && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={c.image_url} alt="" className="h-full w-full object-cover" />
+                )}
               </div>
               <div className="mt-3 flex items-center justify-between">
                 <div className="font-medium truncate">{c.name}</div>
@@ -134,12 +136,13 @@ function CategoryFormModal({ category, onClose, onSaved }: {
         <div className="mb-4 rounded-xl border border-border p-3 bg-white">
           <div className="text-xs uppercase tracking-wider text-ink-soft mb-2">Aperçu en caisse</div>
           <div className="card p-4 max-w-[180px]">
-            <div className="h-20 w-full rounded-lg overflow-hidden grid place-items-center"
+            <div className="aspect-square w-full rounded-lg overflow-hidden"
                  style={{ background: form.color }}>
-              {form.image_url
-                ? <img src={form.image_url} alt="" className="h-full w-full object-cover"
-                       onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                : <span className="text-2xl text-ink-soft">◊</span>}
+              {form.image_url && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={form.image_url} alt="" className="h-full w-full object-cover"
+                     onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+              )}
             </div>
             <div className="mt-2 text-sm font-medium">{form.name || 'Nom catégorie'}</div>
           </div>

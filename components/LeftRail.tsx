@@ -151,7 +151,9 @@ export default function LeftRail({
       // le logo passe au-dessus du contenu adjacent.
       className="hidden md:flex flex-col shrink-0 w-20 lg:w-24 bg-white h-full relative z-30 overflow-visible"
     >
-      {/* Logo — grand et débordant vers la droite pour être bien visible. */}
+      {/* Logo — déborde légèrement du rail, mais reste dans la « safe zone » :
+          sa largeur est plafonnée pour ne JAMAIS passer sous les titres des
+          pages (qui commencent à rail + padding p-8 du contenu). */}
       <Link
         href="/caisse"
         className="flex items-center h-20 pl-3 shrink-0 overflow-visible"
@@ -162,7 +164,7 @@ export default function LeftRail({
           <img
             src={brand.logo_url}
             alt={brand.brand_name}
-            className="h-16 w-auto max-w-[180px] object-contain object-left"
+            className="h-16 w-auto max-w-[96px] lg:max-w-[112px] object-contain object-left"
           />
         ) : (
           <span
