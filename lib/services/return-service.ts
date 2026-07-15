@@ -248,14 +248,11 @@ export class ReturnService {
         [event.currentHash, creditNoteId],
       );
 
-      // 8. Recrédit stock pour produits suivis
+      // 8. Recrédit stock pour TOUS les produits retournés (symétrique de la
+      //    vente) : chaque retour trace un mouvement (+), y compris pour un
+      //    produit non suivi en stock. Le niveau est créé à 0 si absent.
       for (const d of detail) {
         if (!d.product_id) continue;
-        const trackRes = await client.query<{ track_stock: boolean }>(
-          `SELECT track_stock FROM products WHERE id = $1`,
-          [d.product_id],
-        );
-        if (!trackRes.rows[0]?.track_stock) continue;
         // Voir sale-service : ON CONFLICT ne matche pas les variant_id NULL,
         // d'où lecture verrouillée NULL-safe puis update/insert.
         const existing = await client.query<{ id: string; quantity: string }>(

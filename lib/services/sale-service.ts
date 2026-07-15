@@ -605,20 +605,21 @@ export class SaleService {
         }
       }
 
-      // 8. Décrément stock pour les produits suivis
+      // 8. Décrément stock pour TOUS les produits vendus.
+      //    L'historique article doit tracer chaque mouvement (+ ou -). On
+      //    n'exclut donc plus les produits « non suivis » (track_stock=false) :
+      //    un produit sans stock informatique passe simplement en négatif
+      //    (ex. -1) au lieu d'être ignoré. Le niveau est créé à 0 si absent.
       let stockMovementCount = 0;
       const lineProductRes = await client.query<{
         product_id: string; variant_id: string | null; quantity: string;
-        track_stock: boolean;
       }>(
-        `SELECT sl.product_id, sl.variant_id, sl.quantity, p.track_stock
+        `SELECT sl.product_id, sl.variant_id, sl.quantity
            FROM sale_lines sl
-           JOIN products p ON p.id = sl.product_id
           WHERE sl.sale_id = $1 AND sl.product_id IS NOT NULL`,
         [sale.id],
       );
       for (const line of lineProductRes.rows) {
-        if (!line.track_stock) continue;
         const qty = Number(line.quantity);
         // Lit (avec verrou) ou crée le niveau de stock pour ce store / produit
         // / variant. IMPORTANT : `variant_id` peut être NULL et un ON CONFLICT
