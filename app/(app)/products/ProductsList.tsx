@@ -19,6 +19,7 @@ interface Product {
   visible_in_pos: boolean; is_active: boolean;
   is_seasonal: boolean; is_customizable: boolean;
   is_top_product?: boolean;
+  store_ids: string[];
   tags: string[];
 }
 
@@ -30,15 +31,16 @@ export default function ProductsList({
   categories: { id: string; name: string }[];
 }) {
   const [products, setProducts] = useState<Product[]>([]);
+  const [stores, setStores] = useState<{ id: string; name: string }[]>([]);
   const [q, setQ] = useState('');
   const [loading, setLoading] = useState(true);
+  // editing: undefined = rien affiché, null = nouveau produit, Product = édition.
   const [editing, setEditing] = useState<Product | null | undefined>(undefined);
   const [filterCat, setFilterCat] = useState<string>('all');
+  const [filterStore, setFilterStore] = useState<string>('');
   const [showInactive, setShowInactive] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [onlyTop, setOnlyTop] = useState(false);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [bulkBusy, setBulkBusy] = useState(false);
 
   async function reload() {
     setLoading(true);
@@ -50,261 +52,181 @@ export default function ProductsList({
       const j = await res.json();
       setProducts(j.products.map((p: Product) => ({
         ...p, sale_price_ttc: Number(p.sale_price_ttc), tax_rate: Number(p.tax_rate),
+        store_ids: p.store_ids ?? [],
       })));
     }
     setLoading(false);
   }
   useEffect(() => { void reload(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [showInactive]);
 
+  useEffect(() => {
+    void (async () => {
+      const r = await fetch('/api/me');
+      if (r.ok) setStores((await r.json()).stores ?? []);
+    })();
+  }, []);
+
+  const storeName = useMemo(
+    () => new Map(stores.map((s) => [s.id, s.name])),
+    [stores],
+  );
+
   const filtered = useMemo(() => {
     let arr = products;
     if (filterCat !== 'all') arr = arr.filter((p) => p.category_id === filterCat);
     if (onlyTop) arr = arr.filter((p) => p.is_top_product);
+    // Verrouillage boutique : un article limité à certaines boutiques
+    // (store_ids non vide) n'apparaît que pour ces boutiques. store_ids vide
+    // = disponible dans TOUTES les boutiques.
+    if (filterStore) {
+      arr = arr.filter((p) => p.store_ids.length === 0 || p.store_ids.includes(filterStore));
+    }
     return arr;
-  }, [products, filterCat, onlyTop]);
-
-  // Quand la liste filtrée change, on retire de la sélection les ids absents
-  useEffect(() => {
-    setSelected((cur) => {
-      const visible = new Set(filtered.map((p) => p.id));
-      const next = new Set<string>();
-      for (const id of cur) if (visible.has(id)) next.add(id);
-      return next;
-    });
-  }, [filtered]);
-
-  const allSelected = filtered.length > 0 && filtered.every((p) => selected.has(p.id));
-  const someSelected = selected.size > 0 && !allSelected;
-
-  function toggleOne(id: string) {
-    setSelected((cur) => {
-      const next = new Set(cur);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  }
-  function toggleAll() {
-    setSelected((cur) => {
-      if (allSelected) return new Set();
-      const next = new Set(cur);
-      for (const p of filtered) next.add(p.id);
-      return next;
-    });
-  }
-
-  async function bulkDelete() {
-    if (selected.size === 0) return;
-    if (!confirm(
-      `Supprimer ${selected.size} produit(s) ?\n\n` +
-      'Les produits déjà utilisés dans des ventes seront DÉSACTIVÉS (visibles dans "Inclure inactifs"). ' +
-      'Les autres seront supprimés définitivement.',
-    )) return;
-    setBulkBusy(true);
-    const r = await fetch('/api/products/bulk-delete', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ids: Array.from(selected) }),
-    });
-    setBulkBusy(false);
-    if (!r.ok) { alert('Erreur lors de la suppression.'); return; }
-    const j = await r.json();
-    alert(
-      `✓ ${j.deleted} supprimé(s) définitivement\n` +
-      `✓ ${j.deactivated} désactivé(s) (utilisés dans des ventes)\n` +
-      (j.failure_count > 0 ? `✗ ${j.failure_count} échec(s)` : ''),
-    );
-    setSelected(new Set());
-    void reload();
-  }
+  }, [products, filterCat, onlyTop, filterStore]);
 
   const stats = useMemo(() => ({
     total: products.length,
     inPos: products.filter((p) => p.visible_in_pos).length,
-    customizable: products.filter((p) => p.is_customizable).length,
-    seasonal: products.filter((p) => p.is_seasonal).length,
+    scoped: products.filter((p) => p.store_ids.length > 0).length,
+    top: products.filter((p) => p.is_top_product).length,
   }), [products]);
 
+  const activeId = editing && 'id' in editing ? editing.id : null;
+
   return (
-    <div className="p-8 space-y-5">
-      <PageHeader
-        title="Produits"
-        subtitle="Catalogue complet : bouquets, plantes, cache-pots, bougies, services, cartes cadeaux."
-        actions={canEdit ? (
-          <div className="flex gap-2">
-            <button className="btn-soft" onClick={() => setShowImport(true)}>
-              ⬆ Importer
-            </button>
-            <button className="btn-primary" onClick={() => setEditing(null)}>+ Nouveau produit</button>
-          </div>
-        ) : null}
-      />
-
-      <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Kpi label="Références" value={stats.total.toString()} />
-        <Kpi label="Visibles en caisse" value={stats.inPos.toString()} />
-        <Kpi label="Personnalisables" value={stats.customizable.toString()} />
-        <Kpi label="Saisonniers" value={stats.seasonal.toString()} />
-      </section>
-
-      <div className="card p-3 flex flex-wrap items-center gap-2">
-        <input
-          className="input max-w-md"
-          placeholder="Rechercher par nom, SKU, code-barres…"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && void reload()}
+    <div className="flex flex-col md:h-full md:overflow-hidden">
+      <div className="px-6 md:px-8 pt-6 md:pt-8 pb-4 shrink-0 border-b border-border">
+        <PageHeader
+          title="Produits"
+          subtitle="Catalogue complet : bouquets, plantes, cache-pots, bougies, services, cartes cadeaux."
+          actions={canEdit ? (
+            <div className="flex gap-2">
+              <button className="btn-soft" onClick={() => setShowImport(true)}>⬆ Importer</button>
+              <button className="btn-primary" onClick={() => setEditing(null)}>+ Nouveau produit</button>
+            </div>
+          ) : null}
         />
-        <button className="btn-soft" onClick={() => void reload()}>Rechercher</button>
-        <label className="ml-2 flex items-center gap-2 text-sm text-ink-soft">
-          <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} />
-          Inclure inactifs
-        </label>
-        <div className="ml-auto flex gap-1 flex-wrap">
-          <FilterChip active={onlyTop} onClick={() => setOnlyTop((v) => !v)}>
-            ★ TOP
-          </FilterChip>
-          <FilterChip active={filterCat === 'all' && !onlyTop} onClick={() => { setFilterCat('all'); setOnlyTop(false); }}>
-            Toutes
-          </FilterChip>
-          {categories.map((c) => (
-            <FilterChip key={c.id} active={filterCat === c.id} onClick={() => setFilterCat(c.id)}>
-              {c.name}
-            </FilterChip>
-          ))}
-        </div>
+        <section className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+          <Kpi label="Références" value={stats.total.toString()} />
+          <Kpi label="Visibles en caisse" value={stats.inPos.toString()} />
+          <Kpi label="Top produits" value={stats.top.toString()} />
+          <Kpi label="Limités à une boutique" value={stats.scoped.toString()} />
+        </section>
       </div>
 
-      {/* Barre d'actions de masse — visible uniquement si au moins une coche */}
-      {selected.size > 0 && (
-        <div className="card p-3 flex items-center gap-3 bg-accent-soft border-accent-deep/30">
-          <div className="text-sm font-medium">
-            {selected.size} produit(s) sélectionné(s)
+      <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[minmax(300px,1fr)_2fr] md:overflow-hidden">
+        {/* COLONNE LISTE (1/3) */}
+        <aside className="border-r border-border bg-white flex flex-col overflow-hidden min-h-0">
+          <div className="p-3 border-b border-border space-y-2 shrink-0">
+            <div className="flex gap-2">
+              <input
+                className="input flex-1"
+                placeholder="Rechercher…"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && void reload()}
+              />
+              <button className="btn-soft whitespace-nowrap" onClick={() => void reload()}>OK</button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {stores.length > 1 && (
+                <select className="input h-9 flex-1 min-w-[8rem] text-sm"
+                        value={filterStore} onChange={(e) => setFilterStore(e.target.value)}>
+                  <option value="">Toutes les boutiques</option>
+                  {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              )}
+              <select className="input h-9 flex-1 min-w-[8rem] text-sm"
+                      value={filterCat} onChange={(e) => setFilterCat(e.target.value)}>
+                <option value="all">Toutes catégories</option>
+                {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+            <div className="flex items-center gap-3 text-xs text-ink-soft">
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input type="checkbox" checked={onlyTop} onChange={(e) => setOnlyTop(e.target.checked)} /> ★ Top
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} /> Inactifs
+              </label>
+              <span className="ml-auto tabular-nums">{filtered.length}</span>
+            </div>
           </div>
-          <button
-            onClick={() => setSelected(new Set())}
-            className="text-xs text-ink-soft hover:text-ink"
-          >
-            Tout désélectionner
-          </button>
-          <div className="flex-1" />
-          {canEdit && (
-            <button
-              onClick={() => void bulkDelete()}
-              disabled={bulkBusy}
-              className="btn-soft text-sm text-danger hover:bg-danger/10"
-            >
-              {bulkBusy ? 'Suppression…' : `Supprimer (${selected.size})`}
-            </button>
-          )}
-        </div>
-      )}
 
-      {loading ? (
-        <div className="text-ink-soft text-sm">Chargement…</div>
-      ) : filtered.length === 0 ? (
-        <EmptyState
-          icon="◈"
-          title={products.length === 0 ? 'Aucun produit' : 'Aucun résultat'}
-          description={products.length === 0
-            ? 'Commencez par ajouter vos bouquets, plantes ou services.'
-            : 'Aucun produit ne correspond à votre recherche.'}
-          action={canEdit && products.length === 0 && (
-            <button className="btn-primary" onClick={() => setEditing(null)}>+ Créer le premier produit</button>
-          )}
-        />
-      ) : (
-        <div className="card overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-bg text-ink-soft text-xs uppercase">
-              <tr>
-                {canEdit && (
-                  <th className="px-3 py-3 w-10">
-                    <input
-                      type="checkbox"
-                      checked={allSelected}
-                      ref={(el) => { if (el) el.indeterminate = someSelected; }}
-                      onChange={toggleAll}
-                      title={allSelected ? 'Tout désélectionner' : 'Tout sélectionner'}
-                      className="cursor-pointer"
-                    />
-                  </th>
-                )}
-                <th className="text-center px-2 py-3 w-8" title="Top produit">★</th>
-                <th className="text-left px-4 py-3">Nom</th>
-                <th className="text-left px-4 py-3">Catégorie</th>
-                <th className="text-left px-4 py-3">SKU</th>
-                <th className="text-right px-4 py-3">Prix TTC</th>
-                <th className="text-right px-4 py-3">TVA</th>
-                <th className="text-center px-4 py-3">État</th>
-                {canEdit && <th className="text-right px-4 py-3"></th>}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((p) => {
-                const isSelected = selected.has(p.id);
-                return (
-                  <tr
-                    key={p.id}
-                    onClick={() => canEdit && setEditing(p)}
-                    className={`border-t border-border hover:bg-bg/60 ${canEdit ? 'cursor-pointer' : ''} ${isSelected ? 'bg-accent-soft/40' : ''}`}
-                  >
-                    {canEdit && (
-                      <td className="px-3 py-3 w-10" onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => toggleOne(p.id)}
-                          className="cursor-pointer"
-                        />
-                      </td>
-                    )}
-                    <td className="px-2 py-3 text-center text-base">
-                      {p.is_top_product ? (
-                        <span className="text-warning" title="Top produit">★</span>
-                      ) : (
-                        <span className="text-ink-soft/30">·</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="font-medium">{p.name}</div>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {p.price_is_free && <Badge tone="warning">Prix libre</Badge>}
-                        {p.is_customizable && <Badge tone="soft">Personnalisable</Badge>}
-                        {p.is_seasonal && <Badge tone="neutral">Saisonnier</Badge>}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-ink-soft">{p.category_name ?? '—'}</td>
-                    <td className="px-4 py-3 text-ink-soft text-xs font-mono">{p.sku ?? '—'}</td>
-                    <td className="px-4 py-3 text-right font-medium">
-                      {p.price_is_free ? <span className="text-ink-soft">libre</span> : formatEUR(p.sale_price_ttc)}
-                    </td>
-                    <td className="px-4 py-3 text-right">{p.tax_rate}%</td>
-                    <td className="px-4 py-3 text-center">
-                      {!p.is_active ? <Badge tone="danger">Inactif</Badge> :
-                       p.visible_in_pos ? <Badge tone="success">Caisse</Badge> :
-                       <Badge tone="neutral">Caché</Badge>}
-                    </td>
-                    {canEdit && (
-                      <td className="px-4 py-3 text-right">
-                        <span className="text-sage-deep text-sm">Modifier ›</span>
-                      </td>
-                    )}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+          <div className="flex-1 overflow-y-auto min-h-0">
+            {loading ? (
+              <div className="p-4 text-sm text-ink-soft">Chargement…</div>
+            ) : filtered.length === 0 ? (
+              <div className="p-4 text-sm text-ink-soft/70">
+                {products.length === 0 ? 'Aucun produit.' : 'Aucun résultat.'}
+              </div>
+            ) : (
+              <ul className="divide-y divide-border">
+                {filtered.map((p) => {
+                  const limited = p.store_ids.length > 0;
+                  return (
+                    <li key={p.id}>
+                      <button
+                        onClick={() => canEdit && setEditing(p)}
+                        className={`w-full text-left px-3 py-2.5 transition-colors ${
+                          activeId === p.id ? 'bg-accent-soft' : 'hover:bg-gray-50'
+                        } ${canEdit ? '' : 'cursor-default'}`}
+                      >
+                        <div className="flex items-center gap-2">
+                          {p.is_top_product && <span className="text-warning" title="Top produit">★</span>}
+                          <span className="font-medium text-sm truncate flex-1">{p.name}</span>
+                          <span className="text-sm font-medium tabular-nums whitespace-nowrap">
+                            {p.price_is_free ? 'libre' : formatEUR(p.sale_price_ttc)}
+                          </span>
+                        </div>
+                        <div className="mt-0.5 flex items-center gap-1.5 text-xs text-ink-soft">
+                          <span className="truncate">{p.category_name ?? 'Sans catégorie'}</span>
+                          {!p.is_active && <Badge tone="danger">Inactif</Badge>}
+                          {p.is_active && !p.visible_in_pos && <Badge tone="neutral">Caché</Badge>}
+                          {limited && (
+                            <span className="ml-auto rounded-full bg-bg px-1.5 py-0.5 text-[10px] whitespace-nowrap"
+                                  title={p.store_ids.map((id) => storeName.get(id) ?? '?').join(', ')}>
+                              🏪 {p.store_ids.length === 1
+                                ? (storeName.get(p.store_ids[0]!) ?? '1 boutique')
+                                : `${p.store_ids.length} boutiques`}
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        </aside>
 
-      {editing !== undefined && (
-        <ProductFormModal
-          product={editing}
-          taxRates={taxRates}
-          categories={categories}
-          onClose={() => setEditing(undefined)}
-          onSaved={() => { setEditing(undefined); void reload(); }}
-        />
-      )}
+        {/* COLONNE FICHE (2/3) */}
+        <main className="overflow-y-auto bg-bg min-h-0">
+          {editing !== undefined ? (
+            <ProductFormModal
+              key={editing?.id ?? 'new'}
+              product={editing}
+              taxRates={taxRates}
+              categories={categories}
+              inline
+              onClose={() => setEditing(undefined)}
+              onSaved={() => { setEditing(undefined); void reload(); }}
+            />
+          ) : (
+            <div className="h-full grid place-items-center p-8">
+              <EmptyState
+                icon="◈"
+                title="Aucun article sélectionné"
+                description="Choisissez un article dans la liste pour voir sa fiche, ou créez-en un nouveau."
+                action={canEdit ? (
+                  <button className="btn-primary" onClick={() => setEditing(null)}>+ Nouveau produit</button>
+                ) : undefined}
+              />
+            </div>
+          )}
+        </main>
+      </div>
 
       {showImport && (
         <ProductImportModal
@@ -318,22 +240,9 @@ export default function ProductsList({
 
 function Kpi({ label, value }: { label: string; value: string }) {
   return (
-    <div className="card p-4">
-      <div className="text-xs uppercase tracking-wider text-ink-soft">{label}</div>
-      <div className="mt-1 text-xl font-semibold tracking-tight">{value}</div>
+    <div className="card p-3">
+      <div className="text-[11px] uppercase tracking-wider text-ink-soft">{label}</div>
+      <div className="mt-0.5 text-xl font-semibold tracking-tight">{value}</div>
     </div>
-  );
-}
-
-function FilterChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-colors ${
-        active ? 'bg-sage text-white border-sage' : 'bg-white text-ink border-border hover:border-sage/40'
-      }`}
-    >
-      {children}
-    </button>
   );
 }

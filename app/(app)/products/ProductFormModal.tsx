@@ -45,13 +45,15 @@ const PRODUCT_COLORS = [
 ];
 
 export default function ProductFormModal({
-  product, taxRates, categories, onClose, onSaved,
+  product, taxRates, categories, onClose, onSaved, inline = false,
 }: {
   product: Product | null;
   taxRates: { id: string; code: string; rate: number; label: string; is_default: boolean }[];
   categories: { id: string; name: string }[];
   onClose: () => void;
   onSaved: () => void;
+  /** true = panneau intégré (page Produits), false = modale superposée. */
+  inline?: boolean;
 }) {
   const defaultTax = taxRates.find((t) => t.is_default) ?? taxRates[0];
   const [liveCategories, setLiveCategories] = useState(categories);
@@ -197,11 +199,16 @@ export default function ProductFormModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-ink/30 backdrop-blur-sm p-2 sm:p-4 overflow-auto">
-      <div className="card w-full max-w-2xl lg:max-w-4xl p-4 sm:p-6 my-4 sm:my-8">
+    <div className={inline
+      ? 'h-full overflow-y-auto'
+      : 'fixed inset-0 z-50 grid place-items-center bg-ink/30 backdrop-blur-sm p-2 sm:p-4 overflow-auto'}>
+      <div className={inline
+        ? 'card w-full p-4 sm:p-6 m-4 sm:m-6'
+        : 'card w-full max-w-2xl lg:max-w-4xl p-4 sm:p-6 my-4 sm:my-8'}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold">{product ? 'Modifier produit' : 'Nouveau produit'}</h2>
-          <button onClick={onClose} className="text-ink-soft hover:text-ink text-xl leading-none">✕</button>
+          <button onClick={onClose} className="text-ink-soft hover:text-ink text-xl leading-none"
+                  title={inline ? 'Fermer la fiche' : 'Fermer'}>✕</button>
         </div>
 
         {/* Onglets Détails / Historique (l'historique n'existe que pour un
