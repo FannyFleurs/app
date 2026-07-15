@@ -201,7 +201,7 @@ export default function ClosuresAdmin({ stores, registers }: { stores: Store[]; 
     void (async () => {
       try {
         const [rR, rP] = await Promise.all([
-          fetch('/api/settings/receipt'),
+          fetch(`/api/settings/receipt${storeId ? `?store_id=${encodeURIComponent(storeId)}` : ''}`),
           fetch('/api/settings/printer'),
         ]);
         if (!rR.ok || !rP.ok) return;

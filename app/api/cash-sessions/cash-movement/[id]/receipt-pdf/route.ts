@@ -4,7 +4,7 @@ import { query } from '@/lib/db/client';
 import { requirePermission } from '@/lib/auth/guards';
 import { jsonError } from '@/lib/validation/api';
 import { formatEUR } from '@/lib/services/money';
-import { RECEIPT_KEY, mergeReceiptDefaults, type ReceiptSettings } from '@/lib/settings/receipt';
+import { loadReceiptSettings } from '@/lib/settings/receipt-server';
 
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
   const g = await requirePermission('pos.use');
@@ -15,12 +15,14 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     amount: string; reason: string; created_at: string;
     user_name: string;
     store_name: string;
+    store_id: string;
     register_code: string;
     org_name: string;
   }>(
     `SELECT cm.id, cm.movement_type, cm.amount::text, cm.reason, cm.created_at,
             u.full_name AS user_name,
             st.name AS store_name,
+            st.id AS store_id,
             rg.code AS register_code,
             o.name AS org_name
        FROM cash_movements cm
@@ -35,11 +37,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   if (rows.length === 0) return jsonError('NOT_FOUND', 404);
   const m = rows[0]!;
 
-  const settingsRes = await query<{ value: Partial<ReceiptSettings> }>(
-    `SELECT value FROM settings WHERE organization_id = $1 AND key = $2`,
-    [g.user.organizationId, RECEIPT_KEY],
-  );
-  const rs = mergeReceiptDefaults(settingsRes.rows[0]?.value ?? null);
+  const rs = await loadReceiptSettings(g.user.organizationId, m.store_id);
   const isBankDeposit = m.movement_type === 'out' && /banque/i.test(m.reason);
 
   const pdf = await new Promise<Buffer>((resolve, reject) => {

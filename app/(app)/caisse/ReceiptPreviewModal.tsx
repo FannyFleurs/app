@@ -7,12 +7,14 @@ interface Props {
     id: string; number: string; saleId: string; customerId: string | null;
     loyalty?: { earned: number; redeemed: number; new_balance: number } | null;
   };
+  /** Boutique du poste : sert à charger le paramétrage ticket de CETTE boutique. */
+  storeId?: string;
   onClose: () => void;
 }
 
 const AUTO_CLOSE_MS = 5_000;
 
-export default function ReceiptPreviewModal({ receipt, onClose }: Props) {
+export default function ReceiptPreviewModal({ receipt, storeId, onClose }: Props) {
   const isSchool = receipt.id.startsWith('school-receipt-');
   const pdfUrl = isSchool ? '' : `/api/receipts/${receipt.id}/pdf`;
   const [invoice, setInvoice] = useState<{ id: string; number: string } | null>(null);
@@ -55,7 +57,7 @@ export default function ReceiptPreviewModal({ receipt, onClose }: Props) {
     void (async () => {
       try {
         const [rR, rP] = await Promise.all([
-          fetch('/api/settings/receipt'),
+          fetch(`/api/settings/receipt${storeId ? `?store_id=${encodeURIComponent(storeId)}` : ''}`),
           fetch('/api/settings/printer'),
         ]);
         if (!rR.ok || !rP.ok) return;

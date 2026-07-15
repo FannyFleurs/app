@@ -1621,6 +1621,7 @@ export default function CashRegister({
       {receipt && (
         <ReceiptPreviewModal
           receipt={receipt}
+          storeId={storeId}
           onClose={() => {
             setReceipt(null);
             // C'est maintenant qu'on signale la fin de la vente : la modale a

@@ -3,7 +3,7 @@ import { requirePermission } from '@/lib/auth/guards';
 import { jsonError } from '@/lib/validation/api';
 import { query } from '@/lib/db/client';
 import { renderReceiptPdf, type ReceiptSnapshot, type OrgInfo } from '@/lib/services/receipt-pdf';
-import { RECEIPT_KEY, mergeReceiptDefaults, type ReceiptSettings } from '@/lib/settings/receipt';
+import { loadReceiptSettings } from '@/lib/settings/receipt-server';
 
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
   const g = await requirePermission('pos.use');
@@ -27,7 +27,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     org_name: string; org_legal: string; org_siret: string | null;
     org_vat: string | null; org_address: { line1?: string; zip?: string; city?: string } | null;
     org_phone: string | null;
-    store_name: string | null; register_code: string | null;
+    store_name: string | null; store_id: string; register_code: string | null;
     user_name: string | null;
   }>(
     `SELECT
@@ -35,7 +35,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
         o.vat_number AS org_vat,
         o.address AS org_address,
         (o.contact->>'phone') AS org_phone,
-        st.name AS store_name, rg.code AS register_code,
+        st.name AS store_name, st.id AS store_id, rg.code AS register_code,
         u.full_name AS user_name
       FROM sales s
       JOIN organizations o ON o.id = s.organization_id
@@ -52,11 +52,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     address: c.org_address, phone: c.org_phone,
   };
 
-  const settingsRes = await query<{ value: Partial<ReceiptSettings> }>(
-    `SELECT value FROM settings WHERE organization_id = $1 AND key = $2`,
-    [g.user.organizationId, RECEIPT_KEY],
-  );
-  const receiptSettings = mergeReceiptDefaults(settingsRes.rows[0]?.value ?? null);
+  const receiptSettings = await loadReceiptSettings(g.user.organizationId, c.store_id);
 
   const buf = await renderReceiptPdf(rec.snapshot, org, {
     fiscalHash: rec.fiscal_hash,

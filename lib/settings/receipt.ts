@@ -5,6 +5,16 @@
 
 export const RECEIPT_KEY = 'receipt';
 
+/**
+ * Clé de stockage du paramétrage ticket pour une boutique donnée.
+ * Chaque boutique a son propre ticket : `receipt:<storeId>`. La clé
+ * historique `receipt` (sans boutique) sert de modèle par défaut / repli
+ * tant qu'une boutique n'a pas enregistré sa propre configuration.
+ */
+export function receiptKey(storeId?: string | null): string {
+  return storeId ? `${RECEIPT_KEY}:${storeId}` : RECEIPT_KEY;
+}
+
 export interface ReceiptSettings {
   /** Logo en data URL (PNG/JPG, max ~50 kB recommandé). Vide = pas de logo. */
   logo_data_url: string;

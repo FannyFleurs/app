@@ -1,21 +1,38 @@
 'use client';
 
-import { useState } from 'react';
-import type { ReceiptSettings } from '@/lib/settings/receipt';
+import { useEffect, useState } from 'react';
+import { RECEIPT_DEFAULTS, type ReceiptSettings } from '@/lib/settings/receipt';
 
-export default function ReceiptSettingsForm({ initial, canEdit }: {
-  initial: ReceiptSettings; canEdit: boolean;
+export default function ReceiptSettingsForm({ stores, canEdit }: {
+  stores: { id: string; name: string }[]; canEdit: boolean;
 }) {
-  const [form, setForm] = useState<ReceiptSettings>(initial);
+  const [storeId, setStoreId] = useState<string>(stores[0]?.id ?? '');
+  const [form, setForm] = useState<ReceiptSettings>(RECEIPT_DEFAULTS);
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+
+  // Charge la configuration ticket de la boutique sélectionnée (avec repli
+  // sur le modèle organisation tant que la boutique n'a rien enregistré).
+  useEffect(() => {
+    if (!storeId) { setLoading(false); return; }
+    let cancelled = false;
+    setLoading(true); setError(null); setSaved(false);
+    void (async () => {
+      const r = await fetch(`/api/settings/receipt?store_id=${encodeURIComponent(storeId)}`);
+      if (cancelled) return;
+      if (r.ok) setForm((await r.json()).settings as ReceiptSettings);
+      setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [storeId]);
 
   async function submit() {
     setSaving(true); setError(null); setSaved(false);
     const r = await fetch('/api/settings/receipt', {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
+      body: JSON.stringify({ ...form, store_id: storeId || undefined }),
     });
     setSaving(false);
     if (!r.ok) {
@@ -38,12 +55,32 @@ export default function ReceiptSettingsForm({ initial, canEdit }: {
 
   return (
     <div className="p-6 md:p-8 max-w-4xl space-y-5">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Paramétrage ticket</h1>
-        <p className="mt-1 text-sm text-ink-soft">
-          En-tête, pied de page, options d&apos;impression du ticket de caisse.
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Paramétrage ticket</h1>
+          <p className="mt-1 text-sm text-ink-soft">
+            En-tête, pied de page, options d&apos;impression — <strong>propre à chaque boutique</strong>.
+          </p>
+        </div>
+        {stores.length > 0 && (
+          <label className="text-sm">
+            <span className="block text-xs font-medium text-ink-soft mb-1">Boutique</span>
+            <select
+              className="input h-10 min-w-[12rem]"
+              value={storeId}
+              onChange={(e) => setStoreId(e.target.value)}
+            >
+              {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </label>
+        )}
       </div>
+
+      {stores.length === 0 && (
+        <div className="rounded-xl bg-warning/10 px-3 py-2 text-sm text-warning">
+          Aucune boutique accessible : impossible de paramétrer le ticket.
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
         <div className="space-y-5">
@@ -188,8 +225,8 @@ export default function ReceiptSettingsForm({ initial, canEdit }: {
       {saved && <div className="rounded-xl bg-success/10 px-3 py-2 text-sm text-success">✓ Paramètres enregistrés</div>}
 
       {canEdit && (
-        <button onClick={() => void submit()} disabled={saving} className="btn-primary">
-          {saving ? 'Enregistrement…' : 'Enregistrer'}
+        <button onClick={() => void submit()} disabled={saving || loading || !storeId} className="btn-primary">
+          {loading ? 'Chargement…' : saving ? 'Enregistrement…' : 'Enregistrer cette boutique'}
         </button>
       )}
     </div>
