@@ -236,15 +236,21 @@ export default function CashRegister({
 
   const searchRef = useRef<HTMLInputElement>(null);
 
-  // Charge produits + catégories (re-fetch a chaque changement de boutique
-  // — la portee des produits par store_ids peut varier d'une boutique a
-  // l'autre).
+  // Écran & livraison : la valeur reçue du serveur est au niveau organisation
+  // (le poste n'est pas encore lié côté serveur). On la réaffine par boutique
+  // une fois le storeId connu — chaque boutique active/désactive la commande
+  // différée indépendamment.
+  const [deferredEnabled, setDeferredEnabled] = useState(deferredOrdersEnabled);
+
+  // Charge produits + catégories + réglage écran/livraison (re-fetch a chaque
+  // changement de boutique — la portee par boutique peut varier).
   useEffect(() => {
     if (!storeId) return;
     void (async () => {
-      const [pRes, cRes] = await Promise.all([
+      const [pRes, cRes, sdRes] = await Promise.all([
         fetch(`/api/products?pos=1&store_id=${encodeURIComponent(storeId)}`),
         fetch('/api/categories'),
+        fetch(`/api/settings/screen-delivery?store_id=${encodeURIComponent(storeId)}`),
       ]);
       if (pRes.ok) {
         const j = await pRes.json();
@@ -257,6 +263,7 @@ export default function CashRegister({
         );
       }
       if (cRes.ok) setCategories((await cRes.json()).categories);
+      if (sdRes.ok) setDeferredEnabled(Boolean((await sdRes.json()).settings?.enabled));
     })();
   }, [storeId]);
 
@@ -1551,7 +1558,7 @@ export default function CashRegister({
         </div>
 
         <div className="p-2.5 border-t border-border space-y-2">
-          {deferredOrdersEnabled && (
+          {deferredEnabled && (
             <button
               disabled={lines.length === 0 || totals.ttc <= 0}
               className="btn-soft w-full h-12 text-base font-semibold"

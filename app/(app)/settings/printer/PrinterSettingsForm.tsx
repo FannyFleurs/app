@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import PageHeader from '@/components/PageHeader';
+import StoreScopeSelect from '@/components/StoreScopeSelect';
 
 interface Settings {
   enabled: boolean;
@@ -20,7 +21,10 @@ const DEFAULTS: Settings = {
   brand: '',
 };
 
-export default function PrinterSettingsForm({ canWrite }: { canWrite: boolean }) {
+export default function PrinterSettingsForm({ canWrite, stores }: {
+  canWrite: boolean; stores: { id: string; name: string }[];
+}) {
+  const [storeId, setStoreId] = useState<string>(stores[0]?.id ?? '');
   const [s, setS] = useState<Settings>(DEFAULTS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -29,13 +33,18 @@ export default function PrinterSettingsForm({ canWrite }: { canWrite: boolean })
   const [testResult, setTestResult] = useState<{ ok: boolean; ms?: number; error?: string } | null>(null);
   const [testing, setTesting] = useState(false);
 
+  // Recharge la config imprimante de la boutique sélectionnée (repli org).
   useEffect(() => {
+    let cancelled = false;
+    setLoading(true); setError(null); setTestResult(null);
     void (async () => {
-      const r = await fetch('/api/settings/printer');
+      const r = await fetch(`/api/settings/printer${storeId ? `?store_id=${encodeURIComponent(storeId)}` : ''}`);
+      if (cancelled) return;
       if (r.ok) setS((await r.json()).settings);
       setLoading(false);
     })();
-  }, []);
+    return () => { cancelled = true; };
+  }, [storeId]);
 
   function patch<K extends keyof Settings>(k: K, v: Settings[K]) {
     setS((cur) => ({ ...cur, [k]: v }));
@@ -45,7 +54,7 @@ export default function PrinterSettingsForm({ canWrite }: { canWrite: boolean })
     setSaving(true); setError(null);
     const r = await fetch('/api/settings/printer', {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(s),
+      body: JSON.stringify({ ...s, store_id: storeId || undefined }),
     });
     setSaving(false);
     if (!r.ok) {
@@ -80,8 +89,9 @@ export default function PrinterSettingsForm({ canWrite }: { canWrite: boolean })
       <Link href="/settings" className="text-sm text-ink-soft hover:text-ink md:hidden">← Paramètres</Link>
       <PageHeader
         title="Imprimante ticket"
-        subtitle="Connexion à une imprimante ESC/POS réseau (Epson, Star, Bixolon…). La config est enregistrée pour servir à l'impression depuis le navigateur."
+        subtitle="Connexion à une imprimante ESC/POS réseau (Epson, Star, Bixolon…), propre à chaque boutique."
         badge={!canWrite ? { label: 'Lecture seule pour votre rôle', tone: 'soft' } : undefined}
+        actions={<StoreScopeSelect stores={stores} value={storeId} onChange={setStoreId} />}
       />
 
       <div className="card p-5 space-y-4">
@@ -202,10 +212,10 @@ export default function PrinterSettingsForm({ canWrite }: { canWrite: boolean })
       <div className="flex items-center gap-3">
         <button
           onClick={() => void save()}
-          disabled={saving || !canWrite}
+          disabled={saving || !canWrite || loading || !storeId}
           className="btn-primary"
         >
-          {saving ? 'Enregistrement…' : 'Enregistrer'}
+          {saving ? 'Enregistrement…' : 'Enregistrer cette boutique'}
         </button>
         {savedToast && (
           <span className="text-sm text-success">✓ Enregistré</span>

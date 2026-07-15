@@ -4,6 +4,9 @@ import { query } from '@/lib/db/client';
 import { requirePermission } from '@/lib/auth/guards';
 import { parseJson, jsonError } from '@/lib/validation/api';
 import { audit } from '@/lib/audit/log';
+import { storeInOrg } from '@/lib/auth/stores-server';
+import { scopedSettingKey } from '@/lib/settings/scoped';
+import { loadScopedSettingValue } from '@/lib/settings/scoped-server';
 import {
   PRINTER_KEY,
   mergePrinterDefaults,
@@ -12,17 +15,21 @@ import {
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: Request) {
   const g = await requirePermission('settings.read');
   if ('response' in g) return g.response;
-  const { rows } = await query<{ value: Partial<PrinterSettings> }>(
-    `SELECT value FROM settings WHERE organization_id = $1 AND key = $2`,
-    [g.user.organizationId, PRINTER_KEY],
+  const storeId = new URL(req.url).searchParams.get('store_id') || undefined;
+  if (storeId && !(await storeInOrg(storeId, g.user.organizationId))) {
+    return jsonError('STORE_NOT_FOUND', 404);
+  }
+  const value = await loadScopedSettingValue<PrinterSettings>(
+    g.user.organizationId, PRINTER_KEY, storeId,
   );
-  return NextResponse.json({ settings: mergePrinterDefaults(rows[0]?.value ?? null) });
+  return NextResponse.json({ settings: mergePrinterDefaults(value) });
 }
 
 const schema = z.object({
+  store_id: z.string().uuid().optional(),
   enabled: z.boolean(),
   ip: z.string().max(64),
   port: z.number().int().min(1).max(65535),
@@ -35,7 +42,11 @@ export async function PATCH(req: Request) {
   if ('response' in g) return g.response;
   const parsed = await parseJson(req, schema);
   if ('response' in parsed) return parsed.response;
-  const v = parsed.data;
+  const { store_id: storeId, ...v } = parsed.data;
+  if (storeId && !(await storeInOrg(storeId, g.user.organizationId))) {
+    return jsonError('STORE_NOT_FOUND', 404);
+  }
+  const key = scopedSettingKey(PRINTER_KEY, storeId);
 
   try {
     await query(
@@ -45,13 +56,13 @@ export async function PATCH(req: Request) {
        DO UPDATE SET value = EXCLUDED.value,
                      updated_by = EXCLUDED.updated_by,
                      updated_at = now()`,
-      [g.user.organizationId, PRINTER_KEY, JSON.stringify(v), g.user.id],
+      [g.user.organizationId, key, JSON.stringify(v), g.user.id],
     );
     await audit({
       organizationId: g.user.organizationId, userId: g.user.id,
       action: 'settings.printer.update',
-      entityType: 'settings', entityId: null,
-      payload: v,
+      entityType: 'settings', entityId: storeId ?? null,
+      payload: { store_id: storeId ?? null, ...v },
     });
     return NextResponse.json({ ok: true });
   } catch (err) {

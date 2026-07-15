@@ -1,21 +1,38 @@
 'use client';
 
-import { useState } from 'react';
-import type { CashSettings } from '@/lib/settings/cash';
+import { useEffect, useState } from 'react';
+import { CASH_DEFAULTS, type CashSettings } from '@/lib/settings/cash';
+import StoreScopeSelect from '@/components/StoreScopeSelect';
 
-export default function CashSettingsForm({ initial, canEdit }: {
-  initial: CashSettings; canEdit: boolean;
+export default function CashSettingsForm({ canEdit, stores }: {
+  canEdit: boolean; stores: { id: string; name: string }[];
 }) {
-  const [form, setForm] = useState<CashSettings>(initial);
+  const [storeId, setStoreId] = useState<string>(stores[0]?.id ?? '');
+  const [form, setForm] = useState<CashSettings>(CASH_DEFAULTS);
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+
+  // Recharge la gestion argent de la boutique sélectionnée (repli org).
+  useEffect(() => {
+    if (!storeId) { setLoading(false); return; }
+    let cancelled = false;
+    setLoading(true); setError(null); setSaved(false);
+    void (async () => {
+      const r = await fetch(`/api/settings/cash?store_id=${encodeURIComponent(storeId)}`);
+      if (cancelled) return;
+      if (r.ok) setForm((await r.json()).settings as CashSettings);
+      setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [storeId]);
 
   async function submit() {
     setSaving(true); setError(null); setSaved(false);
     const r = await fetch('/api/settings/cash', {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
+      body: JSON.stringify({ ...form, store_id: storeId || undefined }),
     });
     setSaving(false);
     if (!r.ok) {
@@ -29,11 +46,14 @@ export default function CashSettingsForm({ initial, canEdit }: {
 
   return (
     <div className="p-6 md:p-8 max-w-2xl space-y-5">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Gestion argent</h1>
-        <p className="mt-1 text-sm text-ink-soft">
-          Plafond d&apos;espèces, fonds de caisse minimum, remises en banque.
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Gestion argent</h1>
+          <p className="mt-1 text-sm text-ink-soft">
+            Plafond d&apos;espèces, fonds de caisse minimum, remises en banque — par boutique.
+          </p>
+        </div>
+        <StoreScopeSelect stores={stores} value={storeId} onChange={setStoreId} />
       </div>
 
       <div className="card p-5 space-y-4">
@@ -102,8 +122,8 @@ export default function CashSettingsForm({ initial, canEdit }: {
       {saved && <div className="rounded-xl bg-success/10 px-3 py-2 text-sm text-success">✓ Paramètres enregistrés</div>}
 
       {canEdit && (
-        <button onClick={() => void submit()} disabled={saving} className="btn-primary">
-          {saving ? 'Enregistrement…' : 'Enregistrer'}
+        <button onClick={() => void submit()} disabled={saving || loading || !storeId} className="btn-primary">
+          {loading ? 'Chargement…' : saving ? 'Enregistrement…' : 'Enregistrer cette boutique'}
         </button>
       )}
     </div>

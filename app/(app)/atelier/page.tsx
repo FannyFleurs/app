@@ -2,11 +2,7 @@ import Link from 'next/link';
 import { readSessionFromCookie } from '@/lib/auth/session';
 import { userCan } from '@/lib/auth/permissions';
 import { query } from '@/lib/db/client';
-import {
-  SCREEN_DELIVERY_KEY,
-  mergeScreenDeliveryDefaults,
-  type ScreenDeliverySettings,
-} from '@/lib/settings/screen-delivery';
+import { SCREEN_DELIVERY_KEY } from '@/lib/settings/screen-delivery';
 import AtelierScreen from './AtelierScreen';
 
 export const dynamic = 'force-dynamic';
@@ -17,13 +13,21 @@ export default async function AtelierPage() {
     return <div className="p-8">Accès refusé.</div>;
   }
 
-  const sd = await query<{ value: Partial<ScreenDeliverySettings> }>(
-    `SELECT value FROM settings WHERE organization_id = $1 AND key = $2`,
+  // Écran atelier accessible dès que l'option est activée pour l'organisation
+  // OU pour au moins une boutique (réglages désormais par boutique :
+  // clés `screen_delivery` et `screen_delivery:<storeId>`).
+  const sd = await query<{ any: boolean }>(
+    `SELECT EXISTS (
+        SELECT 1 FROM settings
+         WHERE organization_id = $1
+           AND (key = $2 OR key LIKE $2 || ':%')
+           AND COALESCE((value->>'enabled')::boolean, FALSE) = TRUE
+      ) AS any`,
     [user.organizationId, SCREEN_DELIVERY_KEY],
   );
-  const screenDelivery = mergeScreenDeliveryDefaults(sd.rows[0]?.value ?? null);
+  const anyEnabled = sd.rows[0]?.any ?? false;
 
-  if (!screenDelivery.enabled) {
+  if (!anyEnabled) {
     return (
       <div className="p-8">
         <div className="card p-6 max-w-xl">

@@ -9,8 +9,12 @@ import {
   mergeScreenDeliveryDefaults,
   type ScreenDeliverySettings,
 } from '@/lib/settings/screen-delivery';
+import { storeInOrg } from '@/lib/auth/stores-server';
+import { scopedSettingKey } from '@/lib/settings/scoped';
+import { loadScopedSettingValue } from '@/lib/settings/scoped-server';
 
 const schema = z.object({
+  store_id: z.string().uuid().optional(),
   enabled: z.boolean().optional(),
   min_lead_hours: z.number().min(0).max(720).optional(),
   delivery_enabled: z.boolean().optional(),
@@ -19,16 +23,17 @@ const schema = z.object({
   screen_welcome: z.string().max(200).optional(),
 });
 
-export async function GET() {
+export async function GET(req: Request) {
   const g = await requirePermission('pos.use');
   if ('response' in g) return g.response;
-  const { rows } = await query<{ value: Partial<ScreenDeliverySettings> }>(
-    `SELECT value FROM settings WHERE organization_id = $1 AND key = $2`,
-    [g.user.organizationId, SCREEN_DELIVERY_KEY],
+  const storeId = new URL(req.url).searchParams.get('store_id') || undefined;
+  if (storeId && !(await storeInOrg(storeId, g.user.organizationId))) {
+    return NextResponse.json({ error: 'STORE_NOT_FOUND' }, { status: 404 });
+  }
+  const value = await loadScopedSettingValue<ScreenDeliverySettings>(
+    g.user.organizationId, SCREEN_DELIVERY_KEY, storeId,
   );
-  return NextResponse.json({
-    settings: mergeScreenDeliveryDefaults(rows[0]?.value ?? null),
-  });
+  return NextResponse.json({ settings: mergeScreenDeliveryDefaults(value) });
 }
 
 export async function PATCH(req: Request) {
@@ -36,27 +41,30 @@ export async function PATCH(req: Request) {
   if ('response' in g) return g.response;
   const parsed = await parseJson(req, schema);
   if ('response' in parsed) return parsed.response;
+  const { store_id: storeId, ...fields } = parsed.data;
+  if (storeId && !(await storeInOrg(storeId, g.user.organizationId))) {
+    return NextResponse.json({ error: 'STORE_NOT_FOUND' }, { status: 404 });
+  }
 
-  const current = await query<{ value: Partial<ScreenDeliverySettings> }>(
-    `SELECT value FROM settings WHERE organization_id = $1 AND key = $2`,
-    [g.user.organizationId, SCREEN_DELIVERY_KEY],
+  const existing = await loadScopedSettingValue<ScreenDeliverySettings>(
+    g.user.organizationId, SCREEN_DELIVERY_KEY, storeId,
   );
-  const existing = current.rows[0]?.value ?? {};
-  const merged = mergeScreenDeliveryDefaults({ ...existing, ...parsed.data });
+  const merged = mergeScreenDeliveryDefaults({ ...existing, ...fields });
+  const key = scopedSettingKey(SCREEN_DELIVERY_KEY, storeId);
 
   await query(
     `INSERT INTO settings (organization_id, key, value, updated_by)
      VALUES ($1, $2, $3, $4)
      ON CONFLICT (organization_id, key)
      DO UPDATE SET value = EXCLUDED.value, updated_at = now(), updated_by = EXCLUDED.updated_by`,
-    [g.user.organizationId, SCREEN_DELIVERY_KEY, JSON.stringify(merged), g.user.id],
+    [g.user.organizationId, key, JSON.stringify(merged), g.user.id],
   );
 
   await audit({
     organizationId: g.user.organizationId, userId: g.user.id,
     action: 'settings.screen_delivery.update',
-    entityType: 'settings',
-    payload: parsed.data,
+    entityType: 'settings', entityId: storeId ?? null,
+    payload: { store_id: storeId ?? null, ...fields },
   });
 
   return NextResponse.json({ settings: merged });

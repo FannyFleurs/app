@@ -58,7 +58,7 @@ export default function ReceiptPreviewModal({ receipt, storeId, onClose }: Props
       try {
         const [rR, rP] = await Promise.all([
           fetch(`/api/settings/receipt${storeId ? `?store_id=${encodeURIComponent(storeId)}` : ''}`),
-          fetch('/api/settings/printer'),
+          fetch(`/api/settings/printer${storeId ? `?store_id=${encodeURIComponent(storeId)}` : ''}`),
         ]);
         if (!rR.ok || !rP.ok) return;
         const recv = (await rR.json()).settings;
