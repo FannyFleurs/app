@@ -114,7 +114,7 @@ export default function ProductsList({
         </section>
       </div>
 
-      <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[minmax(300px,1fr)_2fr] md:overflow-hidden">
+      <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[minmax(240px,1fr)_3fr] md:overflow-hidden">
         {/* COLONNE LISTE (1/3) */}
         <aside className="border-r border-border bg-white flex flex-col overflow-hidden min-h-0">
           <div className="p-3 border-b border-border space-y-2 shrink-0">

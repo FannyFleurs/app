@@ -200,10 +200,10 @@ export default function ProductFormModal({
 
   return (
     <div className={inline
-      ? 'h-full overflow-y-auto'
+      ? 'p-4 sm:p-6'
       : 'fixed inset-0 z-50 grid place-items-center bg-ink/30 backdrop-blur-sm p-2 sm:p-4 overflow-auto'}>
       <div className={inline
-        ? 'card w-full p-4 sm:p-6 m-4 sm:m-6'
+        ? 'card w-full p-4 sm:p-6'
         : 'card w-full max-w-2xl lg:max-w-4xl p-4 sm:p-6 my-4 sm:my-8'}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold">{product ? 'Modifier produit' : 'Nouveau produit'}</h2>
