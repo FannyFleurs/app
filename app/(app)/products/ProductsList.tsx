@@ -115,8 +115,14 @@ export default function ProductsList({
       </div>
 
       <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[minmax(240px,1fr)_3fr] md:overflow-hidden">
-        {/* COLONNE LISTE (1/3) */}
-        <aside className="border-r border-border bg-white flex flex-col overflow-hidden min-h-0">
+        {/* COLONNE LISTE (1/3).
+            Mobile : master-detail — on masque la liste quand une fiche est
+            ouverte (editing !== undefined) ; sur md+ les deux colonnes
+            cohabitent. Les contraintes de hauteur/scroll ne s'appliquent qu'à
+            partir de md (sur mobile la liste s'écoule naturellement). */}
+        <aside className={`border-r border-border bg-white flex-col min-h-0 md:flex md:overflow-hidden ${
+          editing !== undefined ? 'hidden md:flex' : 'flex'
+        }`}>
           <div className="p-3 border-b border-border space-y-2 shrink-0">
             <div className="flex gap-2">
               <input
@@ -153,7 +159,7 @@ export default function ProductsList({
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto min-h-0">
+          <div className="md:flex-1 md:overflow-y-auto md:min-h-0">
             {loading ? (
               <div className="p-4 text-sm text-ink-soft">Chargement…</div>
             ) : filtered.length === 0 ? (
@@ -201,18 +207,30 @@ export default function ProductsList({
           </div>
         </aside>
 
-        {/* COLONNE FICHE (2/3) */}
-        <main className="overflow-y-auto bg-bg min-h-0">
+        {/* COLONNE FICHE (2/3). Mobile : plein écran quand une fiche est
+            ouverte, masquée sinon (c'est la liste qui s'affiche). */}
+        <main className={`bg-bg min-h-0 md:block md:overflow-y-auto ${
+          editing === undefined ? 'hidden md:block' : 'block'
+        }`}>
           {editing !== undefined ? (
-            <ProductFormModal
-              key={editing?.id ?? 'new'}
-              product={editing}
-              taxRates={taxRates}
-              categories={categories}
-              inline
-              onClose={() => setEditing(undefined)}
-              onSaved={() => { setEditing(undefined); void reload(); }}
-            />
+            <>
+              {/* Barre retour (mobile uniquement) */}
+              <button
+                className="md:hidden w-full flex items-center gap-2 px-4 py-3 border-b border-border bg-white text-sm font-medium"
+                onClick={() => setEditing(undefined)}
+              >
+                <span aria-hidden>←</span> Retour à la liste
+              </button>
+              <ProductFormModal
+                key={editing?.id ?? 'new'}
+                product={editing}
+                taxRates={taxRates}
+                categories={categories}
+                inline
+                onClose={() => setEditing(undefined)}
+                onSaved={() => { setEditing(undefined); void reload(); }}
+              />
+            </>
           ) : (
             <div className="h-full grid place-items-center p-8">
               <EmptyState
