@@ -145,6 +145,21 @@ export async function GET(req: Request) {
     where += ` AND (COALESCE(array_length(p.store_ids, 1), 0) = 0 OR p.store_ids @> ARRAY[$${params.length}]::uuid[])`;
   }
 
+  // Verrouillage boutique cote serveur : un utilisateur rattache a des
+  // boutiques precises (user_store_access) ne voit QUE les produits partages
+  // (store_ids vide = toutes boutiques) ou attribues a l'une de SES boutiques.
+  // Seuls super_admin et owner voient l'integralite du catalogue de l'org.
+  if (!['super_admin', 'owner'].includes(g.user.role) && (await hasStoreIdsColumn())) {
+    const access = await query<{ store_id: string }>(
+      `SELECT store_id FROM user_store_access WHERE user_id = $1`,
+      [g.user.id],
+    );
+    if (access.rows.length > 0) {
+      params.push(access.rows.map((r) => r.store_id));
+      where += ` AND (COALESCE(array_length(p.store_ids, 1), 0) = 0 OR p.store_ids && $${params.length}::uuid[])`;
+    }
+  }
+
   const topCol = (await hasTopColumn())
     ? `COALESCE(p.is_top_product, FALSE) AS is_top_product`
     : `FALSE AS is_top_product`;
