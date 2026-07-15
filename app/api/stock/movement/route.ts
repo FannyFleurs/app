@@ -25,18 +25,36 @@ export async function POST(req: Request) {
 
   try {
     const out = await withTransaction(async (client) => {
-      const lvl = await client.query<{ id: string; quantity: string }>(
-        `INSERT INTO stock_levels (organization_id, store_id, product_id, variant_id, quantity)
-         VALUES ($1,$2,$3,$4,0)
-         ON CONFLICT (store_id, product_id, variant_id) DO UPDATE SET store_id = EXCLUDED.store_id
-         RETURNING id, quantity`,
-        [g.user.organizationId, d.store_id, d.product_id, d.variant_id ?? null],
+      // Lecture verrouillée NULL-safe : un ON CONFLICT sur
+      // (store_id, product_id, variant_id) ne matche JAMAIS quand variant_id
+      // est NULL (les NULL SQL sont distincts), ce qui créait une NOUVELLE
+      // ligne de stock à chaque entrée au lieu de mettre à jour l'existante.
+      // On utilise donc `IS NOT DISTINCT FROM` + FOR UPDATE (cf. sale-service).
+      const existing = await client.query<{ id: string; quantity: string }>(
+        `SELECT id, quantity FROM stock_levels
+          WHERE store_id = $1 AND product_id = $2
+            AND variant_id IS NOT DISTINCT FROM $3
+          FOR UPDATE`,
+        [d.store_id, d.product_id, d.variant_id ?? null],
       );
-      const prev = Number(lvl.rows[0]!.quantity);
+      let levelId: string;
+      let prev: number;
+      if (existing.rows[0]) {
+        levelId = existing.rows[0].id;
+        prev = Number(existing.rows[0].quantity);
+      } else {
+        const ins = await client.query<{ id: string }>(
+          `INSERT INTO stock_levels (organization_id, store_id, product_id, variant_id, quantity)
+           VALUES ($1,$2,$3,$4,0) RETURNING id`,
+          [g.user.organizationId, d.store_id, d.product_id, d.variant_id ?? null],
+        );
+        levelId = ins.rows[0]!.id;
+        prev = 0;
+      }
       const next = Number((prev + d.quantity_delta).toFixed(3));
       await client.query(
         `UPDATE stock_levels SET quantity = $1, updated_at = now() WHERE id = $2`,
-        [next, lvl.rows[0]!.id],
+        [next, levelId],
       );
       await client.query(
         `INSERT INTO stock_movements
