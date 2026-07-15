@@ -7,6 +7,12 @@ import Icon, { type IconName } from '@/components/Icon';
 import PageHeader from '@/components/PageHeader';
 import { formatEUR } from '@/lib/services/money';
 
+/** Quantité de stock : entier si rond, sinon jusqu'à 3 décimales sans zéros
+ *  inutiles (11.000 → « 11 », 1.500 → « 1,5 »). */
+function fmtQty(v: string | number): string {
+  return Number(v).toLocaleString('fr-FR', { maximumFractionDigits: 3 });
+}
+
 interface Store { id: string; name: string }
 
 interface StockLevel {
@@ -271,11 +277,11 @@ export default function StockAdmin({ canAdjust, stores }: { canAdjust: boolean; 
                           <td className="px-4 py-3 font-medium">{m.product_name}</td>
                           <td className="px-4 py-3 text-ink-soft">{m.store_name}</td>
                           <td className="px-4 py-3"><Badge tone={t.tone}>{t.label}</Badge></td>
-                          <td className={`px-4 py-3 text-right ${Number(m.quantity_delta) >= 0 ? 'text-success' : 'text-danger'}`}>
-                            {Number(m.quantity_delta) > 0 ? '+' : ''}{m.quantity_delta}
+                          <td className={`px-4 py-3 text-right tabular-nums ${Number(m.quantity_delta) >= 0 ? 'text-success' : 'text-danger'}`}>
+                            {Number(m.quantity_delta) > 0 ? '+' : ''}{fmtQty(m.quantity_delta)}
                           </td>
-                          <td className="px-4 py-3 text-right text-ink-soft text-xs">
-                            {m.previous_quantity} → {m.new_quantity}
+                          <td className="px-4 py-3 text-right text-ink-soft text-xs tabular-nums">
+                            {fmtQty(m.previous_quantity)} → {fmtQty(m.new_quantity)}
                           </td>
                           <td className="px-4 py-3 text-xs">{m.reason}</td>
                         </tr>
