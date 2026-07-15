@@ -38,7 +38,7 @@ export default function OpeningFloatForm({ initial, canEdit }: {
   }
 
   return (
-    <div className="p-8 max-w-2xl space-y-5">
+    <div className="p-6 md:p-8 max-w-2xl space-y-5">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Fond de caisse</h1>
         <p className="mt-1 text-sm text-ink-soft">

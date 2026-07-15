@@ -64,7 +64,7 @@ export default function ExportsAdmin() {
   }
 
   return (
-    <div className="p-8 space-y-5 max-w-5xl">
+    <div className="p-6 md:p-8 space-y-5 max-w-5xl">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Exports comptables</h1>
         <p className="mt-1 text-sm text-ink-soft">

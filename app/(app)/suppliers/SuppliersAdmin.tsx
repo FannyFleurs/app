@@ -37,7 +37,7 @@ export default function SuppliersAdmin({ canEdit }: { canEdit: boolean }) {
     : items;
 
   return (
-    <div className="p-8 space-y-5">
+    <div className="p-6 md:p-8 space-y-5">
       <PageHeader
         title="Fournisseurs"
         subtitle="Gérez vos fournisseurs. Chaque article peut être rattaché à un fournisseur."

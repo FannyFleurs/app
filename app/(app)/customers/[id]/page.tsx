@@ -80,7 +80,7 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
   const display = c.company_name || [c.first_name, c.last_name].filter(Boolean).join(' ') || 'Client';
 
   return (
-    <div className="p-8 space-y-5">
+    <div className="p-6 md:p-8 space-y-5">
       <Link href="/customers" className="text-sm text-ink-soft hover:text-ink">← Tous les clients</Link>
 
       <PageHeader

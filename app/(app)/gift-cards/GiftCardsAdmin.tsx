@@ -64,7 +64,7 @@ export default function GiftCardsAdmin() {
   }), [items]);
 
   return (
-    <div className="p-8 space-y-5">
+    <div className="p-6 md:p-8 space-y-5">
       <PageHeader
         title="Cartes cadeaux"
         subtitle="Émettez et suivez vos cartes cadeaux. Chaque carte porte un code-barre EAN-13 scannable en caisse."

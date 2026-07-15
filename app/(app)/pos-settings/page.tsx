@@ -26,7 +26,7 @@ export default async function POSSettingsPage() {
   const initial = mergeWithDefaults(rows[0]?.value ?? null);
 
   return (
-    <div className="p-8 space-y-5">
+    <div className="p-6 md:p-8 space-y-5">
       <PageHeader
         title="Paramètres caisse"
         subtitle="Personnalisez l'interface de vente. Vos réglages sont enregistrés au niveau de votre organisation et appliqués sur toutes les caisses."

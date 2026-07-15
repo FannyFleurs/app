@@ -89,7 +89,7 @@ export default function PaymentMethodsForm({ canWrite }: { canWrite: boolean }) 
   const stripeEnabled = !!stripeMethod?.is_active;
 
   return (
-    <div className="p-8 max-w-2xl space-y-5">
+    <div className="p-6 md:p-8 max-w-2xl space-y-5">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Modes de règlement</h1>
         <p className="mt-1 text-sm text-ink-soft">

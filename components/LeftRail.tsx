@@ -156,7 +156,10 @@ export default function LeftRail({
           pages (qui commencent à rail + padding p-8 du contenu). */}
       <Link
         href="/caisse"
-        className="flex items-center h-20 pl-3 shrink-0 overflow-visible"
+        // h-24 : le centre vertical du logo (48px) s'aligne pile sur le centre
+        // de la première ligne du titre de page (top padding 32px + demi
+        // interligne 16px de text-2xl = 48px). Alignement logo/titre « propre ».
+        className="flex items-center h-24 pl-3 shrink-0 overflow-visible"
         title="Caisse"
       >
         {brand.logo_url ? (

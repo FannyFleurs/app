@@ -36,7 +36,7 @@ export default async function LoyaltyPage() {
   const totalPoints = accounts.rows.reduce((s, a) => s + a.points_balance, 0);
 
   return (
-    <div className="p-8 space-y-5">
+    <div className="p-6 md:p-8 space-y-5">
       <PageHeader
         title="Programme fidélité"
         subtitle="Configurez vos règles de gain et d'utilisation, suivez vos adhérents."

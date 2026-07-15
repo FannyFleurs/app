@@ -11,7 +11,7 @@ export default async function FiscalPage() {
   }
 
   return (
-    <div className="p-8 space-y-5">
+    <div className="p-6 md:p-8 space-y-5">
       <PageHeader
         title="Conformité fiscale"
         subtitle="Votre caisse respecte la réglementation française anti-fraude à la TVA."

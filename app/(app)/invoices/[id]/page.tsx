@@ -66,7 +66,7 @@ export default async function InvoiceDetailPage({ params }: { params: { id: stri
   const s = STATUS[i.status] ?? { label: i.status, tone: 'neutral' as const };
 
   return (
-    <div className="p-8 space-y-5">
+    <div className="p-6 md:p-8 space-y-5">
       <Link href="/invoices" className="text-sm text-ink-soft hover:text-ink">← Toutes les factures</Link>
 
       <PageHeader

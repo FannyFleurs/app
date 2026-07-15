@@ -59,7 +59,7 @@ export default function UsersAdmin({ canWrite, currentUserId }: { canWrite: bool
   const storeName = (id: string) => stores.find((s) => s.id === id)?.name ?? '—';
 
   return (
-    <div className="p-8 space-y-5 max-w-5xl">
+    <div className="p-6 md:p-8 space-y-5 max-w-5xl">
       <Link href="/settings" className="text-sm text-ink-soft hover:text-ink">← Paramètres</Link>
       <PageHeader
         title="Gestion des utilisateurs"

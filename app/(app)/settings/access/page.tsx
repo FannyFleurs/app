@@ -26,7 +26,7 @@ export default async function AccessPage() {
   const ui = mergeWithDefaults(rows[0]?.value ?? null);
 
   return (
-    <div className="p-8 space-y-5 max-w-3xl">
+    <div className="p-6 md:p-8 space-y-5 max-w-3xl">
       <Link href="/settings" className="text-sm text-ink-soft hover:text-ink">← Paramètres</Link>
       <PageHeader
         title="Gestion d'accès"

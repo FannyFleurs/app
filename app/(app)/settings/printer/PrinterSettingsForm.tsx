@@ -76,7 +76,7 @@ export default function PrinterSettingsForm({ canWrite }: { canWrite: boolean })
   if (loading) return <div className="p-8 text-ink-soft">Chargement…</div>;
 
   return (
-    <div className="p-4 md:p-8 space-y-5 max-w-3xl">
+    <div className="p-6 md:p-8 space-y-5 max-w-3xl">
       <Link href="/settings" className="text-sm text-ink-soft hover:text-ink md:hidden">← Paramètres</Link>
       <PageHeader
         title="Imprimante ticket"

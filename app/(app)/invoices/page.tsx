@@ -65,7 +65,7 @@ export default async function InvoicesPage() {
     .reduce((s, i) => s + Number(i.total_ttc), 0);
 
   return (
-    <div className="p-8 space-y-5">
+    <div className="p-6 md:p-8 space-y-5">
       <PageHeader
         title="Factures"
         subtitle="B2C, B2B, pro forma, acomptes, soldes et avoirs. Numérotation séquentielle sans rupture."

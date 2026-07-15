@@ -30,7 +30,7 @@ export default function CategoriesAdmin({ canEdit }: { canEdit: boolean }) {
   useEffect(() => { void reload(); }, []);
 
   return (
-    <div className="p-8 space-y-5">
+    <div className="p-6 md:p-8 space-y-5">
       <PageHeader
         title="Catégories"
         subtitle="Organisez votre catalogue. Une catégorie peut avoir une couleur ET/OU une image qui s'affichera sur la tuile en caisse."
