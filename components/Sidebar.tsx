@@ -21,6 +21,7 @@ export const SIDEBAR_ITEMS: SidebarItem[] = [
   { href: '/caisse',       label: 'Caisse',               icon: 'pos',          group: 'Vente',    perm: 'pos.use', required: true },
   { href: '/ma-journee',   label: 'Ma journée',           icon: 'my-day',       group: 'Vente',    perm: 'pos.use' },
   { href: '/orders',       label: 'Commandes',            icon: 'orders',       group: 'Vente' },
+  { href: '/atelier',      label: 'Écran atelier',        icon: 'sparkle',      group: 'Vente',    perm: 'pos.use' },
   { href: '/invoices',     label: 'Factures',             icon: 'invoices',     group: 'Vente' },
   { href: '/vouchers',     label: 'Avoirs & cartes cadeaux', icon: 'loyalty',    group: 'Vente',    perm: 'pos.use' },
   // Relation
