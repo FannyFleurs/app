@@ -49,7 +49,7 @@ export default function CategoriesAdmin({ canEdit }: { canEdit: boolean }) {
           action={canEdit ? <button className="btn-primary" onClick={() => setEditing(null)}>+ Créer la première</button> : undefined}
         />
       ) : (
-        {/* Deux fois plus de colonnes = tuiles ~50 % plus petites. */}
+        // Deux fois plus de colonnes = tuiles ~50 % plus petites.
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3">
           {items.map((c) => (
             <button
