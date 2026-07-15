@@ -329,68 +329,62 @@ export default function CashRegister({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lines, saleId]);
 
-  // Persiste le saleId en cours dans localStorage (scopé au register actif)
-  // pour le restaurer si l'utilisateur change de page et revient.
+  // Persistance de la vente en cours sur le poste (scopée au register actif) :
+  // si l'utilisateur quitte la caisse — typiquement en ouvrant la fiche d'un
+  // client — puis revient, on retrouve le panier et le client.
   const cartKey = registerId ? `webpos_active_sale:${registerId}` : null;
-  useEffect(() => {
-    if (!cartKey || typeof window === 'undefined') return;
-    if (saleId) localStorage.setItem(cartKey, saleId);
-    else localStorage.removeItem(cartKey);
-  }, [cartKey, saleId]);
-
-  // Restauration : au premier mount, si un saleId est mémorisé pour ce register
-  // et qu'il pointe encore sur une vente draft/on_hold, on recharge les lignes.
   const restoredOnceRef = useRef(false);
+  // Empêche l'effet de persistance d'écrire/supprimer la clé AVANT qu'on ait
+  // tenté de restaurer. Sans ce garde, au remount saleId=null supprimerait la
+  // vente mémorisée avant même que l'effet de restauration ait pu la lire.
+  const restoreAttemptedRef = useRef(false);
+
+  // Restauration EN PREMIER (déclarée avant l'effet de persistance pour
+  // s'exécuter avant lui) : au (re)mount, si un saleId est mémorisé pour ce
+  // register et pointe encore sur une vente draft/on_hold, on recharge lignes
+  // + client (+ fidélité / soldes via restoreCustomerForSale).
   useEffect(() => {
     if (!cartKey || restoredOnceRef.current) return;
     if (typeof window === 'undefined') return;
-    const stored = localStorage.getItem(cartKey);
-    if (!stored) return;
     restoredOnceRef.current = true;
+    const stored = localStorage.getItem(cartKey);
+    if (!stored) { restoreAttemptedRef.current = true; return; }
     void (async () => {
-      const r = await fetch(`/api/sales/${stored}`);
-      if (!r.ok) { localStorage.removeItem(cartKey); return; }
-      const j = await r.json();
-      if (j.sale?.status !== 'draft' && j.sale?.status !== 'on_hold') {
-        localStorage.removeItem(cartKey);
-        return;
-      }
-      setSaleId(stored);
-      setLines((j.lines as Record<string, unknown>[]).map((l) => ({
-        key: cryptoKey(),
-        product_id: (l.product_id as string) ?? null,
-        variant_id: (l.variant_id as string) ?? null,
-        label: l.label as string,
-        unit_price_ttc: Number(l.unit_price_ttc),
-        quantity: Number(l.quantity),
-        discount_amount: Number(l.discount_amount),
-        tax_rate: Number(l.tax_rate),
-        tax_rate_code: l.tax_rate_code as string,
-        metadata: (l.metadata as Record<string, unknown>) ?? {},
-      })));
-      // Recharge éventuellement le client attaché
-      if (j.sale.customer_id) {
-        const cr = await fetch(`/api/customers/${j.sale.customer_id}`);
-        if (cr.ok) {
-          const cj = await cr.json();
-          if (cj.customer) {
-            const cu = cj.customer;
-            setCustomer({
-              id: cu.id,
-              display_name: cu.company_name
-                || [cu.first_name, cu.last_name].filter(Boolean).join(' ')
-                || 'Client',
-              type: cu.type ?? 'particulier',
-              email: cu.email ?? null,
-              phone: cu.phone ?? null,
-              company_name: cu.company_name ?? null,
-              default_discount_pct: Number(cu.default_discount_pct ?? 0),
-            });
-          }
+      try {
+        const r = await fetch(`/api/sales/${stored}`);
+        if (!r.ok) { localStorage.removeItem(cartKey); return; }
+        const j = await r.json();
+        if (j.sale?.status !== 'draft' && j.sale?.status !== 'on_hold') {
+          localStorage.removeItem(cartKey);
+          return;
         }
+        setSaleId(stored);
+        setLines((j.lines as Record<string, unknown>[]).map((l) => ({
+          key: cryptoKey(),
+          product_id: (l.product_id as string) ?? null,
+          variant_id: (l.variant_id as string) ?? null,
+          label: l.label as string,
+          unit_price_ttc: Number(l.unit_price_ttc),
+          quantity: Number(l.quantity),
+          discount_amount: Number(l.discount_amount),
+          tax_rate: Number(l.tax_rate),
+          tax_rate_code: l.tax_rate_code as string,
+          metadata: (l.metadata as Record<string, unknown>) ?? {},
+        })));
+        await restoreCustomerForSale(j.sale.customer_id ?? null);
+      } finally {
+        // On n'autorise la persistance qu'après cette tentative.
+        restoreAttemptedRef.current = true;
       }
     })();
   }, [cartKey]);
+
+  useEffect(() => {
+    if (!cartKey || typeof window === 'undefined') return;
+    if (!restoreAttemptedRef.current) return;
+    if (saleId) localStorage.setItem(cartKey, saleId);
+    else localStorage.removeItem(cartKey);
+  }, [cartKey, saleId]);
 
   const ensureSale = useCallback(async (): Promise<string | null> => {
     if (saleId) return saleId;
