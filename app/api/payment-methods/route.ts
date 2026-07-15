@@ -11,7 +11,25 @@ const schema = z.object({
   kind: z.enum(KINDS),
   label: z.string().min(1).max(80),
   position: z.number().int().min(0).optional(),
+  store_ids: z.array(z.string().uuid()).optional(),
 });
+
+// Introspection mise en cache : la colonne store_ids (migration 0044) est-elle
+// présente ? Permet un fail-open tant que la migration n'est pas déployée.
+let _hasStoreIds: boolean | null = null;
+async function hasStoreIdsColumn(): Promise<boolean> {
+  if (_hasStoreIds !== null) return _hasStoreIds;
+  try {
+    const { rows } = await query<{ exists: boolean }>(
+      `SELECT EXISTS (
+         SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'payment_methods' AND column_name = 'store_ids'
+       ) AS exists`,
+    );
+    _hasStoreIds = rows[0]?.exists ?? false;
+  } catch { _hasStoreIds = false; }
+  return _hasStoreIds;
+}
 
 const DEFAULT_METHODS: Array<{ kind: typeof KINDS[number]; label: string; position: number }> = [
   { kind: 'cash',         label: 'Espèces',              position: 10 },
@@ -23,20 +41,28 @@ const DEFAULT_METHODS: Array<{ kind: typeof KINDS[number]; label: string; positi
   { kind: 'payment_link', label: 'Lien de paiement Stripe', position: 70 },
 ];
 
-export async function GET() {
+export async function GET(req: Request) {
   const g = await requirePermission('pos.use');
   if ('response' in g) return g.response;
+  const storeId = new URL(req.url).searchParams.get('store_id') || undefined;
+  const hasStoreIds = await hasStoreIdsColumn();
+
+  const storeIdsCol = hasStoreIds ? 'store_ids' : `'{}'::uuid[] AS store_ids`;
+  // Filtre boutique (caisse) : un mode limité à certaines boutiques
+  // (store_ids non vide) n'apparaît que pour ces boutiques ; vide = toutes.
+  const params: unknown[] = [g.user.organizationId];
+  let where = 'organization_id = $1';
+  if (storeId && hasStoreIds) {
+    params.push(storeId);
+    where += ` AND (COALESCE(array_length(store_ids, 1), 0) = 0 OR store_ids @> ARRAY[$${params.length}]::uuid[])`;
+  }
+  const sql = `SELECT id, code, kind, label, is_active, position, ${storeIdsCol}
+                 FROM payment_methods WHERE ${where}
+                ORDER BY position, label`;
 
   // Auto-seed : si l'organisation n'a aucun mode de reglement, on cree
-  // les modes par defaut. C'est cette absence de seed qui faisait
-  // apparaitre la page /settings/payment-methods "vide" alors que la
-  // modale d'encaissement affichait les modes du fallback en dur.
-  let { rows } = await query<{ id: string; code: string; kind: string; label: string; is_active: boolean; position: number }>(
-    `SELECT id, code, kind, label, is_active, position
-       FROM payment_methods WHERE organization_id = $1
-      ORDER BY position, label`,
-    [g.user.organizationId],
-  );
+  // les modes par defaut (portee "toutes boutiques").
+  let { rows } = await query<{ id: string; code: string; kind: string; label: string; is_active: boolean; position: number; store_ids: string[] }>(sql, params);
   if (rows.length === 0) {
     for (const m of DEFAULT_METHODS) {
       const code = `${m.kind}_default`;
@@ -49,13 +75,7 @@ export async function GET() {
         );
       } catch { /* on n'echoue jamais la lecture pour un probleme de seed */ }
     }
-    const reload = await query<{ id: string; code: string; kind: string; label: string; is_active: boolean; position: number }>(
-      `SELECT id, code, kind, label, is_active, position
-         FROM payment_methods WHERE organization_id = $1
-        ORDER BY position, label`,
-      [g.user.organizationId],
-    );
-    rows = reload.rows;
+    rows = (await query<{ id: string; code: string; kind: string; label: string; is_active: boolean; position: number; store_ids: string[] }>(sql, params)).rows;
   }
   return NextResponse.json({ methods: rows });
 }
@@ -68,11 +88,18 @@ export async function POST(req: Request) {
   const m = parsed.data;
   const code = m.code ?? `${m.kind}_${Date.now().toString(36)}`;
   try {
-    const ins = await query<{ id: string }>(
-      `INSERT INTO payment_methods (organization_id, code, kind, label, position)
-       VALUES ($1,$2,$3,$4,$5) RETURNING id`,
-      [g.user.organizationId, code, m.kind, m.label, m.position ?? 99],
-    );
+    const withStoreIds = (m.store_ids !== undefined) && (await hasStoreIdsColumn());
+    const ins = withStoreIds
+      ? await query<{ id: string }>(
+          `INSERT INTO payment_methods (organization_id, code, kind, label, position, store_ids)
+           VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+          [g.user.organizationId, code, m.kind, m.label, m.position ?? 99, m.store_ids],
+        )
+      : await query<{ id: string }>(
+          `INSERT INTO payment_methods (organization_id, code, kind, label, position)
+           VALUES ($1,$2,$3,$4,$5) RETURNING id`,
+          [g.user.organizationId, code, m.kind, m.label, m.position ?? 99],
+        );
     return NextResponse.json({ id: ins.rows[0]!.id }, { status: 201 });
   } catch (err) {
     const msg = (err as Error).message ?? '';

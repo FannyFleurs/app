@@ -1617,6 +1617,7 @@ export default function CashRegister({
         <PaymentModal
           saleId={saleId ?? ''}
           totalTtc={totals.ttc}
+          storeId={storeId}
           loyaltyRedemption={loyalty.used > 0 ? loyalty.used : undefined}
           schoolMode={schoolMode}
           offlineEnabled={offlinePosEnabled()}

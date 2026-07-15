@@ -19,7 +19,7 @@ export default function OpenSessionModal({
 
   useEffect(() => {
     void (async () => {
-      const r = await fetch(`/api/cash-sessions/suggest-float?register_id=${registerId}`);
+      const r = await fetch(`/api/cash-sessions/suggest-float?register_id=${registerId}&store_id=${encodeURIComponent(storeId)}`);
       if (!r.ok) return;
       const j = await r.json();
       setSuggestion(j);

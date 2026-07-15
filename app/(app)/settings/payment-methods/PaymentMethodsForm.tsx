@@ -9,6 +9,7 @@ interface PaymentMethod {
   label: string;
   is_active: boolean;
   position: number;
+  store_ids: string[];
 }
 
 interface StripeData {
@@ -33,18 +34,24 @@ const PM_KIND_OPTIONS = [
   { value: 'other', label: 'Autre' },
 ];
 
-export default function PaymentMethodsForm({ canWrite }: { canWrite: boolean }) {
+export default function PaymentMethodsForm({ canWrite, stores }: {
+  canWrite: boolean; stores: { id: string; name: string }[];
+}) {
   const [items, setItems] = useState<PaymentMethod[]>([]);
   const [loading, setLoading] = useState(true);
   const [newLabel, setNewLabel] = useState('');
   const [newKind, setNewKind] = useState('other');
   const [addError, setAddError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const multiStore = stores.length > 1;
 
   async function load() {
     setLoading(true);
     const r = await fetch('/api/payment-methods');
-    if (r.ok) setItems((await r.json()).methods);
+    if (r.ok) {
+      const methods = (await r.json()).methods as PaymentMethod[];
+      setItems(methods.map((m) => ({ ...m, store_ids: m.store_ids ?? [] })));
+    }
     setLoading(false);
   }
   useEffect(() => { void load(); }, []);
@@ -62,6 +69,27 @@ export default function PaymentMethodsForm({ canWrite }: { canWrite: boolean }) 
       body: JSON.stringify({ label }),
     });
     void load();
+  }
+  // Bascule l'appartenance d'un mode à une boutique. store_ids vide = toutes.
+  async function toggleStore(m: PaymentMethod, storeId: string) {
+    const next = m.store_ids.includes(storeId)
+      ? m.store_ids.filter((s) => s !== storeId)
+      : [...m.store_ids, storeId];
+    // Optimiste : reflète tout de suite l'état dans la liste.
+    setItems((cur) => cur.map((x) => (x.id === m.id ? { ...x, store_ids: next } : x)));
+    await fetch(`/api/payment-methods/${m.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ store_ids: next }),
+    });
+  }
+  // « Toutes les boutiques » = store_ids vide.
+  async function setAllStores(m: PaymentMethod) {
+    if (m.store_ids.length === 0) return;
+    setItems((cur) => cur.map((x) => (x.id === m.id ? { ...x, store_ids: [] } : x)));
+    await fetch(`/api/payment-methods/${m.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ store_ids: [] }),
+    });
   }
   async function add() {
     if (!newLabel.trim()) return;
@@ -94,6 +122,7 @@ export default function PaymentMethodsForm({ canWrite }: { canWrite: boolean }) 
         <h1 className="text-2xl font-semibold tracking-tight">Modes de règlement</h1>
         <p className="mt-1 text-sm text-ink-soft">
           Activer / désactiver et renommer les moyens de paiement disponibles en caisse.
+          {multiStore && ' Limitez un mode à certaines boutiques si besoin (ex. TPE).'}
         </p>
       </div>
 
@@ -103,22 +132,59 @@ export default function PaymentMethodsForm({ canWrite }: { canWrite: boolean }) 
         ) : (
           <ul className="space-y-1.5">
             {items.map((m) => (
-              <li key={m.id} className="flex items-center gap-2 rounded-xl border border-border p-2">
-                <span className="text-xs uppercase tracking-wider w-20 text-ink-soft">{m.kind}</span>
-                <input
-                  className="input h-9 flex-1"
-                  defaultValue={m.label}
-                  disabled={!canWrite}
-                  onBlur={(e) => e.target.value !== m.label && void rename(m.id, e.target.value)}
-                />
-                <label className="flex items-center gap-1 text-xs">
+              <li key={m.id} className="rounded-xl border border-border p-2 space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs uppercase tracking-wider w-20 text-ink-soft">{m.kind}</span>
                   <input
-                    type="checkbox" checked={m.is_active}
+                    className="input h-9 flex-1"
+                    defaultValue={m.label}
                     disabled={!canWrite}
-                    onChange={(e) => void toggle(m.id, e.target.checked)}
+                    onBlur={(e) => e.target.value !== m.label && void rename(m.id, e.target.value)}
                   />
-                  Actif
-                </label>
+                  <label className="flex items-center gap-1 text-xs">
+                    <input
+                      type="checkbox" checked={m.is_active}
+                      disabled={!canWrite}
+                      onChange={(e) => void toggle(m.id, e.target.checked)}
+                    />
+                    Actif
+                  </label>
+                </div>
+                {multiStore && (
+                  <div className="flex flex-wrap items-center gap-1.5 pl-[calc(5rem+0.5rem)]">
+                    <span className="text-[11px] text-ink-soft mr-0.5">Boutiques :</span>
+                    <button
+                      type="button"
+                      disabled={!canWrite}
+                      onClick={() => void setAllStores(m)}
+                      className={`rounded-full px-2 py-0.5 text-[11px] border transition-colors ${
+                        m.store_ids.length === 0
+                          ? 'accent-bar text-white border-transparent'
+                          : 'bg-white border-border text-ink-soft hover:bg-gray-50'
+                      }`}
+                    >
+                      Toutes
+                    </button>
+                    {stores.map((st) => {
+                      const on = m.store_ids.includes(st.id);
+                      return (
+                        <button
+                          key={st.id}
+                          type="button"
+                          disabled={!canWrite}
+                          onClick={() => void toggleStore(m, st.id)}
+                          className={`rounded-full px-2 py-0.5 text-[11px] border transition-colors ${
+                            on
+                              ? 'accent-bar text-white border-transparent'
+                              : 'bg-white border-border text-ink hover:bg-gray-50'
+                          }`}
+                        >
+                          {st.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </li>
             ))}
           </ul>

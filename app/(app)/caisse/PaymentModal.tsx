@@ -26,6 +26,8 @@ interface RegisteredPayment {
 interface Props {
   saleId: string;
   totalTtc: number;
+  /** Boutique du poste : ne propose que les modes disponibles pour elle. */
+  storeId?: string;
   loyaltyRedemption?: number;
   /** Si true, on génère un faux ticket localement sans appel serveur. */
   schoolMode?: boolean;
@@ -40,7 +42,7 @@ interface Props {
   onValidated: (receiptId: string, receiptNumber: string, loyalty?: { earned: number; redeemed: number; new_balance: number } | null) => void;
 }
 
-export default function PaymentModal({ saleId, totalTtc, loyaltyRedemption, schoolMode, offlineEnabled, onOfflineFinalize, onClose, onValidated }: Props) {
+export default function PaymentModal({ saleId, totalTtc, storeId, loyaltyRedemption, schoolMode, offlineEnabled, onOfflineFinalize, onClose, onValidated }: Props) {
   const [methods, setMethods] = useState<Array<{ kind: Method; label: string }>>(FALLBACK_METHODS);
   const [amountStr, setAmountStr] = useState<string>('');
   const [payments, setPayments] = useState<RegisteredPayment[]>([]);
@@ -66,7 +68,7 @@ export default function PaymentModal({ saleId, totalTtc, loyaltyRedemption, scho
 
   useEffect(() => {
     void (async () => {
-      const r = await fetch('/api/payment-methods');
+      const r = await fetch(`/api/payment-methods${storeId ? `?store_id=${encodeURIComponent(storeId)}` : ''}`);
       if (r.ok) {
         const j = await r.json();
         const active = (j.methods as Array<{ kind: Method; label: string; is_active: boolean }>)
@@ -74,7 +76,8 @@ export default function PaymentModal({ saleId, totalTtc, loyaltyRedemption, scho
         if (active.length > 0) setMethods(active.map((m) => ({ kind: m.kind, label: m.label })));
       }
     })();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storeId]);
 
   const paidAllocated = useMemo(
     () => round2(payments.reduce((s, p) => s + p.amount, 0)),
