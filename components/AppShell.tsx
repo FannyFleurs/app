@@ -154,6 +154,7 @@ export default function AppShell({
           role={user.role}
           hiddenPaths={hiddenPaths}
           permissions={permSet}
+          backOffice={backOffice}
           onClose={() => setMenuOpen(false)}
           onLogout={() => void logout()}
         />

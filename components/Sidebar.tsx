@@ -14,6 +14,8 @@ export interface SidebarItem {
   group: string;
   /** Si true, l'utilisateur ne peut pas désactiver l'item via gestion d'accès. */
   required?: boolean;
+  /** Si true, l'item n'apparaît que dans le back-office (sous-domaine bo.). */
+  boOnly?: boolean;
 }
 
 export const SIDEBAR_ITEMS: SidebarItem[] = [
@@ -28,6 +30,8 @@ export const SIDEBAR_ITEMS: SidebarItem[] = [
   { href: '/customers',    label: 'Clients',              icon: 'customers',    group: 'Relation', perm: 'customers.read' },
   // Catalogue
   { href: '/products',     label: 'Produits',             icon: 'products',     group: 'Catalogue',perm: 'products.read' },
+  { href: '/pricing',      label: 'Gestion de prix',      icon: 'products',     group: 'Catalogue',perm: 'products.write', boOnly: true },
+  { href: '/labels',       label: 'Étiquettes',           icon: 'print',        group: 'Catalogue',perm: 'products.read' },
   { href: '/categories',   label: 'Catégories',           icon: 'categories',   group: 'Catalogue',perm: 'products.read' },
   { href: '/suppliers',    label: 'Fournisseurs',         icon: 'truck',        group: 'Catalogue',perm: 'products.read' },
   { href: '/stock',        label: 'Stock',                icon: 'stock',        group: 'Catalogue' },

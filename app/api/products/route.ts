@@ -200,7 +200,7 @@ export async function GET(req: Request) {
        LEFT JOIN product_categories c ON c.id = p.category_id
        ${supplierJoin}
       WHERE ${where}
-      ORDER BY p.name ASC
+      ORDER BY ${url.searchParams.get('order') === 'recent' ? 'p.created_at DESC' : 'p.name ASC'}
       LIMIT 500`,
     params,
   );

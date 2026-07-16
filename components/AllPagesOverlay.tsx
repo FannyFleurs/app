@@ -12,13 +12,14 @@ interface Props {
   role: Role;
   hiddenPaths: string[];
   permissions: Set<Permission>;
+  backOffice?: boolean;
   onClose: () => void;
   onLogout: () => void;
 }
 
 const GROUP_ORDER = ['Vente', 'Relation', 'Catalogue', 'Pilotage', 'Système'];
 
-export default function AllPagesOverlay({ role, hiddenPaths, permissions, onClose, onLogout }: Props) {
+export default function AllPagesOverlay({ role, hiddenPaths, permissions, backOffice = false, onClose, onLogout }: Props) {
   const schoolActive = useSchoolMode();
   const brand = useBrand();
 
@@ -52,6 +53,7 @@ export default function AllPagesOverlay({ role, hiddenPaths, permissions, onClos
 
   void role; // gardé dans la signature pour compat future
   const visible = SIDEBAR_ITEMS
+    .filter((i) => backOffice || !i.boOnly)
     .filter((i) => !i.perm || permissions.has(i.perm))
     .filter((i) => i.required || !hiddenPaths.includes(i.href));
 

@@ -47,6 +47,7 @@ export default function LeftRail({
   const tabs = order
     .map((href) => SIDEBAR_ITEMS.find((i) => i.href === href))
     .filter((i): i is SidebarItem => !!i)
+    .filter((i) => backOffice || !i.boOnly)
     .filter((i) => !i.perm || permissions.has(i.perm))
     .filter((i) => i.required || !hiddenPaths.includes(i.href));
 
