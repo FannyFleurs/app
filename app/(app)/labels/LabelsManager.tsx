@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import PageHeader from '@/components/PageHeader';
 import { formatEUR } from '@/lib/services/money';
+import { LABEL_SIZES, buildLabelsDocument, openPrintWindow } from '@/lib/services/label-print';
 import LabelPrintModal from '../products/LabelPrintModal';
 
 const BarcodeScannerModal = dynamic(() => import('../caisse/BarcodeScannerModal'), { ssr: false });
@@ -18,17 +19,23 @@ interface LabelItem {
   discount_value: number | null;
 }
 
+interface BatchLine { product: LabelItem; qty: number }
+
 export default function LabelsManager() {
   const [items, setItems] = useState<LabelItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
-  const [scanOpen, setScanOpen] = useState(false);
+  const [scanOpen, setScanOpen] = useState(false);        // scan → impression unitaire
+  const [scanBatchOpen, setScanBatchOpen] = useState(false); // scan continu → liste
   const [selected, setSelected] = useState<LabelItem | null>(null);
   const [notFound, setNotFound] = useState<string | null>(null);
 
+  // Impression rapide (lot)
+  const [batch, setBatch] = useState<BatchLine[]>([]);
+  const [batchSize, setBatchSize] = useState<string>('50x30');
+
   useEffect(() => {
     void (async () => {
-      // Ordre "récent" : du plus récemment créé au plus ancien.
       const r = await fetch('/api/products?order=recent');
       if (r.ok) {
         const list = ((await r.json()).products as LabelItem[]).map((p) => ({
@@ -50,14 +57,60 @@ export default function LabelsManager() {
     );
   }, [items, q]);
 
-  // Recherche exacte par code scanné (EAN puis SKU). Ouvre l'étiquette si trouvé.
-  function handleScan(code: string) {
-    setScanOpen(false);
+  function findByCode(code: string): LabelItem | undefined {
     const c = code.trim();
-    const hit = items.find((p) => p.barcode === c) ?? items.find((p) => p.sku === c);
-    if (hit) { setNotFound(null); setSelected(hit); }
-    else { setSelected(null); setNotFound(c); setQ(c); }
+    return items.find((p) => p.barcode === c) ?? items.find((p) => p.sku === c);
   }
+
+  // Scan → impression unitaire (ouvre la modale).
+  function handleScanSingle(code: string) {
+    setScanOpen(false);
+    const hit = findByCode(code);
+    if (hit) { setNotFound(null); setSelected(hit); }
+    else { setSelected(null); setNotFound(code); setQ(code); }
+  }
+
+  function addProductToBatch(hit: LabelItem) {
+    setNotFound(null);
+    setBatch((cur) => {
+      const idx = cur.findIndex((e) => e.product.id === hit.id);
+      if (idx >= 0) {
+        const next = [...cur];
+        next[idx] = { ...next[idx]!, qty: next[idx]!.qty + 1 };
+        return next;
+      }
+      return [...cur, { product: hit, qty: 1 }];
+    });
+  }
+  // Scan continu → ajoute à la liste (le scanner reste ouvert).
+  function addToBatch(code: string) {
+    const hit = findByCode(code);
+    if (!hit) { setNotFound(code); return; }
+    addProductToBatch(hit);
+  }
+  function setBatchQty(id: string, delta: number) {
+    setBatch((cur) => cur
+      .map((e) => (e.product.id === id ? { ...e, qty: Math.max(0, e.qty + delta) } : e))
+      .filter((e) => e.qty > 0));
+  }
+  function removeBatch(id: string) {
+    setBatch((cur) => cur.filter((e) => e.product.id !== id));
+  }
+  function printBatch() {
+    const entries = batch.map((e) => ({
+      product: {
+        name: e.product.name,
+        barcode: e.product.barcode,
+        sale_price_ttc: e.product.sale_price_ttc,
+        discount_type: e.product.discount_type,
+        discount_value: e.product.discount_value,
+      },
+      qty: e.qty,
+    }));
+    openPrintWindow(buildLabelsDocument(entries, batchSize));
+  }
+
+  const batchTotal = batch.reduce((s, e) => s + e.qty, 0);
 
   return (
     <div className="flex flex-col md:h-full md:overflow-hidden">
@@ -66,17 +119,62 @@ export default function LabelsManager() {
           title="Étiquettes"
           subtitle="Imprimez une étiquette rapidement : recherche par nom, EAN ou référence, ou scan du code-barres."
         />
-        <div className="mt-4 flex gap-2">
+      </div>
+
+      {/* Impression rapide : scan continu → lot → impression groupée */}
+      <div className="px-4 md:px-8 py-4 shrink-0 border-b border-border bg-bg/50">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <div className="font-semibold text-sm">⚡ Impression rapide</div>
+            <p className="text-xs text-ink-soft">Scannez les articles à la suite, ajustez les quantités, imprimez tout d&apos;un coup.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <select className="input h-9 text-sm" value={batchSize} onChange={(e) => setBatchSize(e.target.value)}>
+              {LABEL_SIZES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+            </select>
+            <button className="btn-soft whitespace-nowrap" onClick={() => setScanBatchOpen(true)}>📷 Scanner en continu</button>
+          </div>
+        </div>
+
+        {batch.length > 0 && (
+          <div className="mt-3 rounded-xl border border-border bg-white divide-y divide-border">
+            {batch.map((e) => (
+              <div key={e.product.id} className="flex items-center gap-2 px-3 py-2">
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-sm truncate">{e.product.name}</div>
+                  <div className="text-xs text-ink-soft font-mono truncate">{e.product.barcode || e.product.sku || '— pas de code —'}</div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button className="h-9 w-9 rounded-lg border border-border text-lg font-semibold hover:bg-gray-50"
+                          onClick={() => setBatchQty(e.product.id, -1)}>−</button>
+                  <span className="w-10 text-center tabular-nums font-semibold">{e.qty}</span>
+                  <button className="h-9 w-9 rounded-lg border border-border text-lg font-semibold hover:bg-gray-50"
+                          onClick={() => setBatchQty(e.product.id, +1)}>+</button>
+                </div>
+                <button className="ml-1 text-ink-soft hover:text-danger text-lg leading-none px-1"
+                        title="Retirer" onClick={() => removeBatch(e.product.id)}>✕</button>
+              </div>
+            ))}
+            <div className="flex items-center justify-between gap-2 px-3 py-2">
+              <button className="text-xs text-ink-soft hover:text-danger" onClick={() => setBatch([])}>Vider la liste</button>
+              <button className="btn-primary" onClick={printBatch}>
+                Imprimer tout ({batchTotal} étiquette{batchTotal > 1 ? 's' : ''})
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Recherche + liste (impression unitaire) */}
+      <div className="px-4 md:px-8 py-3 shrink-0 border-b border-border">
+        <div className="flex gap-2">
           <input
             className="input flex-1"
             placeholder="Rechercher par nom, EAN ou référence…"
             value={q}
             onChange={(e) => { setQ(e.target.value); setNotFound(null); }}
-            autoFocus
           />
-          <button className="btn-soft whitespace-nowrap" onClick={() => setScanOpen(true)}>
-            📷 Scanner
-          </button>
+          <button className="btn-soft whitespace-nowrap" onClick={() => setScanOpen(true)}>📷 Scanner</button>
         </div>
         {notFound && (
           <div className="mt-2 rounded-xl bg-warning/10 px-3 py-2 text-sm text-warning">
@@ -93,10 +191,10 @@ export default function LabelsManager() {
         ) : (
           <ul className="divide-y divide-border">
             {filtered.map((p) => (
-              <li key={p.id}>
+              <li key={p.id} className="flex items-center">
                 <button
                   onClick={() => { setNotFound(null); setSelected(p); }}
-                  className="w-full text-left px-4 md:px-8 py-3 hover:bg-gray-50 transition-colors flex items-center gap-3"
+                  className="flex-1 text-left px-4 md:px-8 py-3 hover:bg-gray-50 transition-colors flex items-center gap-3 min-w-0"
                 >
                   <div className="flex-1 min-w-0">
                     <div className="font-medium text-sm truncate">{p.name}</div>
@@ -108,6 +206,13 @@ export default function LabelsManager() {
                     {formatEUR(p.sale_price_ttc)}
                   </div>
                   <span className="text-ink-soft text-lg" aria-hidden>🏷️</span>
+                </button>
+                <button
+                  className="px-3 md:px-4 py-3 text-xs text-ink-soft hover:text-ink whitespace-nowrap"
+                  title="Ajouter à l'impression rapide"
+                  onClick={() => addProductToBatch(p)}
+                >
+                  + lot
                 </button>
               </li>
             ))}
@@ -128,7 +233,10 @@ export default function LabelsManager() {
         />
       )}
       {scanOpen && (
-        <BarcodeScannerModal onClose={() => setScanOpen(false)} onScan={handleScan} />
+        <BarcodeScannerModal onClose={() => setScanOpen(false)} onScan={handleScanSingle} />
+      )}
+      {scanBatchOpen && (
+        <BarcodeScannerModal onClose={() => setScanBatchOpen(false)} onScan={addToBatch} />
       )}
     </div>
   );
