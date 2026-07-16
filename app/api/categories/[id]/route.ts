@@ -12,14 +12,33 @@ const patchSchema = z.object({
   position: z.number().int().nonnegative().optional(),
   visible_in_pos: z.boolean().optional(),
   is_active: z.boolean().optional(),
+  store_ids: z.array(z.string().uuid()).optional(),
 });
+
+// Introspection : la colonne store_ids (migration 0046) existe-t-elle ?
+let _hasStoreIds: boolean | null = null;
+async function hasStoreIdsColumn(): Promise<boolean> {
+  if (_hasStoreIds !== null) return _hasStoreIds;
+  try {
+    const { rows } = await query<{ exists: boolean }>(
+      `SELECT EXISTS (
+         SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'product_categories' AND column_name = 'store_ids'
+       ) AS exists`,
+    );
+    _hasStoreIds = rows[0]?.exists ?? false;
+  } catch { _hasStoreIds = false; }
+  return _hasStoreIds;
+}
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   const g = await requirePermission('categories.write');
   if ('response' in g) return g.response;
   const parsed = await parseJson(req, patchSchema);
   if ('response' in parsed) return parsed.response;
-  const patch = parsed.data;
+  const patch = { ...parsed.data };
+  // Ignore silencieusement store_ids si la migration n'est pas déployée.
+  if (patch.store_ids !== undefined && !(await hasStoreIdsColumn())) delete patch.store_ids;
 
   const fields = Object.keys(patch);
   if (fields.length === 0) return NextResponse.json({ ok: true });

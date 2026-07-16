@@ -12,11 +12,16 @@ interface Category {
   image_url: string | null;
   position: number;
   visible_in_pos: boolean;
+  store_ids: string[];
 }
 
 const COLOR_PRESETS = ['#FFFFFF', '#F5F5F5', '#E8EFE2', '#EFE6D6', '#D8E8D8', '#F0E4D7', '#F3E8E0', '#E6E2D8'];
 
-export default function CategoriesAdmin({ canEdit }: { canEdit: boolean }) {
+export default function CategoriesAdmin({ canEdit, backOffice = false, stores = [] }: {
+  canEdit: boolean;
+  backOffice?: boolean;
+  stores?: { id: string; name: string }[];
+}) {
   const [items, setItems] = useState<Category[]>([]);
   const [editing, setEditing] = useState<Category | null | undefined>(undefined);
   const [loading, setLoading] = useState(true);
@@ -24,7 +29,10 @@ export default function CategoriesAdmin({ canEdit }: { canEdit: boolean }) {
   async function reload() {
     setLoading(true);
     const r = await fetch('/api/categories');
-    if (r.ok) setItems((await r.json()).categories);
+    if (r.ok) {
+      const cats = (await r.json()).categories as Category[];
+      setItems(cats.map((c) => ({ ...c, store_ids: c.store_ids ?? [] })));
+    }
     setLoading(false);
   }
   useEffect(() => { void reload(); }, []);
@@ -69,6 +77,13 @@ export default function CategoriesAdmin({ canEdit }: { canEdit: boolean }) {
                 <div className="font-medium text-sm truncate">{c.name}</div>
                 {c.visible_in_pos ? <Badge tone="soft">Caisse</Badge> : <Badge tone="neutral">Masquée</Badge>}
               </div>
+              {backOffice && c.store_ids.length > 0 && (
+                <div className="mt-1 text-[10px] text-ink-soft truncate">
+                  🏪 {c.store_ids.length === 1
+                    ? (stores.find((s) => s.id === c.store_ids[0])?.name ?? '1 boutique')
+                    : `${c.store_ids.length} boutiques`}
+                </div>
+              )}
             </button>
           ))}
         </div>
@@ -77,6 +92,8 @@ export default function CategoriesAdmin({ canEdit }: { canEdit: boolean }) {
       {editing !== undefined && (
         <CategoryFormModal
           category={editing}
+          backOffice={backOffice}
+          stores={stores}
           onClose={() => setEditing(undefined)}
           onSaved={() => { setEditing(undefined); void reload(); }}
         />
@@ -85,8 +102,10 @@ export default function CategoriesAdmin({ canEdit }: { canEdit: boolean }) {
   );
 }
 
-function CategoryFormModal({ category, onClose, onSaved }: {
+function CategoryFormModal({ category, backOffice, stores, onClose, onSaved }: {
   category: Category | null;
+  backOffice: boolean;
+  stores: { id: string; name: string }[];
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -95,18 +114,22 @@ function CategoryFormModal({ category, onClose, onSaved }: {
     color: category?.color ?? '#FFFFFF',
     image_url: category?.image_url ?? '',
     visible_in_pos: category?.visible_in_pos ?? true,
+    store_ids: category?.store_ids ?? [],
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function submit() {
     setSaving(true); setError(null);
-    const payload = {
+    const payload: Record<string, unknown> = {
       name: form.name.trim(),
       color: form.color,
       image_url: form.image_url.trim() || null,
       visible_in_pos: form.visible_in_pos,
     };
+    // En back-office on transmet la sélection de boutiques ; sinon le serveur
+    // rattache automatiquement à la boutique de l'utilisateur.
+    if (backOffice) payload.store_ids = form.store_ids;
     const res = category
       ? await fetch(`/api/categories/${category.id}`, {
           method: 'PATCH', headers: { 'Content-Type': 'application/json' },
@@ -191,6 +214,45 @@ function CategoryFormModal({ category, onClose, onSaved }: {
                    onChange={(e) => setForm({ ...form, visible_in_pos: e.target.checked })} />
             Visible sur la grille caisse
           </label>
+
+          {backOffice && stores.length > 0 && (
+            <div>
+              <label className="text-sm font-medium text-ink-soft">Boutiques concernées</label>
+              <div className="mt-1 flex flex-wrap gap-1.5">
+                <button type="button"
+                  onClick={() => setForm({ ...form, store_ids: [] })}
+                  className={`rounded-full px-2.5 py-1 text-xs border transition-colors ${
+                    form.store_ids.length === 0
+                      ? 'accent-bar text-white border-transparent'
+                      : 'bg-white border-border text-ink-soft hover:bg-gray-50'
+                  }`}>
+                  Toutes
+                </button>
+                {stores.map((s) => {
+                  const on = form.store_ids.includes(s.id);
+                  return (
+                    <button key={s.id} type="button"
+                      onClick={() => setForm({
+                        ...form,
+                        store_ids: on
+                          ? form.store_ids.filter((x) => x !== s.id)
+                          : [...form.store_ids, s.id],
+                      })}
+                      className={`rounded-full px-2.5 py-1 text-xs border transition-colors ${
+                        on
+                          ? 'accent-bar text-white border-transparent'
+                          : 'bg-white border-border text-ink hover:bg-gray-50'
+                      }`}>
+                      {s.name}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="mt-1 text-xs text-ink-soft">
+                « Toutes » = catégorie partagée sur l&apos;ensemble des boutiques.
+              </p>
+            </div>
+          )}
         </div>
 
         {error && <div className="mt-3 rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
