@@ -12,17 +12,52 @@ const schema = z.object({
   image_url: z.string().max(2048).nullable().optional(),
   position: z.number().int().nonnegative().default(0),
   visible_in_pos: z.boolean().default(true),
+  store_ids: z.array(z.string().uuid()).optional(),
 });
+
+// Introspection : la colonne product_categories.store_ids (migration 0046)
+// est-elle présente ? Fail-open tant que la migration n'est pas déployée.
+let _hasStoreIds: boolean | null = null;
+async function hasStoreIdsColumn(): Promise<boolean> {
+  if (_hasStoreIds !== null) return _hasStoreIds;
+  try {
+    const { rows } = await query<{ exists: boolean }>(
+      `SELECT EXISTS (
+         SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'product_categories' AND column_name = 'store_ids'
+       ) AS exists`,
+    );
+    _hasStoreIds = rows[0]?.exists ?? false;
+  } catch { _hasStoreIds = false; }
+  return _hasStoreIds;
+}
 
 export async function GET() {
   const g = await requirePermission('products.read');
   if ('response' in g) return g.response;
+  const hasStore = await hasStoreIdsColumn();
+  const storeCol = hasStore ? 'store_ids' : `'{}'::uuid[] AS store_ids`;
+  const params: unknown[] = [g.user.organizationId];
+  let where = 'organization_id = $1 AND is_active = TRUE';
+  // Verrouillage boutique : un utilisateur rattaché à des boutiques précises
+  // ne voit que les catégories partagées (store_ids vide) ou attribuées à
+  // l'une de ses boutiques. Owner/super_admin voient tout.
+  if (hasStore && !['super_admin', 'owner'].includes(g.user.role)) {
+    const acc = await query<{ store_id: string }>(
+      `SELECT store_id FROM user_store_access WHERE user_id = $1`,
+      [g.user.id],
+    );
+    if (acc.rows.length > 0) {
+      params.push(acc.rows.map((r) => r.store_id));
+      where += ` AND (COALESCE(array_length(store_ids, 1), 0) = 0 OR store_ids && $${params.length}::uuid[])`;
+    }
+  }
   const { rows } = await query(
-    `SELECT id, name, parent_id, color, icon, image_url, position, visible_in_pos, is_active
+    `SELECT id, name, parent_id, color, icon, image_url, position, visible_in_pos, is_active, ${storeCol}
        FROM product_categories
-      WHERE organization_id = $1 AND is_active = TRUE
+      WHERE ${where}
       ORDER BY position ASC, name ASC`,
-    [g.user.organizationId],
+    params,
   );
   return NextResponse.json({ categories: rows });
 }
@@ -34,10 +69,31 @@ export async function POST(req: Request) {
   if ('response' in parsed) return parsed.response;
   const c = parsed.data;
   try {
+    // Rattachement boutique : fourni (back-office) → tel quel ; absent (app) →
+    // boutique(s) de l'utilisateur (owner/sans rattachement = catégorie
+    // partagée, store_ids vide).
+    let storeCols = '';
+    const extra: unknown[] = [];
+    if (await hasStoreIdsColumn()) {
+      let storeIds: string[];
+      if (c.store_ids !== undefined) {
+        storeIds = c.store_ids;
+      } else if (['super_admin', 'owner'].includes(g.user.role)) {
+        storeIds = [];
+      } else {
+        const acc = await query<{ store_id: string }>(
+          `SELECT store_id FROM user_store_access WHERE user_id = $1`,
+          [g.user.id],
+        );
+        storeIds = acc.rows.map((r) => r.store_id);
+      }
+      storeCols = ', store_ids';
+      extra.push(storeIds);
+    }
     const ins = await query<{ id: string }>(
       `INSERT INTO product_categories
-         (organization_id, name, parent_id, color, icon, image_url, position, visible_in_pos)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+         (organization_id, name, parent_id, color, icon, image_url, position, visible_in_pos${storeCols})
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8${storeCols ? ',$9' : ''}) RETURNING id`,
       [
         g.user.organizationId,
         c.name,
@@ -47,6 +103,7 @@ export async function POST(req: Request) {
         c.image_url ?? null,
         c.position,
         c.visible_in_pos,
+        ...extra,
       ],
     );
     return NextResponse.json({ id: ins.rows[0]!.id }, { status: 201 });

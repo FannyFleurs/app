@@ -20,12 +20,35 @@ export default async function ProductsPage() {
        ORDER BY rate DESC`,
     [user.organizationId],
   );
-  const cats = await query<{ id: string; name: string }>(
-    `SELECT id, name FROM product_categories
-       WHERE organization_id = $1 AND is_active = TRUE
-       ORDER BY position, name`,
-    [user.organizationId],
-  );
+  // Catégories visibles : verrouillage boutique comme les articles. Un
+  // utilisateur rattaché à des boutiques précises ne voit que les catégories
+  // partagées ou attribuées à ses boutiques. Owner/super_admin voient tout.
+  // Try/catch : repli org-wide tant que la colonne store_ids n'existe pas.
+  let cats: { rows: { id: string; name: string }[] };
+  const privileged = ['super_admin', 'owner'].includes(user.role);
+  try {
+    if (privileged) throw new Error('all');
+    cats = await query<{ id: string; name: string }>(
+      `SELECT c.id, c.name FROM product_categories c
+        WHERE c.organization_id = $1 AND c.is_active = TRUE
+          AND (
+            NOT EXISTS (SELECT 1 FROM user_store_access WHERE user_id = $2)
+            OR COALESCE(array_length(c.store_ids, 1), 0) = 0
+            OR c.store_ids && (
+              SELECT COALESCE(array_agg(store_id), '{}') FROM user_store_access WHERE user_id = $2
+            )::uuid[]
+          )
+        ORDER BY c.position, c.name`,
+      [user.organizationId, user.id],
+    );
+  } catch {
+    cats = await query<{ id: string; name: string }>(
+      `SELECT id, name FROM product_categories
+         WHERE organization_id = $1 AND is_active = TRUE
+         ORDER BY position, name`,
+      [user.organizationId],
+    );
+  }
   return (
     <ProductsList
       canEdit={(await userCan(user, 'products.write'))}
