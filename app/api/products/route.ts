@@ -38,7 +38,7 @@ const productSchema = z.object({
    * les boutiques de l'org (retrocompat). Sinon, uniquement dans les
    * boutiques listees.
    */
-  store_ids: z.array(z.string().uuid()).default([]),
+  store_ids: z.array(z.string().uuid()).optional(),
 });
 
 /**
@@ -264,8 +264,24 @@ export async function POST(req: Request) {
       values.push(p.color ?? null);
     }
     if (await hasStoreIdsColumn()) {
+      // store_ids fourni (back-office) : utilisé tel quel. Absent (app) : on
+      // rattache automatiquement l'article à la/les boutique(s) de
+      // l'utilisateur. Un owner/super_admin (ou un utilisateur sans
+      // rattachement) crée un article partagé (store_ids vide = toutes).
+      let storeIds: string[];
+      if (p.store_ids !== undefined) {
+        storeIds = p.store_ids;
+      } else if (['super_admin', 'owner'].includes(g.user.role)) {
+        storeIds = [];
+      } else {
+        const acc = await query<{ store_id: string }>(
+          `SELECT store_id FROM user_store_access WHERE user_id = $1`,
+          [g.user.id],
+        );
+        storeIds = acc.rows.map((r) => r.store_id);
+      }
       cols.push('store_ids');
-      values.push(p.store_ids);
+      values.push(storeIds);
     }
     if (await hasSupplierColumn()) {
       cols.push('supplier_id');

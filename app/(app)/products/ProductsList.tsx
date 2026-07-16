@@ -24,11 +24,12 @@ interface Product {
 }
 
 export default function ProductsList({
-  canEdit, taxRates, categories,
+  canEdit, taxRates, categories, backOffice = false,
 }: {
   canEdit: boolean;
   taxRates: { id: string; code: string; rate: number; label: string; is_default: boolean }[];
   categories: { id: string; name: string }[];
+  backOffice?: boolean;
 }) {
   const [products, setProducts] = useState<Product[]>([]);
   const [stores, setStores] = useState<{ id: string; name: string }[]>([]);
@@ -84,21 +85,14 @@ export default function ProductsList({
     return arr;
   }, [products, filterCat, onlyTop, filterStore]);
 
-  const stats = useMemo(() => ({
-    total: products.length,
-    inPos: products.filter((p) => p.visible_in_pos).length,
-    scoped: products.filter((p) => p.store_ids.length > 0).length,
-    top: products.filter((p) => p.is_top_product).length,
-  }), [products]);
-
   const activeId = editing && 'id' in editing ? editing.id : null;
 
   return (
     <div className="flex flex-col md:h-full md:overflow-hidden">
-      <div className="px-6 md:px-8 pt-6 md:pt-8 pb-4 shrink-0 border-b border-border">
+      <div className="px-4 md:px-8 pt-6 md:pt-8 pb-4 shrink-0 border-b border-border">
         <PageHeader
           title="Produits"
-          subtitle="Catalogue complet : bouquets, plantes, cache-pots, bougies, services, cartes cadeaux."
+          subtitle="Bouquets, plantes, cache-pots, bougies, services, cartes cadeaux."
           actions={canEdit ? (
             <div className="flex gap-2">
               <button className="btn-soft" onClick={() => setShowImport(true)}>⬆ Importer</button>
@@ -106,12 +100,6 @@ export default function ProductsList({
             </div>
           ) : null}
         />
-        <section className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
-          <Kpi label="Références" value={stats.total.toString()} />
-          <Kpi label="Visibles en caisse" value={stats.inPos.toString()} />
-          <Kpi label="Top produits" value={stats.top.toString()} />
-          <Kpi label="Limités à une boutique" value={stats.scoped.toString()} />
-        </section>
       </div>
 
       <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[minmax(240px,1fr)_3fr] md:overflow-hidden">
@@ -123,7 +111,7 @@ export default function ProductsList({
         <aside className={`border-r border-border bg-white flex-col min-h-0 md:flex md:overflow-hidden ${
           editing !== undefined ? 'hidden md:flex' : 'flex'
         }`}>
-          <div className="p-3 border-b border-border space-y-2 shrink-0">
+          <div className="px-4 md:px-3 py-3 border-b border-border space-y-2 shrink-0">
             <div className="flex gap-2">
               <input
                 className="input flex-1"
@@ -135,7 +123,9 @@ export default function ProductsList({
               <button className="btn-soft whitespace-nowrap" onClick={() => void reload()}>OK</button>
             </div>
             <div className="flex flex-wrap gap-2">
-              {stores.length > 1 && (
+              {/* Filtre boutique : réservé au back-office (gestion multi-boutiques).
+                  Dans l'app, chaque boutique ne voit que ses propres articles. */}
+              {backOffice && stores.length > 1 && (
                 <select className="input h-9 flex-1 min-w-[8rem] text-sm"
                         value={filterStore} onChange={(e) => setFilterStore(e.target.value)}>
                   <option value="">Toutes les boutiques</option>
@@ -174,7 +164,7 @@ export default function ProductsList({
                     <li key={p.id}>
                       <button
                         onClick={() => canEdit && setEditing(p)}
-                        className={`w-full text-left px-3 py-2.5 transition-colors ${
+                        className={`w-full text-left px-4 md:px-3 py-2.5 transition-colors ${
                           activeId === p.id ? 'bg-accent-soft' : 'hover:bg-gray-50'
                         } ${canEdit ? '' : 'cursor-default'}`}
                       >
@@ -227,6 +217,7 @@ export default function ProductsList({
                 taxRates={taxRates}
                 categories={categories}
                 inline
+                backOffice={backOffice}
                 onClose={() => setEditing(undefined)}
                 onSaved={() => { setEditing(undefined); void reload(); }}
               />
@@ -252,15 +243,6 @@ export default function ProductsList({
           onCompleted={() => { setShowImport(false); void reload(); }}
         />
       )}
-    </div>
-  );
-}
-
-function Kpi({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="card p-3">
-      <div className="text-[11px] uppercase tracking-wider text-ink-soft">{label}</div>
-      <div className="mt-0.5 text-xl font-semibold tracking-tight">{value}</div>
     </div>
   );
 }

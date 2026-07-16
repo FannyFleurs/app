@@ -45,7 +45,7 @@ const PRODUCT_COLORS = [
 ];
 
 export default function ProductFormModal({
-  product, taxRates, categories, onClose, onSaved, inline = false,
+  product, taxRates, categories, onClose, onSaved, inline = false, backOffice = false,
 }: {
   product: Product | null;
   taxRates: { id: string; code: string; rate: number; label: string; is_default: boolean }[];
@@ -54,6 +54,9 @@ export default function ProductFormModal({
   onSaved: () => void;
   /** true = panneau intégré (page Produits), false = modale superposée. */
   inline?: boolean;
+  /** true = back-office : sélection multi-boutiques. Sinon l'article est
+   *  rattaché automatiquement à la boutique de l'utilisateur. */
+  backOffice?: boolean;
 }) {
   const defaultTax = taxRates.find((t) => t.is_default) ?? taxRates[0];
   const [liveCategories, setLiveCategories] = useState(categories);
@@ -177,8 +180,12 @@ export default function ProductFormModal({
       is_top_product: form.is_top_product,
       no_discount: form.no_discount,
       color: form.color,
-      store_ids: form.store_ids,
     };
+    // Boutiques : en back-office on transmet la sélection explicite. Dans
+    // l'app, on n'envoie PAS store_ids : le serveur rattache automatiquement
+    // l'article à la boutique de l'utilisateur (à la création) et le laisse
+    // inchangé (à la modification).
+    if (backOffice) payload.store_ids = form.store_ids;
     if (product && form.price_change_reason) payload.price_change_reason = form.price_change_reason;
     const res = product
       ? await fetch(`/api/products/${product.id}`, {
@@ -453,7 +460,7 @@ export default function ProductFormModal({
             </p>
           </Field>
 
-          {stores.length > 0 && (
+          {backOffice && stores.length > 0 && (
             <Field label="Boutiques concernées" full>
               <div className="mt-1 space-y-1.5">
                 <label className="flex items-center gap-2 text-sm">
