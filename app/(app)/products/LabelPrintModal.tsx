@@ -40,9 +40,22 @@ export default function LabelPrintModal({
   product: LabelProduct;
   onClose: () => void;
 }) {
-  const [qty, setQty] = useState(1);
+  // Quantité saisie au clavier tactile. Vide par défaut (l'utilisateur saisit).
+  const [qtyStr, setQtyStr] = useState('');
+  const qty = Math.min(200, Math.max(0, parseInt(qtyStr || '0', 10) || 0));
   const [sizeKey, setSizeKey] = useState('50x30');
   const [error, setError] = useState<string | null>(null);
+
+  function pressQty(k: string) {
+    setError(null);
+    setQtyStr((cur) => {
+      if (k === 'C') return '';
+      if (k === '⌫') return cur.slice(0, -1);
+      const next = (cur + k).replace(/^0+(?=\d)/, '');
+      if (next.length > 3) return cur;
+      return Number(next) > 200 ? '200' : next;
+    });
+  }
 
   const size = SIZES.find((s) => s.key === sizeKey)!;
   const disc = discountedPrice(product);
@@ -110,12 +123,26 @@ html, body { margin: 0; padding: 0; }
           <div className="space-y-4">
             <div>
               <label className="text-sm font-medium text-ink-soft">Quantité d&apos;étiquettes</label>
-              <input
-                type="number" min={1} max={200}
-                className="input mt-1"
-                value={qty}
-                onChange={(e) => setQty(Math.max(1, Math.min(200, Number(e.target.value) || 1)))}
-              />
+              {/* Afficheur + clavier tactile */}
+              <div className="mt-1 rounded-xl border border-border h-14 px-4 flex items-center justify-end text-3xl font-semibold tabular-nums bg-white">
+                {qtyStr === '' ? <span className="text-ink-soft/40">0</span> : qtyStr}
+              </div>
+              <div className="mt-2 grid grid-cols-3 gap-2">
+                {['1', '2', '3', '4', '5', '6', '7', '8', '9', 'C', '0', '⌫'].map((k) => (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => pressQty(k)}
+                    className={`h-14 rounded-xl text-xl font-semibold transition-colors ${
+                      k === 'C' ? 'bg-danger/10 text-danger hover:bg-danger/20'
+                      : k === '⌫' ? 'bg-gray-100 text-ink-soft hover:bg-gray-200'
+                      : 'bg-gray-50 hover:bg-gray-100 border border-border'
+                    }`}
+                  >
+                    {k}
+                  </button>
+                ))}
+              </div>
             </div>
             <div>
               <label className="text-sm font-medium text-ink-soft">Format d&apos;étiquette</label>
@@ -123,7 +150,7 @@ html, body { margin: 0; padding: 0; }
                 {SIZES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
               </select>
               <p className="mt-1 text-xs text-ink-soft">
-                Une étiquette par « page » : l&apos;imprimante à rouleau enchaîne les {qty} étiquette{qty > 1 ? 's' : ''}.
+                Une étiquette par « page » : l&apos;imprimante à rouleau enchaîne les étiquettes.
               </p>
             </div>
             {!product.barcode && (
@@ -167,8 +194,10 @@ html, body { margin: 0; padding: 0; }
 
         <div className="mt-5 flex justify-end gap-2">
           <button onClick={onClose} className="btn-ghost">Fermer</button>
-          <button onClick={printLabels} className="btn-primary">
-            Imprimer {qty > 1 ? `${qty} étiquettes` : 'l\'étiquette'}
+          <button onClick={printLabels} disabled={qty < 1} className="btn-primary">
+            {qty >= 1
+              ? (qty > 1 ? `Imprimer ${qty} étiquettes` : 'Imprimer l\'étiquette')
+              : 'Imprimer'}
           </button>
         </div>
       </div>
