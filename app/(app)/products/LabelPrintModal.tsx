@@ -17,12 +17,24 @@ export default function LabelPrintModal({
   const qty = Math.min(200, Math.max(0, parseInt(qtyStr || '0', 10) || 0));
   const [settings, setSettings] = useState<LabelSettings>(LABEL_DEFAULTS);
   const [error, setError] = useState<string | null>(null);
+  // Imprimante CloudPRNT active (impression directe) : null si aucune.
+  const [cloudPrinter, setCloudPrinter] = useState<string | null>(null);
+  const [cloudMsg, setCloudMsg] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
 
   // Format + éléments : configurés dans Réglages → Paramètres étiquettes.
   useEffect(() => {
     void (async () => {
-      const r = await fetch('/api/settings/labels');
+      const [r, rc] = await Promise.all([
+        fetch('/api/settings/labels'),
+        fetch('/api/cloudprnt/printers'),
+      ]);
       if (r.ok) setSettings((await r.json()).settings as LabelSettings);
+      if (rc.ok) {
+        const printers = (await rc.json()).printers as Array<{ label: string; role: string; enabled: boolean }>;
+        const p = printers.find((x) => x.role === 'label' && x.enabled);
+        setCloudPrinter(p ? p.label : null);
+      }
     })();
   }, []);
 
@@ -45,6 +57,22 @@ export default function LabelPrintModal({
     const doc = buildLabelsDocument([{ product, qty }], settings);
     if (!openPrintWindow(doc)) {
       setError('Autorisez les fenêtres pop-up pour lancer l\'impression.');
+    }
+  }
+
+  async function printCloud() {
+    setError(null); setCloudMsg(null); setSending(true);
+    const r = await fetch('/api/cloudprnt/print-labels', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entries: [{ product, qty }] }),
+    });
+    setSending(false);
+    if (r.ok) {
+      const j = await r.json();
+      setCloudMsg(`${j.count} étiquette(s) envoyée(s) à « ${j.printer} ».`);
+    } else {
+      const j = await r.json().catch(() => null);
+      setError(j?.error === 'NO_PRINTER' ? 'Aucune imprimante CloudPRNT active.' : 'Échec de l\'envoi à l\'imprimante.');
     }
   }
 
@@ -128,13 +156,27 @@ export default function LabelPrintModal({
           </div>
         </div>
 
-        <div className="mt-5 flex justify-end gap-2">
+        {cloudMsg && <div className="mt-3 rounded-xl bg-success/10 px-3 py-2 text-sm text-success">{cloudMsg}</div>}
+
+        <div className="mt-5 flex flex-wrap justify-end gap-2">
           <button onClick={onClose} className="btn-ghost">Fermer</button>
-          <button onClick={printLabels} disabled={qty < 1} className="btn-primary">
-            {qty >= 1
-              ? (qty > 1 ? `Imprimer ${qty} étiquettes` : 'Imprimer l\'étiquette')
-              : 'Imprimer'}
-          </button>
+          {cloudPrinter ? (
+            <>
+              <button onClick={printLabels} disabled={qty < 1} className="btn-soft"
+                      title="Via la boîte d'impression du navigateur">
+                PDF / navigateur
+              </button>
+              <button onClick={() => void printCloud()} disabled={qty < 1 || sending} className="btn-primary">
+                {sending ? 'Envoi…' : `🖨 Imprimer sur « ${cloudPrinter} »${qty > 1 ? ` (${qty})` : ''}`}
+              </button>
+            </>
+          ) : (
+            <button onClick={printLabels} disabled={qty < 1} className="btn-primary">
+              {qty >= 1
+                ? (qty > 1 ? `Imprimer ${qty} étiquettes` : 'Imprimer l\'étiquette')
+                : 'Imprimer'}
+            </button>
+          )}
         </div>
       </div>
     </div>
