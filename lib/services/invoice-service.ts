@@ -356,4 +356,91 @@ export class InvoiceService {
       return { invoice_id: inv.id, number: inv.number, new_balance: newBalance };
     });
   }
+
+  /**
+   * Règlement direct du solde « en compte » d'un client (depuis la fiche
+   * client, caisse). Crédite le solde du montant réglé et solde au passage les
+   * éventuelles factures de période en attente (les plus anciennes d'abord,
+   * intégralement). Trace un unique événement fiscal PAYMENT_REGISTERED.
+   */
+  static async settleAccount(args: {
+    organizationId: string;
+    userId: string;
+    customerId: string;
+    amount: number;
+    method?: string;
+    storeId?: string | null;
+  }): Promise<{ new_balance: number; settled_invoice_ids: string[] }> {
+    return withTransaction(async (client) => {
+      const custRes = await client.query<{ id: string; account_balance: string }>(
+        `SELECT id, COALESCE(account_balance, 0)::text AS account_balance
+           FROM customers WHERE id = $1 AND organization_id = $2 FOR UPDATE`,
+        [args.customerId, args.organizationId],
+      );
+      if (custRes.rowCount === 0) throw new Error('CUSTOMER_NOT_FOUND');
+
+      const amount = round2(args.amount);
+      if (!(amount > 0)) throw new Error('INVALID_AMOUNT');
+
+      const balRes = await client.query<{ account_balance: string }>(
+        `UPDATE customers
+            SET account_balance = COALESCE(account_balance, 0) + $2,
+                updated_at = now()
+          WHERE id = $1
+        RETURNING account_balance::text`,
+        [args.customerId, amount],
+      );
+      const newBalance = Number(balRes.rows[0]?.account_balance ?? 0);
+
+      // Solde les factures de période en attente, les plus anciennes d'abord,
+      // tant que le montant réglé couvre intégralement chaque facture.
+      const invs = await client.query<{ id: string; total_ttc: string }>(
+        `SELECT id, total_ttc::text
+           FROM invoices
+          WHERE customer_id = $1
+            AND organization_id = $2
+            AND status IN ('validated','sent','partially_paid','overdue')
+          ORDER BY COALESCE(issue_date, created_at::date) ASC, created_at ASC
+          FOR UPDATE`,
+        [args.customerId, args.organizationId],
+      );
+      let remaining = amount;
+      const settled: string[] = [];
+      for (const inv of invs.rows) {
+        const ttc = Number(inv.total_ttc);
+        if (remaining + 0.0001 >= ttc) {
+          await client.query(
+            `UPDATE invoices
+                SET status = 'paid', updated_at = now(),
+                    metadata = COALESCE(metadata, '{}'::jsonb)
+                      || jsonb_build_object('settled_via', 'account')
+              WHERE id = $1`,
+            [inv.id],
+          );
+          remaining = round2(remaining - ttc);
+          settled.push(inv.id);
+        }
+      }
+
+      const fiscal = new FiscalCore(client);
+      await fiscal.recordEvent({
+        organizationId: args.organizationId,
+        storeId: args.storeId ?? null,
+        userId: args.userId,
+        eventType: 'PAYMENT_REGISTERED',
+        entityType: 'payment',
+        entityId: null,
+        payload: {
+          customer_id: args.customerId,
+          amount,
+          method: args.method ?? 'account_settlement',
+          settled_invoice_ids: settled,
+          new_account_balance: newBalance,
+        },
+        amountTtcDelta: 0,
+      });
+
+      return { new_balance: newBalance, settled_invoice_ids: settled };
+    });
+  }
 }

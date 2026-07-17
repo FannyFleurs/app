@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Badge from '@/components/Badge';
 import EmptyState from '@/components/EmptyState';
@@ -274,8 +274,7 @@ function CustomerDetailContent({ tab, detail, canWrite, onEdit }: {
     credit_notes_balance: number;
   }>({ account_balance: 0, gift_card_balance: 0, credit_notes_balance: 0 });
 
-  useEffect(() => {
-    setBalances({ account_balance: 0, gift_card_balance: 0, credit_notes_balance: 0 });
+  const loadBalances = useCallback(() => {
     void fetch(`/api/customers/${c.id}/balances`)
       .then((r) => r.ok ? r.json() : null)
       .then((j) => {
@@ -287,7 +286,14 @@ function CustomerDetailContent({ tab, detail, canWrite, onEdit }: {
       })
       .catch(() => undefined);
   }, [c.id]);
+
+  useEffect(() => {
+    setBalances({ account_balance: 0, gift_card_balance: 0, credit_notes_balance: 0 });
+    loadBalances();
+  }, [c.id, loadBalances]);
   const accountDue = balances.account_balance < 0 ? -balances.account_balance : 0;
+
+  const [settleOpen, setSettleOpen] = useState(false);
 
   return (
     <div className="p-6 space-y-5">
@@ -311,16 +317,40 @@ function CustomerDetailContent({ tab, detail, canWrite, onEdit }: {
       </div>
 
       {tab === 'dashboard' && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Tile value={formatEUR(totalTtc)}                       label="Total des achats" />
-          <Tile value={formatEUR(accountDue)}                     label="Montant dû (en compte)"
-                tone={accountDue > 0 ? 'danger' : undefined} />
-          <Tile value={detail.sales.length.toString()}            label="Nombre de passages" />
-          <Tile value={formatEUR(avg)}                            label="Ticket moyen TTC" />
-          <Tile value={formatEUR(balances.credit_notes_balance)}  label="Crédits à dépenser" />
-          <Tile value={formatEUR(balances.gift_card_balance)}     label="Bons cadeaux à dépenser" />
-          <Tile value={(detail.loyalty_points ?? 0).toString()}   label="Points de fidélité" />
+        <div className="space-y-3">
+          {accountDue > 0 && (
+            <div className="card p-4 flex items-center justify-between gap-3 bg-danger/5 border border-danger/20">
+              <div>
+                <div className="text-sm font-semibold text-danger">Solde en compte à régler</div>
+                <div className="text-2xl font-semibold tracking-tight text-danger">{formatEUR(accountDue)}</div>
+              </div>
+              {canWrite && (
+                <button className="btn-primary" onClick={() => setSettleOpen(true)}>
+                  Solder le compte
+                </button>
+              )}
+            </div>
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Tile value={formatEUR(totalTtc)}                       label="Total des achats" />
+            <Tile value={formatEUR(accountDue)}                     label="Montant dû (en compte)"
+                  tone={accountDue > 0 ? 'danger' : undefined} />
+            <Tile value={detail.sales.length.toString()}            label="Nombre de passages" />
+            <Tile value={formatEUR(avg)}                            label="Ticket moyen TTC" />
+            <Tile value={formatEUR(balances.credit_notes_balance)}  label="Crédits à dépenser" />
+            <Tile value={formatEUR(balances.gift_card_balance)}     label="Bons cadeaux à dépenser" />
+            <Tile value={(detail.loyalty_points ?? 0).toString()}   label="Points de fidélité" />
+          </div>
         </div>
+      )}
+
+      {settleOpen && (
+        <SettleAccountModal
+          customerId={c.id}
+          due={accountDue}
+          onClose={() => setSettleOpen(false)}
+          onDone={() => { setSettleOpen(false); loadBalances(); }}
+        />
       )}
 
       {tab === 'informations' && (
@@ -510,6 +540,69 @@ function Item({ label, value }: { label: string; value: string }) {
     <div>
       <dt className="text-xs uppercase tracking-wider text-ink-soft">{label}</dt>
       <dd className="font-medium">{value}</dd>
+    </div>
+  );
+}
+
+const SETTLE_METHODS: { value: string; label: string }[] = [
+  { value: 'cash', label: 'Espèces' },
+  { value: 'card', label: 'Carte' },
+  { value: 'check', label: 'Chèque' },
+  { value: 'transfer', label: 'Virement' },
+];
+
+function SettleAccountModal({ customerId, due, onClose, onDone }: {
+  customerId: string; due: number; onClose: () => void; onDone: () => void;
+}) {
+  const [amount, setAmount] = useState(due.toFixed(2));
+  const [method, setMethod] = useState('cash');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function confirm() {
+    const val = Number(amount.replace(',', '.'));
+    if (!(val > 0)) { setError('Montant invalide.'); return; }
+    setBusy(true); setError(null);
+    const r = await fetch(`/api/customers/${customerId}/settle-account`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount: val, method }),
+    });
+    setBusy(false);
+    if (r.ok) onDone();
+    else {
+      const j = await r.json().catch(() => null);
+      setError(j?.message ?? 'Échec du règlement.');
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => !busy && onClose()}>
+      <div className="card w-full max-w-md p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-lg font-semibold">Solder le compte</h3>
+        <p className="text-sm text-ink-soft">
+          Montant dû : <strong>{formatEUR(due)}</strong>. Ajustez si le règlement diffère.
+        </p>
+        <label className="block text-sm">
+          <span className="text-ink-soft">Montant réglé (€)</span>
+          <input
+            autoFocus className="input h-11 w-full mt-1 text-right tabular-nums" inputMode="decimal"
+            value={amount} onChange={(e) => setAmount(e.target.value)}
+          />
+        </label>
+        <label className="block text-sm">
+          <span className="text-ink-soft">Mode de règlement</span>
+          <select className="input h-11 w-full mt-1" value={method} onChange={(e) => setMethod(e.target.value)}>
+            {SETTLE_METHODS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+          </select>
+        </label>
+        {error && <p className="text-sm text-danger">{error}</p>}
+        <div className="flex justify-end gap-2">
+          <button className="btn-secondary h-10 px-4" disabled={busy} onClick={onClose}>Annuler</button>
+          <button className="btn-primary h-10 px-4" disabled={busy} onClick={() => void confirm()}>
+            {busy ? '…' : 'Marquer comme payé'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
