@@ -38,6 +38,42 @@ async function hasColumn(col: string): Promise<boolean> {
   return exists;
 }
 
+/**
+ * Suppression d'une catégorie. Les articles rattachés sont automatiquement
+ * déclassés (products.category_id → NULL, contrainte ON DELETE SET NULL) et
+ * restent vendables. En cas de blocage par une autre référence, on archive.
+ */
+export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
+  const g = await requirePermission('categories.write');
+  if ('response' in g) return g.response;
+
+  const cnt = await query<{ n: string }>(
+    `SELECT COUNT(*)::text n FROM products WHERE category_id = $1 AND organization_id = $2`,
+    [params.id, g.user.organizationId],
+  );
+  const detached = Number(cnt.rows[0]?.n ?? 0);
+
+  try {
+    const res = await query(
+      `DELETE FROM product_categories WHERE id = $1 AND organization_id = $2`,
+      [params.id, g.user.organizationId],
+    );
+    if (res.rowCount === 0) return jsonError('NOT_FOUND', 404);
+    return NextResponse.json({ deleted: true, detached });
+  } catch (e) {
+    if ((e as { code?: string }).code === '23503') {
+      // Référencée ailleurs : on l'archive (disparaît des listes).
+      await query(
+        `UPDATE product_categories SET is_active = FALSE, updated_at = now()
+          WHERE id = $1 AND organization_id = $2`,
+        [params.id, g.user.organizationId],
+      );
+      return NextResponse.json({ archived: true, detached });
+    }
+    throw e;
+  }
+}
+
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   const g = await requirePermission('categories.write');
   if ('response' in g) return g.response;

@@ -35,6 +35,71 @@ const patchSchema = z.object({
   store_ids: z.array(z.string().uuid()).optional(),
 });
 
+/**
+ * Suppression d'un article.
+ * - S'il a déjà été vendu (sale_lines) ou est référencé ailleurs (commandes,
+ *   avoirs…), on l'ARCHIVE (is_active = false) : l'historique fiscal reste
+ *   intact et l'article disparaît des listes.
+ * - Sinon, suppression définitive.
+ */
+export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
+  const g = await requirePermission('products.write');
+  if ('response' in g) return g.response;
+
+  const exists = await query(
+    `SELECT id FROM products WHERE id = $1 AND organization_id = $2`,
+    [params.id, g.user.organizationId],
+  );
+  if (exists.rowCount === 0) return jsonError('NOT_FOUND', 404);
+
+  // Vendu ? → archivage (jamais de suppression dure : sale_lines est en
+  // ON DELETE CASCADE, ce qui effacerait des lignes de vente fiscales).
+  const sold = await query(
+    `SELECT 1 FROM sale_lines WHERE product_id = $1 LIMIT 1`,
+    [params.id],
+  );
+  if (sold.rowCount && sold.rowCount > 0) {
+    await query(
+      `UPDATE products SET is_active = FALSE, visible_in_pos = FALSE, updated_at = now()
+        WHERE id = $1 AND organization_id = $2`,
+      [params.id, g.user.organizationId],
+    );
+    await audit({
+      organizationId: g.user.organizationId, userId: g.user.id,
+      action: 'products.archive', entityType: 'product', entityId: params.id,
+      payload: { reason: 'has_sales' },
+    });
+    return NextResponse.json({ archived: true });
+  }
+
+  // Jamais vendu : suppression définitive. Si une autre référence RESTRICT
+  // bloque (commande, avoir…), on retombe sur l'archivage.
+  try {
+    await query(`DELETE FROM products WHERE id = $1 AND organization_id = $2`, [params.id, g.user.organizationId]);
+    await audit({
+      organizationId: g.user.organizationId, userId: g.user.id,
+      action: 'products.delete', entityType: 'product', entityId: params.id,
+      payload: {},
+    });
+    return NextResponse.json({ deleted: true });
+  } catch (e) {
+    if ((e as { code?: string }).code === '23503') {
+      await query(
+        `UPDATE products SET is_active = FALSE, visible_in_pos = FALSE, updated_at = now()
+          WHERE id = $1 AND organization_id = $2`,
+        [params.id, g.user.organizationId],
+      );
+      await audit({
+        organizationId: g.user.organizationId, userId: g.user.id,
+        action: 'products.archive', entityType: 'product', entityId: params.id,
+        payload: { reason: 'referenced' },
+      });
+      return NextResponse.json({ archived: true });
+    }
+    throw e;
+  }
+}
+
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   const g = await requirePermission('products.write');
   if ('response' in g) return g.response;

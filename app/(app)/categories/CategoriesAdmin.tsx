@@ -119,6 +119,19 @@ function CategoryFormModal({ category, backOffice, stores, onClose, onSaved }: {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  async function remove() {
+    if (!category) return;
+    if (!confirm(
+      `Supprimer la catégorie « ${category.name} » ?\n\n`
+      + 'Les articles rattachés ne seront pas supprimés : ils passeront simplement « sans catégorie ».',
+    )) return;
+    setSaving(true); setError(null);
+    const res = await fetch(`/api/categories/${category.id}`, { method: 'DELETE' });
+    setSaving(false);
+    if (res.ok) onSaved();
+    else setError('Suppression impossible.');
+  }
+
   async function submit() {
     setSaving(true); setError(null);
     const payload: Record<string, unknown> = {
@@ -257,11 +270,20 @@ function CategoryFormModal({ category, backOffice, stores, onClose, onSaved }: {
 
         {error && <div className="mt-3 rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
 
-        <div className="mt-4 flex justify-end gap-2">
-          <button onClick={onClose} className="btn-ghost">Annuler</button>
-          <button disabled={saving || !form.name.trim()} onClick={() => void submit()} className="btn-primary">
-            {saving ? 'Enregistrement…' : (category ? 'Enregistrer' : 'Créer')}
-          </button>
+        <div className="mt-4 flex justify-between gap-2">
+          <div>
+            {category && (
+              <button type="button" disabled={saving} onClick={() => void remove()} className="btn-soft text-danger">
+                🗑 Supprimer
+              </button>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="btn-ghost">Annuler</button>
+            <button disabled={saving || !form.name.trim()} onClick={() => void submit()} className="btn-primary">
+              {saving ? 'Enregistrement…' : (category ? 'Enregistrer' : 'Créer')}
+            </button>
+          </div>
         </div>
       </div>
     </div>

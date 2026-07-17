@@ -117,6 +117,21 @@ export default function ProductFormModal({
   const [newCat, setNewCat] = useState<string | null>(null);   // null = fermé
   const [newSup, setNewSup] = useState<string | null>(null);
   const [inlineBusy, setInlineBusy] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  async function remove() {
+    if (!product) return;
+    if (!confirm(
+      `Supprimer l'article « ${product.name} » ?\n\n`
+      + "S'il a déjà été vendu, il sera archivé (retiré des listes) pour préserver "
+      + "l'historique. Sinon, il sera supprimé définitivement.",
+    )) return;
+    setDeleting(true); setError(null);
+    const r = await fetch(`/api/products/${product.id}`, { method: 'DELETE' });
+    setDeleting(false);
+    if (r.ok) { onSaved(); onClose(); }
+    else { setError('Suppression impossible.'); }
+  }
 
   async function addCategory() {
     const name = (newCat ?? '').trim();
@@ -541,10 +556,18 @@ export default function ProductFormModal({
         {error && tab === 'details' && <div className="mt-3 rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
         {tab === 'details' ? (
           <div className="mt-4 flex flex-wrap justify-between gap-2">
-            <button type="button" onClick={() => setShowLabel(true)}
-                    className="btn-soft" title="Imprimer une étiquette avec code-barres et prix">
-              🏷️ Imprimer étiquette
-            </button>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setShowLabel(true)}
+                      className="btn-soft" title="Imprimer une étiquette avec code-barres et prix">
+                🏷️ Imprimer étiquette
+              </button>
+              {product && (
+                <button type="button" onClick={() => void remove()} disabled={deleting}
+                        className="btn-soft text-danger" title="Supprimer cet article">
+                  {deleting ? 'Suppression…' : '🗑 Supprimer'}
+                </button>
+              )}
+            </div>
             <div className="flex gap-2">
               <button onClick={onClose} className="btn-ghost">Annuler</button>
               <button disabled={saving || !form.name.trim()} onClick={() => void submit()} className="btn-primary">
