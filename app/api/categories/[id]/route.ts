@@ -39,13 +39,55 @@ async function hasColumn(col: string): Promise<boolean> {
 }
 
 /**
- * Suppression d'une catégorie. Les articles rattachés sont automatiquement
- * déclassés (products.category_id → NULL, contrainte ON DELETE SET NULL) et
- * restent vendables. En cas de blocage par une autre référence, on archive.
+ * Suppression d'une catégorie.
+ *
+ * - Avec `?store_id=` : retrait de CETTE boutique uniquement (comme les
+ *   articles). La catégorie reste dans les autres boutiques ; on ajuste
+ *   simplement son périmètre (store_ids). Suppression réelle seulement si elle
+ *   n'était présente que dans cette boutique.
+ * - Sans `store_id` : suppression pour toutes les boutiques.
+ *
+ * Les articles rattachés sont déclassés automatiquement à la vraie suppression
+ * (products.category_id → NULL, ON DELETE SET NULL). Blocage éventuel → archivage.
  */
-export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
+export async function DELETE(req: Request, { params }: { params: { id: string } }) {
   const g = await requirePermission('categories.write');
   if ('response' in g) return g.response;
+
+  const storeId = new URL(req.url).searchParams.get('store_id');
+
+  // Retrait boutique par boutique (si la colonne store_ids existe).
+  if (storeId && (await hasColumn('store_ids'))) {
+    const cat = await query<{ store_ids: string[] | null }>(
+      `SELECT store_ids FROM product_categories WHERE id = $1 AND organization_id = $2`,
+      [params.id, g.user.organizationId],
+    );
+    if (cat.rowCount === 0) return jsonError('NOT_FOUND', 404);
+    const current = cat.rows[0]!.store_ids ?? [];
+
+    // store_ids vide = « toutes les boutiques » : retirer une boutique revient
+    // à restreindre la catégorie à toutes les AUTRES boutiques.
+    let base = current;
+    if (current.length === 0) {
+      const all = await query<{ id: string }>(
+        `SELECT id FROM stores WHERE organization_id = $1 AND is_active = TRUE`,
+        [g.user.organizationId],
+      );
+      base = all.rows.map((r) => r.id);
+    }
+    const remaining = base.filter((id) => id !== storeId);
+
+    // S'il reste au moins une boutique, on conserve la catégorie ailleurs.
+    if (remaining.length > 0) {
+      await query(
+        `UPDATE product_categories SET store_ids = $3, updated_at = now()
+          WHERE id = $1 AND organization_id = $2`,
+        [params.id, g.user.organizationId, remaining],
+      );
+      return NextResponse.json({ detached_store: true });
+    }
+    // Sinon (catégorie propre à cette seule boutique) → suppression réelle ci-dessous.
+  }
 
   const cnt = await query<{ n: string }>(
     `SELECT COUNT(*)::text n FROM products WHERE category_id = $1 AND organization_id = $2`,

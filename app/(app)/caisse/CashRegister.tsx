@@ -1514,7 +1514,7 @@ export default function CashRegister({
                   <div className="text-sm font-medium flex-1 truncate">{l.label}</div>
                   <span className="font-semibold text-sm whitespace-nowrap">{formatEUR(sub)}</span>
                   <button
-                    onClick={(e) => { e.stopPropagation(); requestRemoveLine(l.key); }}
+                    onClick={(e) => { e.stopPropagation(); removeLine(l.key); }}
                     className="h-7 w-7 grid place-items-center rounded-lg text-ink-soft hover:bg-danger/10 hover:text-danger text-sm shrink-0"
                     aria-label="Retirer cet article"
                   >✕</button>

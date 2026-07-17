@@ -25,6 +25,13 @@ export default function CategoriesAdmin({ canEdit, backOffice = false, stores = 
   const [items, setItems] = useState<Category[]>([]);
   const [editing, setEditing] = useState<Category | null | undefined>(undefined);
   const [loading, setLoading] = useState(true);
+  // Filtre boutique (back-office) : sert aussi de contexte pour la suppression
+  // « de cette boutique uniquement ».
+  const [filterStore, setFilterStore] = useState('');
+
+  const visibleItems = filterStore
+    ? items.filter((c) => c.store_ids.length === 0 || c.store_ids.includes(filterStore))
+    : items;
 
   async function reload() {
     setLoading(true);
@@ -43,13 +50,21 @@ export default function CategoriesAdmin({ canEdit, backOffice = false, stores = 
         title="Catégories"
         subtitle="Organisez votre catalogue. Une catégorie peut avoir une couleur ET/OU une image qui s'affichera sur la tuile en caisse."
         actions={canEdit ? (
-          <button className="btn-primary" onClick={() => setEditing(null)}>+ Nouvelle catégorie</button>
+          <div className="flex items-center gap-2">
+            {backOffice && stores.length > 1 && (
+              <select className="input h-10 text-sm" value={filterStore} onChange={(e) => setFilterStore(e.target.value)}>
+                <option value="">Toutes les boutiques</option>
+                {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            )}
+            <button className="btn-primary" onClick={() => setEditing(null)}>+ Nouvelle catégorie</button>
+          </div>
         ) : null}
       />
 
       {loading ? (
         <div className="text-ink-soft text-sm">Chargement…</div>
-      ) : items.length === 0 ? (
+      ) : visibleItems.length === 0 ? (
         <EmptyState
           icon="◊"
           title="Aucune catégorie"
@@ -59,7 +74,7 @@ export default function CategoriesAdmin({ canEdit, backOffice = false, stores = 
       ) : (
         // Deux fois plus de colonnes = tuiles ~50 % plus petites.
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3">
-          {items.map((c) => (
+          {visibleItems.map((c) => (
             <button
               key={c.id}
               onClick={() => canEdit && setEditing(c)}
@@ -94,6 +109,8 @@ export default function CategoriesAdmin({ canEdit, backOffice = false, stores = 
           category={editing}
           backOffice={backOffice}
           stores={stores}
+          deleteStoreId={filterStore || null}
+          deleteStoreName={filterStore ? (stores.find((s) => s.id === filterStore)?.name ?? null) : null}
           onClose={() => setEditing(undefined)}
           onSaved={() => { setEditing(undefined); void reload(); }}
         />
@@ -102,10 +119,12 @@ export default function CategoriesAdmin({ canEdit, backOffice = false, stores = 
   );
 }
 
-function CategoryFormModal({ category, backOffice, stores, onClose, onSaved }: {
+function CategoryFormModal({ category, backOffice, stores, deleteStoreId, deleteStoreName, onClose, onSaved }: {
   category: Category | null;
   backOffice: boolean;
   stores: { id: string; name: string }[];
+  deleteStoreId?: string | null;
+  deleteStoreName?: string | null;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -121,12 +140,20 @@ function CategoryFormModal({ category, backOffice, stores, onClose, onSaved }: {
 
   async function remove() {
     if (!category) return;
-    if (!confirm(
-      `Supprimer la catégorie « ${category.name} » ?\n\n`
-      + 'Les articles rattachés ne seront pas supprimés : ils passeront simplement « sans catégorie ».',
-    )) return;
+    // Si une boutique est filtrée en back-office : retrait de cette boutique
+    // uniquement (la catégorie reste dans les autres). Sinon suppression totale.
+    const perStore = backOffice && deleteStoreId;
+    const msg = perStore
+      ? `Retirer la catégorie « ${category.name} » de la boutique « ${deleteStoreName ?? '' }» ?\n\n`
+        + 'Elle restera disponible dans les autres boutiques.'
+      : `Supprimer la catégorie « ${category.name} » de TOUTES les boutiques ?\n\n`
+        + 'Les articles rattachés ne seront pas supprimés : ils passeront « sans catégorie ».';
+    if (!confirm(msg)) return;
     setSaving(true); setError(null);
-    const res = await fetch(`/api/categories/${category.id}`, { method: 'DELETE' });
+    const url = perStore
+      ? `/api/categories/${category.id}?store_id=${encodeURIComponent(deleteStoreId)}`
+      : `/api/categories/${category.id}`;
+    const res = await fetch(url, { method: 'DELETE' });
     setSaving(false);
     if (res.ok) onSaved();
     else setError('Suppression impossible.');
