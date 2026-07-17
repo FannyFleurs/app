@@ -56,6 +56,7 @@ export interface Category {
   name: string;
   color: string | null;
   image_url: string | null;
+  visible_in_pos?: boolean;
 }
 
 export interface CartLine {
@@ -463,7 +464,10 @@ export default function CashRegister({
     }
     const cats = categories
       .map((c) => ({ ...c, count: counts.get(c.id) ?? 0 }))
-      .filter((c) => c.count > 0);
+      // Masque de l'accueil caisse : au moins 1 produit ET catégorie visible
+      // (décocher « Visible sur la caisse » la retire, même si elle contient
+      // un article en top).
+      .filter((c) => c.count > 0 && c.visible_in_pos !== false);
     const uncat = counts.get('uncategorized') ?? 0;
     return { cats, uncategorized: uncat };
   }, [products, categories]);
