@@ -41,6 +41,12 @@ export default function ProductsList({
   const [filterStore, setFilterStore] = useState<string>('');
   const [showInactive, setShowInactive] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  // Sélection multiple (back-office) : attribuer une boutique en masse.
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkStore, setBulkStore] = useState<string>('');
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkMsg, setBulkMsg] = useState<string | null>(null);
   const [onlyTop, setOnlyTop] = useState(false);
 
   async function reload() {
@@ -71,6 +77,33 @@ export default function ProductsList({
     () => new Map(stores.map((s) => [s.id, s.name])),
     [stores],
   );
+
+  function toggleSelect(id: string) {
+    setSelectedIds((cur) => {
+      const next = new Set(cur);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  async function applyBulkStore() {
+    if (selectedIds.size === 0 || !bulkStore) return;
+    setBulkBusy(true); setBulkMsg(null);
+    const storeIds = bulkStore === '__all__' ? [] : [bulkStore];
+    const r = await fetch('/api/products/bulk-store', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ product_ids: Array.from(selectedIds), store_ids: storeIds }),
+    });
+    setBulkBusy(false);
+    if (r.ok) {
+      const j = await r.json();
+      setBulkMsg(`${j.updated} article(s) mis à jour.`);
+      setSelectedIds(new Set());
+      await reload();
+    } else {
+      setBulkMsg('Échec de l’attribution.');
+    }
+  }
 
   const filtered = useMemo(() => {
     let arr = products;
@@ -145,8 +178,45 @@ export default function ProductsList({
               <label className="flex items-center gap-1.5 cursor-pointer">
                 <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} /> Inactifs
               </label>
+              {canEdit && backOffice && stores.length > 1 && (
+                <button
+                  className={`rounded px-1.5 py-0.5 ${selectMode ? 'bg-accent-deep text-white' : 'hover:bg-gray-100'}`}
+                  onClick={() => { setSelectMode((v) => !v); setSelectedIds(new Set()); setBulkMsg(null); }}
+                >
+                  {selectMode ? 'Terminer' : '☑ Sélection'}
+                </button>
+              )}
               <span className="ml-auto tabular-nums">{filtered.length}</span>
             </div>
+            {selectMode && (
+              <div className="rounded-xl border border-border bg-bg/60 p-2 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-medium">{selectedIds.size} sélectionné(s)</span>
+                  <div className="flex gap-2">
+                    <button className="text-accent-deep hover:underline"
+                            onClick={() => setSelectedIds(new Set(filtered.map((p) => p.id)))}>
+                      Tout ({filtered.length})
+                    </button>
+                    <button className="text-ink-soft hover:underline" onClick={() => setSelectedIds(new Set())}>
+                      Aucun
+                    </button>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <select className="input h-9 flex-1 text-sm" value={bulkStore} onChange={(e) => setBulkStore(e.target.value)}>
+                    <option value="">— Attribuer à… —</option>
+                    {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    <option value="__all__">Toutes les boutiques</option>
+                  </select>
+                  <button className="btn-primary h-9 px-3 text-sm"
+                          disabled={bulkBusy || selectedIds.size === 0 || !bulkStore}
+                          onClick={() => void applyBulkStore()}>
+                    {bulkBusy ? '…' : 'Appliquer'}
+                  </button>
+                </div>
+                {bulkMsg && <p className="text-xs text-success">{bulkMsg}</p>}
+              </div>
+            )}
           </div>
 
           <div className="md:flex-1 md:overflow-y-auto md:min-h-0">
@@ -163,12 +233,18 @@ export default function ProductsList({
                   return (
                     <li key={p.id}>
                       <button
-                        onClick={() => canEdit && setEditing(p)}
+                        onClick={() => (selectMode ? toggleSelect(p.id) : canEdit && setEditing(p))}
                         className={`w-full text-left px-4 md:px-3 py-2.5 transition-colors ${
-                          activeId === p.id ? 'bg-accent-soft' : 'hover:bg-gray-50'
+                          selectMode && selectedIds.has(p.id) ? 'bg-accent-soft'
+                          : activeId === p.id ? 'bg-accent-soft' : 'hover:bg-gray-50'
                         } ${canEdit ? '' : 'cursor-default'}`}
                       >
                         <div className="flex items-center gap-2">
+                          {selectMode && (
+                            <span className={`h-4 w-4 shrink-0 rounded border grid place-items-center text-[10px] ${
+                              selectedIds.has(p.id) ? 'bg-accent-deep border-accent-deep text-white' : 'border-border'
+                            }`}>{selectedIds.has(p.id) ? '✓' : ''}</span>
+                          )}
                           {p.is_top_product && <span className="text-warning" title="Top produit">★</span>}
                           <span className="font-medium text-sm truncate flex-1">{p.name}</span>
                           <span className="text-sm font-medium tabular-nums whitespace-nowrap">
@@ -239,6 +315,8 @@ export default function ProductsList({
 
       {showImport && (
         <ProductImportModal
+          stores={stores}
+          backOffice={backOffice}
           onClose={() => setShowImport(false)}
           onCompleted={() => { setShowImport(false); void reload(); }}
         />

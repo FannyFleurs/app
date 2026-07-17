@@ -29,12 +29,16 @@ interface PreviewResp {
 type Step = 'pick' | 'preview' | 'done';
 
 export default function ProductImportModal({
-  onClose, onCompleted,
+  onClose, onCompleted, stores = [], backOffice = false,
 }: {
   onClose: () => void;
   onCompleted: () => void;
+  stores?: { id: string; name: string }[];
+  backOffice?: boolean;
 }) {
   const [step, setStep] = useState<Step>('pick');
+  // Boutique cible de l'import ('' = toutes les boutiques).
+  const [targetStore, setTargetStore] = useState<string>('');
   const [preview, setPreview] = useState<PreviewResp | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -86,6 +90,7 @@ export default function ProductImportModal({
           visible_in_pos: row.visible_in_pos,
           is_active: row.is_active,
         })),
+        store_ids: targetStore ? [targetStore] : [],
       }),
     });
     setLoading(false);
@@ -143,6 +148,15 @@ export default function ProductImportModal({
           )}
           {step === 'preview' && preview && (
             <>
+              {stores.length > 1 && (
+                <label className="mr-auto text-sm flex items-center gap-2">
+                  <span className="text-ink-soft whitespace-nowrap">Importer dans :</span>
+                  <select className="input h-9" value={targetStore} onChange={(e) => setTargetStore(e.target.value)}>
+                    <option value="">Toutes les boutiques</option>
+                    {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                </label>
+              )}
               <button onClick={() => { setStep('pick'); setPreview(null); setError(null); }} className="btn-ghost">
                 ← Changer de fichier
               </button>

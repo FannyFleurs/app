@@ -22,6 +22,8 @@ const rowSchema = z.object({
 });
 const bodySchema = z.object({
   rows: z.array(rowSchema).min(1).max(1000),
+  // Boutique(s) cible de l'import. Vide/absent = toutes les boutiques.
+  store_ids: z.array(z.string().uuid()).optional(),
 });
 
 /**
@@ -39,6 +41,7 @@ export async function POST(req: Request) {
   const parsed = await parseJson(req, bodySchema);
   if ('response' in parsed) return parsed.response;
   const { rows } = parsed.data;
+  const storeIds = parsed.data.store_ids ?? [];
 
   let inserted = 0;
   const failures: Array<{ line?: number; name: string; reason: string }> = [];
@@ -67,10 +70,19 @@ export async function POST(req: Request) {
   const colCheck = await query<{ column_name: string }>(
     `SELECT column_name FROM information_schema.columns
       WHERE table_name = 'products'
-        AND column_name IN ('is_top_product','color')`,
+        AND column_name IN ('is_top_product','color','store_ids')`,
   );
   const hasTop = colCheck.rows.some((r) => r.column_name === 'is_top_product');
   const hasColor = colCheck.rows.some((r) => r.column_name === 'color');
+  const hasStoreIds = colCheck.rows.some((r) => r.column_name === 'store_ids');
+  // Boutiques ciblées (seulement si la colonne existe). Vide = toutes.
+  const targetStores = hasStoreIds ? storeIds : [];
+
+  const catStoreCheck = await query<{ exists: boolean }>(
+    `SELECT EXISTS (SELECT 1 FROM information_schema.columns
+       WHERE table_name='product_categories' AND column_name='store_ids') AS exists`,
+  );
+  const catHasStoreIds = catStoreCheck.rows[0]?.exists ?? false;
 
   for (const r of rows) {
     try {
@@ -90,11 +102,17 @@ export async function POST(req: Request) {
           categoryId = existing;
         } else {
           try {
-            const insCat = await query<{ id: string }>(
-              `INSERT INTO product_categories (organization_id, name)
-               VALUES ($1, $2) RETURNING id`,
-              [g.user.organizationId, r.category.trim()],
-            );
+            const insCat = catHasStoreIds
+              ? await query<{ id: string }>(
+                  `INSERT INTO product_categories (organization_id, name, store_ids)
+                   VALUES ($1, $2, $3) RETURNING id`,
+                  [g.user.organizationId, r.category.trim(), targetStores],
+                )
+              : await query<{ id: string }>(
+                  `INSERT INTO product_categories (organization_id, name)
+                   VALUES ($1, $2) RETURNING id`,
+                  [g.user.organizationId, r.category.trim()],
+                );
             categoryId = insCat.rows[0]!.id;
             catByName.set(key, categoryId);
           } catch (catErr) {
@@ -125,6 +143,10 @@ export async function POST(req: Request) {
       if (hasColor) {
         cols.push('color');
         values.push(r.color ?? null);
+      }
+      if (hasStoreIds) {
+        cols.push('store_ids');
+        values.push(targetStores);
       }
 
       const placeholders = cols.map((_, i) => `$${i + 1}`).join(',');

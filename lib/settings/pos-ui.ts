@@ -7,7 +7,7 @@
  * zod côté API, (3) ajouter le contrôle dans la page de paramètres.
  */
 
-export const POS_TILE_SIZES = ['compact', 'normal', 'large', 'xl'] as const;
+export const POS_TILE_SIZES = ['mini', 'compact', 'normal', 'large', 'xl'] as const;
 export type PosTileSize = (typeof POS_TILE_SIZES)[number];
 
 export const POS_THEME_COLORS = ['sage', 'charcoal', 'navy', 'terracotta', 'rose', 'amber', 'plum'] as const;
@@ -229,6 +229,15 @@ export interface PosTileMetrics {
 
 export function tileMetrics(size: PosTileSize): PosTileMetrics {
   switch (size) {
+    case 'mini':
+      return {
+        grid: 'grid-cols-4 md:grid-cols-6 xl:grid-cols-8',
+        padding: 'p-1.5',
+        titleFontSize: 'text-[11px]',
+        titleMinHeight: 'min-h-[1.75rem]',
+        priceFontSize: 'text-xs',
+        gap: 'gap-1.5',
+      };
     case 'compact':
       return {
         grid: 'grid-cols-3 md:grid-cols-4 xl:grid-cols-6',
@@ -269,6 +278,10 @@ export function tileMetrics(size: PosTileSize): PosTileMetrics {
 }
 
 export const POS_TILE_SIZE_LABELS: Record<PosTileSize, { label: string; description: string }> = {
+  mini: {
+    label: 'Mini',
+    description: 'Très petites tuiles, jusqu\'à 8 colonnes — catalogue très dense.',
+  },
   compact: {
     label: 'Compact',
     description: 'Petites tuiles, jusqu\'à 6 colonnes — idéal pour très gros catalogue.',
