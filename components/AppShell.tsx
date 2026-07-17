@@ -9,7 +9,7 @@ import WakeLockKeeper from './WakeLockKeeper';
 import PaidOrderNotifier from './PaidOrderNotifier';
 import SchoolModeBanner from './SchoolModeBanner';
 import type { Role, Permission } from '@/lib/auth/rbac';
-import { POS_THEME_COLOR_VALUES, type PosThemeColor, type ColorScheme, type AutoLogoutMode } from '@/lib/settings/pos-ui';
+import { POS_THEME_COLOR_VALUES, getDeviceThemeColor, type PosThemeColor, type ColorScheme, type AutoLogoutMode } from '@/lib/settings/pos-ui';
 
 interface User { id: string; fullName: string; role: Role; email: string }
 
@@ -46,13 +46,28 @@ export default function AppShell({
   const [menuOpen, setMenuOpen] = useState(false);
   const router = useRouter();
 
-  useEffect(() => { document.body.setAttribute('data-theme', themeColor); }, [themeColor]);
+  // Couleur d'accent effective : celle choisie AU POSTE (localStorage) prime
+  // sur celle de l'organisation. Se met à jour en direct quand le poste change
+  // sa couleur (événement) ou depuis un autre onglet (storage).
+  const [effectiveTheme, setEffectiveTheme] = useState<PosThemeColor>(themeColor);
+  useEffect(() => {
+    const resolve = () => setEffectiveTheme(getDeviceThemeColor(themeColor));
+    resolve();
+    window.addEventListener('webpos-theme-change', resolve);
+    window.addEventListener('storage', resolve);
+    return () => {
+      window.removeEventListener('webpos-theme-change', resolve);
+      window.removeEventListener('storage', resolve);
+    };
+  }, [themeColor]);
+
+  useEffect(() => { document.body.setAttribute('data-theme', effectiveTheme); }, [effectiveTheme]);
 
   // Synchronise la meta theme-color (barre systeme iOS/Android + chrome
-  // Safari macOS) avec la couleur d'accent selectionnee. Si la couleur
+  // Safari macOS) avec la couleur d'accent effective. Si la couleur
   // n'est pas trouvee, on retombe sur blanc.
   useEffect(() => {
-    const hex = POS_THEME_COLOR_VALUES[themeColor]?.main ?? '#FFFFFF';
+    const hex = POS_THEME_COLOR_VALUES[effectiveTheme]?.main ?? '#FFFFFF';
     let meta = document.querySelector('meta[name="theme-color"]') as HTMLMetaElement | null;
     if (!meta) {
       meta = document.createElement('meta');
@@ -60,7 +75,7 @@ export default function AppShell({
       document.head.appendChild(meta);
     }
     meta.content = hex;
-  }, [themeColor]);
+  }, [effectiveTheme]);
 
   useEffect(() => {
     function applyMode() {

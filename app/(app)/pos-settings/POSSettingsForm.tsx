@@ -8,6 +8,8 @@ import {
   POS_TILE_SIZE_LABELS,
   POS_THEME_COLORS,
   POS_THEME_COLOR_VALUES,
+  getDeviceThemeColor,
+  setDeviceThemeColor,
   POS_UI_DEFAULTS,
   COLOR_SCHEMES,
   HEADER_TABS_DEFAULT,
@@ -34,10 +36,21 @@ export default function POSSettingsForm({ initial, canWrite }: Props) {
   const firstRender = useRef(true);
   const lastSaved = useRef<PosUiSettings>(initial);
 
-  // Aperçu en direct du thème + mode clair/sombre pendant l'édition
+  // Couleur d'accent : préférence DU POSTE (mémorisée sur cet appareil), pas de
+  // l'organisation. Chaque caisse peut donc avoir sa propre couleur.
+  const [deviceTheme, setDeviceTheme] = useState<PosUiSettings['theme_color']>(initial.theme_color);
   useEffect(() => {
-    document.body.setAttribute('data-theme', settings.theme_color);
-  }, [settings.theme_color]);
+    setDeviceTheme(getDeviceThemeColor(initial.theme_color));
+  }, [initial.theme_color]);
+  useEffect(() => {
+    document.body.setAttribute('data-theme', deviceTheme);
+  }, [deviceTheme]);
+
+  function selectTheme(color: PosUiSettings['theme_color']) {
+    if (!canWrite) return;
+    setDeviceTheme(color);
+    setDeviceThemeColor(color); // localStorage + événement live pour l'AppShell
+  }
   useEffect(() => {
     let mode: 'light' | 'dark' = 'light';
     if (settings.color_scheme === 'dark') mode = 'dark';
@@ -128,18 +141,18 @@ export default function POSSettingsForm({ initial, canWrite }: Props) {
 
         <Section
           title="Couleur des boutons"
-          description="Couleur principale appliquée aux boutons d'action et accents. Modifiable à tout moment."
+          description="Couleur principale de cette caisse — mémorisée sur ce poste. Chaque poste peut avoir sa propre couleur."
         >
           <div className="grid grid-cols-3 md:grid-cols-7 gap-3">
             {POS_THEME_COLORS.map((color) => {
               const meta = POS_THEME_COLOR_VALUES[color];
-              const active = settings.theme_color === color;
+              const active = deviceTheme === color;
               return (
                 <button
                   key={color}
                   type="button"
                   disabled={!canWrite}
-                  onClick={() => patch('theme_color', color)}
+                  onClick={() => selectTheme(color)}
                   className={`relative rounded-2xl border p-3 transition-all flex flex-col items-center gap-2
                     ${active ? 'border-ink ring-2 ring-offset-1' : 'border-border hover:border-gray-300'}
                     ${!canWrite ? 'opacity-60 cursor-not-allowed' : ''}`}
