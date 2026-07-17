@@ -34,12 +34,16 @@ export default function LabelsManager() {
   // Impression rapide (lot)
   const [batch, setBatch] = useState<BatchLine[]>([]);
   const [settings, setSettings] = useState<LabelSettings>(LABEL_DEFAULTS);
+  // Imprimante CloudPRNT active (impression directe) : null si aucune.
+  const [cloudPrinter, setCloudPrinter] = useState<string | null>(null);
+  const [cloudMsg, setCloudMsg] = useState<string | null>(null);
 
   useEffect(() => {
     void (async () => {
-      const [rp, rs] = await Promise.all([
+      const [rp, rs, rc] = await Promise.all([
         fetch('/api/products?order=recent'),
         fetch('/api/settings/labels'),
+        fetch('/api/cloudprnt/printers'),
       ]);
       if (rp.ok) {
         const list = ((await rp.json()).products as LabelItem[]).map((p) => ({
@@ -48,6 +52,11 @@ export default function LabelsManager() {
         setItems(list);
       }
       if (rs.ok) setSettings((await rs.json()).settings as LabelSettings);
+      if (rc.ok) {
+        const printers = (await rc.json()).printers as Array<{ label: string; role: string; enabled: boolean }>;
+        const p = printers.find((x) => x.role === 'label' && x.enabled);
+        setCloudPrinter(p ? p.label : null);
+      }
       setLoading(false);
     })();
   }, []);
@@ -101,8 +110,8 @@ export default function LabelsManager() {
   function removeBatch(id: string) {
     setBatch((cur) => cur.filter((e) => e.product.id !== id));
   }
-  function printBatch() {
-    const entries = batch.map((e) => ({
+  function batchEntries() {
+    return batch.map((e) => ({
       product: {
         name: e.product.name,
         sku: e.product.sku,
@@ -113,7 +122,25 @@ export default function LabelsManager() {
       },
       qty: e.qty,
     }));
-    openPrintWindow(buildLabelsDocument(entries, settings));
+  }
+  function printBatch() {
+    openPrintWindow(buildLabelsDocument(batchEntries(), settings));
+  }
+  async function printBatchCloud() {
+    setCloudMsg(null);
+    const r = await fetch('/api/cloudprnt/print-labels', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entries: batchEntries() }),
+    });
+    if (r.ok) {
+      const j = await r.json();
+      setCloudMsg(`${j.count} étiquette(s) envoyée(s) à « ${j.printer} ».`);
+      setBatch([]);
+      setTimeout(() => setCloudMsg(null), 4000);
+    } else {
+      const j = await r.json().catch(() => null);
+      setCloudMsg(j?.error === 'NO_PRINTER' ? 'Aucune imprimante CloudPRNT active.' : 'Échec de l’envoi à l’imprimante.');
+    }
   }
 
   const batchTotal = batch.reduce((s, e) => s + e.qty, 0);
@@ -156,14 +183,28 @@ export default function LabelsManager() {
                         title="Retirer" onClick={() => removeBatch(e.product.id)}>✕</button>
               </div>
             ))}
-            <div className="flex items-center justify-between gap-2 px-3 py-2">
+            <div className="flex items-center justify-between gap-2 px-3 py-2 flex-wrap">
               <button className="text-xs text-ink-soft hover:text-danger" onClick={() => setBatch([])}>Vider la liste</button>
-              <button className="btn-primary" onClick={printBatch}>
-                Imprimer tout ({batchTotal} étiquette{batchTotal > 1 ? 's' : ''})
-              </button>
+              <div className="flex items-center gap-2">
+                {cloudPrinter ? (
+                  <>
+                    <button className="btn-soft" onClick={printBatch} title="Via la boîte d'impression du navigateur">
+                      PDF / navigateur
+                    </button>
+                    <button className="btn-primary" onClick={() => void printBatchCloud()}>
+                      🖨 Imprimer sur « {cloudPrinter} » ({batchTotal})
+                    </button>
+                  </>
+                ) : (
+                  <button className="btn-primary" onClick={printBatch}>
+                    Imprimer tout ({batchTotal} étiquette{batchTotal > 1 ? 's' : ''})
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         )}
+        {cloudMsg && <p className="mt-2 text-xs text-accent-deep">{cloudMsg}</p>}
       </div>
 
       {/* Recherche + liste (impression unitaire) */}
