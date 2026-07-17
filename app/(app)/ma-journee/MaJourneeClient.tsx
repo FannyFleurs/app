@@ -482,6 +482,7 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
   const [showReturn, setShowReturn] = useState(false);
   const [creditNote, setCreditNote] = useState<{ id: string; number: string; amount: number } | null>(null);
   const [showCorrection, setShowCorrection] = useState(false);
+  const [showCancel, setShowCancel] = useState(false);
   const [showAttach, setShowAttach] = useState(false);
   const [info, setInfo] = useState<string | null>(null);
 
@@ -498,6 +499,7 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
   // Vente entièrement retournée ? (statut annulé, ou toutes les quantités
   // déjà rendues) → le bouton « Retour produit » est désactivé.
   const returnedByLine = detail.returned_by_line ?? {};
+  const hasReturns = Object.values(returnedByLine).some((q) => Number(q) > 0);
   const fullyReturned =
     s.status === 'cancelled_by_credit_note' ||
     (detail.lines.length > 0 && detail.lines.every(
@@ -597,6 +599,24 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
           {!s.customer_id && (
             <button onClick={() => setShowAttach(true)} className="btn-soft text-sm">
               + Attribuer un client
+            </button>
+          )}
+          {s.status === 'cancelled_by_credit_note' ? (
+            <span className="inline-flex items-center rounded-lg bg-danger/10 px-3 py-1.5 text-sm font-medium text-danger">
+              Vente annulée
+            </span>
+          ) : (
+            <button
+              onClick={() => setShowCancel(true)}
+              disabled={hasReturns || !!detail.invoice}
+              title={
+                detail.invoice ? 'Vente facturée : annulation impossible (passer par un avoir de facture).'
+                : hasReturns ? 'Un retour a déjà eu lieu sur cette vente.'
+                : undefined
+              }
+              className="btn-soft text-sm text-danger disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              ✕ Annuler la vente
             </button>
           )}
         </div>
@@ -783,6 +803,20 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
           }}
         />
       )}
+      {showCancel && (
+        <CancelSaleModal
+          saleId={s.id}
+          receiptNumber={s.receipt_number}
+          amount={Number(s.total_ttc)}
+          onClose={() => setShowCancel(false)}
+          onSuccess={(number) => {
+            setShowCancel(false);
+            setInfo(`Vente annulée · avoir ${number} émis.`);
+            setTimeout(() => setInfo(null), 5000);
+            onInvoiceGenerated();
+          }}
+        />
+      )}
       {showCorrection && (
         <PaymentCorrectionModal
           saleId={s.id}
@@ -812,6 +846,67 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
           }}
         />
       )}
+    </div>
+  );
+}
+
+function CancelSaleModal({ saleId, receiptNumber, amount, onClose, onSuccess }: {
+  saleId: string; receiptNumber: string; amount: number;
+  onClose: () => void; onSuccess: (creditNoteNumber: string) => void;
+}) {
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const ERR: Record<string, string> = {
+    SALE_NOT_CANCELABLE: 'Cette vente ne peut plus être annulée.',
+    SALE_INVOICED: 'Vente facturée : annulation impossible (passer par un avoir de facture).',
+    SALE_HAS_RETURNS: 'Un retour a déjà eu lieu sur cette vente.',
+    REASON_REQUIRED: 'Indiquez un motif.',
+  };
+
+  async function confirm() {
+    if (!reason.trim()) { setError('Indiquez un motif.'); return; }
+    setBusy(true); setError(null);
+    const r = await fetch(`/api/sales/${saleId}/cancel-validated`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: reason.trim() }),
+    });
+    setBusy(false);
+    if (r.ok) {
+      const j = await r.json();
+      onSuccess(j.number as string);
+    } else {
+      const j = await r.json().catch(() => null);
+      setError(ERR[j?.error] ?? j?.error ?? 'Échec de l’annulation.');
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => !busy && onClose()}>
+      <div className="card w-full max-w-md p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-lg font-semibold text-danger">Annuler la vente {receiptNumber}</h3>
+        <p className="text-sm text-ink-soft">
+          Cette action contre-passe l’intégralité de la vente ({formatEUR(amount)}) : articles,
+          tous les modes de règlement et la fidélité. Un avoir est émis et la vente est marquée
+          « annulée ». Opération irréversible.
+        </p>
+        <label className="block text-sm">
+          <span className="text-ink-soft">Motif de l’annulation</span>
+          <textarea
+            autoFocus className="input w-full mt-1 min-h-[80px]" value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="Ex. erreur de saisie, client s’est ravisé…"
+          />
+        </label>
+        {error && <p className="text-sm text-danger">{error}</p>}
+        <div className="flex justify-end gap-2">
+          <button className="btn-secondary h-10 px-4" disabled={busy} onClick={onClose}>Retour</button>
+          <button className="btn-primary h-10 px-4 !bg-danger" disabled={busy} onClick={() => void confirm()}>
+            {busy ? '…' : 'Annuler la vente'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
