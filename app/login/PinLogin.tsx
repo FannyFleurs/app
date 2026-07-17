@@ -250,7 +250,7 @@ export default function PinLogin() {
                     setSelectedId(u.id);
                     setPin('');
                   }}
-                  className={`relative w-full text-left rounded-2xl border bg-white px-5 py-5 lg:py-6 pl-6 transition-all flex items-center gap-4 ${
+                  className={`relative w-full text-left rounded-2xl border bg-white px-5 py-3 lg:py-3.5 pl-6 transition-all flex items-center gap-3 ${
                     isSelected
                       ? 'border-transparent ring-2 shadow-md'
                       : 'border-border hover:shadow-sm hover:border-gray-300'
@@ -258,18 +258,18 @@ export default function PinLogin() {
                   style={isSelected ? { ['--tw-ring-color' as string]: 'var(--primary)' } : undefined}
                 >
                   <span
-                    className="absolute left-0 top-2.5 bottom-2.5 w-2 rounded-r-full"
+                    className="absolute left-0 top-2 bottom-2 w-2 rounded-r-full"
                     style={{ backgroundColor: c }}
                   />
                   <div
-                    className="grid h-12 w-12 lg:h-14 lg:w-14 place-items-center rounded-full text-white font-semibold text-lg lg:text-xl shrink-0"
+                    className="grid h-10 w-10 lg:h-11 lg:w-11 place-items-center rounded-full text-white font-semibold text-base lg:text-lg shrink-0"
                     style={{ backgroundColor: c }}
                     aria-hidden="true"
                   >
                     {(u.full_name?.[0] ?? '?').toUpperCase()}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-lg lg:text-xl truncate leading-tight">{u.full_name}</div>
+                    <div className="font-semibold text-base lg:text-lg truncate leading-tight">{u.full_name}</div>
                     <div className="text-sm text-ink-soft mt-0.5">
                       {ROLE_LABELS[u.role] ?? u.role}
                       {!u.has_pin && <span className="text-warning ml-1">· sans PIN</span>}

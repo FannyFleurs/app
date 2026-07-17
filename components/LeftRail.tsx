@@ -157,10 +157,11 @@ export default function LeftRail({
           pages (qui commencent à rail + padding p-8 du contenu). */}
       <Link
         href="/caisse"
-        // h-24 : le centre vertical du logo (48px) s'aligne pile sur le centre
-        // de la première ligne du titre de page (top padding 32px + demi
-        // interligne 16px de text-2xl = 48px). Alignement logo/titre « propre ».
-        className="flex items-center h-24 pl-3 shrink-0 overflow-visible"
+        // Hors caisse (h-24) : le centre vertical du logo (48px) s'aligne pile
+        // sur le centre de la 1re ligne du titre de page (32px + 16px). Sur la
+        // CAISSE, l'en-tête fait h-14 (56px) : on aligne le logo dessus (h-14)
+        // pour qu'il soit centré entre la barre verte du haut et la bordure.
+        className={`flex items-center pl-3 shrink-0 overflow-visible ${path === '/caisse' ? 'h-14' : 'h-24'}`}
         title="Caisse"
       >
         {brand.logo_url ? (
@@ -168,7 +169,7 @@ export default function LeftRail({
           <img
             src={brand.logo_url}
             alt={brand.brand_name}
-            className="h-16 w-auto max-w-[96px] lg:max-w-[112px] object-contain object-left"
+            className={`w-auto max-w-[96px] lg:max-w-[112px] object-contain object-left ${path === '/caisse' ? 'h-10' : 'h-16'}`}
           />
         ) : (
           <span
