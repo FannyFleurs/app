@@ -44,7 +44,7 @@ export default function ProductsList({
   // Sélection multiple (back-office) : attribuer une boutique en masse.
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [bulkStore, setBulkStore] = useState<string>('');
+  const [bulkStores, setBulkStores] = useState<string[]>([]);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkMsg, setBulkMsg] = useState<string | null>(null);
   const [onlyTop, setOnlyTop] = useState(false);
@@ -87,12 +87,15 @@ export default function ProductsList({
   }
 
   async function applyBulkStore() {
-    if (selectedIds.size === 0 || !bulkStore) return;
+    if (selectedIds.size === 0) return;
+    if (bulkStores.length === 0
+        && !confirm('Aucune boutique sélectionnée : les articles seront visibles dans TOUTES les boutiques. Continuer ?')) {
+      return;
+    }
     setBulkBusy(true); setBulkMsg(null);
-    const storeIds = bulkStore === '__all__' ? [] : [bulkStore];
     const r = await fetch('/api/products/bulk-store', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ product_ids: Array.from(selectedIds), store_ids: storeIds }),
+      body: JSON.stringify({ product_ids: Array.from(selectedIds), store_ids: bulkStores }),
     });
     setBulkBusy(false);
     if (r.ok) {
@@ -202,16 +205,27 @@ export default function ProductsList({
                     </button>
                   </div>
                 </div>
-                <div className="flex gap-2">
-                  <select className="input h-9 flex-1 text-sm" value={bulkStore} onChange={(e) => setBulkStore(e.target.value)}>
-                    <option value="">— Attribuer à… —</option>
-                    {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    <option value="__all__">Toutes les boutiques</option>
-                  </select>
-                  <button className="btn-primary h-9 px-3 text-sm"
-                          disabled={bulkBusy || selectedIds.size === 0 || !bulkStore}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-xs text-ink-soft">Attribuer à :</span>
+                    {stores.map((s) => {
+                      const on = bulkStores.includes(s.id);
+                      return (
+                        <button key={s.id} type="button"
+                                onClick={() => setBulkStores((cur) => cur.includes(s.id) ? cur.filter((x) => x !== s.id) : [...cur, s.id])}
+                                className={`px-2 py-0.5 rounded-lg border text-xs font-medium ${
+                                  on ? 'border-accent-deep bg-accent-soft/40 text-accent-deep' : 'border-border text-ink-soft hover:bg-gray-50'
+                                }`}>
+                          {on ? '✓ ' : ''}{s.name}
+                        </button>
+                      );
+                    })}
+                    {bulkStores.length === 0 && <span className="text-xs text-ink-soft">(toutes les boutiques)</span>}
+                  </div>
+                  <button className="btn-primary h-9 px-3 text-sm w-full"
+                          disabled={bulkBusy || selectedIds.size === 0}
                           onClick={() => void applyBulkStore()}>
-                    {bulkBusy ? '…' : 'Appliquer'}
+                    {bulkBusy ? '…' : `Appliquer à ${selectedIds.size} article(s)`}
                   </button>
                 </div>
                 {bulkMsg && <p className="text-xs text-success">{bulkMsg}</p>}

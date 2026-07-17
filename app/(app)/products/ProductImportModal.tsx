@@ -37,8 +37,10 @@ export default function ProductImportModal({
   backOffice?: boolean;
 }) {
   const [step, setStep] = useState<Step>('pick');
-  // Boutique cible de l'import ('' = toutes les boutiques).
-  const [targetStore, setTargetStore] = useState<string>('');
+  // Boutiques cibles de l'import (vide = toutes les boutiques).
+  const [targetStores, setTargetStores] = useState<string[]>([]);
+  const toggleStore = (id: string) =>
+    setTargetStores((cur) => (cur.includes(id) ? cur.filter((s) => s !== id) : [...cur, id]));
   const [preview, setPreview] = useState<PreviewResp | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -90,7 +92,7 @@ export default function ProductImportModal({
           visible_in_pos: row.visible_in_pos,
           is_active: row.is_active,
         })),
-        store_ids: targetStore ? [targetStore] : [],
+        store_ids: targetStores,
       }),
     });
     setLoading(false);
@@ -149,13 +151,21 @@ export default function ProductImportModal({
           {step === 'preview' && preview && (
             <>
               {stores.length > 1 && (
-                <label className="mr-auto text-sm flex items-center gap-2">
+                <div className="mr-auto flex items-center gap-2 flex-wrap text-sm">
                   <span className="text-ink-soft whitespace-nowrap">Importer dans :</span>
-                  <select className="input h-9" value={targetStore} onChange={(e) => setTargetStore(e.target.value)}>
-                    <option value="">Toutes les boutiques</option>
-                    {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  </select>
-                </label>
+                  {stores.map((s) => {
+                    const on = targetStores.includes(s.id);
+                    return (
+                      <button key={s.id} type="button" onClick={() => toggleStore(s.id)}
+                              className={`px-2.5 py-1 rounded-lg border text-xs font-medium ${
+                                on ? 'border-accent-deep bg-accent-soft/40 text-accent-deep' : 'border-border text-ink-soft hover:bg-gray-50'
+                              }`}>
+                        {on ? '✓ ' : ''}{s.name}
+                      </button>
+                    );
+                  })}
+                  <span className="text-xs text-ink-soft">{targetStores.length === 0 ? '(toutes)' : ''}</span>
+                </div>
               )}
               <button onClick={() => { setStep('pick'); setPreview(null); setError(null); }} className="btn-ghost">
                 ← Changer de fichier
