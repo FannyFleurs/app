@@ -77,9 +77,11 @@ const ICONS: Record<IconName, React.ReactNode> = {
     </>
   ),
   orders: (
+    // Bon de commande : presse-papier + liste — distinct du sac de la caisse.
     <>
-      <path d="M3 7h18l-1.5 11a2 2 0 0 1-2 1.7H6.5a2 2 0 0 1-2-1.7L3 7Z" />
-      <path d="M8 7V5a4 4 0 1 1 8 0v2" />
+      <rect x="4" y="5" width="16" height="16" rx="2" />
+      <path d="M9 5V4.5A1.5 1.5 0 0 1 10.5 3h3A1.5 1.5 0 0 1 15 4.5V5" />
+      <path d="M8 11h8M8 15h5" />
     </>
   ),
   invoices: (
