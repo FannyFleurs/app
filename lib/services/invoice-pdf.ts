@@ -1,6 +1,16 @@
 import PDFDocument from 'pdfkit';
 import { formatEUR } from './money';
 
+/** Formate une date (string 'YYYY-MM-DD', ISO ou Date) en jj/mm/aaaa. '—' si vide. */
+function fmtDate(d: string | null | undefined): string {
+  if (!d) return '—';
+  const s = String(d);
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[3]}/${m[2]}/${m[1]}`;
+  const dt = new Date(s);
+  return Number.isNaN(dt.getTime()) ? '—' : dt.toLocaleDateString('fr-FR');
+}
+
 export interface InvoicePdfData {
   number: string;
   invoice_type: string;
@@ -77,16 +87,16 @@ export async function renderInvoicePdf(
     if (customer.siret) doc.text(`SIRET ${customer.siret}`, 340, doc.y);
     if (customer.vat_number) doc.text(`TVA intra. ${customer.vat_number}`, 340, doc.y);
 
-    // Méta facture (dates)
+    // Méta facture (dates) — largeurs fixées pour éviter tout chevauchement.
     const metaY = 220;
     doc.font('Helvetica').fontSize(9).fillColor('#666');
-    doc.text('Date d\'émission', 48, metaY);
-    doc.text('Date de prestation', 200, metaY);
-    if (invoice.due_date) doc.text('Échéance', 350, metaY);
+    doc.text('Date d\'émission', 48, metaY, { width: 140 });
+    doc.text('Date de prestation', 200, metaY, { width: 140 });
+    if (invoice.due_date) doc.text('Échéance', 350, metaY, { width: 140 });
     doc.fillColor('#000').font('Helvetica-Bold');
-    doc.text(invoice.issue_date, 48, metaY + 12);
-    doc.text(invoice.service_date ?? '—', 200, metaY + 12);
-    if (invoice.due_date) doc.text(invoice.due_date, 350, metaY + 12);
+    doc.text(fmtDate(invoice.issue_date), 48, metaY + 12, { width: 140 });
+    doc.text(fmtDate(invoice.service_date), 200, metaY + 12, { width: 140 });
+    if (invoice.due_date) doc.text(fmtDate(invoice.due_date), 350, metaY + 12, { width: 140 });
 
     // Table des lignes
     const tableTop = 270;

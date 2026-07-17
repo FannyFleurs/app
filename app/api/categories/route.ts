@@ -68,9 +68,11 @@ export async function GET() {
       where += ` AND (COALESCE(array_length(store_ids, 1), 0) = 0 OR store_ids && $${params.length}::uuid[])`;
     }
   }
-  const transportCol = (await hasTransportColumn()) ? 'transport_cost_ht' : '0 AS transport_cost_ht';
+  const hasTransport = await hasTransportColumn();
+  const transportCol = hasTransport ? 'transport_cost_ht' : '0 AS transport_cost_ht';
+  const pctCol = hasTransport ? 'transport_cost_pct' : 'NULL::numeric AS transport_cost_pct';
   const { rows } = await query(
-    `SELECT id, name, parent_id, color, icon, image_url, position, visible_in_pos, is_active, ${storeCol}, ${transportCol}
+    `SELECT id, name, parent_id, color, icon, image_url, position, visible_in_pos, is_active, ${storeCol}, ${transportCol}, ${pctCol}
        FROM product_categories
       WHERE ${where}
       ORDER BY position ASC, name ASC`,

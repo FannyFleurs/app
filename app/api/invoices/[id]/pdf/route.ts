@@ -27,7 +27,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     customer_address: { line1?: string; zip?: string; city?: string } | null;
   }>(
     `SELECT i.number, i.invoice_type, i.status,
-            i.issue_date, i.service_date, i.due_date,
+            i.issue_date::text, i.service_date::text, i.due_date::text,
             i.total_ht::text, i.total_tva::text, i.total_ttc::text,
             i.tva_breakdown, i.payment_terms, i.legal_mentions, i.fiscal_hash,
             o.name AS org_name, o.legal_name AS org_legal, o.siret AS org_siret,

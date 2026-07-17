@@ -544,24 +544,37 @@ function Item({ label, value }: { label: string; value: string }) {
   );
 }
 
-const SETTLE_METHODS: { value: string; label: string }[] = [
-  { value: 'cash', label: 'Espèces' },
-  { value: 'card', label: 'Carte' },
-  { value: 'check', label: 'Chèque' },
-  { value: 'transfer', label: 'Virement' },
-];
+interface PayMethod { kind: string; label: string; is_active: boolean; position: number }
+// Modes non pertinents pour solder un compte (pas d'encaissement réel ici).
+const SETTLE_EXCLUDED = new Set(['deferred', 'payment_link']);
 
 function SettleAccountModal({ customerId, due, onClose, onDone }: {
   customerId: string; due: number; onClose: () => void; onDone: () => void;
 }) {
   const [amount, setAmount] = useState(due.toFixed(2));
-  const [method, setMethod] = useState('cash');
+  const [method, setMethod] = useState<string | null>(null);
+  const [methods, setMethods] = useState<PayMethod[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Modes de règlement configurés pour la boutique (comme en caisse).
+  useEffect(() => {
+    void fetch('/api/payment-methods')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        const list = ((j?.methods ?? []) as PayMethod[])
+          .filter((m) => m.is_active && !SETTLE_EXCLUDED.has(m.kind))
+          .sort((a, b) => a.position - b.position);
+        setMethods(list);
+        setMethod(list.find((m) => m.kind === 'cash')?.kind ?? list[0]?.kind ?? null);
+      })
+      .catch(() => undefined);
+  }, []);
 
   async function confirm() {
     const val = Number(amount.replace(',', '.'));
     if (!(val > 0)) { setError('Montant invalide.'); return; }
+    if (!method) { setError('Choisissez un mode de règlement.'); return; }
     setBusy(true); setError(null);
     const r = await fetch(`/api/customers/${customerId}/settle-account`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -589,16 +602,30 @@ function SettleAccountModal({ customerId, due, onClose, onDone }: {
             value={amount} onChange={(e) => setAmount(e.target.value)}
           />
         </label>
-        <label className="block text-sm">
+        <div className="text-sm">
           <span className="text-ink-soft">Mode de règlement</span>
-          <select className="input h-11 w-full mt-1" value={method} onChange={(e) => setMethod(e.target.value)}>
-            {SETTLE_METHODS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
-          </select>
-        </label>
+          <div className="mt-1 grid grid-cols-2 gap-2">
+            {methods.map((m) => (
+              <button
+                key={m.kind}
+                type="button"
+                onClick={() => setMethod(m.kind)}
+                className={`h-11 rounded-xl border px-3 text-sm font-medium transition-colors ${
+                  method === m.kind
+                    ? 'border-accent-deep bg-accent-soft/40 text-accent-deep'
+                    : 'border-border hover:bg-gray-50'
+                }`}
+              >
+                {m.label}
+              </button>
+            ))}
+            {methods.length === 0 && <p className="text-xs text-ink-soft col-span-2">Aucun mode de règlement configuré.</p>}
+          </div>
+        </div>
         {error && <p className="text-sm text-danger">{error}</p>}
         <div className="flex justify-end gap-2">
           <button className="btn-secondary h-10 px-4" disabled={busy} onClick={onClose}>Annuler</button>
-          <button className="btn-primary h-10 px-4" disabled={busy} onClick={() => void confirm()}>
+          <button className="btn-primary h-10 px-4" disabled={busy || !method} onClick={() => void confirm()}>
             {busy ? '…' : 'Marquer comme payé'}
           </button>
         </div>

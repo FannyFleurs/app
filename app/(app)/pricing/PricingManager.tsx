@@ -14,7 +14,7 @@ interface ApiProduct {
   tax_rate: number;
 }
 
-interface Category { id: string; name: string; transport_cost_ht: number }
+interface Category { id: string; name: string; transport_cost_ht: number; transport_cost_pct: number | null }
 
 /** Ligne éditable en mémoire. */
 interface Row {
@@ -71,7 +71,9 @@ export default function PricingManager() {
       ]);
       if (rc.ok) {
         setCategories(((await rc.json()).categories as Category[]).map((c) => ({
-          ...c, transport_cost_ht: Number(c.transport_cost_ht ?? 0),
+          ...c,
+          transport_cost_ht: Number(c.transport_cost_ht ?? 0),
+          transport_cost_pct: c.transport_cost_pct != null ? Number(c.transport_cost_pct) : null,
         })));
       }
       if (rp.ok) {
@@ -88,8 +90,14 @@ export default function PricingManager() {
     })();
   }, []);
 
-  const catTransport = (cid: string | null) =>
-    categories.find((c) => c.id === cid)?.transport_cost_ht ?? 0;
+  // Transport effectif par défaut de la catégorie : % du prix d'achat si un
+  // pourcentage est défini, sinon le montant fixe.
+  const catTransport = (cid: string | null, purchase: number) => {
+    const c = categories.find((x) => x.id === cid);
+    if (!c) return 0;
+    if (c.transport_cost_pct != null) return round2((purchase * c.transport_cost_pct) / 100);
+    return c.transport_cost_ht ?? 0;
+  };
 
   // Prépare les lignes éditables dès qu'une catégorie est choisie.
   const visible = useMemo(
@@ -98,7 +106,7 @@ export default function PricingManager() {
   );
   useEffect(() => {
     const next: Record<string, Row> = {};
-    for (const p of visible) next[p.id] = rows[p.id] ?? toRow(p, catTransport(p.category_id));
+    for (const p of visible) next[p.id] = rows[p.id] ?? toRow(p, catTransport(p.category_id, Number(p.purchase_price_ht ?? 0)));
     setRows(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [catId, products, categories]);

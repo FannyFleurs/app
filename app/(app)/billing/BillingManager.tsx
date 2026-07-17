@@ -40,6 +40,24 @@ const INVOICE_STATUS: Record<string, string> = {
   validated: 'Validée', sent: 'Envoyée', partially_paid: 'Part. payée', overdue: 'En retard',
 };
 
+const iso = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+/** Périodes rapides pour la facturation (calculées à l'affichage). */
+function PERIOD_PRESETS(): { label: string; from: string; to: string }[] {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = now.getMonth();
+  const q = Math.floor(m / 3); // trimestre courant (0..3)
+  return [
+    { label: "Aujourd'hui", from: iso(now), to: iso(now) },
+    { label: 'Mois en cours', from: iso(new Date(y, m, 1)), to: iso(new Date(y, m + 1, 0)) },
+    { label: 'Mois passé', from: iso(new Date(y, m - 1, 1)), to: iso(new Date(y, m, 0)) },
+    { label: 'Trimestre en cours', from: iso(new Date(y, q * 3, 1)), to: iso(new Date(y, q * 3 + 3, 0)) },
+    { label: 'Trimestre passé', from: iso(new Date(y, q * 3 - 3, 1)), to: iso(new Date(y, q * 3, 0)) },
+  ];
+}
+
 export default function BillingManager({ canInvoice }: { canInvoice: boolean }) {
   const [customers, setCustomers] = useState<CustomerRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -238,6 +256,29 @@ export default function BillingManager({ canInvoice }: { canInvoice: boolean }) 
                       <input type="date" className="input h-9" value={to} onChange={(e) => setTo(e.target.value)} />
                     </label>
                   </div>
+                </div>
+                {/* Périodes rapides */}
+                <div className="flex flex-wrap gap-1.5">
+                  {PERIOD_PRESETS().map((p) => {
+                    const active = from === p.from && to === p.to;
+                    return (
+                      <button
+                        key={p.label}
+                        onClick={() => { setFrom(p.from); setTo(p.to); }}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
+                          active ? 'border-accent-deep bg-accent-soft/40 text-accent-deep' : 'border-border text-ink-soft hover:bg-gray-50'
+                        }`}
+                      >
+                        {p.label}
+                      </button>
+                    );
+                  })}
+                  {(from || to) && (
+                    <button onClick={() => { setFrom(''); setTo(''); }}
+                            className="px-2.5 py-1 rounded-lg text-xs font-medium border border-border text-ink-soft hover:bg-gray-50">
+                      Tout
+                    </button>
+                  )}
                 </div>
 
                 {detail.sales.length === 0 ? (

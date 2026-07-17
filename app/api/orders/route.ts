@@ -152,7 +152,15 @@ export async function GET() {
       ? `COALESCE(s.prep_status, 'confirmed')`
       : `'confirmed'`;
     const salesStripeCols = salesHasStripe
-      ? `, s.payment_status, s.payment_link_url, s.paid_at`
+      // Une vente encaissée au comptoir est payée. La colonne payment_status
+      // (Stripe) ne vaut 'paid' que pour les paiements par lien ; on ne
+      // considère « impayée » qu'une vente avec un lien de paiement encore en
+      // attente. Toute autre vente validée = payée.
+      ? `, CASE WHEN s.payment_status = 'paid' THEN 'paid'
+                WHEN s.payment_link_url IS NOT NULL THEN COALESCE(s.payment_status, 'pending')
+                ELSE 'paid' END AS payment_status,
+         s.payment_link_url,
+         COALESCE(s.paid_at, s.validated_at) AS paid_at`
       // Si pas Stripe sur sales : sale validée = payée
       : `, 'paid'::text AS payment_status, NULL::text AS payment_link_url, s.validated_at AS paid_at`;
 

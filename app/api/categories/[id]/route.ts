@@ -13,7 +13,8 @@ const patchSchema = z.object({
   visible_in_pos: z.boolean().optional(),
   is_active: z.boolean().optional(),
   store_ids: z.array(z.string().uuid()).optional(),
-  transport_cost_ht: z.number().min(0).optional(),
+  transport_cost_ht: z.number().min(0).nullable().optional(),
+  transport_cost_pct: z.number().min(0).max(1000).nullable().optional(),
 });
 
 // Introspection : une colonne de product_categories existe-t-elle ? (mise en
@@ -46,6 +47,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   // Ignore silencieusement les colonnes dont la migration n'est pas déployée.
   if (patch.store_ids !== undefined && !(await hasColumn('store_ids'))) delete patch.store_ids;
   if (patch.transport_cost_ht !== undefined && !(await hasColumn('transport_cost_ht'))) delete patch.transport_cost_ht;
+  if (patch.transport_cost_pct !== undefined && !(await hasColumn('transport_cost_pct'))) delete patch.transport_cost_pct;
 
   const fields = Object.keys(patch);
   if (fields.length === 0) return NextResponse.json({ ok: true });
