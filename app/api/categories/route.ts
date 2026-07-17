@@ -32,6 +32,22 @@ async function hasStoreIdsColumn(): Promise<boolean> {
   return _hasStoreIds;
 }
 
+// Introspection : colonne transport_cost_ht (migration 0047).
+let _hasTransport: boolean | null = null;
+async function hasTransportColumn(): Promise<boolean> {
+  if (_hasTransport !== null) return _hasTransport;
+  try {
+    const { rows } = await query<{ exists: boolean }>(
+      `SELECT EXISTS (
+         SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'product_categories' AND column_name = 'transport_cost_ht'
+       ) AS exists`,
+    );
+    _hasTransport = rows[0]?.exists ?? false;
+  } catch { _hasTransport = false; }
+  return _hasTransport;
+}
+
 export async function GET() {
   const g = await requirePermission('products.read');
   if ('response' in g) return g.response;
@@ -52,8 +68,9 @@ export async function GET() {
       where += ` AND (COALESCE(array_length(store_ids, 1), 0) = 0 OR store_ids && $${params.length}::uuid[])`;
     }
   }
+  const transportCol = (await hasTransportColumn()) ? 'transport_cost_ht' : '0 AS transport_cost_ht';
   const { rows } = await query(
-    `SELECT id, name, parent_id, color, icon, image_url, position, visible_in_pos, is_active, ${storeCol}
+    `SELECT id, name, parent_id, color, icon, image_url, position, visible_in_pos, is_active, ${storeCol}, ${transportCol}
        FROM product_categories
       WHERE ${where}
       ORDER BY position ASC, name ASC`,

@@ -20,6 +20,7 @@ const productSchema = z.object({
   unit: z.string().max(20).default('unité'),
   tax_rate_id: z.string().uuid(),
   purchase_price_ht: z.number().min(0).optional().nullable(),
+  transport_cost_ht: z.number().min(0).optional().nullable(),
   sale_price_ttc: z.number().min(0),
   price_is_free: z.boolean().default(false),
   track_stock: z.boolean().default(false),
@@ -170,6 +171,8 @@ export async function GET(req: Request) {
     ? `COALESCE(p.no_discount, FALSE) AS no_discount`
     : `FALSE AS no_discount`;
   const colorCol = (await hasProductColumn('color')) ? `p.color` : `NULL AS color`;
+  const transportCol = (await hasProductColumn('transport_cost_ht'))
+    ? `p.transport_cost_ht` : `NULL AS transport_cost_ht`;
   const storeIdsCol = (await hasStoreIdsColumn())
     ? `p.store_ids`
     : `'{}'::uuid[] AS store_ids`;
@@ -189,6 +192,7 @@ export async function GET(req: Request) {
             ${topCol},
             ${ndCol},
             ${colorCol},
+            ${transportCol},
             ${storeIdsCol},
             ${supplierCols},
             ${discountCols},
@@ -262,6 +266,10 @@ export async function POST(req: Request) {
     if (colorExists.rows[0]?.exists) {
       cols.push('color');
       values.push(p.color ?? null);
+    }
+    if (await hasProductColumn('transport_cost_ht')) {
+      cols.push('transport_cost_ht');
+      values.push(p.transport_cost_ht ?? null);
     }
     if (await hasStoreIdsColumn()) {
       // store_ids fourni (back-office) : utilisé tel quel. Absent (app) : on

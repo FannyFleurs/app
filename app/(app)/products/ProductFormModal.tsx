@@ -10,6 +10,7 @@ interface Product {
   sku: string | null; barcode: string | null;
   sale_price_ttc: number; price_is_free: boolean;
   purchase_price_ht?: number | null;
+  transport_cost_ht?: number | null;
   tax_rate_id: string; category_id: string | null;
   supplier_id?: string | null;
   discount_type?: 'percent' | 'amount' | null;
@@ -90,6 +91,7 @@ export default function ProductFormModal({
     barcode: product?.barcode ?? '',
     sale_price_ttc: product?.sale_price_ttc != null ? String(product.sale_price_ttc) : '',
     purchase_price_ht: product?.purchase_price_ht != null ? String(product.purchase_price_ht) : '',
+    transport_cost_ht: product?.transport_cost_ht != null ? String(product.transport_cost_ht) : '',
     price_is_free: product?.price_is_free ?? false,
     tax_rate_id: product?.tax_rate_id ?? (defaultTax?.id ?? ''),
     category_id: product?.category_id ?? '',
@@ -167,6 +169,7 @@ export default function ProductFormModal({
       barcode: form.barcode || null,
       sale_price_ttc: parseAmount(form.sale_price_ttc),
       purchase_price_ht: parseAmount(form.purchase_price_ht) > 0 ? parseAmount(form.purchase_price_ht) : null,
+      transport_cost_ht: form.transport_cost_ht.trim() ? parseAmount(form.transport_cost_ht) : null,
       price_is_free: form.price_is_free,
       tax_rate_id: form.tax_rate_id,
       category_id: form.category_id || null,
@@ -353,6 +356,16 @@ export default function ProductFormModal({
               placeholder="0,00"
             />
           </Field>
+          <Field label="Coût transport HT (€)">
+            <input
+              type="text" inputMode="decimal"
+              className="input h-11 text-base"
+              value={form.transport_cost_ht}
+              onChange={(e) => setForm({ ...form, transport_cost_ht: e.target.value.replace(/[^0-9.,]/g, '') })}
+              placeholder="hérité de la catégorie"
+            />
+            <p className="mt-1 text-xs text-ink-soft">Vide = coût par défaut de la catégorie (Réglages → Coûts de transport).</p>
+          </Field>
           <Field label="Remise (affichée sur l'étiquette)" full>
             <div className="flex flex-wrap items-center gap-2">
               <select
@@ -391,6 +404,7 @@ export default function ProductFormModal({
           <Field label="Marge calculée" full>
             {(() => {
               const purchase = parseAmount(form.purchase_price_ht);
+              const transport = parseAmount(form.transport_cost_ht);
               const sellTtc = parseAmount(form.sale_price_ttc);
               const taxRate = taxRates.find((t) => t.id === form.tax_rate_id)?.rate ?? 0;
               const sellHt = sellTtc / (1 + taxRate / 100);
@@ -399,9 +413,10 @@ export default function ProductFormModal({
                   Renseignez prix d&apos;achat HT + prix de vente TTC pour voir la marge.
                 </div>;
               }
-              const margin = sellHt - purchase;
+              const cost = purchase + transport;
+              const margin = sellHt - cost;
               const marginPct = (margin / sellHt) * 100;
-              const coeff = sellHt / purchase;
+              const coeff = sellHt / cost;
               return (
                 <div className="grid grid-cols-3 gap-2 sm:gap-3">
                   <Stat label="Marge brute" value={`${margin.toFixed(2)} €`} tone={margin > 0 ? 'success' : 'danger'} />

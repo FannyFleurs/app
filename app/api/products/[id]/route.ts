@@ -20,6 +20,7 @@ const patchSchema = z.object({
   tax_rate_id: z.string().uuid().optional(),
   sale_price_ttc: z.number().min(0).optional(),
   purchase_price_ht: z.number().min(0).nullable().optional(),
+  transport_cost_ht: z.number().min(0).nullable().optional(),
   price_change_reason: z.string().max(200).optional(),
   price_is_free: z.boolean().optional(),
   track_stock: z.boolean().optional(),
@@ -81,14 +82,16 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     let hasStoreIdsCol = true;
     let hasSupplierCol = true;
     let hasDiscountCol = true;
+    let hasTransportCol = true;
     if (patch.is_top_product != null || patch.no_discount != null
         || patch.color !== undefined || patch.store_ids !== undefined
         || patch.supplier_id !== undefined
+        || patch.transport_cost_ht !== undefined
         || patch.discount_type !== undefined || patch.discount_value !== undefined) {
       const colCheck = await client.query<{ column_name: string }>(
         `SELECT column_name FROM information_schema.columns
           WHERE table_name = 'products'
-            AND column_name IN ('is_top_product','no_discount','color','store_ids','supplier_id','discount_type','discount_value')`,
+            AND column_name IN ('is_top_product','no_discount','color','store_ids','supplier_id','discount_type','discount_value','transport_cost_ht')`,
       );
       const set = new Set(colCheck.rows.map((r) => r.column_name));
       hasTopCol = set.has('is_top_product');
@@ -97,6 +100,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       hasStoreIdsCol = set.has('store_ids');
       hasSupplierCol = set.has('supplier_id');
       hasDiscountCol = set.has('discount_type');
+      hasTransportCol = set.has('transport_cost_ht');
     }
 
     const setParts: string[] = ['updated_by = $1', 'updated_at = now()'];
@@ -108,6 +112,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       if (k === 'no_discount' && !hasNdCol) continue;
       if (k === 'color' && !hasColorCol) continue;
       if (k === 'store_ids' && !hasStoreIdsCol) continue;
+      if (k === 'transport_cost_ht' && !hasTransportCol) continue;
       if (k === 'supplier_id' && !hasSupplierCol) continue;
       if ((k === 'discount_type' || k === 'discount_value') && !hasDiscountCol) continue;
       setParts.push(`${k} = $${i++}`);

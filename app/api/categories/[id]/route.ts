@@ -13,22 +13,28 @@ const patchSchema = z.object({
   visible_in_pos: z.boolean().optional(),
   is_active: z.boolean().optional(),
   store_ids: z.array(z.string().uuid()).optional(),
+  transport_cost_ht: z.number().min(0).optional(),
 });
 
-// Introspection : la colonne store_ids (migration 0046) existe-t-elle ?
-let _hasStoreIds: boolean | null = null;
-async function hasStoreIdsColumn(): Promise<boolean> {
-  if (_hasStoreIds !== null) return _hasStoreIds;
+// Introspection : une colonne de product_categories existe-t-elle ? (mise en
+// cache par nom). Fail-open tant que la migration n'est pas déployée.
+const _colCache = new Map<string, boolean>();
+async function hasColumn(col: string): Promise<boolean> {
+  const cached = _colCache.get(col);
+  if (cached !== undefined) return cached;
+  let exists = false;
   try {
     const { rows } = await query<{ exists: boolean }>(
       `SELECT EXISTS (
          SELECT 1 FROM information_schema.columns
-          WHERE table_name = 'product_categories' AND column_name = 'store_ids'
+          WHERE table_name = 'product_categories' AND column_name = $1
        ) AS exists`,
+      [col],
     );
-    _hasStoreIds = rows[0]?.exists ?? false;
-  } catch { _hasStoreIds = false; }
-  return _hasStoreIds;
+    exists = rows[0]?.exists ?? false;
+  } catch { exists = false; }
+  _colCache.set(col, exists);
+  return exists;
 }
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
@@ -37,8 +43,9 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   const parsed = await parseJson(req, patchSchema);
   if ('response' in parsed) return parsed.response;
   const patch = { ...parsed.data };
-  // Ignore silencieusement store_ids si la migration n'est pas déployée.
-  if (patch.store_ids !== undefined && !(await hasStoreIdsColumn())) delete patch.store_ids;
+  // Ignore silencieusement les colonnes dont la migration n'est pas déployée.
+  if (patch.store_ids !== undefined && !(await hasColumn('store_ids'))) delete patch.store_ids;
+  if (patch.transport_cost_ht !== undefined && !(await hasColumn('transport_cost_ht'))) delete patch.transport_cost_ht;
 
   const fields = Object.keys(patch);
   if (fields.length === 0) return NextResponse.json({ ok: true });
