@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { generateEan13 } from '@/lib/services/ean';
+import { getOrCreateDeviceId } from '@/lib/device';
 import ProductHistory from './ProductHistory';
 import LabelPrintModal from './LabelPrintModal';
 
@@ -63,6 +64,10 @@ export default function ProductFormModal({
   const [liveCategories, setLiveCategories] = useState(categories);
   const [suppliers, setSuppliers] = useState<{ id: string; name: string }[]>([]);
   const [stores, setStores] = useState<{ id: string; name: string }[]>([]);
+  // Boutique du POSTE (caisse liée à cet appareil) : sert à scoper un nouvel
+  // article à la boutique où il est créé, même pour un owner/admin — sinon il
+  // serait « toutes boutiques » et apparaîtrait sur toutes les caisses.
+  const [posteStoreId, setPosteStoreId] = useState<string | null>(null);
   // Recharge la liste des catégories + fournisseurs + boutiques à l'ouverture.
   async function refetchCategories() {
     const r = await fetch('/api/categories');
@@ -84,6 +89,20 @@ export default function ProductFormModal({
       if (rS.ok) setStores((await rS.json()).stores ?? []);
     })();
   }, []);
+  // Hors back-office : détecte la boutique du poste (caisse liée à l'appareil).
+  useEffect(() => {
+    if (backOffice) return;
+    void (async () => {
+      try {
+        const id = getOrCreateDeviceId();
+        const r = await fetch(`/api/registers/mine?device_id=${encodeURIComponent(id)}`);
+        if (r.ok) {
+          const reg = (await r.json()).register as { store_id?: string } | null;
+          if (reg?.store_id) setPosteStoreId(reg.store_id);
+        }
+      } catch { /* pas de poste lié : comportement par défaut */ }
+    })();
+  }, [backOffice]);
   const [form, setForm] = useState({
     name: product?.name ?? '',
     short_description: product?.short_description ?? '',
@@ -199,11 +218,14 @@ export default function ProductFormModal({
       no_discount: form.no_discount,
       color: form.color,
     };
-    // Boutiques : en back-office on transmet la sélection explicite. Dans
-    // l'app, on n'envoie PAS store_ids : le serveur rattache automatiquement
-    // l'article à la boutique de l'utilisateur (à la création) et le laisse
-    // inchangé (à la modification).
+    // Boutiques :
+    //  - back-office : sélection multi-boutiques explicite ;
+    //  - app, NOUVEL article sur un poste lié : on le scope à la boutique du
+    //    poste (évite le « toutes boutiques » qui le ferait apparaître partout,
+    //    y compris pour un owner/admin) ;
+    //  - app, modification : on ne touche pas au périmètre existant.
     if (backOffice) payload.store_ids = form.store_ids;
+    else if (!product && posteStoreId) payload.store_ids = [posteStoreId];
     if (product && form.price_change_reason) payload.price_change_reason = form.price_change_reason;
     const res = product
       ? await fetch(`/api/products/${product.id}`, {

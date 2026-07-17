@@ -18,9 +18,9 @@ export async function GET(req: Request) {
 
   try {
     const { rows } = await query<{
-      id: string; code: string; name: string; store_name: string;
+      id: string; code: string; name: string; store_id: string; store_name: string;
     }>(
-      `SELECT r.id, r.code, r.name, s.name AS store_name
+      `SELECT r.id, r.code, r.name, r.store_id, s.name AS store_name
          FROM registers r
          JOIN stores s ON s.id = r.store_id
         WHERE r.organization_id = $1 AND r.device_id = $2
