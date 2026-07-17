@@ -381,7 +381,7 @@ function Toggle({ label, checked, onChange, disabled }: {
 
 function SizeIcon({ size }: { size: PosTileSize }) {
   const cells = {
-    mini: 8, compact: 6, normal: 4, large: 3, xl: 2,
+    mini: 8, dense: 6, compact: 6, normal: 4, large: 3, xl: 2,
   }[size];
   return (
     <div className="flex gap-0.5">
