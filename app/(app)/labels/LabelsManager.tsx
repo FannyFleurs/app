@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import PageHeader from '@/components/PageHeader';
 import { formatEUR } from '@/lib/services/money';
-import { LABEL_SIZES, buildLabelsDocument, openPrintWindow } from '@/lib/services/label-print';
+import { buildLabelsDocument, openPrintWindow } from '@/lib/services/label-print';
+import { LABEL_DEFAULTS, type LabelSettings } from '@/lib/settings/label';
 import LabelPrintModal from '../products/LabelPrintModal';
 
 const BarcodeScannerModal = dynamic(() => import('../caisse/BarcodeScannerModal'), { ssr: false });
@@ -32,17 +33,21 @@ export default function LabelsManager() {
 
   // Impression rapide (lot)
   const [batch, setBatch] = useState<BatchLine[]>([]);
-  const [batchSize, setBatchSize] = useState<string>('50x30');
+  const [settings, setSettings] = useState<LabelSettings>(LABEL_DEFAULTS);
 
   useEffect(() => {
     void (async () => {
-      const r = await fetch('/api/products?order=recent');
-      if (r.ok) {
-        const list = ((await r.json()).products as LabelItem[]).map((p) => ({
+      const [rp, rs] = await Promise.all([
+        fetch('/api/products?order=recent'),
+        fetch('/api/settings/labels'),
+      ]);
+      if (rp.ok) {
+        const list = ((await rp.json()).products as LabelItem[]).map((p) => ({
           ...p, sale_price_ttc: Number(p.sale_price_ttc),
         }));
         setItems(list);
       }
+      if (rs.ok) setSettings((await rs.json()).settings as LabelSettings);
       setLoading(false);
     })();
   }, []);
@@ -100,6 +105,7 @@ export default function LabelsManager() {
     const entries = batch.map((e) => ({
       product: {
         name: e.product.name,
+        sku: e.product.sku,
         barcode: e.product.barcode,
         sale_price_ttc: e.product.sale_price_ttc,
         discount_type: e.product.discount_type,
@@ -107,7 +113,7 @@ export default function LabelsManager() {
       },
       qty: e.qty,
     }));
-    openPrintWindow(buildLabelsDocument(entries, batchSize));
+    openPrintWindow(buildLabelsDocument(entries, settings));
   }
 
   const batchTotal = batch.reduce((s, e) => s + e.qty, 0);
@@ -128,12 +134,7 @@ export default function LabelsManager() {
             <div className="font-semibold text-sm">⚡ Impression rapide</div>
             <p className="text-xs text-ink-soft">Scannez les articles à la suite, ajustez les quantités, imprimez tout d&apos;un coup.</p>
           </div>
-          <div className="flex items-center gap-2">
-            <select className="input h-9 text-sm" value={batchSize} onChange={(e) => setBatchSize(e.target.value)}>
-              {LABEL_SIZES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
-            </select>
-            <button className="btn-soft whitespace-nowrap" onClick={() => setScanBatchOpen(true)}>📷 Scanner en continu</button>
-          </div>
+          <button className="btn-soft whitespace-nowrap" onClick={() => setScanBatchOpen(true)}>📷 Scanner en continu</button>
         </div>
 
         {batch.length > 0 && (
@@ -224,6 +225,7 @@ export default function LabelsManager() {
         <LabelPrintModal
           product={{
             name: selected.name,
+            sku: selected.sku,
             barcode: selected.barcode,
             sale_price_ttc: selected.sale_price_ttc,
             discount_type: selected.discount_type,

@@ -1,12 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { formatEUR } from '@/lib/services/money';
 import { ean13Svg } from '@/lib/services/barcode';
-import {
-  LABEL_SIZES, discountedPrice, buildLabelsDocument, openPrintWindow,
-  type LabelProduct,
-} from '@/lib/services/label-print';
+import { discountedPrice, buildLabelsDocument, openPrintWindow, type LabelProduct } from '@/lib/services/label-print';
+import { LABEL_DEFAULTS, type LabelSettings } from '@/lib/settings/label';
 
 export default function LabelPrintModal({
   product, onClose,
@@ -17,8 +15,16 @@ export default function LabelPrintModal({
   // Quantité saisie au clavier tactile. Vide par défaut (l'utilisateur saisit).
   const [qtyStr, setQtyStr] = useState('');
   const qty = Math.min(200, Math.max(0, parseInt(qtyStr || '0', 10) || 0));
-  const [sizeKey, setSizeKey] = useState('50x30');
+  const [settings, setSettings] = useState<LabelSettings>(LABEL_DEFAULTS);
   const [error, setError] = useState<string | null>(null);
+
+  // Format + éléments : configurés dans Réglages → Paramètres étiquettes.
+  useEffect(() => {
+    void (async () => {
+      const r = await fetch('/api/settings/labels');
+      if (r.ok) setSettings((await r.json()).settings as LabelSettings);
+    })();
+  }, []);
 
   function pressQty(k: string) {
     setError(null);
@@ -31,13 +37,12 @@ export default function LabelPrintModal({
     });
   }
 
-  const size = LABEL_SIZES.find((s) => s.key === sizeKey)!;
-  const disc = discountedPrice(product);
+  const disc = settings.show_discount ? discountedPrice(product) : null;
   const svg = product.barcode ? ean13Svg(product.barcode, { module: 2, height: 50 }) : null;
 
   function printLabels() {
     setError(null);
-    const doc = buildLabelsDocument([{ product, qty }], sizeKey);
+    const doc = buildLabelsDocument([{ product, qty }], settings);
     if (!openPrintWindow(doc)) {
       setError('Autorisez les fenêtres pop-up pour lancer l\'impression.');
     }
@@ -77,16 +82,11 @@ export default function LabelPrintModal({
                 ))}
               </div>
             </div>
-            <div>
-              <label className="text-sm font-medium text-ink-soft">Format d&apos;étiquette</label>
-              <select className="input mt-1" value={sizeKey} onChange={(e) => setSizeKey(e.target.value)}>
-                {LABEL_SIZES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
-              </select>
-              <p className="mt-1 text-xs text-ink-soft">
-                Une étiquette par « page » : l&apos;imprimante à rouleau enchaîne les étiquettes.
-              </p>
-            </div>
-            {!product.barcode && (
+            <p className="text-xs text-ink-soft">
+              Format {settings.width_mm} × {settings.height_mm} mm et éléments imprimés définis dans{' '}
+              <a href="/settings/labels" className="underline">Réglages → Paramètres étiquettes</a>.
+            </p>
+            {settings.show_barcode && !product.barcode && (
               <p className="text-xs text-warning">
                 Cet article n&apos;a pas de code-barres : l&apos;étiquette n&apos;affichera que le nom et le prix.
                 Ajoutez un code-barres (EAN-13) dans l&apos;onglet Détails pour l&apos;imprimer.
@@ -100,26 +100,29 @@ export default function LabelPrintModal({
             <div className="text-xs uppercase tracking-wider text-ink-soft mb-2">Aperçu</div>
             <div className="rounded-xl border border-border bg-white p-3 grid place-items-center">
               <div
-                className="border border-dashed border-border p-2 flex flex-col items-center justify-between text-center"
-                style={{ width: `${size.w * 3}px`, height: `${size.h * 3}px` }}
+                className="border border-dashed border-border p-2 flex flex-col items-center justify-between text-center overflow-hidden"
+                style={{ width: `${settings.width_mm * 3}px`, height: `${settings.height_mm * 3}px` }}
               >
-                <div className="font-semibold leading-tight text-sm line-clamp-2">{product.name}</div>
-                {svg ? (
+                {settings.show_name && <div className="font-semibold leading-tight text-sm line-clamp-2">{product.name}</div>}
+                {settings.show_sku && product.sku && <div className="font-mono text-[10px] text-ink-soft">{product.sku}</div>}
+                {settings.show_barcode && (svg ? (
                   <div className="w-full flex-1 min-h-0 flex items-center justify-center"
                        dangerouslySetInnerHTML={{ __html: svg }} />
                 ) : (
                   <div className="font-mono text-xs text-ink-soft">
                     {product.barcode ?? '— pas de code-barres —'}
                   </div>
+                ))}
+                {settings.show_price && (
+                  <div className="font-bold text-base whitespace-nowrap">
+                    {disc != null && (
+                      <span className="line-through text-ink-soft font-normal text-xs mr-1">
+                        {formatEUR(product.sale_price_ttc)}
+                      </span>
+                    )}
+                    {formatEUR(disc ?? product.sale_price_ttc)}
+                  </div>
                 )}
-                <div className="font-bold text-base whitespace-nowrap">
-                  {disc != null && (
-                    <span className="line-through text-ink-soft font-normal text-xs mr-1">
-                      {formatEUR(product.sale_price_ttc)}
-                    </span>
-                  )}
-                  {formatEUR(disc ?? product.sale_price_ttc)}
-                </div>
               </div>
             </div>
           </div>
