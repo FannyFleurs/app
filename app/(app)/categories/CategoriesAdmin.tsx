@@ -25,9 +25,15 @@ export default function CategoriesAdmin({ canEdit, backOffice = false, stores = 
   const [items, setItems] = useState<Category[]>([]);
   const [editing, setEditing] = useState<Category | null | undefined>(undefined);
   const [loading, setLoading] = useState(true);
-  // Filtre boutique (back-office) : sert aussi de contexte pour la suppression
-  // « de cette boutique uniquement ».
+  // Filtre boutique : sert aussi de contexte pour la suppression « de cette
+  // boutique uniquement ». Mono-boutique → boutique implicite. Multi → filtre.
   const [filterStore, setFilterStore] = useState('');
+  const soleStore = stores.length === 1 ? stores[0]! : null;
+  // Boutique cible d'une suppression : la seule accessible, sinon celle filtrée.
+  const deleteStoreId = soleStore ? soleStore.id : (filterStore || null);
+  const deleteStoreName = soleStore
+    ? soleStore.name
+    : (filterStore ? (stores.find((s) => s.id === filterStore)?.name ?? null) : null);
 
   const visibleItems = filterStore
     ? items.filter((c) => c.store_ids.length === 0 || c.store_ids.includes(filterStore))
@@ -51,7 +57,7 @@ export default function CategoriesAdmin({ canEdit, backOffice = false, stores = 
         subtitle="Organisez votre catalogue. Une catégorie peut avoir une couleur ET/OU une image qui s'affichera sur la tuile en caisse."
         actions={canEdit ? (
           <div className="flex items-center gap-2">
-            {backOffice && stores.length > 1 && (
+            {stores.length > 1 && (
               <select className="input h-10 text-sm" value={filterStore} onChange={(e) => setFilterStore(e.target.value)}>
                 <option value="">Toutes les boutiques</option>
                 {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -109,8 +115,8 @@ export default function CategoriesAdmin({ canEdit, backOffice = false, stores = 
           category={editing}
           backOffice={backOffice}
           stores={stores}
-          deleteStoreId={filterStore || null}
-          deleteStoreName={filterStore ? (stores.find((s) => s.id === filterStore)?.name ?? null) : null}
+          deleteStoreId={deleteStoreId}
+          deleteStoreName={deleteStoreName}
           onClose={() => setEditing(undefined)}
           onSaved={() => { setEditing(undefined); void reload(); }}
         />
@@ -140,9 +146,10 @@ function CategoryFormModal({ category, backOffice, stores, deleteStoreId, delete
 
   async function remove() {
     if (!category) return;
-    // Si une boutique est filtrée en back-office : retrait de cette boutique
-    // uniquement (la catégorie reste dans les autres). Sinon suppression totale.
-    const perStore = backOffice && deleteStoreId;
+    // Boutique cible connue (mono-boutique ou filtre) : retrait de cette
+    // boutique uniquement (la catégorie reste dans les autres). Sinon
+    // suppression totale.
+    const perStore = !!deleteStoreId;
     const msg = perStore
       ? `Retirer la catégorie « ${category.name} » de la boutique « ${deleteStoreName ?? '' }» ?\n\n`
         + 'Elle restera disponible dans les autres boutiques.'

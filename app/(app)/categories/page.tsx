@@ -11,7 +11,9 @@ export default async function CategoriesPage() {
   // Back-office : sélection multi-boutiques des catégories. Hors BO, la
   // catégorie est rattachée automatiquement à la boutique de l'utilisateur.
   const backOffice = headers().get('x-webpos-bo') === '1';
-  const stores = backOffice ? await accessibleStores(user) : [];
+  // Boutiques accessibles à l'utilisateur : en BO pour la multi-sélection, et
+  // dans l'app pour scoper la suppression à SA boutique (chaque caisse a la main).
+  const stores = await accessibleStores(user);
   return (
     <CategoriesAdmin
       canEdit={(await userCan(user, 'categories.write'))}
