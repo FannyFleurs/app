@@ -1496,7 +1496,7 @@ export default function CashRegister({
           )}
         </div>
 
-        <div className="flex-1 overflow-auto px-2 py-2 space-y-1.5">
+        <div className="flex-1 overflow-auto px-2 py-2 space-y-1">
           {lines.length === 0 ? (
             <div className="mt-12 text-center text-ink-soft text-sm px-3">
               Sélectionnez un produit pour commencer.
@@ -1507,32 +1507,32 @@ export default function CashRegister({
               <button
                 key={l.key}
                 onClick={() => setDiscountLineKey(l.key)}
-                className="w-full text-left rounded-lg border border-border px-2.5 py-1.5 bg-white hover:border-gray-300 transition-colors"
+                className="w-full text-left rounded-lg border border-border px-2 py-1 bg-white hover:border-gray-300 transition-colors"
                 title="Cliquer pour ajouter / modifier une remise"
               >
                 <div className="flex justify-between items-center gap-2">
-                  <div className="text-sm font-medium flex-1 truncate">{l.label}</div>
+                  <div className="text-sm font-medium flex-1 truncate leading-tight">{l.label}</div>
                   <span className="font-semibold text-sm whitespace-nowrap">{formatEUR(sub)}</span>
                   <button
                     onClick={(e) => { e.stopPropagation(); removeLine(l.key); }}
-                    className="h-7 w-7 grid place-items-center rounded-lg text-ink-soft hover:bg-danger/10 hover:text-danger text-sm shrink-0"
+                    className="h-6 w-6 grid place-items-center rounded-lg text-ink-soft hover:bg-danger/10 hover:text-danger text-xs shrink-0"
                     aria-label="Retirer cet article"
                   >✕</button>
                 </div>
-                <div className="mt-0.5 flex items-center justify-between text-xs text-ink-soft">
-                  <span>
+                <div className="mt-0 flex items-center justify-between text-xs text-ink-soft">
+                  <span className="leading-tight">
                     {formatEUR(l.unit_price_ttc)}
                     {l.discount_amount > 0 && <span className="text-warning ml-1">· -{formatEUR(l.discount_amount)}</span>}
                   </span>
                   <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                     <button
-                      className="h-8 w-8 rounded-lg border border-border bg-white text-base font-medium active:scale-95"
+                      className="h-7 w-7 rounded-lg border border-border bg-white text-sm font-medium active:scale-95"
                       onClick={() => incLine(l.key, -1)}
                       aria-label="Réduire la quantité"
                     >−</button>
-                    <span className="w-8 text-center text-ink text-sm font-semibold tabular-nums">{l.quantity}</span>
+                    <span className="w-7 text-center text-ink text-sm font-semibold tabular-nums">{l.quantity}</span>
                     <button
-                      className="h-8 w-8 rounded-lg border border-border bg-white text-base font-medium active:scale-95"
+                      className="h-7 w-7 rounded-lg border border-border bg-white text-sm font-medium active:scale-95"
                       onClick={() => incLine(l.key, +1)}
                       aria-label="Augmenter la quantité"
                     >+</button>
