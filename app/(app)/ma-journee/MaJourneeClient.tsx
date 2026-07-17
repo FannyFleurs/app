@@ -10,6 +10,8 @@ import PageHeader from '@/components/PageHeader';
 import ReturnModal from './ReturnModal';
 import PaymentCorrectionModal from './PaymentCorrectionModal';
 import AttachCustomerAfterSaleModal from './AttachCustomerAfterSaleModal';
+import DayReportView from './DayReportView';
+import type { DayReport } from '@/lib/services/day-report';
 
 interface Sale {
   id: string; receipt_number: string;
@@ -61,6 +63,9 @@ export default function MaJourneeClient() {
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [search, setSearch] = useState('');
   const [mode, setMode] = useState<SummaryMode>('simple');
+  // Rapport X complet (identique au Z) — chargé à la demande.
+  const [dayReport, setDayReport] = useState<DayReport | null>(null);
+  const [loadingReport, setLoadingReport] = useState(false);
 
   // Recharge la liste + synthèse du jour (aussi appelé après un retour,
   // pour défalquer le CA et afficher les badges sans recharger la page).
@@ -87,6 +92,17 @@ export default function MaJourneeClient() {
       .catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date]);
+
+  // Charge le rapport X complet quand on passe en mode complet (ou change de date).
+  useEffect(() => {
+    if (mode !== 'complet') return;
+    setLoadingReport(true);
+    setDayReport(null);
+    void fetch(`/api/reports/day?date=${date}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (j?.report) setDayReport(j.report as DayReport); })
+      .finally(() => setLoadingReport(false));
+  }, [mode, date]);
 
   async function pickSale(id: string) {
     setSelected(id);
@@ -172,73 +188,94 @@ export default function MaJourneeClient() {
           </div>
         </div>
 
-        {/* Total TTC mis en avant + indicateur journée fermée */}
-        <div className="px-5 py-6 text-center">
-          <div className="inline-flex items-center gap-1 text-xs text-ink-soft">
-            <Icon name="dashboard" size={14} /> CA TTC
+        {mode === 'complet' ? (
+          /* X Complet : rapport détaillé identique au Z */
+          <div className="px-5 py-4">
+            {sealedAt && (
+              <div className="mb-3 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold text-white"
+                   style={{ backgroundColor: 'var(--primary)' }}>
+                🔒 Journée fermée — {new Date(sealedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+              </div>
+            )}
+            {loadingReport || !dayReport
+              ? <p className="text-sm text-ink-soft">Chargement du rapport…</p>
+              : <DayReportView report={dayReport} />}
           </div>
-          <div className="mt-1 text-4xl font-semibold tracking-tight">{formatEUR(totals.netTtc)}</div>
-          {returnsTotal > 0 && (
-            <div className="mt-1 text-xs text-ink-soft">
-              {formatEUR(totals.ttc)} de ventes − {formatEUR(returnsTotal)} de retours
+        ) : (
+          <>
+            {/* Total TTC mis en avant + indicateur journée fermée */}
+            <div className="px-5 py-6 text-center">
+              <div className="inline-flex items-center gap-1 text-xs text-ink-soft">
+                <Icon name="dashboard" size={14} /> CA TTC
+              </div>
+              <div className="mt-1 text-4xl font-semibold tracking-tight">{formatEUR(totals.netTtc)}</div>
+              {returnsTotal > 0 && (
+                <div className="mt-1 text-xs text-ink-soft">
+                  {formatEUR(totals.ttc)} de ventes − {formatEUR(returnsTotal)} de retours
+                </div>
+              )}
+              {sealedAt && (
+                <div
+                  className="mt-3 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold text-white"
+                  style={{ backgroundColor: 'var(--primary)' }}
+                >
+                  🔒 Journée fermée — {new Date(sealedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                </div>
+              )}
             </div>
-          )}
-          {sealedAt && (
-            <div
-              className="mt-3 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold text-white"
-              style={{ backgroundColor: 'var(--primary)' }}
-            >
-              🔒 Journée fermée — {new Date(sealedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
-            </div>
-          )}
-        </div>
 
-        {/* KPI lignes */}
-        <div className="px-5 pb-4 space-y-3">
-          <KpiRow label="CA HT" value={formatEUR(totals.ht)} />
-          <KpiRow label="Ventes" value={totals.count.toString()} />
-          {returnsTotal > 0 && (
-            <KpiRow label="Retours / avoirs" value={`-${formatEUR(returnsTotal)}`} tone="warning" />
-          )}
-          <KpiRow label="Panier moyen" value={formatEUR(totals.avg)} />
-          {mode === 'complet' && (
-            <>
-              <KpiRow label="TVA collectée" value={formatEUR(totals.tva)} />
-              <KpiRow label="Remises" value={formatEUR(totals.discount)} tone="warning" />
-            </>
-          )}
-          {/* Trésorerie : ventes espèces / remise banque / espèces attendues */}
-          <div className="pt-2 border-t border-border space-y-2">
-            <div className="text-[10px] uppercase tracking-widest text-ink-soft font-semibold">
-              Trésorerie espèces
+            {/* KPI lignes */}
+            <div className="px-5 pb-4 space-y-3">
+              <KpiRow label="CA HT" value={formatEUR(totals.ht)} />
+              <KpiRow label="Ventes" value={totals.count.toString()} />
+              {returnsTotal > 0 && (
+                <KpiRow label="Retours / avoirs" value={`-${formatEUR(returnsTotal)}`} tone="warning" />
+              )}
+              <KpiRow label="Panier moyen" value={formatEUR(totals.avg)} />
+              {/* Trésorerie : ventes espèces / remise banque / espèces attendues */}
+              <div className="pt-2 border-t border-border space-y-2">
+                <div className="text-[10px] uppercase tracking-widest text-ink-soft font-semibold">
+                  Trésorerie espèces
+                </div>
+                <KpiRow label="Ventes espèces" value={formatEUR(cashSummary.cash_sales)} />
+                {cashSummary.bank_deposits > 0 && (
+                  <KpiRow
+                    label="Remise en banque"
+                    value={`-${formatEUR(cashSummary.bank_deposits)}`}
+                    tone="warning"
+                  />
+                )}
+                {(cashSummary.cash_refunds ?? 0) > 0 && (
+                  <KpiRow
+                    label="Remboursements espèces"
+                    value={`-${formatEUR(cashSummary.cash_refunds ?? 0)}`}
+                    tone="warning"
+                  />
+                )}
+                <KpiRow
+                  label="Espèces attendues"
+                  value={formatEUR(cashSummary.expected_cash)}
+                  tone="accent"
+                />
+              </div>
             </div>
-            <KpiRow label="Ventes espèces" value={formatEUR(cashSummary.cash_sales)} />
-            {cashSummary.bank_deposits > 0 && (
-              <KpiRow
-                label="Remise en banque"
-                value={`-${formatEUR(cashSummary.bank_deposits)}`}
-                tone="warning"
-              />
-            )}
-            {(cashSummary.cash_refunds ?? 0) > 0 && (
-              <KpiRow
-                label="Remboursements espèces"
-                value={`-${formatEUR(cashSummary.cash_refunds ?? 0)}`}
-                tone="warning"
-              />
-            )}
-            <KpiRow
-              label="Espèces attendues"
-              value={formatEUR(cashSummary.expected_cash)}
-              tone="accent"
-            />
-          </div>
-        </div>
+          </>
+        )}
 
         <div className="flex-1" />
 
         {/* Action en pied — équivalent du "Actions sur ma journée" */}
-        <div className="border-t border-border p-3 bg-white sticky bottom-0">
+        <div className="border-t border-border p-3 bg-white sticky bottom-0 space-y-2">
+          {mode === 'complet' && (
+            <a
+              href={`/api/reports/day/pdf?date=${date}`}
+              target="_blank"
+              rel="noreferrer"
+              className="btn-soft w-full text-sm h-11 flex items-center justify-center gap-2"
+            >
+              <Icon name="print" size={16} /> Imprimer le X
+            </a>
+          )}
           <a
             href="/closures"
             className="btn-primary w-full text-sm h-11"

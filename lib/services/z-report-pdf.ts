@@ -1,45 +1,10 @@
 import PDFDocument from 'pdfkit';
-import { formatEUR } from './money';
+import type { DayReport } from './day-report';
 
-export interface ZReportData {
-  business_date: string;
-  store_name: string;
-  closed_by: string;
-  sealed_at: string;
-  fiscal_hash: string;
-  totals: {
-    total_sales: number;
-    total_ht: number;
-    total_tva: number;
-    total_ttc: number;
-    discounts_total: number;
-  };
-  tva_breakdown: { rate: number; base_ht: number; tva: number; ttc: number }[];
-  payments_breakdown: { method: string; declared?: number; counted: number; variance?: number }[];
-  cash: {
-    expected: number;
-    counted: number;
-    variance: number;
-    denomination_count?: Record<string, number>;
-    bank_deposits?: number;
-  };
-  margin?: {
-    revenue_ht: number;
-    cost_ht: number;
-    gross: number;
-    percent: number;
-    lines_with_cost: number;
-    total_lines: number;
-  };
-}
-
-export interface OrgInfoMinimal {
-  name: string;
-  legal_name: string;
-  siret?: string | null;
-  vat_number?: string | null;
-  address?: { line1?: string; zip?: string; city?: string } | null;
-}
+/**
+ * Rendu PDF du récapitulatif de journée (Z scellé ou X en cours), calqué sur
+ * le modèle « Récapitulatif Z ». Format ticket centré sur une page A4.
+ */
 
 const PAYMENT_LABELS: Record<string, string> = {
   cash: 'Espèces',
@@ -48,29 +13,19 @@ const PAYMENT_LABELS: Record<string, string> = {
   transfer: 'Virement',
   gift_card: 'Carte cadeau',
   credit_note: 'Avoir',
-  deferred: 'Différé client',
+  deferred: 'Mise en compte',
+  payment_link: 'Lien de paiement',
   other: 'Autre',
 };
 
-const DENOMINATION_LABELS: Record<string, string> = {
-  '500':  'Billet 500 €',
-  '200':  'Billet 200 €',
-  '100':  'Billet 100 €',
-  '50':   'Billet 50 €',
-  '20':   'Billet 20 €',
-  '10':   'Billet 10 €',
-  '5':    'Billet 5 €',
-  '2':    'Pièce 2 €',
-  '1':    'Pièce 1 €',
-  '0.5':  'Pièce 0,50 €',
-  '0.2':  'Pièce 0,20 €',
-  '0.1':  'Pièce 0,10 €',
-  '0.05': 'Pièce 0,05 €',
-  '0.02': 'Pièce 0,02 €',
-  '0.01': 'Pièce 0,01 €',
-};
+const eur = (n: number) =>
+  `${n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} EUR`;
+const rate = (r: number) =>
+  `${r.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} %`;
+const dt = (iso: string | null) =>
+  iso ? new Date(iso).toLocaleString('fr-FR') : '—';
 
-export async function renderZReportPdf(data: ZReportData, org: OrgInfoMinimal): Promise<Buffer> {
+export async function renderReportPdf(r: DayReport): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: 'A4', margin: 48 });
     const chunks: Buffer[] = [];
@@ -78,169 +33,145 @@ export async function renderZReportPdf(data: ZReportData, org: OrgInfoMinimal): 
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
 
-    // Bandeau
-    doc.font('Helvetica-Bold').fontSize(20).text('RAPPORT Z DE CLÔTURE', { align: 'center' });
-    doc.moveDown(0.2);
-    doc.font('Helvetica').fontSize(10).fillColor('#666')
-       .text('Document fiscal de clôture journalière — exemplaire conservé par l\'établissement', { align: 'center' });
+    const id = r.identity;
+
+    // --- En-tête identité (centré) ---
+    doc.font('Helvetica-Bold').fontSize(15).text(id.name || r.store_name, { align: 'center' });
+    doc.font('Helvetica').fontSize(9).fillColor('#333');
+    const center = (s?: string | null) => { if (s) doc.text(s, { align: 'center' }); };
+    center(id.line1);
+    center(id.line2);
+    center([id.zip, id.city, id.country].filter(Boolean).join(' ') || null);
+    center(id.phone);
+    if (id.siret) center(`Siret : ${id.siret}`);
+    if (id.vat_number) center(`TVA : ${id.vat_number}`);
+    center(id.website);
     doc.fillColor('#000');
 
-    // Bloc org
-    doc.moveDown(1);
-    doc.font('Helvetica-Bold').fontSize(12).text(org.name);
-    doc.font('Helvetica').fontSize(9);
-    if (org.legal_name && org.legal_name !== org.name) doc.text(org.legal_name);
-    if (org.address?.line1) doc.text(org.address.line1);
-    if (org.address?.zip || org.address?.city) doc.text(`${org.address?.zip ?? ''} ${org.address?.city ?? ''}`.trim());
-    if (org.siret) doc.text(`SIRET ${org.siret}`);
-    if (org.vat_number) doc.text(`TVA intra. ${org.vat_number}`);
-
-    // Bloc clôture
+    // --- Titre FINANCIER / Z|X ---
     doc.moveDown(0.8);
-    drawHr(doc);
-    doc.moveDown(0.3);
-    doc.font('Helvetica-Bold').fontSize(11).text('Identification de la clôture');
-    doc.moveDown(0.3);
-    doc.font('Helvetica').fontSize(10);
-    kv(doc, 'Date d\'opération', new Date(data.business_date).toLocaleDateString('fr-FR', {
-      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-    }));
-    kv(doc, 'Boutique', data.store_name);
-    kv(doc, 'Clôturée par', data.closed_by);
-    kv(doc, 'Scellée le', new Date(data.sealed_at).toLocaleString('fr-FR'));
+    doc.font('Helvetica').fontSize(9).fillColor('#666').text('FINANCIER', { align: 'center' });
+    doc.fillColor('#000').font('Helvetica-Bold').fontSize(22).text(r.kind, { align: 'center' });
+    doc.font('Helvetica').fontSize(10).text(id.name || r.store_name, { align: 'center' });
 
-    // Totaux
-    doc.moveDown(0.7);
-    drawHr(doc);
-    doc.moveDown(0.3);
-    doc.font('Helvetica-Bold').fontSize(11).text('Totaux de la journée');
-    doc.moveDown(0.3);
-    doc.font('Helvetica').fontSize(10);
-    kv(doc, 'Nombre de tickets', String(data.totals.total_sales));
-    kv(doc, 'Total HT', formatEUR(data.totals.total_ht));
-    kv(doc, 'TVA collectée', formatEUR(data.totals.total_tva));
-    if (data.totals.discounts_total > 0) kv(doc, 'Remises accordées', `-${formatEUR(data.totals.discounts_total)}`);
-    doc.font('Helvetica-Bold');
-    kv(doc, 'TOTAL TTC', formatEUR(data.totals.total_ttc));
-    doc.font('Helvetica');
+    // --- Bloc journée ---
+    doc.moveDown(0.6); hr(doc); doc.moveDown(0.3);
+    doc.fontSize(10);
+    kv(doc, 'Numéro de journée', r.journee_number != null ? String(r.journee_number) : '—');
+    kv(doc, 'Ouverture', dt(r.opened_at));
+    kv(doc, 'Fermeture', r.kind === 'X' ? 'En cours' : dt(r.closed_at));
+    kv(doc, 'Date impression', dt(r.printed_at));
 
-    // TVA
-    if (data.tva_breakdown.length > 0) {
-      doc.moveDown(0.7);
-      drawHr(doc);
-      doc.moveDown(0.3);
-      doc.font('Helvetica-Bold').fontSize(11).text('Récapitulatif TVA par taux');
-      doc.moveDown(0.3);
-      doc.font('Helvetica').fontSize(10);
-      for (const t of data.tva_breakdown) {
-        kv(doc, `TVA ${t.rate}% — base ${formatEUR(t.base_ht)}`, formatEUR(t.tva));
-      }
+    // --- Chiffres clés ---
+    doc.moveDown(0.5); hr(doc); doc.moveDown(0.3);
+    doc.font('Helvetica-Bold'); kv(doc, 'CA TOTAL', eur(r.totals.ca_ttc)); doc.font('Helvetica');
+    kv(doc, 'CA HT', eur(r.totals.ca_ht));
+    kv(doc, 'Ticket moyen TTC', eur(r.totals.ticket_moyen_ttc));
+    if (r.totals.marge_brute_ht != null) kv(doc, 'Marge brute HT', eur(r.totals.marge_brute_ht));
+
+    // --- TVA collectée ---
+    if (r.tva_by_rate.length > 0) {
+      doc.moveDown(0.5); hr(doc); doc.moveDown(0.3);
+      for (const t of r.tva_by_rate) kv(doc, `TVA ${rate(t.rate)} collectée`, eur(t.tva));
+      doc.moveDown(0.4);
+      for (const t of r.tva_by_rate) kv(doc, `CA TTC ${rate(t.rate)}`, eur(t.ttc));
+      doc.moveDown(0.4);
+      for (const t of r.tva_by_rate) kv(doc, `CA HT ${rate(t.rate)}`, eur(t.ht));
     }
 
-    // Paiements
-    doc.moveDown(0.7);
-    drawHr(doc);
-    doc.moveDown(0.3);
-    doc.font('Helvetica-Bold').fontSize(11).text('Modes de règlement');
-    doc.moveDown(0.3);
-    doc.font('Helvetica').fontSize(10);
-    for (const p of data.payments_breakdown) {
+    // --- Réductions / offerts ---
+    doc.moveDown(0.5); hr(doc); doc.moveDown(0.3);
+    kv(doc, 'Total réduction', `-${eur(r.totals.discounts_total)}`);
+    kv(doc, 'Total offerts', eur(r.totals.offerts_total));
+    kv(doc, "Nombre d'offerts", String(r.totals.offerts_count));
+
+    // --- Modes de règlement ---
+    doc.moveDown(0.5); hr(doc); doc.moveDown(0.3);
+    section(doc, 'Modes de règlement');
+    for (const p of r.payments) {
       const label = PAYMENT_LABELS[p.method] ?? p.method;
-      if (p.declared !== undefined && Math.abs((p.counted ?? 0) - (p.declared ?? 0)) > 0.005) {
-        kv(doc, label, `${formatEUR(p.counted)} (déclaré ${formatEUR(p.declared)} · écart ${formatEUR((p.declared ?? 0) - p.counted)})`);
-      } else {
-        kv(doc, label, formatEUR(p.counted));
-      }
+      kv(doc, `${label} [${p.count}]`, eur(p.amount));
     }
 
-    // Espèces
-    doc.moveDown(0.7);
-    drawHr(doc);
-    doc.moveDown(0.3);
-    doc.font('Helvetica-Bold').fontSize(11).text('Contrôle des espèces');
-    doc.moveDown(0.3);
-    doc.font('Helvetica').fontSize(10);
-    if (data.cash.bank_deposits && data.cash.bank_deposits > 0) {
-      kv(doc, 'Remise en banque', `-${formatEUR(data.cash.bank_deposits)}`);
+    // --- Entrées d'argent / espèces ---
+    doc.moveDown(0.5); hr(doc); doc.moveDown(0.3);
+    section(doc, "Entrées d'argent");
+    if (r.cash.entrees_argent > 0) kv(doc, "Entrées d'argent", eur(r.cash.entrees_argent));
+    kv(doc, 'Fonds de caisse', eur(r.cash.fonds_de_caisse));
+    kv(doc, 'Total espèce caisse à la fermeture', eur(r.cash.total_espece_fermeture));
+    if (r.cash.counted != null) {
+      kv(doc, 'Espèces comptées', eur(r.cash.counted));
+      const v = r.cash.variance ?? 0;
+      kv(doc, v === 0 ? 'Écart' : v > 0 ? 'Surplus' : 'Manquant', `${v >= 0 ? '+' : ''}${eur(v)}`);
     }
-    kv(doc, 'Espèces attendues (système)', formatEUR(data.cash.expected));
-    kv(doc, 'Espèces comptées', formatEUR(data.cash.counted));
-    const variance = data.cash.variance;
-    const varianceLabel = variance === 0 ? 'Écart' : (variance > 0 ? 'Surplus en caisse' : 'Manquant en caisse');
-    kv(doc, varianceLabel, `${variance >= 0 ? '+' : ''}${formatEUR(variance)}`);
+    kv(doc, 'Ouverture tiroir caisse sans ticket', String(r.cash.tiroir_sans_ticket));
 
-    if (data.cash.denomination_count) {
-      doc.moveDown(0.5);
-      doc.font('Helvetica-Oblique').fontSize(9).text('Détail du comptage :');
-      doc.moveDown(0.2);
-      doc.font('Helvetica').fontSize(9);
-      const entries = Object.entries(data.cash.denomination_count)
-        .filter(([, q]) => q > 0)
-        .sort((a, b) => Number(b[0]) - Number(a[0]));
-      for (const [denom, qty] of entries) {
-        const total = Number(denom) * qty;
-        const label = DENOMINATION_LABELS[denom] ?? `${denom} €`;
-        kv(doc, `${label} × ${qty}`, formatEUR(total), { faded: true });
-      }
+    // --- Données par vendeur ---
+    if (r.by_vendor.length > 0) {
+      doc.moveDown(0.5); hr(doc); doc.moveDown(0.3);
+      section(doc, 'Données par vendeur');
+      for (const v of r.by_vendor) kv(doc, `${v.name} — CA TTC`, eur(v.ca_ttc));
     }
 
-    // Marge brute (si dispo)
-    if (data.margin && data.margin.lines_with_cost > 0) {
-      doc.moveDown(0.7);
-      drawHr(doc);
+    // --- CA TTC Familles ---
+    if (r.by_category.length > 0) {
+      doc.moveDown(0.5); hr(doc); doc.moveDown(0.3);
+      section(doc, 'CA TTC Familles');
+      for (const c of r.by_category) kv(doc, c.name, eur(c.ca_ttc));
+    }
+
+    // --- CA TTC Modes de ventes ---
+    if (r.by_mode.length > 0) {
+      doc.moveDown(0.5); hr(doc); doc.moveDown(0.3);
+      section(doc, 'CA TTC Modes de ventes');
+      for (const m of r.by_mode) kv(doc, m.mode, eur(m.ca_ttc));
+    }
+
+    // --- Nombre de tickets ---
+    doc.moveDown(0.5); hr(doc); doc.moveDown(0.3);
+    section(doc, 'Nombre de tickets');
+    kv(doc, 'Nombre de tickets normal', String(r.tickets.normal_count));
+    kv(doc, 'Total ticket NORMAL', eur(r.tickets.normal_total));
+
+    // --- Empreinte fiscale (Z uniquement) ---
+    if (r.kind === 'Z' && r.fiscal_hash) {
+      doc.moveDown(0.7); hr(doc); doc.moveDown(0.3);
+      if (r.closed_by) kv(doc, 'Clôturée par', r.closed_by);
+      doc.font('Helvetica-Bold').fontSize(9).text('Empreinte fiscale (hash de scellement)');
+      doc.font('Helvetica-Oblique').fontSize(8).fillColor('#444').text(r.fiscal_hash);
       doc.moveDown(0.3);
-      doc.font('Helvetica-Bold').fontSize(11).text('Marge brute');
-      doc.moveDown(0.3);
-      doc.font('Helvetica').fontSize(10);
-      kv(doc, 'Chiffre d\'affaires HT (lignes avec coût)', formatEUR(data.margin.revenue_ht));
-      kv(doc, 'Coût d\'achat HT', formatEUR(data.margin.cost_ht));
-      doc.font('Helvetica-Bold');
-      kv(doc, 'Marge brute', `${formatEUR(data.margin.gross)} (${data.margin.percent.toFixed(1)}%)`);
-      doc.font('Helvetica');
-      if (data.margin.lines_with_cost < data.margin.total_lines) {
-        doc.moveDown(0.2);
-        doc.font('Helvetica-Oblique').fontSize(8).fillColor('#666')
-           .text(`Calcul sur ${data.margin.lines_with_cost}/${data.margin.total_lines} lignes — prix d'achat manquant pour le reste.`);
-        doc.fillColor('#000');
-      }
+      doc.fillColor('#666').fontSize(8).text(
+        "Rapport généré à partir d'un événement fiscal append-only scellé en base. Toute modification " +
+        'a posteriori est interdite par les déclencheurs Postgres et détectée par la vérification de la ' +
+        'chaîne (art. 286, I, 3°bis du CGI).',
+        { align: 'justify' },
+      );
+      doc.fillColor('#000');
     }
-
-    // Empreinte fiscale
-    doc.moveDown(1);
-    drawHr(doc);
-    doc.moveDown(0.3);
-    doc.font('Helvetica-Bold').fontSize(10).text('Empreinte fiscale (hash de scellement)');
-    doc.font('Helvetica-Oblique').fontSize(8).fillColor('#444')
-       .text(data.fiscal_hash, { align: 'left' });
-    doc.fillColor('#000');
-    doc.moveDown(0.4);
-    doc.font('Helvetica-Oblique').fontSize(8).fillColor('#666').text(
-      'Ce rapport est généré à partir d\'un événement fiscal append-only scellé en base de données. ' +
-      'Toute modification a posteriori est interdite par les déclencheurs Postgres et serait détectée par la vérification de la chaîne (art. 286, I, 3°bis du CGI).',
-      { align: 'justify' },
-    );
-    doc.fillColor('#000');
 
     doc.end();
   });
 }
 
-function kv(doc: PDFKit.PDFDocument, label: string, value: string, opts?: { faded?: boolean }) {
+function section(doc: PDFKit.PDFDocument, title: string) {
+  doc.font('Helvetica-Bold').fontSize(10).text(title);
+  doc.moveDown(0.2);
+  doc.font('Helvetica').fontSize(10);
+}
+
+function kv(doc: PDFKit.PDFDocument, label: string, value: string) {
   const left = doc.page.margins.left;
   const right = doc.page.width - doc.page.margins.right;
   const width = right - left;
   const y = doc.y;
-  const color = opts?.faded ? '#666' : '#000';
-  doc.fillColor(color);
-  doc.text(label, left, y, { width: width * 0.7, continued: false });
+  doc.text(label, left, y, { width: width * 0.62 });
   const labelHeight = doc.y - y;
   doc.text(value, left, y, { width, align: 'right' });
   doc.y = y + labelHeight;
-  doc.fillColor('#000');
 }
 
-function drawHr(doc: PDFKit.PDFDocument) {
+function hr(doc: PDFKit.PDFDocument) {
   const left = doc.page.margins.left;
   const right = doc.page.width - doc.page.margins.right;
-  doc.moveTo(left, doc.y).lineTo(right, doc.y).strokeColor('#DDD').lineWidth(0.5).stroke().strokeColor('#000');
+  doc.moveTo(left, doc.y).lineTo(right, doc.y).strokeColor('#CCC').lineWidth(0.5).stroke().strokeColor('#000');
 }
