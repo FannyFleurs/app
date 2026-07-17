@@ -39,6 +39,7 @@ const DEFAULT_METHODS: Array<{ kind: typeof KINDS[number]; label: string; positi
   { kind: 'gift_card',    label: 'Carte cadeau',         position: 50 },
   { kind: 'credit_note',  label: 'Avoir',                position: 60 },
   { kind: 'payment_link', label: 'Lien de paiement Stripe', position: 70 },
+  { kind: 'deferred',     label: 'En compte',            position: 80 },
 ];
 
 export async function GET(req: Request) {
@@ -76,6 +77,18 @@ export async function GET(req: Request) {
       } catch { /* on n'echoue jamais la lecture pour un probleme de seed */ }
     }
     rows = (await query<{ id: string; code: string; kind: string; label: string; is_active: boolean; position: number; store_ids: string[] }>(sql, params)).rows;
+  } else if (!rows.some((r) => r.kind === 'deferred')) {
+    // Rattrapage : les organisations créées avant l'ajout du mode « En compte »
+    // ne l'avaient pas. On l'insère si absent (portée toutes boutiques).
+    try {
+      await query(
+        `INSERT INTO payment_methods (organization_id, code, kind, label, position)
+         VALUES ($1, 'deferred_default', 'deferred', 'En compte', 80)
+         ON CONFLICT DO NOTHING`,
+        [g.user.organizationId],
+      );
+      rows = (await query<{ id: string; code: string; kind: string; label: string; is_active: boolean; position: number; store_ids: string[] }>(sql, params)).rows;
+    } catch { /* fail-open */ }
   }
   return NextResponse.json({ methods: rows });
 }
