@@ -24,11 +24,12 @@ export default function PlatformConfigForm({ initial }: { initial: FormData }) {
   }
 
   // Upload générique d'image (logo, favicon, logo CA…) -> data URL.
-  function onImageFile(e: React.ChangeEvent<HTMLInputElement>, key: keyof FormData) {
+  // maxBytes plus élevé pour le visuel de connexion (photo).
+  function onImageFile(e: React.ChangeEvent<HTMLInputElement>, key: keyof FormData, maxBytes = 1_000_000) {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 1_000_000) {
-      setError('Image trop volumineuse (max 1 Mo). Compressez le fichier.');
+    if (file.size > maxBytes) {
+      setError(`Image trop volumineuse (max ${Math.round(maxBytes / 1_000_000)} Mo). Compressez le fichier.`);
       return;
     }
     const reader = new FileReader();
@@ -123,9 +124,9 @@ export default function PlatformConfigForm({ initial }: { initial: FormData }) {
         />
         <ImageField
           label="Visuel écran de connexion (caisse)"
-          hint="Photo affichée à droite de l'écran de connexion de la caisse. Vide = le logo / visuel par défaut."
+          hint="Photo affichée à droite de l'écran de connexion de la caisse (max 3 Mo). Vide = le logo / visuel par défaut."
           value={s.login_image_url}
-          onFile={(e) => onImageFile(e, 'login_image_url')}
+          onFile={(e) => onImageFile(e, 'login_image_url', 3_000_000)}
           onUrl={(v) => patch('login_image_url', v)}
           onClear={() => patch('login_image_url', '')}
         />

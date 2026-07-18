@@ -309,6 +309,15 @@ export default function PinLogin() {
       {/* COLONNE DROITE — affichage / pavé PIN. Sur mobile, visible
           uniquement quand un user est sélectionné. */}
       <section className={`${selected ? 'flex' : 'hidden lg:flex'} flex-col overflow-hidden`}>
+        {/* Logo EN HAUT de la partie droite, centré horizontalement. */}
+        <div className="pt-8 pb-2 flex justify-center shrink-0">
+          {brand.logo_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={brand.logo_url} alt={APP_NAME} className="h-14 w-auto max-w-[240px] object-contain" />
+          ) : (
+            <div className="text-2xl font-semibold tracking-tight">{APP_NAME}</div>
+          )}
+        </div>
         {/* En-tête à droite : juste le bouton retour mobile (le logo
             de gauche dans l'aside suffit, pas besoin de le doubler). */}
         {selected && (
@@ -340,13 +349,6 @@ npm run user:test</pre>
         <div className="flex-1 grid place-items-center px-4 lg:px-8 pb-4 lg:pb-10 min-h-0">
           {!selected ? (
             <div className="text-center max-w-md w-full">
-              {/* Logo centré (partie droite) */}
-              {brand.logo_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={brand.logo_url} alt={APP_NAME} className="h-16 w-auto max-w-[240px] object-contain mx-auto mb-8" />
-              ) : (
-                <div className="text-2xl font-semibold tracking-tight mb-8">{APP_NAME}</div>
-              )}
               {/* Visuel de connexion configurable (Admin → Configuration →
                   « Visuel écran de connexion »). Repli sur une illustration. */}
               {brand.login_image_url ? (
