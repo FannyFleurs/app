@@ -4,6 +4,8 @@ import { query } from '@/lib/db/client';
 import { requirePermission } from '@/lib/auth/guards';
 import { parseJson, jsonError } from '@/lib/validation/api';
 import { audit } from '@/lib/audit/log';
+import { sendOrgEmail } from '@/lib/email/send';
+import { buildInvoicePdf } from '@/lib/services/pdf-builders';
 
 const schema = z.object({
   email: z.string().email().optional(), // si omis, on prend l'email du client
@@ -58,14 +60,35 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     );
   }
 
+  // Envoi réel via Brevo (si configuré), avec la facture en pièce jointe.
+  let delivered = false;
+  let sendError: string | undefined;
+  const pdf = await buildInvoicePdf(invoice.id, g.user.organizationId);
+  if (pdf) {
+    const res = await sendOrgEmail({
+      organizationId: g.user.organizationId,
+      to: targetEmail,
+      subject: `Votre facture ${invoice.number ?? ''}`.trim(),
+      html: `<p>Bonjour,</p><p>Veuillez trouver ci-joint votre facture`
+        + `${invoice.number ? ` <strong>${invoice.number}</strong>` : ''}.</p>`
+        + `<p>Merci pour votre confiance.</p>`,
+      attachments: [{ name: `facture-${invoice.number ?? invoice.id}.pdf`, content: pdf.buffer }],
+    });
+    delivered = res.ok;
+    if (!res.ok) sendError = res.error;
+  }
+
   await audit({
     organizationId: g.user.organizationId,
     userId: g.user.id,
     action: 'invoice.email_requested',
     entityType: 'invoice',
     entityId: invoice.id,
-    payload: { number: invoice.number, email: targetEmail },
+    payload: { number: invoice.number, email: targetEmail, delivered, error: sendError ?? null },
   });
 
-  return NextResponse.json({ ok: true, email: targetEmail });
+  // Si l'email n'est pas configuré, on renvoie tout de même OK (l'adresse est
+  // enregistrée et le statut passé à « envoyée ») mais on signale not_configured
+  // pour que l'UI puisse inviter à configurer Brevo.
+  return NextResponse.json({ ok: true, email: targetEmail, delivered, send_error: sendError ?? null });
 }

@@ -4,6 +4,8 @@ import { query } from '@/lib/db/client';
 import { requirePermission } from '@/lib/auth/guards';
 import { parseJson, jsonError } from '@/lib/validation/api';
 import { audit } from '@/lib/audit/log';
+import { sendOrgEmail } from '@/lib/email/send';
+import { buildReceiptPdf } from '@/lib/services/pdf-builders';
 
 const schema = z.object({
   email: z.string().email(),
@@ -55,5 +57,22 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     payload: { receipt_number: receipt.number, email },
   });
 
-  return NextResponse.json({ ok: true, email });
+  // Envoi réel via Brevo (si configuré), ticket en pièce jointe.
+  let delivered = false;
+  let sendError: string | undefined;
+  const pdf = await buildReceiptPdf(receipt.id, g.user.organizationId);
+  if (pdf) {
+    const res = await sendOrgEmail({
+      organizationId: g.user.organizationId,
+      to: email,
+      subject: `Votre ticket ${receipt.number}`,
+      html: `<p>Bonjour,</p><p>Veuillez trouver ci-joint votre ticket de caisse `
+        + `<strong>${receipt.number}</strong>.</p><p>Merci pour votre visite.</p>`,
+      attachments: [{ name: `ticket-${receipt.number}.pdf`, content: pdf.buffer }],
+    });
+    delivered = res.ok;
+    if (!res.ok) sendError = res.error;
+  }
+
+  return NextResponse.json({ ok: true, email, delivered, send_error: sendError ?? null });
 }
