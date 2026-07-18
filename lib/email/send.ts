@@ -1,6 +1,6 @@
 import 'server-only';
 import { query } from '@/lib/db/client';
-import { EMAIL_KEY, mergeEmailDefaults, type EmailSettings } from '@/lib/settings/email';
+import { EMAIL_KEY, emailKey, mergeEmailDefaults, type EmailSettings } from '@/lib/settings/email';
 
 export interface EmailAttachment {
   /** Nom du fichier (ex "facture-F-2026-000002.pdf"). */
@@ -16,12 +16,26 @@ export interface SendResult {
   detail?: string;
 }
 
-/** Charge la config email d'une organisation. */
-export async function loadEmailSettings(organizationId: string): Promise<EmailSettings> {
+/**
+ * Charge la config email effective pour une boutique.
+ *
+ * Priorité : configuration propre à la boutique (`email:<storeId>`), sinon
+ * repli sur la configuration au niveau organisation (`email`), sinon valeurs
+ * par défaut. Ce repli garantit qu'une boutique jamais configurée hérite du
+ * modèle existant (même mécanique que le paramétrage ticket).
+ */
+export async function loadEmailSettings(
+  organizationId: string,
+  storeId?: string | null,
+): Promise<EmailSettings> {
   try {
+    const storeKey = emailKey(storeId);
     const { rows } = await query<{ value: Partial<EmailSettings> }>(
-      `SELECT value FROM settings WHERE organization_id = $1 AND key = $2`,
-      [organizationId, EMAIL_KEY],
+      `SELECT value FROM settings
+        WHERE organization_id = $1 AND key = ANY($2::text[])
+        ORDER BY (key = $3) DESC
+        LIMIT 1`,
+      [organizationId, [storeKey, EMAIL_KEY], storeKey],
     );
     return mergeEmailDefaults(rows[0]?.value ?? null);
   } catch {
@@ -35,6 +49,8 @@ export async function loadEmailSettings(organizationId: string): Promise<EmailSe
  */
 export async function sendOrgEmail(args: {
   organizationId: string;
+  /** Boutique concernée : sélectionne la config email de cette boutique. */
+  storeId?: string | null;
   to: string;
   toName?: string;
   subject: string;
@@ -47,7 +63,7 @@ export async function sendOrgEmail(args: {
    */
   allowDisabled?: boolean;
 }): Promise<SendResult> {
-  const cfg = await loadEmailSettings(args.organizationId);
+  const cfg = await loadEmailSettings(args.organizationId, args.storeId);
   if (!cfg.api_key || !cfg.sender_email) {
     return { ok: false, error: 'NOT_CONFIGURED' };
   }

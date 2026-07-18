@@ -27,9 +27,9 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
   const inv = await query<{
     id: string; number: string | null; customer_id: string | null; status: string;
-    customer_email: string | null;
+    store_id: string | null; customer_email: string | null;
   }>(
-    `SELECT i.id, i.number, i.customer_id, i.status,
+    `SELECT i.id, i.number, i.customer_id, i.status, i.store_id,
             c.email AS customer_email
        FROM invoices i
        LEFT JOIN customers c ON c.id = i.customer_id
@@ -67,6 +67,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   if (pdf) {
     const res = await sendOrgEmail({
       organizationId: g.user.organizationId,
+      storeId: invoice.store_id,
       to: targetEmail,
       subject: `Votre facture ${invoice.number ?? ''}`.trim(),
       html: `<p>Bonjour,</p><p>Veuillez trouver ci-joint votre facture`

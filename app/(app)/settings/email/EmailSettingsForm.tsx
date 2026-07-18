@@ -14,19 +14,26 @@ interface State {
   api_key_set: boolean;
 }
 
-export default function EmailSettingsForm({ canWrite }: { canWrite: boolean }) {
+export default function EmailSettingsForm(
+  { canWrite, stores }: { canWrite: boolean; stores: { id: string; name: string }[] },
+) {
+  const [storeId, setStoreId] = useState<string>(stores[0]?.id ?? '');
   const [s, setS] = useState<State | null>(null);
+  const [inherited, setInherited] = useState(false);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [testTo, setTestTo] = useState('');
   const [testing, setTesting] = useState(false);
 
+  // (Re)charge la config de la boutique sélectionnée.
   useEffect(() => {
-    void fetch('/api/settings/email')
+    setS(null); setMsg(null); setErr(null);
+    const qs = storeId ? `?store_id=${encodeURIComponent(storeId)}` : '';
+    void fetch(`/api/settings/email${qs}`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((j) => { if (j) setS({ ...j.settings, api_key: '' }); });
-  }, []);
+      .then((j) => { if (j) { setS({ ...j.settings, api_key: '' }); setInherited(!!j.inherited); } });
+  }, [storeId]);
 
   function patch<K extends keyof State>(k: K, v: State[K]) {
     setS((cur) => (cur ? { ...cur, [k]: v } : cur));
@@ -38,6 +45,7 @@ export default function EmailSettingsForm({ canWrite }: { canWrite: boolean }) {
     const r = await fetch('/api/settings/email', {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        store_id: storeId || undefined,
         enabled: s.enabled,
         sender_email: s.sender_email,
         sender_name: s.sender_name,
@@ -50,8 +58,9 @@ export default function EmailSettingsForm({ canWrite }: { canWrite: boolean }) {
     if (r.ok) {
       setMsg('Enregistré.');
       // Recharge l'état masqué + reset la saisie clé.
-      const j = await (await fetch('/api/settings/email')).json();
-      setS({ ...j.settings, api_key: '' });
+      const qs = storeId ? `?store_id=${encodeURIComponent(storeId)}` : '';
+      const j = await (await fetch(`/api/settings/email${qs}`)).json();
+      setS({ ...j.settings, api_key: '' }); setInherited(!!j.inherited);
       setTimeout(() => setMsg(null), 2500);
     } else {
       const j = await r.json().catch(() => null);
@@ -64,7 +73,7 @@ export default function EmailSettingsForm({ canWrite }: { canWrite: boolean }) {
     setTesting(true); setMsg(null); setErr(null);
     const r = await fetch('/api/settings/email', {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ test_to: testTo }),
+      body: JSON.stringify({ store_id: storeId || undefined, test_to: testTo }),
     });
     setTesting(false);
     if (r.ok) { setMsg(`Email de test envoyé à ${testTo}.`); }
@@ -75,15 +84,44 @@ export default function EmailSettingsForm({ canWrite }: { canWrite: boolean }) {
     }
   }
 
-  if (!s) return <div className="p-8 text-sm text-ink-soft">Chargement…</div>;
-
   return (
     <div className="p-6 md:p-8 max-w-2xl space-y-5">
       <PageHeader
         title="Envoi d'emails (Brevo)"
-        subtitle="Configurez l'envoi automatique des factures, tickets et documents par email via Brevo."
+        subtitle="Configurez l'envoi des factures et tickets par email via Brevo — propre à chaque boutique."
         actions={null}
       />
+
+      {stores.length === 0 && (
+        <div className="card p-4 text-sm text-ink-soft">
+          Aucune boutique accessible : impossible de configurer l’envoi d’emails.
+        </div>
+      )}
+
+      {stores.length > 0 && (
+        <label className="block">
+          <span className="block text-xs font-medium text-ink-soft mb-1">Boutique</span>
+          <select
+            className="input h-10 w-full sm:w-72"
+            value={storeId}
+            onChange={(e) => setStoreId(e.target.value)}
+          >
+            {stores.map((st) => <option key={st.id} value={st.id}>{st.name}</option>)}
+          </select>
+        </label>
+      )}
+
+      {!s ? (
+        <div className="card p-8 text-sm text-ink-soft">Chargement…</div>
+      ) : (
+      <>
+      {inherited && (
+        <div className="card p-3 text-xs text-ink-soft border-l-4 border-amber-400">
+          Cette boutique n’a pas encore sa propre configuration : les valeurs affichées
+          sont héritées du modèle par défaut. Enregistre pour les rendre spécifiques à
+          cette boutique.
+        </div>
+      )}
 
       <div className="card p-5 space-y-4">
         <label className="flex items-center gap-3">
@@ -140,7 +178,7 @@ export default function EmailSettingsForm({ canWrite }: { canWrite: boolean }) {
 
         {canWrite && (
           <button className="btn-primary h-10 px-4" disabled={saving} onClick={() => void save()}>
-            {saving ? '…' : 'Enregistrer'}
+            {saving ? '…' : 'Enregistrer cette boutique'}
           </button>
         )}
       </div>
@@ -157,6 +195,8 @@ export default function EmailSettingsForm({ canWrite }: { canWrite: boolean }) {
             </button>
           </div>
         </div>
+      )}
+      </>
       )}
     </div>
   );

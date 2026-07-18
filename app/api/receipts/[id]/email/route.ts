@@ -24,10 +24,12 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   if ('response' in parsed) return parsed.response;
   const email = parsed.data.email.trim().toLowerCase();
 
-  // Vérifie le ticket
-  const r = await query<{ id: string; sale_id: string; number: string }>(
-    `SELECT id, sale_id, number FROM receipts
-      WHERE id = $1 AND organization_id = $2`,
+  // Vérifie le ticket + récupère la boutique de la vente (config par boutique)
+  const r = await query<{ id: string; sale_id: string; number: string; store_id: string | null }>(
+    `SELECT rc.id, rc.sale_id, rc.number, s.store_id
+       FROM receipts rc
+       JOIN sales s ON s.id = rc.sale_id
+      WHERE rc.id = $1 AND rc.organization_id = $2`,
     [params.id, g.user.organizationId],
   );
   if (r.rowCount === 0) return jsonError('NOT_FOUND', 404);
@@ -64,6 +66,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   if (pdf) {
     const res = await sendOrgEmail({
       organizationId: g.user.organizationId,
+      storeId: receipt.store_id,
       to: email,
       subject: `Votre ticket ${receipt.number}`,
       html: `<p>Bonjour,</p><p>Veuillez trouver ci-joint votre ticket de caisse `

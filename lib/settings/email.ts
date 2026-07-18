@@ -6,6 +6,15 @@
  */
 export const EMAIL_KEY = 'email';
 
+/**
+ * Clé de stockage de la config email pour une boutique donnée.
+ * `email:<storeId>` si une boutique est précisée, sinon la clé
+ * historique au niveau organisation (`email`), qui sert de repli.
+ */
+export function emailKey(storeId?: string | null): string {
+  return storeId ? `${EMAIL_KEY}:${storeId}` : EMAIL_KEY;
+}
+
 export interface EmailSettings {
   enabled: boolean;
   provider: 'brevo';

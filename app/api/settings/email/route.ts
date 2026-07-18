@@ -5,24 +5,41 @@ import { requirePermission } from '@/lib/auth/guards';
 import { parseJson } from '@/lib/validation/api';
 import { sendOrgEmail } from '@/lib/email/send';
 import {
-  EMAIL_KEY, mergeEmailDefaults, maskApiKey, type EmailSettings,
+  EMAIL_KEY, emailKey, mergeEmailDefaults, maskApiKey, type EmailSettings,
 } from '@/lib/settings/email';
 
 export const dynamic = 'force-dynamic';
 
-async function load(orgId: string): Promise<EmailSettings> {
-  const { rows } = await query<{ value: Partial<EmailSettings> }>(
-    `SELECT value FROM settings WHERE organization_id = $1 AND key = $2`,
-    [orgId, EMAIL_KEY],
+/**
+ * Charge la config email d'une boutique (repli sur la config organisation
+ * quand la boutique n'a pas encore la sienne). Renvoie aussi si la config
+ * affichée est propre à la boutique ou héritée.
+ */
+async function load(
+  orgId: string,
+  storeId?: string | null,
+): Promise<{ settings: EmailSettings; ownStore: boolean }> {
+  const storeKey = emailKey(storeId);
+  const { rows } = await query<{ value: Partial<EmailSettings>; key: string }>(
+    `SELECT value, key FROM settings
+      WHERE organization_id = $1 AND key = ANY($2::text[])
+      ORDER BY (key = $3) DESC
+      LIMIT 1`,
+    [orgId, [storeKey, EMAIL_KEY], storeKey],
   );
-  return mergeEmailDefaults(rows[0]?.value ?? null);
+  return {
+    settings: mergeEmailDefaults(rows[0]?.value ?? null),
+    ownStore: !!storeId && rows[0]?.key === storeKey,
+  };
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   const g = await requirePermission('settings.read');
   if ('response' in g) return g.response;
-  const s = await load(g.user.organizationId);
+  const storeId = new URL(req.url).searchParams.get('store_id') || null;
+  const { settings: s, ownStore } = await load(g.user.organizationId, storeId);
   return NextResponse.json({
+    inherited: !!storeId && !ownStore,   // config affichée = héritée de l'organisation
     settings: {
       enabled: s.enabled,
       provider: s.provider,
@@ -38,6 +55,7 @@ export async function GET() {
 }
 
 const schema = z.object({
+  store_id: z.string().uuid().optional(),
   enabled: z.boolean().optional(),
   api_key: z.string().max(200).optional(),
   sender_email: z.string().email().or(z.literal('')).optional(),
@@ -54,8 +72,9 @@ export async function PATCH(req: Request) {
   const parsed = await parseJson(req, schema);
   if ('response' in parsed) return parsed.response;
   const d = parsed.data;
+  const storeId = d.store_id ?? null;
 
-  const existing = await load(g.user.organizationId);
+  const { settings: existing } = await load(g.user.organizationId, storeId);
 
   // Test d'envoi (avant sauvegarde éventuelle) : utilise la config existante.
   // `allowDisabled` : on peut tester la clé/expéditeur avant d'activer l'envoi.
@@ -68,6 +87,7 @@ export async function PATCH(req: Request) {
     }
     const res = await sendOrgEmail({
       organizationId: g.user.organizationId,
+      storeId,
       to: d.test_to,
       subject: 'Test d’envoi HelloPos',
       html: '<p>Ceci est un email de test envoyé depuis HelloPos via Brevo. '
@@ -101,7 +121,7 @@ export async function PATCH(req: Request) {
      VALUES ($1, $2, $3, now())
      ON CONFLICT (organization_id, key)
      DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
-    [g.user.organizationId, EMAIL_KEY, JSON.stringify(next)],
+    [g.user.organizationId, emailKey(storeId), JSON.stringify(next)],
   );
   return NextResponse.json({ ok: true });
 }

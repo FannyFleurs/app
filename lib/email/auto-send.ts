@@ -18,7 +18,14 @@ export async function autoSendInvoiceIfEnabled(
   organizationId: string,
 ): Promise<void> {
   try {
-    const cfg = await loadEmailSettings(organizationId);
+    // Boutique de la facture → config email propre à cette boutique.
+    const s = await query<{ store_id: string | null }>(
+      `SELECT store_id FROM invoices WHERE id = $1 AND organization_id = $2`,
+      [invoiceId, organizationId],
+    );
+    const storeId = s.rows[0]?.store_id ?? null;
+
+    const cfg = await loadEmailSettings(organizationId, storeId);
     if (!cfg.enabled || !cfg.auto_send_invoice) return;
 
     const pdf = await buildInvoicePdf(invoiceId, organizationId);
@@ -28,6 +35,7 @@ export async function autoSendInvoiceIfEnabled(
 
     const res = await sendOrgEmail({
       organizationId,
+      storeId,
       to,
       toName: pdf.customer_name ?? undefined,
       subject: `Votre facture ${pdf.number}`.trim(),
@@ -53,13 +61,12 @@ export async function autoSendReceiptIfEnabled(
   organizationId: string,
 ): Promise<void> {
   try {
-    const cfg = await loadEmailSettings(organizationId);
-    if (!cfg.enabled || !cfg.auto_send_receipt) return;
-
-    // Adresse email du client attaché à la vente (sinon rien à envoyer).
-    const r = await query<{ email: string | null; name: string | null }>(
+    // Boutique de la vente + adresse email du client attaché (sinon rien à
+    // envoyer). On récupère aussi le store_id pour la config par boutique.
+    const r = await query<{ email: string | null; name: string | null; store_id: string | null }>(
       `SELECT c.email,
-              COALESCE(c.company_name, NULLIF(TRIM(CONCAT(c.first_name,' ',c.last_name)), '')) AS name
+              COALESCE(c.company_name, NULLIF(TRIM(CONCAT(c.first_name,' ',c.last_name)), '')) AS name,
+              s.store_id
          FROM receipts rc
          JOIN sales s ON s.id = rc.sale_id
          JOIN customers c ON c.id = s.customer_id
@@ -67,13 +74,18 @@ export async function autoSendReceiptIfEnabled(
       [receiptId, organizationId],
     );
     const to = r.rows[0]?.email?.trim();
+    const storeId = r.rows[0]?.store_id ?? null;
     if (!to) return;
+
+    const cfg = await loadEmailSettings(organizationId, storeId);
+    if (!cfg.enabled || !cfg.auto_send_receipt) return;
 
     const pdf = await buildReceiptPdf(receiptId, organizationId);
     if (!pdf) return;
 
     const res = await sendOrgEmail({
       organizationId,
+      storeId,
       to,
       toName: r.rows[0]?.name ?? undefined,
       subject: `Votre ticket ${pdf.number}`,
