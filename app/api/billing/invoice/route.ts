@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requirePermission } from '@/lib/auth/guards';
 import { InvoiceService } from '@/lib/services/invoice-service';
+import { autoSendInvoiceIfEnabled } from '@/lib/email/auto-send';
 
 const schema = z.object({
   customer_id: z.string().uuid(),
@@ -37,6 +38,8 @@ export async function POST(req: Request) {
       saleIds: parsed.data.sale_ids,
       dueDays: parsed.data.due_days,
     });
+    // Envoi automatique de la facture par email (si activé dans les réglages).
+    void autoSendInvoiceIfEnabled(out.invoice_id, g.user.organizationId);
     return NextResponse.json(out);
   } catch (e) {
     const code = (e as Error).message;

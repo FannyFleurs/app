@@ -4,6 +4,7 @@ import { requirePermission } from '@/lib/auth/guards';
 import { parseJson, jsonError } from '@/lib/validation/api';
 import { InvoiceService } from '@/lib/services/invoice-service';
 import { audit } from '@/lib/audit/log';
+import { autoSendInvoiceIfEnabled } from '@/lib/email/auto-send';
 
 const schema = z.object({
   customer_id: z.string().uuid().optional(),
@@ -35,6 +36,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       entityType: 'invoice', entityId: out.invoice_id,
       payload: { sale_id: params.id, number: out.number },
     });
+    // Envoi automatique de la facture par email (si activé dans les réglages).
+    void autoSendInvoiceIfEnabled(out.invoice_id, g.user.organizationId);
     return NextResponse.json(out, { status: 201 });
   } catch (e) {
     const msg = (e as Error).message;

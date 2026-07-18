@@ -6,6 +6,7 @@ import { SaleService } from '@/lib/services/sale-service';
 import { audit } from '@/lib/audit/log';
 import { query } from '@/lib/db/client';
 import { pushWalletUpdateForCustomer } from '@/lib/wallet/notify';
+import { autoSendReceiptIfEnabled } from '@/lib/email/auto-send';
 
 const paymentSchema = z.object({
   method: z.enum(['cash','card','check','transfer','gift_card','credit_note','deferred','other','payment_link']),
@@ -59,6 +60,10 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         }
       })();
     }
+
+    // Envoi automatique du ticket par email si activé et si le client a une
+    // adresse. Fire-and-forget : la vente est déjà validée.
+    if (out.receiptId) void autoSendReceiptIfEnabled(out.receiptId, g.user.organizationId);
 
     return NextResponse.json({
       sale_id: out.saleId,
