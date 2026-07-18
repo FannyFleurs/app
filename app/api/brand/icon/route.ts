@@ -29,7 +29,18 @@ export async function GET(req: Request) {
     ? (p.ca_favicon_url || p.ca_logo_url || p.favicon_url || p.logo_url)
     : (p.favicon_url || p.logo_url);
 
-  if (!src) return new NextResponse(null, { status: 404 });
+  // Aucun logo/favicon configuré : on renvoie un visuel NEUTRE (sac), jamais
+  // l'ancien monogramme statique. Ainsi le favicon n'affiche plus « F ».
+  if (!src) {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">`
+      + `<rect width="1024" height="1024" rx="220" fill="#556B3E"/>`
+      + `<path d="M338 404 h348 l-42 306 a64 64 0 0 1 -63 55 H443 a64 64 0 0 1 -63 -55 Z" fill="none" stroke="#FFFFFF" stroke-width="46" stroke-linejoin="round"/>`
+      + `<path d="M420 404 v-44 a92 92 0 0 1 184 0 v44" fill="none" stroke="#FFFFFF" stroke-width="46" stroke-linecap="round"/>`
+      + `</svg>`;
+    return new NextResponse(svg, {
+      headers: { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'no-store, max-age=0' },
+    });
+  }
 
   // URL externe : on redirige simplement.
   if (!src.startsWith('data:')) {

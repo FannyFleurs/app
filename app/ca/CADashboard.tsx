@@ -229,7 +229,7 @@ function TopBar({
       ) : (
         <div className="h-11 w-11 rounded-lg grid place-items-center shrink-0 text-white font-semibold text-lg"
              style={{ backgroundColor: 'var(--primary)' }}>
-          {(orgName || 'F').charAt(0).toUpperCase()}
+          {(orgName || 'H').charAt(0).toUpperCase()}
         </div>
       )}
 

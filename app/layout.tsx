@@ -21,12 +21,15 @@ export const metadata: Metadata = {
     address: false,
   },
   icons: {
+    // Icône neutre par défaut (SVG sans lettre) + favicon dynamique
+    // (/api/brand/icon) qui reflète le logo configuré. Plus jamais l'ancien
+    // monogramme « F ». FaviconSetter (client) surcharge ensuite au besoin.
     icon: [
-      { url: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
-      { url: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
+      { url: '/api/brand/icon?scope=app', type: 'image/svg+xml' },
+      { url: '/icons/icon.svg', type: 'image/svg+xml' },
     ],
     apple: [
-      { url: '/icons/apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
+      { url: '/api/brand/icon?scope=app', type: 'image/svg+xml' },
     ],
   },
 };
