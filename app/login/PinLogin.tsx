@@ -172,22 +172,11 @@ export default function PinLogin() {
       {/* COLONNE GAUCHE — sélection utilisateur. Sur mobile, on masque la
           liste quand un user est sélectionné, pour laisser place au PIN. */}
       <aside className={`${selected ? 'hidden lg:flex' : 'flex'} flex-col border-r border-border bg-white overflow-hidden`}>
-        {/* Header : le logo remplace le nom de la marque (on ne le devine
-            pas, on le voit). Hauteur généreuse, largeur automatique pour un
-            logo « wordmark ». */}
+        {/* Header : titre simple. Le logo est désormais affiché à droite,
+            centré, au-dessus du visuel de connexion. */}
         <div className="px-6 py-5 border-b border-border shrink-0">
-          {brand.logo_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={brand.logo_url} alt={APP_NAME} className="h-14 w-auto max-w-[220px] object-contain" />
-          ) : (
-            <div className="flex items-center gap-3">
-              <div className="grid h-12 w-12 place-items-center rounded-2xl accent-bar text-white text-xl font-semibold">
-                {APP_NAME.charAt(0)}
-              </div>
-              <div className="text-xl font-semibold tracking-tight">{APP_NAME}</div>
-            </div>
-          )}
-          <div className="text-xs text-ink-soft mt-2">Connexion utilisateur</div>
+          <div className="text-xl font-semibold tracking-tight">Connexion</div>
+          <div className="text-xs text-ink-soft mt-1">Choisissez votre profil</div>
         </div>
 
         {/* Liste users (scrollable) */}
@@ -350,19 +339,36 @@ npm run user:test</pre>
         {/* Centre : illustration OU pavé PIN */}
         <div className="flex-1 grid place-items-center px-4 lg:px-8 pb-4 lg:pb-10 min-h-0">
           {!selected ? (
-            <div className="text-center">
-              <div className="mx-auto grid h-48 w-48 place-items-center rounded-full bg-accent-soft text-accent-deep mb-6">
-                {/* Illustration vectorielle simple : bouclier + clé */}
-                <svg width="120" height="120" viewBox="0 0 120 120" fill="none" aria-hidden="true">
-                  <path d="M60 14 L94 28 V60 C94 84 78 100 60 106 C42 100 26 84 26 60 V28 Z"
-                        fill="white" stroke="currentColor" strokeWidth="3" />
-                  <circle cx="55" cy="56" r="9" stroke="currentColor" strokeWidth="3" fill="none" />
-                  <path d="M55 65 V83" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-                  <path d="M55 73 H70" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-                  <path d="M55 79 H68" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-                </svg>
-              </div>
-              <h1 className="text-3xl font-semibold tracking-tight">Sélectionner un utilisateur</h1>
+            <div className="text-center max-w-md w-full">
+              {/* Logo centré (partie droite) */}
+              {brand.logo_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={brand.logo_url} alt={APP_NAME} className="h-16 w-auto max-w-[240px] object-contain mx-auto mb-8" />
+              ) : (
+                <div className="text-2xl font-semibold tracking-tight mb-8">{APP_NAME}</div>
+              )}
+              {/* Visuel de connexion configurable (Admin → Configuration →
+                  « Visuel écran de connexion »). Repli sur une illustration. */}
+              {brand.login_image_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={brand.login_image_url}
+                  alt=""
+                  className="mx-auto mb-6 max-h-[42vh] w-auto max-w-full rounded-3xl object-contain"
+                />
+              ) : (
+                <div className="mx-auto grid h-48 w-48 place-items-center rounded-full bg-accent-soft text-accent-deep mb-6">
+                  <svg width="120" height="120" viewBox="0 0 120 120" fill="none" aria-hidden="true">
+                    <path d="M60 14 L94 28 V60 C94 84 78 100 60 106 C42 100 26 84 26 60 V28 Z"
+                          fill="white" stroke="currentColor" strokeWidth="3" />
+                    <circle cx="55" cy="56" r="9" stroke="currentColor" strokeWidth="3" fill="none" />
+                    <path d="M55 65 V83" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+                    <path d="M55 73 H70" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+                    <path d="M55 79 H68" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+                  </svg>
+                </div>
+              )}
+              <h1 className="text-2xl font-semibold tracking-tight">Sélectionner un utilisateur</h1>
               <p className="mt-2 text-sm text-ink-soft">
                 Choisissez votre profil à gauche pour saisir votre code.
               </p>

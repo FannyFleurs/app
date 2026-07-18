@@ -25,6 +25,7 @@ export async function GET() {
     favicon_url: p.favicon_url,
     ca_logo_url: p.ca_logo_url,
     ca_favicon_url: p.ca_favicon_url,
+    login_image_url: p.login_image_url,
     plan_essentiel_price: p.plan_essentiel_price,
     plan_croissance_price: p.plan_croissance_price,
   }, {

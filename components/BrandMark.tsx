@@ -8,6 +8,7 @@ export interface Brand {
   favicon_url?: string;
   ca_logo_url?: string;
   ca_favicon_url?: string;
+  login_image_url?: string;
   plan_essentiel_price?: string;
   plan_croissance_price?: string;
 }

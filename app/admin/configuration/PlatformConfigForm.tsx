@@ -121,6 +121,14 @@ export default function PlatformConfigForm({ initial }: { initial: FormData }) {
           onUrl={(v) => patch('favicon_url', v)}
           onClear={() => patch('favicon_url', '')}
         />
+        <ImageField
+          label="Visuel écran de connexion (caisse)"
+          hint="Photo affichée à droite de l'écran de connexion de la caisse. Vide = le logo / visuel par défaut."
+          value={s.login_image_url}
+          onFile={(e) => onImageFile(e, 'login_image_url')}
+          onUrl={(v) => patch('login_image_url', v)}
+          onClear={() => patch('login_image_url', '')}
+        />
       </section>
 
       {/* Espace CA (couleur / logo distincts) */}
