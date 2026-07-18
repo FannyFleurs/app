@@ -58,15 +58,29 @@ export async function PATCH(req: Request) {
   const existing = await load(g.user.organizationId);
 
   // Test d'envoi (avant sauvegarde éventuelle) : utilise la config existante.
+  // `allowDisabled` : on peut tester la clé/expéditeur avant d'activer l'envoi.
   if (d.test_to) {
+    if (!existing.api_key || !existing.sender_email) {
+      return NextResponse.json({
+        error: 'NOT_CONFIGURED',
+        message: 'Renseigne la clé API Brevo et l’email expéditeur, puis clique sur « Enregistrer » avant de tester.',
+      }, { status: 400 });
+    }
     const res = await sendOrgEmail({
       organizationId: g.user.organizationId,
       to: d.test_to,
       subject: 'Test d’envoi HelloPos',
       html: '<p>Ceci est un email de test envoyé depuis HelloPos via Brevo. '
         + 'Si vous le recevez, la configuration est correcte ✅.</p>',
+      allowDisabled: true,
     });
-    if (!res.ok) return NextResponse.json({ error: res.error, detail: res.detail }, { status: 400 });
+    if (!res.ok) {
+      const message = res.error === 'NOT_CONFIGURED'
+        ? 'Renseigne la clé API Brevo et l’email expéditeur, puis enregistre avant de tester.'
+        : `Brevo a refusé l’envoi : ${res.detail ?? 'erreur inconnue'}. `
+          + 'Vérifie que la clé est une clé « API v3 » valide et que l’expéditeur est vérifié dans Brevo.';
+      return NextResponse.json({ error: res.error, detail: res.detail, message }, { status: 400 });
+    }
     return NextResponse.json({ tested: true });
   }
 

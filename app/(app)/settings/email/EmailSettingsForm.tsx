@@ -70,7 +70,8 @@ export default function EmailSettingsForm({ canWrite }: { canWrite: boolean }) {
     if (r.ok) { setMsg(`Email de test envoyé à ${testTo}.`); }
     else {
       const j = await r.json().catch(() => null);
-      setErr(j?.detail ? `Échec : ${j.detail}` : 'Échec de l’envoi de test (vérifie la clé et l’expéditeur, et enregistre avant de tester).');
+      setErr(j?.message
+        ?? (j?.detail ? `Échec : ${j.detail}` : 'Échec de l’envoi de test (vérifie la clé et l’expéditeur, et enregistre avant de tester).'));
     }
   }
 

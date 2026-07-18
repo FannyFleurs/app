@@ -40,10 +40,19 @@ export async function sendOrgEmail(args: {
   subject: string;
   html: string;
   attachments?: EmailAttachment[];
+  /**
+   * Autorise l'envoi même si la bascule « Activer » est désactivée.
+   * Utile pour le bouton « Envoyer un test » : on veut pouvoir tester la
+   * clé et l'expéditeur avant d'activer l'envoi en production.
+   */
+  allowDisabled?: boolean;
 }): Promise<SendResult> {
   const cfg = await loadEmailSettings(args.organizationId);
-  if (!cfg.enabled || !cfg.api_key || !cfg.sender_email) {
+  if (!cfg.api_key || !cfg.sender_email) {
     return { ok: false, error: 'NOT_CONFIGURED' };
+  }
+  if (!cfg.enabled && !args.allowDisabled) {
+    return { ok: false, error: 'DISABLED' };
   }
 
   const body: Record<string, unknown> = {
