@@ -129,6 +129,10 @@ export async function GET(req: Request) {
   const onlyActive = url.searchParams.get('active') !== 'false';
   const inPos = url.searchParams.get('pos') === '1';
   const storeId = url.searchParams.get('store_id') || undefined;
+  // Contexte : back-office (sous-domaine bo.) vs application (caisse).
+  // Hors BO, chaque poste ne doit voir QUE les articles de sa boutique —
+  // y compris dans la liste « Produits » (pas seulement les tuiles caisse).
+  const backOffice = req.headers.get('x-webpos-bo') === '1';
 
   const params: unknown[] = [g.user.organizationId];
   let where = `p.organization_id = $1`;
@@ -151,16 +155,19 @@ export async function GET(req: Request) {
   if (storeId && (await hasStoreIdsColumn())) {
     params.push(storeId);
     const storeParamIdx = params.length;
-    let strictPos = false;
-    if (inPos) {
+    // Filtre strict (uniquement les articles rattachés à cette boutique) dès
+    // qu'on est sur l'application (hors BO) — caisse OU liste Produits — et que
+    // l'organisation compte plusieurs boutiques.
+    let strict = false;
+    if (inPos || !backOffice) {
       const c = await query<{ n: string }>(
         `SELECT COUNT(*)::text AS n FROM stores
           WHERE organization_id = $1 AND is_active = TRUE`,
         [g.user.organizationId],
       );
-      strictPos = Number(c.rows[0]?.n ?? '1') > 1;
+      strict = Number(c.rows[0]?.n ?? '1') > 1;
     }
-    where += strictPos
+    where += strict
       ? ` AND p.store_ids @> ARRAY[$${storeParamIdx}]::uuid[]`
       : ` AND (COALESCE(array_length(p.store_ids, 1), 0) = 0 OR p.store_ids @> ARRAY[$${storeParamIdx}]::uuid[])`;
   }

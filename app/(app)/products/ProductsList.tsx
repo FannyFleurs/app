@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { getOrCreateDeviceId } from '@/lib/device';
 import { formatEUR } from '@/lib/services/money';
 import ProductFormModal from './ProductFormModal';
 import ProductImportModal from './ProductImportModal';
@@ -48,12 +49,32 @@ export default function ProductsList({
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkMsg, setBulkMsg] = useState<string | null>(null);
   const [onlyTop, setOnlyTop] = useState(false);
+  // Hors back-office : boutique du poste (liaison appareil). Tant qu'elle
+  // n'est pas résolue, on ne charge pas la liste pour éviter d'afficher
+  // brièvement les articles des autres boutiques.
+  // posteStoreId : '' = inconnu, null = résolu sans boutique, string = boutique.
+  const [posteStoreId, setPosteStoreId] = useState<string | null | ''>(backOffice ? null : '');
+
+  useEffect(() => {
+    if (backOffice) return;
+    void (async () => {
+      try {
+        const id = getOrCreateDeviceId();
+        const r = await fetch(`/api/registers/mine?device_id=${encodeURIComponent(id)}`);
+        const reg = r.ok ? ((await r.json()).register as { store_id?: string } | null) : null;
+        setPosteStoreId(reg?.store_id ?? null);
+      } catch { setPosteStoreId(null); }
+    })();
+  }, [backOffice]);
 
   async function reload() {
     setLoading(true);
     const params = new URLSearchParams();
     if (q) params.set('q', q);
     if (showInactive) params.set('active', 'false');
+    // Application : on restreint à la boutique du poste (le serveur applique
+    // alors le filtrage strict hors BO).
+    if (!backOffice && posteStoreId) params.set('store_id', posteStoreId);
     const res = await fetch(`/api/products?${params.toString()}`);
     if (res.ok) {
       const j = await res.json();
@@ -64,7 +85,12 @@ export default function ProductsList({
     }
     setLoading(false);
   }
-  useEffect(() => { void reload(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [showInactive]);
+  useEffect(() => {
+    // Hors BO : on attend de connaître la boutique du poste avant de charger.
+    if (!backOffice && posteStoreId === '') return;
+    void reload();
+    /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, [showInactive, posteStoreId, backOffice]);
 
   useEffect(() => {
     void (async () => {
