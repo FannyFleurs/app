@@ -132,6 +132,27 @@ input[type=time]::-webkit-calendar-picker-indicator {
   cursor: pointer;
 }
 
+/* Cases à cocher / boutons radio : couleur du thème (accent) au lieu du
+   bleu générique du navigateur. accent-color s'applique aux contrôles
+   natifs cochés. */
+input[type=checkbox],
+input[type=radio] {
+  accent-color: var(--primary);
+}
+
+/* <select> : sur mobile (iOS notamment) le texte est tronqué en bas quand la
+   hauteur est trop contrainte (ex. utilitaire h-9). On garantit une hauteur
+   suffisante et une ligne de base correcte, en neutralisant la hauteur fixe. */
+select.input {
+  height: auto;
+  min-height: 2.75rem;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  line-height: 1.4;
+  /* Réserve la place de la flèche native pour ne pas chevaucher le texte. */
+  padding-right: 2rem;
+}
+
 @layer components {
   .card {
     border-radius: 18px;
