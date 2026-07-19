@@ -250,7 +250,7 @@ export default function CashRegister({
     void (async () => {
       const [pRes, cRes, sdRes] = await Promise.all([
         fetch(`/api/products?pos=1&store_id=${encodeURIComponent(storeId)}`),
-        fetch('/api/categories'),
+        fetch(`/api/categories?pos=1&store_id=${encodeURIComponent(storeId)}`),
         fetch(`/api/settings/screen-delivery?store_id=${encodeURIComponent(storeId)}`),
       ]);
       if (pRes.ok) {
@@ -457,9 +457,14 @@ export default function CashRegister({
 
   // Catégories effectivement présentes (au moins 1 produit) + bucket "sans catégorie"
   const categoriesWithCounts = useMemo(() => {
+    // Catégories visibles sur cette caisse (déjà filtrées par boutique côté
+    // serveur). Un article dont la catégorie n'y figure pas (ex. catégorie
+    // « toutes boutiques » non rattachée à ce poste) bascule en « sans
+    // catégorie » pour rester accessible.
+    const catIds = new Set(categories.map((c) => c.id));
     const counts = new Map<string, number>();
     for (const p of products) {
-      const k = p.category_id ?? 'uncategorized';
+      const k = p.category_id && catIds.has(p.category_id) ? p.category_id : 'uncategorized';
       counts.set(k, (counts.get(k) ?? 0) + 1);
     }
     const cats = categories
@@ -487,14 +492,17 @@ export default function CashRegister({
       );
     }
     if (view.kind === 'products') {
+      const catIds = new Set(categories.map((c) => c.id));
       return products.filter((p) =>
         view.categoryId === 'uncategorized'
-          ? p.category_id == null
+          // « Sans catégorie » inclut aussi les articles dont la catégorie
+          // n'est pas visible sur cette caisse (sinon ils seraient orphelins).
+          ? p.category_id == null || !catIds.has(p.category_id)
           : p.category_id === view.categoryId,
       );
     }
     return [];
-  }, [products, searchQ, view]);
+  }, [products, searchQ, view, categories]);
 
   // Totaux locaux
   const totals = useMemo(() => {

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { getOrCreateDeviceId } from '@/lib/device';
 import PageHeader from '@/components/PageHeader';
 import EmptyState from '@/components/EmptyState';
 import Badge from '@/components/Badge';
@@ -25,15 +26,36 @@ export default function CategoriesAdmin({ canEdit, backOffice = false, stores = 
   const [items, setItems] = useState<Category[]>([]);
   const [editing, setEditing] = useState<Category | null | undefined>(undefined);
   const [loading, setLoading] = useState(true);
+  // Hors BO : boutique du poste (liaison appareil). '' = inconnu, null =
+  // résolu sans boutique, string = boutique. On attend sa résolution avant de
+  // charger, pour ne pas afficher brièvement les catégories des autres.
+  const [posteStoreId, setPosteStoreId] = useState<string | null | ''>(backOffice ? null : '');
+
+  useEffect(() => {
+    if (backOffice) return;
+    void (async () => {
+      try {
+        const id = getOrCreateDeviceId();
+        const r = await fetch(`/api/registers/mine?device_id=${encodeURIComponent(id)}`);
+        const reg = r.ok ? ((await r.json()).register as { store_id?: string } | null) : null;
+        setPosteStoreId(reg?.store_id ?? null);
+      } catch { setPosteStoreId(null); }
+    })();
+  }, [backOffice]);
   // Filtre boutique : sert aussi de contexte pour la suppression « de cette
   // boutique uniquement ». Mono-boutique → boutique implicite. Multi → filtre.
   const [filterStore, setFilterStore] = useState('');
   const soleStore = stores.length === 1 ? stores[0]! : null;
-  // Boutique cible d'une suppression : la seule accessible, sinon celle filtrée.
-  const deleteStoreId = soleStore ? soleStore.id : (filterStore || null);
-  const deleteStoreName = soleStore
-    ? soleStore.name
-    : (filterStore ? (stores.find((s) => s.id === filterStore)?.name ?? null) : null);
+  // Boutique cible d'une suppression :
+  //  - app (hors BO) : la boutique DU POSTE → « chaque caisse a la main », la
+  //    suppression ne retire la catégorie que de sa boutique ;
+  //  - BO : la seule boutique accessible, sinon celle filtrée.
+  const appPosteStore = !backOffice && typeof posteStoreId === 'string' && posteStoreId
+    ? posteStoreId : null;
+  const deleteStoreId = appPosteStore ?? (soleStore ? soleStore.id : (filterStore || null));
+  const deleteStoreName = deleteStoreId
+    ? (stores.find((s) => s.id === deleteStoreId)?.name ?? null)
+    : null;
 
   const visibleItems = filterStore
     ? items.filter((c) => c.store_ids.length === 0 || c.store_ids.includes(filterStore))
@@ -41,14 +63,22 @@ export default function CategoriesAdmin({ canEdit, backOffice = false, stores = 
 
   async function reload() {
     setLoading(true);
-    const r = await fetch('/api/categories');
+    // Application : on restreint à la boutique du poste (filtrage strict côté
+    // serveur hors BO). Back-office : liste complète.
+    const qs = !backOffice && posteStoreId ? `?store_id=${encodeURIComponent(posteStoreId)}` : '';
+    const r = await fetch(`/api/categories${qs}`);
     if (r.ok) {
       const cats = (await r.json()).categories as Category[];
       setItems(cats.map((c) => ({ ...c, store_ids: c.store_ids ?? [] })));
     }
     setLoading(false);
   }
-  useEffect(() => { void reload(); }, []);
+  useEffect(() => {
+    // Hors BO : attendre de connaître la boutique du poste avant de charger.
+    if (!backOffice && posteStoreId === '') return;
+    void reload();
+    /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, [posteStoreId, backOffice]);
 
   return (
     <div className="p-6 md:p-8 space-y-5">
@@ -115,6 +145,7 @@ export default function CategoriesAdmin({ canEdit, backOffice = false, stores = 
           category={editing}
           backOffice={backOffice}
           stores={stores}
+          posteStoreId={typeof posteStoreId === 'string' && posteStoreId ? posteStoreId : null}
           deleteStoreId={deleteStoreId}
           deleteStoreName={deleteStoreName}
           onClose={() => setEditing(undefined)}
@@ -125,10 +156,11 @@ export default function CategoriesAdmin({ canEdit, backOffice = false, stores = 
   );
 }
 
-function CategoryFormModal({ category, backOffice, stores, deleteStoreId, deleteStoreName, onClose, onSaved }: {
+function CategoryFormModal({ category, backOffice, stores, posteStoreId, deleteStoreId, deleteStoreName, onClose, onSaved }: {
   category: Category | null;
   backOffice: boolean;
   stores: { id: string; name: string }[];
+  posteStoreId?: string | null;
   deleteStoreId?: string | null;
   deleteStoreName?: string | null;
   onClose: () => void;
@@ -174,9 +206,18 @@ function CategoryFormModal({ category, backOffice, stores, deleteStoreId, delete
       image_url: form.image_url.trim() || null,
       visible_in_pos: form.visible_in_pos,
     };
-    // En back-office on transmet la sélection de boutiques ; sinon le serveur
-    // rattache automatiquement à la boutique de l'utilisateur.
-    if (backOffice) payload.store_ids = form.store_ids;
+    // Boutiques (même logique que les articles) :
+    //  - back-office : sélection explicite. « Toutes » (aucune cochée) est
+    //    traduit en la liste EXPLICITE de toutes les boutiques, car le filtre
+    //    caisse est strict (store_ids vide = aucune caisse).
+    //  - app, NOUVELLE catégorie sur un poste lié : on la scope à la boutique
+    //    du poste ;
+    //  - app, modification : on ne touche pas au périmètre existant.
+    if (backOffice) {
+      payload.store_ids = form.store_ids.length > 0 ? form.store_ids : stores.map((s) => s.id);
+    } else if (!category && posteStoreId) {
+      payload.store_ids = [posteStoreId];
+    }
     const res = category
       ? await fetch(`/api/categories/${category.id}`, {
           method: 'PATCH', headers: { 'Content-Type': 'application/json' },
@@ -269,7 +310,7 @@ function CategoryFormModal({ category, backOffice, stores, deleteStoreId, delete
                 <button type="button"
                   onClick={() => setForm({ ...form, store_ids: [] })}
                   className={`rounded-full px-2.5 py-1 text-xs border transition-colors ${
-                    form.store_ids.length === 0
+                    form.store_ids.length === 0 || stores.every((s) => form.store_ids.includes(s.id))
                       ? 'accent-bar text-white border-transparent'
                       : 'bg-white border-border text-ink-soft hover:bg-gray-50'
                   }`}>

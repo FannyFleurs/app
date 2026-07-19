@@ -48,9 +48,15 @@ async function hasTransportColumn(): Promise<boolean> {
   return _hasTransport;
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   const g = await requirePermission('products.read');
   if ('response' in g) return g.response;
+  const url = new URL(req.url);
+  const storeId = url.searchParams.get('store_id') || undefined;
+  const inPos = url.searchParams.get('pos') === '1';
+  // Hors back-office (sous-domaine bo.), chaque poste ne voit QUE les
+  // catégories de sa boutique — comme les articles.
+  const backOffice = req.headers.get('x-webpos-bo') === '1';
   const hasStore = await hasStoreIdsColumn();
   const storeCol = hasStore ? 'store_ids' : `'{}'::uuid[] AS store_ids`;
   const params: unknown[] = [g.user.organizationId];
@@ -67,6 +73,27 @@ export async function GET() {
       params.push(acc.rows.map((r) => r.store_id));
       where += ` AND (COALESCE(array_length(store_ids, 1), 0) = 0 OR store_ids && $${params.length}::uuid[])`;
     }
+  }
+  // Filtre boutique explicite.
+  //  - Application (hors BO) : STRICT — uniquement les catégories rattachées à
+  //    la boutique du poste, dès que l'organisation compte plusieurs boutiques.
+  //    Une catégorie « toutes boutiques » (store_ids vide) n'apparaît pas.
+  //  - Back-office : « vide » (toutes) OU la boutique demandée.
+  if (storeId && hasStore) {
+    params.push(storeId);
+    const storeParamIdx = params.length;
+    let strict = false;
+    if (inPos || !backOffice) {
+      const c = await query<{ n: string }>(
+        `SELECT COUNT(*)::text AS n FROM stores
+          WHERE organization_id = $1 AND is_active = TRUE`,
+        [g.user.organizationId],
+      );
+      strict = Number(c.rows[0]?.n ?? '1') > 1;
+    }
+    where += strict
+      ? ` AND store_ids @> ARRAY[$${storeParamIdx}]::uuid[]`
+      : ` AND (COALESCE(array_length(store_ids, 1), 0) = 0 OR store_ids @> ARRAY[$${storeParamIdx}]::uuid[])`;
   }
   const hasTransport = await hasTransportColumn();
   const transportCol = hasTransport ? 'transport_cost_ht' : '0 AS transport_cost_ht';
