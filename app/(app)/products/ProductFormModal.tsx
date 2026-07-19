@@ -219,13 +219,19 @@ export default function ProductFormModal({
       color: form.color,
     };
     // Boutiques :
-    //  - back-office : sélection multi-boutiques explicite ;
+    //  - back-office : sélection multi-boutiques explicite. « Toutes les
+    //    boutiques » (aucune cochée) est traduit en la liste EXPLICITE de
+    //    toutes les boutiques : sur la caisse le filtre est strict (un article
+    //    sans boutique n'apparaît sur AUCUNE caisse), donc « toutes » doit
+    //    réellement rattacher chaque boutique ;
     //  - app, NOUVEL article sur un poste lié : on le scope à la boutique du
-    //    poste (évite le « toutes boutiques » qui le ferait apparaître partout,
-    //    y compris pour un owner/admin) ;
+    //    poste ;
     //  - app, modification : on ne touche pas au périmètre existant.
-    if (backOffice) payload.store_ids = form.store_ids;
-    else if (!product && posteStoreId) payload.store_ids = [posteStoreId];
+    if (backOffice) {
+      payload.store_ids = form.store_ids.length > 0 ? form.store_ids : stores.map((s) => s.id);
+    } else if (!product && posteStoreId) {
+      payload.store_ids = [posteStoreId];
+    }
     if (product && form.price_change_reason) payload.price_change_reason = form.price_change_reason;
     const res = product
       ? await fetch(`/api/products/${product.id}`, {
@@ -518,14 +524,14 @@ export default function ProductFormModal({
                 <label className="flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
-                    checked={form.store_ids.length === 0}
+                    checked={form.store_ids.length === 0 || stores.every((s) => form.store_ids.includes(s.id))}
                     onChange={(e) => {
                       if (e.target.checked) setForm({ ...form, store_ids: [] });
                     }}
                   />
                   <span className="font-medium">Toutes les boutiques</span>
                 </label>
-                {form.store_ids.length > 0 && (
+                {form.store_ids.length > 0 && !stores.every((s) => form.store_ids.includes(s.id)) && (
                   <div className="ml-6 space-y-1 border-l border-border pl-3">
                     {stores.map((s) => {
                       const checked = form.store_ids.includes(s.id);
@@ -547,7 +553,7 @@ export default function ProductFormModal({
                     })}
                   </div>
                 )}
-                {form.store_ids.length === 0 && stores.length > 1 && (
+                {(form.store_ids.length === 0 || stores.every((s) => form.store_ids.includes(s.id))) && stores.length > 1 && (
                   <button
                     type="button"
                     onClick={() => setForm({ ...form, store_ids: [stores[0]!.id] })}
@@ -558,7 +564,9 @@ export default function ProductFormModal({
                 )}
               </div>
               <p className="mt-2 text-xs text-ink-soft">
-                Si aucune boutique n&apos;est cochée, le produit est visible dans toutes les boutiques de l&apos;organisation.
+                « Toutes les boutiques » = l&apos;article est vendu sur <strong>chaque</strong> caisse.
+                Pour le limiter, cochez « Limiter à certaines boutiques » puis sélectionnez-les.
+                Un article apparaît uniquement sur la caisse des boutiques cochées.
               </p>
             </Field>
           )}
