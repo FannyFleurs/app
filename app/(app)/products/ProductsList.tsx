@@ -108,6 +108,36 @@ export default function ProductsList({
     }
   }
 
+  // Nombre d'articles « toutes boutiques » (non rattachés) : ils
+  // n'apparaissent plus sur aucune caisse tant qu'ils ne sont pas rangés.
+  const unassignedCount = useMemo(
+    () => products.filter((p) => p.store_ids.length === 0).length,
+    [products],
+  );
+  const [assignTarget, setAssignTarget] = useState<string>('');
+  const [assignBusy, setAssignBusy] = useState(false);
+  const [assignMsg, setAssignMsg] = useState<string | null>(null);
+
+  async function assignAllUnassigned() {
+    if (!assignTarget) return;
+    const name = storeName.get(assignTarget) ?? 'cette boutique';
+    if (!confirm(`Ranger les ${unassignedCount} article(s) « toutes boutiques » sous « ${name} » ? `
+      + `Ils n'apparaîtront alors QUE sur la caisse de cette boutique.`)) return;
+    setAssignBusy(true); setAssignMsg(null);
+    const r = await fetch('/api/products/assign-unassigned', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ store_ids: [assignTarget] }),
+    });
+    setAssignBusy(false);
+    if (r.ok) {
+      const j = await r.json();
+      setAssignMsg(`${j.updated} article(s) rangé(s) sous « ${name} ».`);
+      await reload();
+    } else {
+      setAssignMsg('Échec de l’opération.');
+    }
+  }
+
   const filtered = useMemo(() => {
     let arr = products;
     if (filterCat !== 'all') arr = arr.filter((p) => p.category_id === filterCat);
@@ -191,6 +221,31 @@ export default function ProductsList({
               )}
               <span className="ml-auto tabular-nums">{filtered.length}</span>
             </div>
+            {/* Articles « toutes boutiques » : sur une organisation multi-
+                boutiques ils n'apparaissent plus sur les caisses tant qu'ils ne
+                sont pas rattachés. Rangement en 1 clic. */}
+            {canEdit && backOffice && stores.length > 1 && unassignedCount > 0 && (
+              <div className="rounded-xl border border-amber-300 bg-amber-50 p-2 space-y-2">
+                <p className="text-xs text-amber-800">
+                  <strong>{unassignedCount}</strong> article(s) « toutes boutiques » ne sont
+                  rattachés à aucune boutique : ils n’apparaissent sur <strong>aucune caisse</strong>.
+                  Rangez-les sous une boutique :
+                </p>
+                <div className="flex gap-2">
+                  <select className="input h-9 flex-1 text-sm"
+                          value={assignTarget} onChange={(e) => setAssignTarget(e.target.value)}>
+                    <option value="">Choisir une boutique…</option>
+                    {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                  <button className="btn-primary h-9 px-3 text-sm whitespace-nowrap"
+                          disabled={assignBusy || !assignTarget}
+                          onClick={() => void assignAllUnassigned()}>
+                    {assignBusy ? '…' : 'Ranger ici'}
+                  </button>
+                </div>
+                {assignMsg && <p className="text-xs text-success">{assignMsg}</p>}
+              </div>
+            )}
             {selectMode && (
               <div className="rounded-xl border border-border bg-bg/60 p-2 space-y-2">
                 <div className="flex items-center justify-between text-xs">

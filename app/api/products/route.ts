@@ -139,11 +139,30 @@ export async function GET(req: Request) {
     params.push(q);
     where += ` AND (lower(p.name) LIKE $${params.length - 1} OR p.barcode = $${params.length} OR p.sku = $${params.length})`;
   }
-  // Filtre par boutique : produit visible si son store_ids est vide
-  // (portee "toutes") OU contient le store demande.
+  // Filtre par boutique.
+  //  - Back-office / listes : produit visible si store_ids est vide (portee
+  //    "toutes boutiques") OU contient la boutique demandee.
+  //  - Caisse (pos=1) : STRICTEMENT les articles rattaches a la boutique du
+  //    poste. Un article sans rattachement (store_ids vide) n'apparait PAS sur
+  //    une caisse dès que l'organisation compte plusieurs boutiques — chaque
+  //    caisse ne montre que SES articles, quel que soit l'utilisateur connecte.
+  //    Exception : organisation mono-boutique -> "vide" = l'unique boutique
+  //    (retrocompat, evite une caisse vide).
   if (storeId && (await hasStoreIdsColumn())) {
     params.push(storeId);
-    where += ` AND (COALESCE(array_length(p.store_ids, 1), 0) = 0 OR p.store_ids @> ARRAY[$${params.length}]::uuid[])`;
+    const storeParamIdx = params.length;
+    let strictPos = false;
+    if (inPos) {
+      const c = await query<{ n: string }>(
+        `SELECT COUNT(*)::text AS n FROM stores
+          WHERE organization_id = $1 AND is_active = TRUE`,
+        [g.user.organizationId],
+      );
+      strictPos = Number(c.rows[0]?.n ?? '1') > 1;
+    }
+    where += strictPos
+      ? ` AND p.store_ids @> ARRAY[$${storeParamIdx}]::uuid[]`
+      : ` AND (COALESCE(array_length(p.store_ids, 1), 0) = 0 OR p.store_ids @> ARRAY[$${storeParamIdx}]::uuid[])`;
   }
 
   // Verrouillage boutique cote serveur : un utilisateur rattache a des
