@@ -13,7 +13,8 @@ export const dynamic = 'force-dynamic';
  *   /api/brand/icon?scope=app  -> favicon caisse (fallback logo principal)
  */
 export async function GET(req: Request) {
-  const scope = new URL(req.url).searchParams.get('scope') === 'ca' ? 'ca' : 'app';
+  const raw = new URL(req.url).searchParams.get('scope');
+  const scope = raw === 'ca' || raw === 'bo' || raw === 'admin' ? raw : 'app';
 
   let p: PlatformSettings;
   try {
@@ -25,8 +26,12 @@ export async function GET(req: Request) {
     p = mergePlatformDefaults(null);
   }
 
-  const src = scope === 'ca'
-    ? (p.ca_favicon_url || p.ca_logo_url || p.favicon_url || p.logo_url)
+  // Chaque espace peut avoir son favicon dédié ; sinon repli sur le
+  // favicon/logo principal.
+  const src =
+    scope === 'ca' ? (p.ca_favicon_url || p.ca_logo_url || p.favicon_url || p.logo_url)
+    : scope === 'bo' ? (p.bo_favicon_url || p.favicon_url || p.logo_url)
+    : scope === 'admin' ? (p.admin_favicon_url || p.favicon_url || p.logo_url)
     : (p.favicon_url || p.logo_url);
 
   // Aucun logo/favicon configuré : on renvoie un visuel NEUTRE (sac), jamais

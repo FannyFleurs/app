@@ -19,6 +19,8 @@ const schema = z.object({
   favicon_url: z.string().max(1_500_000).optional(),
   ca_logo_url: z.string().max(1_500_000).optional(),
   ca_favicon_url: z.string().max(1_500_000).optional(),
+  bo_favicon_url: z.string().max(1_500_000).optional(),
+  admin_favicon_url: z.string().max(1_500_000).optional(),
   login_image_url: z.string().max(5_000_000).optional(),
   company_legal_name: z.string().max(160).optional(),
   company_siren: z.string().max(15).optional(),

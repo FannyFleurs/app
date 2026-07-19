@@ -15,11 +15,18 @@ export default function FaviconSetter() {
 
   useEffect(() => {
     const host = typeof window !== 'undefined' ? window.location.hostname : '';
+    const cookies = typeof document !== 'undefined' ? document.cookie : '';
     // Attention : '/caisse'.startsWith('/ca') est TRUE — on doit matcher le
     // segment /ca exactement (ou /ca/…), sinon la caisse hérite du favicon CA.
     const isCA =
       host.startsWith('ca.') || path === '/ca' || (path?.startsWith('/ca/') ?? false);
-    const scope = isCA ? 'ca' : 'app';
+    const isAdmin =
+      host.startsWith('admin.') || path === '/admin' || (path?.startsWith('/admin/') ?? false);
+    // Back-office : sous-domaine bo. OU cookie webpos_bo=1 (posé par /bo),
+    // qui reste le signal fiable hors sous-domaine (dev, domaine unique).
+    const isBO =
+      host.startsWith('bo.') || /(?:^|;\s*)webpos_bo=1(?:;|$)/.test(cookies);
+    const scope = isCA ? 'ca' : isAdmin ? 'admin' : isBO ? 'bo' : 'app';
 
     void (async () => {
       // On calcule un jeton de version basé sur l'image effective : l'URL du
@@ -31,8 +38,10 @@ export default function FaviconSetter() {
         const r = await fetch('/api/brand', { cache: 'no-store' });
         if (r.ok) {
           const b = await r.json();
-          const eff = isCA
-            ? (b.ca_favicon_url || b.ca_logo_url || b.favicon_url || b.logo_url || '')
+          const eff =
+            scope === 'ca' ? (b.ca_favicon_url || b.ca_logo_url || b.favicon_url || b.logo_url || '')
+            : scope === 'admin' ? (b.admin_favicon_url || b.favicon_url || b.logo_url || '')
+            : scope === 'bo' ? (b.bo_favicon_url || b.favicon_url || b.logo_url || '')
             : (b.favicon_url || b.logo_url || '');
           v = hashStr(String(eff));
         }

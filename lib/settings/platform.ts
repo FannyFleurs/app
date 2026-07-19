@@ -19,6 +19,10 @@ export interface PlatformSettings {
   ca_logo_url: string;
   /** Favicon de l'espace CA. Vide = utilise le logo CA. */
   ca_favicon_url: string;
+  /** Favicon du back-office (bo.). Vide = favicon/logo principal. */
+  bo_favicon_url: string;
+  /** Favicon de la console super-admin (admin.). Vide = favicon/logo principal. */
+  admin_favicon_url: string;
   /** Visuel affiché sur l'écran de connexion caisse (photo). Vide = logo/défaut. */
   login_image_url: string;
   /** Identité légale de l'éditeur (pour le site + mentions légales). */
@@ -76,6 +80,8 @@ export const PLATFORM_DEFAULTS: PlatformSettings = {
   favicon_url: '',
   ca_logo_url: '',
   ca_favicon_url: '',
+  bo_favicon_url: '',
+  admin_favicon_url: '',
   login_image_url: '',
   company_legal_name: '',
   company_siren: '',
