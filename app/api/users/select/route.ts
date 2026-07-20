@@ -24,7 +24,19 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(req: Request) {
   const session = await readSessionFromCookie();
-  const tenantId = session?.organizationId ?? readTenantCookie();
+  let tenantId = session?.organizationId ?? readTenantCookie();
+  // Repli mono-organisation : sur un déploiement à une seule organisation
+  // (cas courant d'un client), on n'exige pas de cookie tenant préalable.
+  // Indispensable pour se connecter directement sur des sous-domaines
+  // secondaires (print., ca.…) sans passer d'abord par la caisse.
+  // Sur un déploiement multi-tenant (plusieurs organisations), on garde
+  // l'exigence du tenant pour préserver l'isolation.
+  if (!tenantId) {
+    try {
+      const orgs = await query<{ id: string }>(`SELECT id FROM organizations LIMIT 2`);
+      if (orgs.rowCount === 1) tenantId = orgs.rows[0]!.id;
+    } catch { /* ignore */ }
+  }
   if (!tenantId) {
     return NextResponse.json({ users: [], tenant_required: true });
   }
@@ -33,6 +45,9 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const deviceId = url.searchParams.get('device_id');
   let storeId: string | null = null;
+  // Sur la station d'étiquettes (PDA), l'appareil n'est pas une caisse mais une
+  // label_station : on résout aussi la boutique via ce rattachement pour
+  // filtrer les utilisateurs proposés.
   if (deviceId) {
     try {
       const reg = await query<{ store_id: string }>(
@@ -42,6 +57,16 @@ export async function GET(req: Request) {
         [tenantId, deviceId],
       );
       storeId = reg.rows[0]?.store_id ?? null;
+      if (!storeId) {
+        try {
+          const ls = await query<{ store_id: string }>(
+            `SELECT store_id FROM label_stations
+              WHERE organization_id = $1 AND device_id = $2 LIMIT 1`,
+            [tenantId, deviceId],
+          );
+          storeId = ls.rows[0]?.store_id ?? null;
+        } catch { /* table 0051 absente */ }
+      }
     } catch {
       // Migration 0026 (device_id) pas appliquee : on ignore le filtre.
       storeId = null;
