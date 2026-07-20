@@ -7,10 +7,12 @@ import { discountedPrice, buildLabelsDocument, openPrintWindow, type LabelProduc
 import { LABEL_DEFAULTS, type LabelSettings } from '@/lib/settings/label';
 
 export default function LabelPrintModal({
-  product, onClose,
+  product, onClose, storeId = null,
 }: {
   product: LabelProduct;
   onClose: () => void;
+  /** Boutique concernée : sélectionne l'imprimante étiquettes de cette boutique. */
+  storeId?: string | null;
 }) {
   // Quantité saisie au clavier tactile. Vide par défaut (l'utilisateur saisit).
   const [qtyStr, setQtyStr] = useState('');
@@ -64,7 +66,7 @@ export default function LabelPrintModal({
     setError(null); setCloudMsg(null); setSending(true);
     const r = await fetch('/api/cloudprnt/print-labels', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ entries: [{ product, qty }] }),
+      body: JSON.stringify({ entries: [{ product, qty }], store_id: storeId }),
     });
     setSending(false);
     if (r.ok) {
