@@ -231,13 +231,11 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
 
   return (
     <div className="h-screen flex flex-col bg-bg text-ink overflow-hidden">
-      {/* Barre d'en-tête */}
+      {/* Barre d'en-tête (sans titre) */}
       <header className="shrink-0 h-12 border-b border-border bg-surface flex items-center gap-2 px-3">
         <BrandLogo brand={brand} small />
-        <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold leading-tight truncate">Étiquettes — {station.store_name}</div>
-        </div>
-        <span className="text-xs text-ink-soft truncate max-w-[30%]">{userName}</span>
+        <div className="flex-1" />
+        <span className="text-xs text-ink-soft truncate max-w-[45%]">{userName}</span>
         <button onClick={() => void logout()} className="text-sm text-ink-soft hover:text-ink px-2 py-1 rounded hover:bg-gray-100">Quitter</button>
       </header>
 
@@ -245,20 +243,22 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
       <section className="h-[46%] shrink-0 border-b-2 border-border bg-surface overflow-y-auto">
         {!selected ? (
           <div className="h-full p-4 flex flex-col gap-3">
-            <button onClick={() => setShowScanner(true)}
-                    className="btn-primary flex-1 text-lg flex-col gap-1 min-h-[96px]">
-              <span className="text-3xl">📷</span>
-              <span>Scanner un code-barres (EAN)</span>
-            </button>
-            {canWrite && (
-              <button onClick={() => setCreateFor('')} className="btn-soft h-14 text-base">
-                ＋ Créer un article
+            <div className="flex items-center gap-2">
+              {/* Scan caméra : petit bouton d'appoint (le lecteur du PDA
+                  reste le moyen principal, sans bouton). */}
+              <button onClick={() => setShowScanner(true)} className="btn-soft h-11 px-3 text-sm shrink-0">
+                📷 Scanner
               </button>
-            )}
-            <p className="text-xs text-ink-soft text-center">
-              Avec un lecteur intégré, scannez directement — la recherche se fait sans bouton.
+              {canWrite && (
+                <button onClick={() => setCreateFor('')} className="btn-primary h-11 flex-1 text-base">
+                  ＋ Créer un article
+                </button>
+              )}
+            </div>
+            <p className="text-xs text-ink-soft">
+              Scannez directement avec le lecteur du PDA — la recherche se fait sans bouton.
             </p>
-            {msg && <p className="text-sm text-center text-ink-soft">{msg}</p>}
+            {msg && <p className="text-sm text-ink-soft">{msg}</p>}
           </div>
         ) : (
           <div className="h-full p-4 flex flex-col">
