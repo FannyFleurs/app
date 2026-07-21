@@ -222,11 +222,11 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
 
   return (
     <div className="h-screen flex flex-col bg-bg text-ink overflow-hidden">
-      {/* Barre d'en-tête (sans titre) */}
-      <header className="shrink-0 h-12 border-b border-border bg-surface flex items-center gap-2 px-3">
-        <BrandLogo brand={brand} small />
+      {/* Barre d'en-tête : logo (comme à l'origine), sans titre. */}
+      <header className="shrink-0 h-14 border-b border-border bg-surface flex items-center gap-3 px-4">
+        <BrandLogo brand={brand} />
         <div className="flex-1" />
-        <span className="text-xs text-ink-soft truncate max-w-[45%]">{userName}</span>
+        <span className="text-xs text-ink-soft truncate max-w-[40%]">{userName}</span>
         <button onClick={() => void logout()} className="text-sm text-ink-soft hover:text-ink px-2 py-1 rounded hover:bg-gray-100">Quitter</button>
       </header>
 
