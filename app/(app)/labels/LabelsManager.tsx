@@ -247,7 +247,7 @@ export default function LabelsManager() {
                   <div className="text-sm font-medium tabular-nums whitespace-nowrap">
                     {formatEUR(p.sale_price_ttc)}
                   </div>
-                  <span className="text-ink-soft text-lg" aria-hidden>🏷️</span>
+                  <span className="text-ink-soft text-lg" aria-hidden>—</span>
                 </button>
                 <button
                   className="px-3 md:px-4 py-3 text-xs text-ink-soft hover:text-ink whitespace-nowrap"

@@ -561,7 +561,7 @@ export default function ProductFormModal({
                 {(photo || existingPhoto)
                   // eslint-disable-next-line @next/next/no-img-element
                   ? <img src={(photo || existingPhoto)!} alt="" className="h-full w-full object-cover" />
-                  : <span className="text-2xl text-ink-soft/40">🏷</span>}
+                  : null}
               </div>
               <div className="space-y-2">
                 <button type="button" onClick={() => photoInputRef.current?.click()} className="btn-soft h-10 px-3 text-sm">
@@ -654,7 +654,7 @@ export default function ProductFormModal({
             <div className="flex gap-2">
               <button type="button" onClick={() => setShowLabel(true)}
                       className="btn-soft" title="Imprimer une étiquette avec code-barres et prix">
-                🏷️ Imprimer étiquette
+                Imprimer étiquette
               </button>
               {product && (
                 <button type="button" onClick={() => void remove()} disabled={deleting}

@@ -15,6 +15,38 @@ interface Product extends LabelProduct {
   id: string;
   image_url?: string | null;
   category_name?: string | null;
+  /** Enregistrement brut (API) pour l'édition (tous les champs). */
+  raw?: Record<string, unknown>;
+}
+/** Type accepté par ProductFormModal (structurel). */
+type EditableProduct = {
+  id: string; name: string; short_description: string | null;
+  sku: string | null; barcode: string | null; sale_price_ttc: number;
+  price_is_free: boolean; purchase_price_ht?: number | null; transport_cost_ht?: number | null;
+  tax_rate_id: string; category_id: string | null; supplier_id?: string | null;
+  discount_type?: 'percent' | 'amount' | null; discount_value?: number | null;
+  visible_in_pos: boolean; is_active: boolean; is_seasonal: boolean; is_customizable: boolean;
+  is_top_product?: boolean; no_discount?: boolean; color?: string | null;
+  image_url?: string | null; store_ids?: string[];
+};
+function toEditable(r: Record<string, unknown>): EditableProduct {
+  const num = (v: unknown) => (v != null ? Number(v) : null);
+  return {
+    id: String(r.id), name: String(r.name),
+    short_description: (r.short_description as string) ?? null,
+    sku: (r.sku as string) ?? null, barcode: (r.barcode as string) ?? null,
+    sale_price_ttc: Number(r.sale_price_ttc), price_is_free: !!r.price_is_free,
+    purchase_price_ht: num(r.purchase_price_ht), transport_cost_ht: num(r.transport_cost_ht),
+    tax_rate_id: String(r.tax_rate_id ?? ''), category_id: (r.category_id as string) ?? null,
+    supplier_id: (r.supplier_id as string) ?? null,
+    discount_type: (r.discount_type as 'percent' | 'amount' | null) ?? null,
+    discount_value: num(r.discount_value),
+    visible_in_pos: r.visible_in_pos !== false, is_active: r.is_active !== false,
+    is_seasonal: !!r.is_seasonal, is_customizable: !!r.is_customizable,
+    is_top_product: !!r.is_top_product, no_discount: !!r.no_discount,
+    color: (r.color as string) ?? null, image_url: (r.image_url as string) ?? null,
+    store_ids: (r.store_ids as string[]) ?? [],
+  };
 }
 interface Station { id: string; store_id: string; store_name: string; name: string }
 interface TaxRate { id: string; code: string; rate: number; label: string; is_default: boolean }
@@ -40,6 +72,7 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
   const [photoBusy, setPhotoBusy] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [createFor, setCreateFor] = useState<string | null>(null); // barcode prérempli ('' = vide)
+  const [editing, setEditing] = useState<EditableProduct | null>(null); // édition article
   const photoRef = useRef<HTMLInputElement>(null);
 
   // ---- Résolution de la station (PDA ↔ boutique), définie à l'appairage ----
@@ -83,6 +116,7 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
         discount_value: p.discount_value != null ? Number(p.discount_value) : null,
         image_url: (p.image_url as string) ?? null,
         category_name: (p.category_name as string) ?? null,
+        raw: p,
       })));
     }
   }
@@ -255,6 +289,58 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
     );
   }
 
+  // ---- Édition d'article : PLEINE PAGE ----
+  if (editing) {
+    return (
+      <div
+        className="h-screen flex flex-col bg-bg text-ink overflow-hidden"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+      >
+        <header
+          className="shrink-0 border-b border-border bg-surface flex items-center gap-3 px-4"
+          style={{
+            paddingTop: 'env(safe-area-inset-top, 0px)',
+            minHeight: 'calc(3.5rem + env(safe-area-inset-top, 0px))',
+          }}
+        >
+          <button onClick={() => setEditing(null)} className="text-sm text-accent-deep hover:underline">← Retour</button>
+          <div className="flex-1 text-center font-semibold">Modifier l&apos;article</div>
+          <div className="w-16" />
+        </header>
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <ProductFormModal
+            inline
+            product={editing}
+            taxRates={taxRates}
+            categories={[]}
+            backOffice={false}
+            posteStoreOverride={station.store_id}
+            onClose={() => setEditing(null)}
+            onSaved={async () => {
+              setEditing(null);
+              await reloadProducts(station.store_id);
+              // Rafraîchit la fiche ouverte avec les nouvelles données.
+              if (selected) {
+                const r = await fetch(`/api/products?active=true&store_id=${encodeURIComponent(station.store_id)}`);
+                if (r.ok) {
+                  const p = ((await r.json()).products as Array<Record<string, unknown>>).find((x) => String(x.id) === selected.id);
+                  if (p) setSelected({
+                    id: selected.id, name: String(p.name), sku: (p.sku as string) ?? null,
+                    barcode: (p.barcode as string) ?? null, sale_price_ttc: Number(p.sale_price_ttc),
+                    discount_type: (p.discount_type as 'percent' | 'amount' | null) ?? null,
+                    discount_value: p.discount_value != null ? Number(p.discount_value) : null,
+                    image_url: (p.image_url as string) ?? null, category_name: (p.category_name as string) ?? null,
+                    raw: p,
+                  });
+                }
+              }
+            }}
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className="h-screen flex flex-col bg-bg text-ink overflow-hidden"
@@ -332,7 +418,7 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
                 <button onClick={() => void print()} disabled={qty < 1 || sending}
                         className="btn-primary flex-1 flex-col gap-1 text-sm">
                   <span className="text-2xl">🖨</span>
-                  <span>{sending ? '…' : cloudPrinter ? 'Imprimer' : 'PDF'}</span>
+                  <span>{sending ? '…' : 'Imprimer'}</span>
                 </button>
                 {canWrite && (
                   <button onClick={() => photoRef.current?.click()} disabled={photoBusy}
@@ -378,7 +464,7 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
                         {p.image_url
                           // eslint-disable-next-line @next/next/no-img-element
                           ? <img src={p.image_url} alt="" className="h-10 w-10 rounded object-cover shrink-0 bg-gray-100" />
-                          : <span className="h-10 w-10 rounded bg-gray-100 grid place-items-center text-ink-soft/50 shrink-0">🏷</span>}
+                          : <span className="h-10 w-10 rounded bg-gray-100 shrink-0" />}
                         <div className="min-w-0 flex-1">
                           <div className="font-medium truncate">{p.name}</div>
                           <div className="text-xs text-ink-soft truncate">{p.barcode ?? '— pas de code-barres —'}</div>
@@ -393,13 +479,24 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
           </>
         ) : (
           <div className="flex-1 min-h-0 overflow-y-auto p-4">
-            <button onClick={backToList} className="text-sm text-accent-deep hover:underline">← Retour à la liste</button>
-            <div className="mt-3 flex gap-4">
-              <div className="h-28 w-28 rounded-xl overflow-hidden bg-gray-100 grid place-items-center shrink-0">
-                {selected.image_url
+            <div className="flex items-center justify-between">
+              <button onClick={backToList} className="text-sm text-accent-deep hover:underline">← Retour à la liste</button>
+              <button
+                onClick={() => selected.raw && setEditing(toEditable(selected.raw))}
+                className="btn-soft h-9 px-3 text-sm">
+                ✎ Éditer l&apos;article
+              </button>
+            </div>
+            {/* Fiche cliquable : ouvre l'édition. */}
+            <button
+              onClick={() => selected.raw && setEditing(toEditable(selected.raw))}
+              className="mt-3 w-full text-left flex gap-4 rounded-xl p-1 -m-1 active:bg-gray-100"
+            >
+              <div className="h-28 w-28 rounded-xl overflow-hidden bg-gray-100 shrink-0">
+                {selected.image_url && (
                   // eslint-disable-next-line @next/next/no-img-element
-                  ? <img src={selected.image_url} alt="" className="h-full w-full object-cover" />
-                  : <span className="text-4xl text-ink-soft/40">🏷</span>}
+                  <img src={selected.image_url} alt="" className="h-full w-full object-cover" />
+                )}
               </div>
               <div className="min-w-0 flex-1 space-y-1">
                 <div className="text-lg font-semibold leading-tight">{selected.name}</div>
@@ -409,8 +506,9 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
                   {selected.sku && <div>SKU : <span className="font-mono text-ink">{selected.sku}</span></div>}
                   {selected.category_name && <div>Catégorie : <span className="text-ink">{selected.category_name}</span></div>}
                 </dl>
+                <div className="text-xs text-accent-deep pt-1">Appuyer pour modifier →</div>
               </div>
-            </div>
+            </button>
           </div>
         )}
       </section>
