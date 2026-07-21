@@ -6,7 +6,7 @@
  * en cache que le nécessaire pour faire tourner la caisse : documents de
  * navigation, assets Next/_next, icônes, et quelques API « catalogue » en GET.
  */
-const VERSION = 'v2';
+const VERSION = 'v3';
 const CACHE = 'webpos-' + VERSION;
 
 // API en lecture, sûres à mettre en cache (pas de données sensibles cross-user).
@@ -85,7 +85,11 @@ async function networkFirst(req, isNavigation) {
     const cached = await cache.match(req);
     if (cached) return cached;
     if (isNavigation) {
-      const fallback = (await cache.match('/caisse')) || (await cache.match('/'));
+      // Le PDA (app étiquettes dédiée) ne doit jamais retomber sur la caisse.
+      const isPda = new URL(req.url).pathname.startsWith('/pda');
+      const fallback = isPda
+        ? (await cache.match('/pda'))
+        : (await cache.match('/caisse')) || (await cache.match('/'));
       if (fallback) return fallback;
     }
     throw err;

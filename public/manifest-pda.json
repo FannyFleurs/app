@@ -1,0 +1,21 @@
+{
+  "name": "Étiquettes",
+  "short_name": "Étiquettes",
+  "description": "Station d'impression d'étiquettes (PDA)",
+  "start_url": "/pda",
+  "scope": "/pda",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#FFFFFF",
+  "theme_color": "#556B3E",
+  "lang": "fr",
+  "categories": ["business", "productivity"],
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
