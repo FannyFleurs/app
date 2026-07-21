@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { generateEan13 } from '@/lib/services/ean';
 import { getOrCreateDeviceId } from '@/lib/device';
 import ProductHistory from './ProductHistory';
@@ -21,6 +21,7 @@ interface Product {
   is_top_product?: boolean;
   no_discount?: boolean;
   color?: string | null;
+  image_url?: string | null;
   store_ids?: string[];
 }
 
@@ -144,6 +145,14 @@ export default function ProductFormModal({
   const [inlineBusy, setInlineBusy] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  // Photo de l'article : capturée (appareil) ou existante. Enregistrée via
+  // l'endpoint dédié après la sauvegarde (la data URL est trop grande pour le
+  // POST /api/products). `photo` : data URL locale ; `existingPhoto` : URL déjà
+  // stockée sur le produit.
+  const [photo, setPhoto] = useState<string | null>(null);
+  const [existingPhoto, setExistingPhoto] = useState<string | null>(product?.image_url ?? null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+
   async function remove() {
     if (!product) return;
     if (!confirm(
@@ -248,13 +257,35 @@ export default function ProductFormModal({
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
-    setSaving(false);
     if (!res.ok) {
+      setSaving(false);
       const j = await res.json().catch(() => ({}));
       setError(j.message ?? j.error ?? 'Erreur');
       return;
     }
+    // Photo prise depuis l'appareil : enregistrée via l'endpoint dédié (la
+    // data URL compressée dépasse la limite du POST produit). Retrait pris en
+    // charge (image_url vidée) si une photo existante a été retirée.
+    const photoRemoved = !photo && !existingPhoto && !!product?.image_url;
+    if (photo || photoRemoved) {
+      let id = product?.id;
+      if (!id) { try { id = (await res.json()).id as string; } catch { /* ignore */ } }
+      if (id) {
+        await fetch(`/api/products/${id}/photo`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image_url: photo ?? '' }),
+        }).catch(() => { /* non bloquant */ });
+      }
+    }
+    setSaving(false);
     onSaved();
+  }
+
+  function onPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    compressImageFile(file, 900, 0.7).then(setPhoto).catch(() => setError('Photo illisible.'));
   }
 
   return (
@@ -524,6 +555,34 @@ export default function ProductFormModal({
             </p>
           </Field>
 
+          <Field label="Photo de l'article" full>
+            <div className="mt-1 flex items-center gap-4">
+              <div className="h-20 w-20 rounded-xl border border-border bg-gray-50 grid place-items-center overflow-hidden shrink-0">
+                {(photo || existingPhoto)
+                  // eslint-disable-next-line @next/next/no-img-element
+                  ? <img src={(photo || existingPhoto)!} alt="" className="h-full w-full object-cover" />
+                  : <span className="text-2xl text-ink-soft/40">🏷</span>}
+              </div>
+              <div className="space-y-2">
+                <button type="button" onClick={() => photoInputRef.current?.click()} className="btn-soft h-10 px-3 text-sm">
+                  📷 Prendre une photo
+                </button>
+                {(photo || existingPhoto) && (
+                  <button type="button"
+                          onClick={() => { setPhoto(null); setExistingPhoto(null); }}
+                          className="block text-xs text-danger hover:underline">
+                    Retirer la photo
+                  </button>
+                )}
+              </div>
+              <input ref={photoInputRef} type="file" accept="image/*" capture="environment"
+                     className="hidden" onChange={onPhotoFile} />
+            </div>
+            <p className="mt-1 text-xs text-ink-soft">
+              Enregistrée sur l&apos;article — sert de vignette en caisse et sur le PDA.
+            </p>
+          </Field>
+
           {backOffice && stores.length > 0 && (
             <Field label="Boutiques concernées" full>
               <div className="mt-1 space-y-1.5">
@@ -661,4 +720,26 @@ function Stat({ label, value, tone }: { label: string; value: string; tone?: 'su
       <div className={`mt-0.5 text-base font-semibold ${cls}`}>{value}</div>
     </div>
   );
+}
+
+/** Réduit une image (fichier) en data URL JPEG compressée (capture PDA/mobile). */
+function compressImageFile(file: File, maxSize: number, quality: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
+      const w = Math.round(img.width * scale);
+      const h = Math.round(img.height * scale);
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { reject(new Error('no ctx')); return; }
+      ctx.drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('load error')); };
+    img.src = url;
+  });
 }
