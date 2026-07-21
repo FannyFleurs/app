@@ -33,14 +33,26 @@ export async function POST(req: Request) {
   const pairing = await resolvePairing(code);
   if (!pairing) return jsonError('INVALID_CODE', 404);
 
-  // Rattache l'appareil à la boutique (un appareil = une boutique).
+  // Plusieurs PDA par boutique : chaque appareil (device_id) a sa propre
+  // station. On numérote automatiquement les PDA d'une même boutique pour les
+  // distinguer (renommables ensuite en BO).
+  const cnt = await query<{ n: string }>(
+    `SELECT COUNT(*)::text AS n FROM label_stations
+      WHERE organization_id = $1 AND store_id = $2 AND device_id <> $3`,
+    [pairing.organization_id, pairing.store_id, device_id],
+  );
+  const others = Number(cnt.rows[0]?.n ?? '0');
+  const autoName = others > 0 ? `PDA ${pairing.store_name} ${others + 1}` : `PDA ${pairing.store_name}`;
+
+  // Rattache l'appareil à la boutique. Sur re-appairage du MÊME appareil, on
+  // conserve son nom (pas d'écrasement).
   await query(
     `INSERT INTO label_stations (organization_id, store_id, device_id, name, last_seen_at)
      VALUES ($1, $2, $3, $4, now())
      ON CONFLICT (organization_id, device_id)
      DO UPDATE SET store_id = EXCLUDED.store_id, last_seen_at = now()`,
     [pairing.organization_id, pairing.store_id, device_id,
-     device_name?.trim() || `PDA ${pairing.store_name}`],
+     device_name?.trim() || autoName],
   );
 
   const h = headers();

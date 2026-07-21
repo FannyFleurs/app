@@ -175,8 +175,10 @@ export default function LabelStationsManager({ canWrite, stores }: {
                               <div className="text-sm text-ink-soft">Aucun code — générez-en un.</div>
                             )}
                             <p className="mt-1 text-xs text-ink-soft max-w-xs">
-                              Sur le PDA (<code>pda.</code>), saisissez ce code ou scannez le QR pour
-                              rattacher l&apos;appareil à « {store.name} ».
+                              Sur chaque PDA (<code>pda.</code>), saisissez ce code ou scannez le QR pour
+                              rattacher l&apos;appareil à « {store.name} ». <strong>Le même code
+                              appaire autant de PDA que nécessaire</strong> — chacun apparaît ici
+                              séparément.
                             </p>
                             <button className="btn-soft h-8 px-2 text-sm mt-2" onClick={() => void generatePairing(store.id)}>
                               {p.code ? 'Régénérer' : 'Générer le code'}
