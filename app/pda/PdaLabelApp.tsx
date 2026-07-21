@@ -305,17 +305,19 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
       <section className="flex-1 min-h-0 flex flex-col">
         {!selected ? (
           <>
-            <div className="shrink-0 p-2 border-b border-border bg-surface">
-              <input
-                ref={searchRef}
-                className="input h-12 text-base w-full"
-                placeholder="Rechercher ou scanner…"
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleCode(q); } }}
-                autoFocus autoComplete="off" enterKeyHint="search"
-              />
+            {/* Séparateur de zone */}
+            <div className="shrink-0 px-4 py-2 border-y border-border bg-muted/60 text-xs font-semibold uppercase tracking-wide text-ink-soft">
+              Liste des articles
             </div>
+            {/* Champ caché : capte le lecteur intégré du PDA (scan sans bouton). */}
+            <input
+              ref={searchRef}
+              className="sr-only"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleCode(q); } }}
+              autoFocus autoComplete="off" aria-hidden tabIndex={-1}
+            />
             <div className="flex-1 min-h-0 overflow-y-auto">
               {loading ? (
                 <div className="p-6 text-sm text-ink-soft">Chargement…</div>
