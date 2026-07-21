@@ -197,7 +197,7 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
   // (Pas d'écran de choix de boutique : la boutique vient de l'appairage.)
   if (station === null) {
     return (
-      <div className="min-h-screen grid place-items-center bg-bg p-6">
+      <div className="min-h-screen grid place-items-center bg-bg p-6 pt-safe pb-safe pl-safe pr-safe">
         <div className="card w-full max-w-sm p-6 text-center">
           <div className="flex items-center justify-center gap-3 mb-4">
             <BrandLogo brand={brand} />
@@ -219,6 +219,41 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
   }
 
   const disc = selected && settings.show_discount ? discountedPrice(selected) : null;
+
+  // ---- Création d'article : PLEINE PAGE (pas de modale) ----
+  if (createFor !== null) {
+    return (
+      <div
+        className="h-screen flex flex-col bg-bg text-ink overflow-hidden"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+      >
+        <header
+          className="shrink-0 border-b border-border bg-surface flex items-center gap-3 px-4"
+          style={{
+            paddingTop: 'env(safe-area-inset-top, 0px)',
+            minHeight: 'calc(3.5rem + env(safe-area-inset-top, 0px))',
+          }}
+        >
+          <button onClick={() => setCreateFor(null)} className="text-sm text-accent-deep hover:underline">← Retour</button>
+          <div className="flex-1 text-center font-semibold">Nouvel article</div>
+          <div className="w-16" />
+        </header>
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <ProductFormModal
+            inline
+            product={null}
+            taxRates={taxRates}
+            categories={[]}
+            backOffice={false}
+            prefillBarcode={createFor || undefined}
+            posteStoreOverride={station.store_id}
+            onClose={() => setCreateFor(null)}
+            onSaved={async () => { setCreateFor(null); await reloadProducts(station.store_id); }}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -385,21 +420,6 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
         <BarcodeScannerModal
           onClose={() => setShowScanner(false)}
           onScan={(code) => { setShowScanner(false); handleCode(code); }}
-        />
-      )}
-
-      {/* Création d'article — formulaire complet (identique au back-office),
-          rattaché à la boutique du PDA, code-barres scanné pré-rempli. */}
-      {createFor !== null && (
-        <ProductFormModal
-          product={null}
-          taxRates={taxRates}
-          categories={[]}
-          backOffice={false}
-          prefillBarcode={createFor || undefined}
-          posteStoreOverride={station.store_id}
-          onClose={() => setCreateFor(null)}
-          onSaved={async () => { setCreateFor(null); await reloadProducts(station.store_id); }}
         />
       )}
 

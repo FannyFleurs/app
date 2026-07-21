@@ -34,7 +34,7 @@ export default function PdaPairing() {
   }
 
   return (
-    <div className="min-h-screen grid place-items-center bg-bg p-6">
+    <div className="min-h-screen grid place-items-center bg-bg p-6 pt-safe pb-safe pl-safe pr-safe">
       <div className="card w-full max-w-sm p-6">
         <div className="flex items-center gap-3 mb-5">
           {brand.logo_url ? (
