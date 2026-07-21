@@ -1,16 +1,17 @@
 import { redirect } from 'next/navigation';
 import { readSessionFromCookie } from '@/lib/auth/session';
 import { userCan } from '@/lib/auth/permissions';
-import PrintLabelApp from './PrintLabelApp';
+import PdaLabelApp from './PdaLabelApp';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * Station d'impression d'étiquettes (PDA) — sous-domaine print.
- * Mono-usage : liste d'articles + recherche/scan + aperçu étiquette +
- * quantité (clavier virtuel) + impression (CloudPRNT ou navigateur).
+ * Station PDA — sous-domaine pda.
+ * Écran divisé verticalement : haut = scan / édition étiquette / photo /
+ * création d'article ; bas = recherche + liste d'articles (ou fiche de
+ * l'article scanné).
  */
-export default async function PrintStationPage() {
+export default async function PdaStationPage() {
   const user = await readSessionFromCookie();
   if (!user) redirect('/login');
   const canRead = await userCan(user, 'products.read');
@@ -27,5 +28,6 @@ export default async function PrintStationPage() {
       </main>
     );
   }
-  return <PrintLabelApp userName={user.fullName} />;
+  const canWrite = await userCan(user, 'products.write');
+  return <PdaLabelApp userName={user.fullName} canWrite={canWrite} />;
 }

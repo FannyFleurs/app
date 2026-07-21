@@ -21,7 +21,7 @@ import { NextResponse, type NextRequest } from 'next/server';
  *   - /site      affiche la vitrine
  */
 const BO_COOKIE = 'webpos_bo';
-const KNOWN_SUBS = ['app.', 'bo.', 'ca.', 'admin.', 'print.', 'www.'];
+const KNOWN_SUBS = ['app.', 'bo.', 'ca.', 'admin.', 'pda.', 'www.'];
 
 function isVercelPreview(host: string): boolean {
   return host.endsWith('.vercel.app') || host === 'localhost' || host.startsWith('localhost:');
@@ -63,14 +63,14 @@ export function middleware(req: NextRequest) {
     return NextResponse.rewrite(url);
   }
 
-  // -------- print. -> station d'impression d'étiquettes (PDA)
-  // Sous-domaine mono-usage : tout est réécrit vers /print, sauf le login PIN
+  // -------- pda. -> station d'impression d'étiquettes (PDA)
+  // Sous-domaine mono-usage : tout est réécrit vers /pda, sauf le login PIN
   // (mêmes identifiants que la caisse). Après connexion, la caisse redirige
-  // vers /caisse qui est ici réécrit en /print.
-  if (host.startsWith('print.')) {
+  // vers /caisse qui est ici réécrit en /pda.
+  if (host.startsWith('pda.')) {
     if (pathname === '/login') return NextResponse.next();
-    if (pathname === '/print' || pathname.startsWith('/print/')) return NextResponse.next();
-    url.pathname = '/print';
+    if (pathname === '/pda' || pathname.startsWith('/pda/')) return NextResponse.next();
+    url.pathname = '/pda';
     return NextResponse.rewrite(url);
   }
 

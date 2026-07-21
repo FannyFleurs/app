@@ -74,7 +74,7 @@ export default function LabelStationsManager({ canWrite, stores }: {
       <div className="card p-4 text-sm text-ink-soft">
         <p className="font-medium text-ink mb-1">Comment ajouter un PDA à une boutique&nbsp;?</p>
         <ol className="list-decimal ml-5 space-y-1">
-          <li>Sur le PDA, ouvrez <code className="bg-gray-100 px-1 rounded">print.</code> (votre sous-domaine d&apos;impression).</li>
+          <li>Sur le PDA, ouvrez <code className="bg-gray-100 px-1 rounded">pda.</code> (votre sous-domaine d&apos;étiquettes).</li>
           <li>Connectez-vous avec un code PIN.</li>
           <li>Choisissez la boutique&nbsp;: le PDA n&apos;affichera alors que les articles de cette boutique.</li>
         </ol>

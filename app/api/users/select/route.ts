@@ -28,7 +28,7 @@ export async function GET(req: Request) {
   // Repli mono-organisation : sur un déploiement à une seule organisation
   // (cas courant d'un client), on n'exige pas de cookie tenant préalable.
   // Indispensable pour se connecter directement sur des sous-domaines
-  // secondaires (print., ca.…) sans passer d'abord par la caisse.
+  // secondaires (pda., ca.…) sans passer d'abord par la caisse.
   // Sur un déploiement multi-tenant (plusieurs organisations), on garde
   // l'exigence du tenant pour préserver l'isolation.
   if (!tenantId) {
