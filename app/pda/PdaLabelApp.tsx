@@ -22,8 +22,6 @@ interface TaxRate { id: string; code: string; rate: number; label: string; is_de
 export default function PdaLabelApp({ userName, canWrite }: { userName: string; canWrite: boolean }) {
   const brand = useBrand();
   const [station, setStation] = useState<Station | null | undefined>(undefined);
-  const [stores, setStores] = useState<{ id: string; name: string }[]>([]);
-  const [binding, setBinding] = useState(false);
 
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,35 +42,31 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
   const [createFor, setCreateFor] = useState<string | null>(null); // barcode prérempli ('' = vide)
   const photoRef = useRef<HTMLInputElement>(null);
 
-  // ---- Résolution de la station (PDA ↔ boutique) ----
+  // ---- Résolution de la station (PDA ↔ boutique), définie à l'appairage ----
+  // Pas d'écran de choix de boutique : la boutique vient de l'appairage
+  // (code / QR). Si l'appareil n'a pas de station, on la reconstitue depuis
+  // la boutique de l'utilisateur de service (appairé) et on la rattache.
   useEffect(() => {
     void (async () => {
       const deviceId = getOrCreateDeviceId();
       const r = await fetch(`/api/label-stations/mine?device_id=${encodeURIComponent(deviceId)}`);
-      const st = r.ok ? ((await r.json()).station as Station | null) : null;
-      if (st) { setStation(st); return; }
-      const me = await fetch('/api/me');
-      const accessible = me.ok ? (((await me.json()).stores ?? []) as { id: string; name: string }[]) : [];
-      setStores(accessible);
-      if (accessible.length === 1) { await bind(accessible[0]!.id); return; }
-      setStation(null);
+      let st = r.ok ? ((await r.json()).station as Station | null) : null;
+      if (!st) {
+        const me = await fetch('/api/me');
+        const accessible = me.ok ? (((await me.json()).stores ?? []) as { id: string; name: string }[]) : [];
+        if (accessible.length >= 1) {
+          const store = accessible[0]!;
+          await fetch('/api/label-stations', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ device_id: deviceId, store_id: store.id }),
+          });
+          st = { id: '', store_id: store.id, store_name: store.name, name: `PDA ${store.name}` };
+        }
+      }
+      setStation(st ?? null);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  async function bind(storeId: string) {
-    setBinding(true);
-    const deviceId = getOrCreateDeviceId();
-    const r = await fetch('/api/label-stations', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ device_id: deviceId, store_id: storeId }),
-    });
-    setBinding(false);
-    if (r.ok) {
-      const j = await r.json();
-      setStation({ id: j.id, store_id: storeId, store_name: j.store_name, name: `PDA ${j.store_name}` });
-    }
-  }
 
   // ---- Chargement catalogue (boutique du PDA) + réglages étiquettes ----
   async function reloadProducts(storeId: string) {
@@ -199,27 +193,23 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
     window.location.assign('/pda');
   }
 
-  // ---- Écran de choix de boutique ----
+  // ---- Appareil non appairé (aucune boutique résolue) : ré-appairage ----
+  // (Pas d'écran de choix de boutique : la boutique vient de l'appairage.)
   if (station === null) {
     return (
       <div className="min-h-screen grid place-items-center bg-bg p-6">
-        <div className="card w-full max-w-md p-6">
-          <div className="flex items-center gap-3 mb-4">
+        <div className="card w-full max-w-sm p-6 text-center">
+          <div className="flex items-center justify-center gap-3 mb-4">
             <BrandLogo brand={brand} />
-            <div className="text-sm font-semibold">Station d&apos;étiquettes</div>
           </div>
-          <h1 className="text-lg font-semibold">Choisir la boutique de ce PDA</h1>
-          <p className="mt-1 text-sm text-ink-soft">Ce terminal n&apos;affichera que les articles de la boutique choisie.</p>
-          <div className="mt-4 space-y-2">
-            {stores.length === 0 ? (
-              <p className="text-sm text-ink-soft">Aucune boutique accessible avec ce compte.</p>
-            ) : stores.map((s) => (
-              <button key={s.id} disabled={binding} onClick={() => void bind(s.id)} className="w-full btn-soft h-12 justify-between">
-                <span>{s.name}</span><span className="text-ink-soft">→</span>
-              </button>
-            ))}
-          </div>
-          <button onClick={() => void logout()} className="mt-4 text-sm text-ink-soft hover:text-ink">Quitter</button>
+          <h1 className="text-lg font-semibold">PDA non appairé</h1>
+          <p className="mt-1 text-sm text-ink-soft">
+            Cet appareil n&apos;est rattaché à aucune boutique. Ré-appairez-le avec le
+            code (ou le QR) généré en back-office.
+          </p>
+          <button onClick={() => void logout()} className="btn-primary w-full h-12 mt-4">
+            Appairer ce PDA
+          </button>
         </div>
       </div>
     );
