@@ -65,7 +65,7 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
   const [cloudPrinter, setCloudPrinter] = useState<string | null>(null);
   const [taxRates, setTaxRates] = useState<TaxRate[]>([]);
 
-  const [qtyStr, setQtyStr] = useState('1');
+  const [qtyStr, setQtyStr] = useState('');
   const qty = Math.min(200, Math.max(0, parseInt(qtyStr || '0', 10) || 0));
   const [msg, setMsg] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
@@ -169,7 +169,7 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
     else setMsg('Article introuvable pour ce code.');
   }
 
-  function openProduct(p: Product) { setSelected(p); setQtyStr('1'); setQ(''); setMsg(null); }
+  function openProduct(p: Product) { setSelected(p); setQtyStr(''); setQ(''); setMsg(null); }
   function backToList() { setSelected(null); setMsg(null); }
 
   function pressQty(k: string) {
