@@ -45,7 +45,7 @@ export default function PdaPairing() {
               {(brand.brand_name || 'H').charAt(0)}
             </span>
           )}
-          <div className="text-sm font-semibold text-ink-soft">Station d&apos;étiquettes</div>
+          <div className="text-sm font-semibold text-ink-soft">PDA</div>
         </div>
 
         <h1 className="text-lg font-semibold">Appairer ce PDA</h1>
