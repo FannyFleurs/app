@@ -54,6 +54,8 @@ export async function createSession(args: {
    * limite). Défaut : 'pos'.
    */
   kind?: 'pos' | 'management';
+  /** Durée de vie personnalisée (minutes). Ex : session PDA appairée (~1 an). */
+  ttlMinutesOverride?: number;
 }): Promise<string> {
   const kind = args.kind ?? 'pos';
   // Vérification de la limite multi-appareils.
@@ -107,7 +109,7 @@ export async function createSession(args: {
   const sessionId = crypto.randomUUID();
   const raw = randomBytes(32).toString('hex');
   const tokenHash = createHash('sha256').update(raw).digest('hex');
-  const expiresAt = new Date(Date.now() + ttlMinutes() * 60 * 1000);
+  const expiresAt = new Date(Date.now() + (args.ttlMinutesOverride ?? ttlMinutes()) * 60 * 1000);
 
   try {
     await query(

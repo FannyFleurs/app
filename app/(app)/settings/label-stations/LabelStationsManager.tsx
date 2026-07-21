@@ -14,12 +14,30 @@ export default function LabelStationsManager({ canWrite, stores }: {
 }) {
   const [stations, setStations] = useState<Station[] | null>(null);
   const [busy, setBusy] = useState(false);
+  // Codes d'appairage par boutique : { code, qr } affichés à la demande.
+  const [pairing, setPairing] = useState<Record<string, { code: string; qr: string | null } | 'loading'>>({});
 
   async function reload() {
     const r = await fetch('/api/label-stations');
     setStations(r.ok ? ((await r.json()).stations as Station[]) : []);
   }
   useEffect(() => { void reload(); }, []);
+
+  async function showPairing(storeId: string) {
+    setPairing((c) => ({ ...c, [storeId]: 'loading' }));
+    const r = await fetch(`/api/label-stations/pairing?store_id=${encodeURIComponent(storeId)}`);
+    const j = r.ok ? await r.json() : null;
+    setPairing((c) => ({ ...c, [storeId]: j?.code ? { code: j.code, qr: j.qr } : { code: '', qr: null } }));
+  }
+  async function generatePairing(storeId: string) {
+    setPairing((c) => ({ ...c, [storeId]: 'loading' }));
+    const r = await fetch('/api/label-stations/pairing', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ store_id: storeId }),
+    });
+    const j = r.ok ? await r.json() : null;
+    setPairing((c) => ({ ...c, [storeId]: j?.code ? { code: j.code, qr: j.qr } : { code: '', qr: null } }));
+  }
 
   // Groupe les PDA par boutique (toutes les boutiques affichées, même vides).
   const byStore = useMemo(() => {
@@ -128,6 +146,51 @@ export default function LabelStationsManager({ canWrite, stores }: {
                       </li>
                     ))}
                   </ul>
+                )}
+
+                {/* Appairage : code + QR pour connecter un PDA à cette boutique. */}
+                {canWrite && (
+                  <div className="mt-3 pt-3 border-t border-border">
+                    {(() => {
+                      const p = pairing[store.id];
+                      if (p === undefined) {
+                        return (
+                          <button className="btn-soft h-9 px-3 text-sm" onClick={() => void showPairing(store.id)}>
+                            🔑 Code d&apos;appairage PDA
+                          </button>
+                        );
+                      }
+                      if (p === 'loading') return <p className="text-sm text-ink-soft">…</p>;
+                      return (
+                        <div className="flex flex-wrap items-center gap-4">
+                          {p.qr && (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={p.qr} alt="QR d'appairage" className="h-28 w-28 rounded-lg border border-border bg-white" />
+                          )}
+                          <div className="min-w-0">
+                            <div className="text-xs text-ink-soft">Code d&apos;appairage</div>
+                            {p.code ? (
+                              <div className="text-2xl font-mono font-bold tracking-widest">{p.code}</div>
+                            ) : (
+                              <div className="text-sm text-ink-soft">Aucun code — générez-en un.</div>
+                            )}
+                            <p className="mt-1 text-xs text-ink-soft max-w-xs">
+                              Sur le PDA (<code>pda.</code>), saisissez ce code ou scannez le QR pour
+                              rattacher l&apos;appareil à « {store.name} ».
+                            </p>
+                            <button className="btn-soft h-8 px-2 text-sm mt-2" onClick={() => void generatePairing(store.id)}>
+                              {p.code ? 'Régénérer' : 'Générer le code'}
+                            </button>
+                            {p.code && (
+                              <span className="ml-2 text-[11px] text-ink-soft">
+                                (régénérer invalide l&apos;ancien code)
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
                 )}
               </div>
             );

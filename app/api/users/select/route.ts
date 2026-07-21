@@ -118,6 +118,7 @@ export async function GET(req: Request) {
               u.color
          FROM users u
         WHERE u.is_active = TRUE
+          AND COALESCE(u.is_service, FALSE) = FALSE
           AND u.organization_id = $1
           ${storeFilter}
         ORDER BY u.full_name`,
@@ -126,6 +127,20 @@ export async function GET(req: Request) {
     return NextResponse.json({ users: rows, tenant_id: tenantId, store_id: storeId });
   } catch (err) {
     const m = (err as Error).message ?? '';
+    // Fallback sans is_service (migration 0052 absente).
+    if (m.includes('is_service')) {
+      const { rows } = await query(
+        `SELECT u.id, u.full_name, u.role,
+                (u.pin_code_hash IS NOT NULL) AS has_pin,
+                COALESCE(u.pin_required, TRUE) AS pin_required, u.color
+           FROM users u
+          WHERE u.is_active = TRUE AND u.organization_id = $1
+            ${storeFilter}
+          ORDER BY u.full_name`,
+        storeParams,
+      );
+      return NextResponse.json({ users: rows, tenant_id: tenantId, store_id: storeId });
+    }
     // Fallback sans color (migration 0022 absente) — on garde le filtre boutique.
     if (m.includes('column "color"') || m.includes('"users".color')) {
       const { rows } = await query(
@@ -133,7 +148,9 @@ export async function GET(req: Request) {
                 (u.pin_code_hash IS NOT NULL) AS has_pin,
                 COALESCE(u.pin_required, TRUE) AS pin_required
            FROM users u
-          WHERE u.is_active = TRUE AND u.organization_id = $1
+          WHERE u.is_active = TRUE
+            AND COALESCE(u.is_service, FALSE) = FALSE
+            AND u.organization_id = $1
             ${storeFilter}
           ORDER BY u.full_name`,
         storeParams,

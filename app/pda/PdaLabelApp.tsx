@@ -195,7 +195,8 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
 
   async function logout() {
     try { await fetch('/api/auth/logout', { method: 'POST' }); } catch { /* ignore */ }
-    window.location.assign('/login');
+    // App dédiée : on revient à l'écran d'appairage du PDA, jamais à la caisse.
+    window.location.assign('/pda');
   }
 
   // ---- Écran de choix de boutique ----
