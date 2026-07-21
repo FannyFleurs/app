@@ -221,9 +221,16 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
   const disc = selected && settings.show_discount ? discountedPrice(selected) : null;
 
   return (
-    <div className="h-screen flex flex-col bg-bg text-ink overflow-hidden">
-      {/* Barre d'en-tête : logo (comme à l'origine), sans titre. */}
-      <header className="shrink-0 h-14 border-b border-border bg-surface flex items-center gap-3 px-4">
+    <div
+      className="h-screen flex flex-col bg-bg text-ink overflow-hidden"
+      style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+    >
+      {/* Barre d'en-tête : logo (comme à l'origine), sans titre.
+          paddingTop = encoche iOS (PWA plein écran) pour ne pas masquer le logo. */}
+      <header
+        className="shrink-0 min-h-14 border-b border-border bg-surface flex items-center gap-3 px-4"
+        style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
+      >
         <BrandLogo brand={brand} />
         <div className="flex-1" />
         <span className="text-xs text-ink-soft truncate max-w-[40%]">{userName}</span>
