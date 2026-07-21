@@ -238,8 +238,8 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
       >
         <BrandLogo brand={brand} />
         <div className="flex-1" />
-        <span className="text-xs text-ink-soft truncate max-w-[40%]">{userName}</span>
-        <button onClick={() => void logout()} className="text-sm text-ink-soft hover:text-ink px-2 py-1 rounded hover:bg-gray-100">Quitter</button>
+        {/* PDA appairé en permanence : pas de bouton Quitter. */}
+        <span className="text-xs text-ink-soft truncate max-w-[45%]">{userName}</span>
       </header>
 
       {/* ============ PARTIE HAUTE ============ */}
