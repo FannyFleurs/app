@@ -48,6 +48,7 @@ const PRODUCT_COLORS = [
 
 export default function ProductFormModal({
   product, taxRates, categories, onClose, onSaved, inline = false, backOffice = false,
+  prefillBarcode, posteStoreOverride,
 }: {
   product: Product | null;
   taxRates: { id: string; code: string; rate: number; label: string; is_default: boolean }[];
@@ -59,6 +60,10 @@ export default function ProductFormModal({
   /** true = back-office : sélection multi-boutiques. Sinon l'article est
    *  rattaché automatiquement à la boutique de l'utilisateur. */
   backOffice?: boolean;
+  /** Code-barres pré-rempli (ex : scan PDA d'un article inconnu). */
+  prefillBarcode?: string;
+  /** Boutique du poste forcée (PDA : l'appareil n'est pas une caisse). */
+  posteStoreOverride?: string | null;
 }) {
   const defaultTax = taxRates.find((t) => t.is_default) ?? taxRates[0];
   const [liveCategories, setLiveCategories] = useState(categories);
@@ -67,7 +72,7 @@ export default function ProductFormModal({
   // Boutique du POSTE (caisse liée à cet appareil) : sert à scoper un nouvel
   // article à la boutique où il est créé, même pour un owner/admin — sinon il
   // serait « toutes boutiques » et apparaîtrait sur toutes les caisses.
-  const [posteStoreId, setPosteStoreId] = useState<string | null>(null);
+  const [posteStoreId, setPosteStoreId] = useState<string | null>(posteStoreOverride ?? null);
   // Recharge la liste des catégories + fournisseurs + boutiques à l'ouverture.
   async function refetchCategories() {
     const r = await fetch('/api/categories');
@@ -90,8 +95,9 @@ export default function ProductFormModal({
     })();
   }, []);
   // Hors back-office : détecte la boutique du poste (caisse liée à l'appareil).
+  // Si une boutique est imposée (PDA), on l'utilise directement.
   useEffect(() => {
-    if (backOffice) return;
+    if (backOffice || posteStoreOverride) return;
     void (async () => {
       try {
         const id = getOrCreateDeviceId();
@@ -107,7 +113,7 @@ export default function ProductFormModal({
     name: product?.name ?? '',
     short_description: product?.short_description ?? '',
     sku: product?.sku ?? '',
-    barcode: product?.barcode ?? '',
+    barcode: product?.barcode ?? prefillBarcode ?? '',
     sale_price_ttc: product?.sale_price_ttc != null ? String(product.sale_price_ttc) : '',
     purchase_price_ht: product?.purchase_price_ht != null ? String(product.purchase_price_ht) : '',
     transport_cost_ht: product?.transport_cost_ht != null ? String(product.transport_cost_ht) : '',

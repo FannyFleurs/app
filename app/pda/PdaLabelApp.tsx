@@ -5,6 +5,7 @@ import { getOrCreateDeviceId } from '@/lib/device';
 import { formatEUR } from '@/lib/services/money';
 import { useBrand } from '@/components/BrandMark';
 import BarcodeScannerModal from '@/app/(app)/caisse/BarcodeScannerModal';
+import ProductFormModal from '@/app/(app)/products/ProductFormModal';
 import {
   buildLabelsDocument, openPrintWindow, discountedPrice, type LabelProduct,
 } from '@/lib/services/label-print';
@@ -382,27 +383,18 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
         />
       )}
 
-      {/* Création d'article */}
+      {/* Création d'article — formulaire complet (identique au back-office),
+          rattaché à la boutique du PDA, code-barres scanné pré-rempli. */}
       {createFor !== null && (
-        <CreateProductModal
-          barcode={createFor}
-          storeId={station.store_id}
+        <ProductFormModal
+          product={null}
           taxRates={taxRates}
+          categories={[]}
+          backOffice={false}
+          prefillBarcode={createFor || undefined}
+          posteStoreOverride={station.store_id}
           onClose={() => setCreateFor(null)}
-          onCreated={async (id) => {
-            setCreateFor(null);
-            await reloadProducts(station.store_id);
-            const r = await fetch(`/api/products?active=true&store_id=${encodeURIComponent(station.store_id)}`);
-            if (r.ok) {
-              const p = ((await r.json()).products as Array<Record<string, unknown>>).find((x) => String(x.id) === id);
-              if (p) openProduct({
-                id, name: String(p.name), sku: (p.sku as string) ?? null,
-                barcode: (p.barcode as string) ?? null, sale_price_ttc: Number(p.sale_price_ttc),
-                discount_type: null, discount_value: null,
-                image_url: (p.image_url as string) ?? null, category_name: (p.category_name as string) ?? null,
-              });
-            }
-          }}
+          onSaved={async () => { setCreateFor(null); await reloadProducts(station.store_id); }}
         />
       )}
 
@@ -444,83 +436,4 @@ function compressImage(file: File, maxSize: number, quality: number): Promise<st
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('load error')); };
     img.src = url;
   });
-}
-
-function CreateProductModal({ barcode, storeId, taxRates, onClose, onCreated }: {
-  barcode: string;
-  storeId: string;
-  taxRates: TaxRate[];
-  onClose: () => void;
-  onCreated: (id: string) => void;
-}) {
-  const [name, setName] = useState('');
-  const [bc, setBc] = useState(barcode);
-  const [price, setPrice] = useState('');
-  const [taxId, setTaxId] = useState(taxRates.find((t) => t.is_default)?.id ?? taxRates[0]?.id ?? '');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function submit() {
-    setError(null);
-    const p = Number(price.replace(',', '.'));
-    if (!name.trim() || !Number.isFinite(p) || p < 0 || !taxId) {
-      setError('Renseignez le nom, le prix et la TVA.');
-      return;
-    }
-    setSaving(true);
-    const r = await fetch('/api/products', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: name.trim(),
-        barcode: bc.trim() || null,
-        sale_price_ttc: p,
-        tax_rate_id: taxId,
-        store_ids: [storeId],
-        visible_in_pos: true,
-      }),
-    });
-    setSaving(false);
-    if (r.ok) { const j = await r.json(); onCreated(j.id as string); }
-    else { const j = await r.json().catch(() => ({})); setError(j.message ?? j.error ?? 'Échec de la création.'); }
-  }
-
-  return (
-    <div className="fixed inset-0 z-[70] grid place-items-center bg-ink/40 backdrop-blur-sm p-4">
-      <div className="card w-full max-w-md p-5">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-lg font-semibold">Nouvel article</h2>
-          <button onClick={onClose} className="text-ink-soft hover:text-ink text-xl leading-none">✕</button>
-        </div>
-        <div className="space-y-3">
-          <label className="block text-sm">
-            <span className="text-ink-soft">Nom</span>
-            <input className="input h-11 w-full mt-1" value={name} onChange={(e) => setName(e.target.value)} autoFocus placeholder="ex : Rose rouge" />
-          </label>
-          <label className="block text-sm">
-            <span className="text-ink-soft">Code-barres (EAN)</span>
-            <input className="input h-11 w-full mt-1 font-mono" value={bc} onChange={(e) => setBc(e.target.value)} placeholder="3xxxxxxxxxxxx" />
-          </label>
-          <div className="grid grid-cols-2 gap-3">
-            <label className="block text-sm">
-              <span className="text-ink-soft">Prix TTC (€)</span>
-              <input className="input h-11 w-full mt-1" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0,00" />
-            </label>
-            <label className="block text-sm">
-              <span className="text-ink-soft">TVA</span>
-              <select className="input h-11 w-full mt-1" value={taxId} onChange={(e) => setTaxId(e.target.value)}>
-                {taxRates.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
-              </select>
-            </label>
-          </div>
-          {error && <p className="text-sm text-danger">{error}</p>}
-        </div>
-        <div className="mt-4 flex justify-end gap-2">
-          <button onClick={onClose} className="btn-ghost">Annuler</button>
-          <button onClick={() => void submit()} disabled={saving} className="btn-primary">
-            {saving ? 'Création…' : 'Créer'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
 }
