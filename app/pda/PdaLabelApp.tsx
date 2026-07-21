@@ -226,10 +226,15 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
       style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
     >
       {/* Barre d'en-tête : logo (comme à l'origine), sans titre.
-          paddingTop = encoche iOS (PWA plein écran) pour ne pas masquer le logo. */}
+          Hauteur = 3,5rem + encoche iOS (PWA plein écran), sinon le logo passe
+          derrière la barre de statut. minHeight en inline (indépendant de la
+          disponibilité de la classe min-h-14). */}
       <header
-        className="shrink-0 min-h-14 border-b border-border bg-surface flex items-center gap-3 px-4"
-        style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
+        className="shrink-0 border-b border-border bg-surface flex items-center gap-3 px-4"
+        style={{
+          paddingTop: 'env(safe-area-inset-top, 0px)',
+          minHeight: 'calc(3.5rem + env(safe-area-inset-top, 0px))',
+        }}
       >
         <BrandLogo brand={brand} />
         <div className="flex-1" />

@@ -6,7 +6,7 @@
  * en cache que le nécessaire pour faire tourner la caisse : documents de
  * navigation, assets Next/_next, icônes, et quelques API « catalogue » en GET.
  */
-const VERSION = 'v3';
+const VERSION = 'v4';
 const CACHE = 'webpos-' + VERSION;
 
 // API en lecture, sûres à mettre en cache (pas de données sensibles cross-user).
