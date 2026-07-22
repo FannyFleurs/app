@@ -1,0 +1,26 @@
+{
+  "name": "Admin HelloPos",
+  "short_name": "Admin",
+  "description": "Console d'administration HelloPos",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#FFFFFF",
+  "theme_color": "#556B3E",
+  "lang": "fr",
+  "categories": ["business"],
+  "icons": [
+    {
+      "src": "/api/brand/icon?scope=admin",
+      "sizes": "512x512",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

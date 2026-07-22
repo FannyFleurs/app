@@ -9,6 +9,7 @@ import { mergePlatformDefaults, type PlatformSettings } from './platform';
  */
 export async function getServerBrand(): Promise<{
   brandName: string; logoUrl: string; caLogoUrl: string;
+  boLogoUrl: string; adminLogoUrl: string; pdaLogoUrl: string;
 }> {
   let cfg: PlatformSettings = mergePlatformDefaults(null);
   try {
@@ -17,9 +18,13 @@ export async function getServerBrand(): Promise<{
     );
     cfg = mergePlatformDefaults(rows[0]?.value ?? null);
   } catch { /* défauts */ }
+  const main = cfg.logo_url || '';
   return {
     brandName: cfg.brand_name || 'HelloPos',
-    logoUrl: cfg.logo_url || '',
-    caLogoUrl: cfg.ca_logo_url || cfg.logo_url || '',
+    logoUrl: main,
+    caLogoUrl: cfg.ca_logo_url || main,
+    boLogoUrl: cfg.bo_logo_url || main,
+    adminLogoUrl: cfg.admin_logo_url || main,
+    pdaLogoUrl: cfg.pda_logo_url || main,
   };
 }

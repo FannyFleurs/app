@@ -4,8 +4,22 @@ import { readSessionFromCookie } from '@/lib/auth/session';
 import { query } from '@/lib/db/client';
 import { mergePlatformDefaults, type PlatformSettings } from '@/lib/settings/platform';
 import AdminShell from './AdminShell';
+import type { Metadata } from 'next';
 
 export const dynamic = 'force-dynamic';
+
+// PWA admin : manifest dédié (start_url /) pour que l'icône « écran d'accueil »
+// n'ouvre pas /caisse (404 sur admin.). Icône = favicon/logo admin.
+export const metadata: Metadata = {
+  title: 'Admin HelloPos',
+  applicationName: 'Admin',
+  manifest: '/manifest-admin.json',
+  icons: {
+    icon: [{ url: '/api/brand/icon?scope=admin' }, { url: '/icons/icon.svg', type: 'image/svg+xml' }],
+    apple: [{ url: '/api/brand/icon?scope=admin' }],
+  },
+  appleWebApp: { capable: true, title: 'Admin', statusBarStyle: 'black-translucent' },
+};
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const user = await readSessionFromCookie();
