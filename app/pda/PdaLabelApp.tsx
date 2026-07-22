@@ -81,6 +81,7 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
   const [stockLevel, setStockLevel] = useState<number | null>(null);
   const [stockMsg, setStockMsg] = useState<string | null>(null);
   const [stockSending, setStockSending] = useState(false);
+  const [lastStockQty, setLastStockQty] = useState(0); // qté de la dernière entrée validée
   const photoRef = useRef<HTMLInputElement>(null);
 
   // ---- Résolution de la station (PDA ↔ boutique), définie à l'appairage ----
@@ -184,7 +185,7 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
 
   // ---- Entrée de stock ----
   async function startStock(p: Product) {
-    setStockFor(p); setStockQtyStr(''); setStockLevel(null); setStockMsg(null);
+    setStockFor(p); setStockQtyStr(''); setStockLevel(null); setStockMsg(null); setLastStockQty(0);
     if (!station) return;
     try {
       const r = await fetch(`/api/stock/levels?store_id=${encodeURIComponent(station.store_id)}`);
@@ -219,6 +220,7 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
     if (r.ok) {
       setStockLevel((cur) => (cur ?? 0) + qty);
       setStockMsg(`✅ +${qty} en stock (total : ${(stockLevel ?? 0) + qty}).`);
+      setLastStockQty(qty);
       setStockQtyStr('');
     } else {
       const j = await r.json().catch(() => null);
@@ -236,22 +238,37 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
     });
   }
 
-  async function print() {
-    if (!selected || qty < 1) return;
-    setMsg(null); setSending(true);
+  // Impression générique de N étiquettes d'un produit. Retourne un message.
+  async function printLabelsFor(product: Product, count: number): Promise<string> {
+    if (count < 1) return '';
     if (cloudPrinter) {
       const r = await fetch('/api/cloudprnt/print-labels', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ entries: [{ product: selected, qty }], store_id: station?.store_id ?? null }),
+        body: JSON.stringify({ entries: [{ product, qty: count }], store_id: station?.store_id ?? null }),
       });
-      setSending(false);
-      if (r.ok) { const j = await r.json(); setMsg(`✅ ${j.count} étiquette(s) envoyée(s) à « ${j.printer} ».`); }
-      else setMsg('❌ Échec de l’envoi à l’imprimante.');
-    } else {
-      const doc = buildLabelsDocument([{ product: selected, qty }], settings);
-      setSending(false);
-      if (!openPrintWindow(doc)) setMsg('Autorisez les fenêtres pop-up pour imprimer.');
+      if (r.ok) { const j = await r.json(); return `✅ ${j.count} étiquette(s) envoyée(s) à « ${j.printer} ».`; }
+      return '❌ Échec de l’envoi à l’imprimante.';
     }
+    const doc = buildLabelsDocument([{ product, qty: count }], settings);
+    return openPrintWindow(doc) ? '' : 'Autorisez les fenêtres pop-up pour imprimer.';
+  }
+
+  async function print() {
+    if (!selected || qty < 1) return;
+    setMsg(null); setSending(true);
+    const m = await printLabelsFor(selected, qty);
+    setSending(false);
+    if (m) setMsg(m);
+  }
+
+  // Impression des étiquettes correspondant à l'entrée de stock qui vient
+  // d'être validée (N articles entrés → N étiquettes).
+  async function printStockLabels() {
+    if (!stockFor || lastStockQty < 1) return;
+    setStockSending(true);
+    const m = await printLabelsFor(stockFor, lastStockQty);
+    setStockSending(false);
+    setStockMsg(m || `🖨 ${lastStockQty} étiquette(s) lancée(s) à l'impression.`);
   }
 
   // ---- Photo : capture + compression + enregistrement sur l'article ----
@@ -435,6 +452,13 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
                   className="btn-primary h-14 mt-4 text-base">
             {stockSending ? '…' : sQty > 0 ? `Valider l'entrée (+${sQty})` : "Valider l'entrée de stock"}
           </button>
+          {/* Après validation : imprimer autant d'étiquettes que d'articles entrés. */}
+          {lastStockQty > 0 && (
+            <button onClick={() => void printStockLabels()} disabled={stockSending}
+                    className="btn-soft h-14 mt-2 text-base">
+              🖨 Imprimer {lastStockQty} étiquette{lastStockQty > 1 ? 's' : ''}
+            </button>
+          )}
         </div>
       </div>
     );
