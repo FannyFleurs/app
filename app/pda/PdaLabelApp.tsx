@@ -75,6 +75,12 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
   const [showScanner, setShowScanner] = useState(false);
   const [createFor, setCreateFor] = useState<string | null>(null); // barcode prérempli ('' = vide)
   const [editing, setEditing] = useState<EditableProduct | null>(null); // édition article
+  const [pending, setPending] = useState<Product | null>(null); // choix étiquette / stock
+  const [stockFor, setStockFor] = useState<Product | null>(null); // entrée de stock
+  const [stockQtyStr, setStockQtyStr] = useState('');
+  const [stockLevel, setStockLevel] = useState<number | null>(null);
+  const [stockMsg, setStockMsg] = useState<string | null>(null);
+  const [stockSending, setStockSending] = useState(false);
   const photoRef = useRef<HTMLInputElement>(null);
 
   // ---- Résolution de la station (PDA ↔ boutique), définie à l'appairage ----
@@ -146,8 +152,8 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
 
   // Garde le focus sur la recherche : le scanner PDA « tape » le code + Entrée.
   useEffect(() => {
-    if (station && !selected && !showScanner && createFor === null) searchRef.current?.focus();
-  }, [station, selected, showScanner, createFor, loading]);
+    if (station && !selected && !showScanner && createFor === null && !pending && !stockFor && !editing) searchRef.current?.focus();
+  }, [station, selected, showScanner, createFor, loading, pending, stockFor, editing]);
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -159,20 +165,66 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
     );
   }, [products, q]);
 
-  // Traite un code (scan matériel via Entrée, ou caméra) : ouvre la fiche si
-  // trouvé, sinon propose la création avec le code prérempli.
+  // Traite un code (scan matériel via Entrée, ou caméra) : propose l'action
+  // (étiquette / stock) si trouvé, sinon propose la création (code prérempli).
   function handleCode(raw: string) {
     const s = raw.trim();
     if (!s) return;
     const exact = products.find((p) => p.barcode === s || p.sku === s || p.barcode === s.toUpperCase());
-    if (exact) { openProduct(exact); return; }
-    if (filtered.length === 1) { openProduct(filtered[0]!); return; }
+    if (exact) { pickProduct(exact); return; }
+    if (filtered.length === 1) { pickProduct(filtered[0]!); return; }
     if (canWrite) setCreateFor(s);
     else setMsg('Article introuvable pour ce code.');
   }
 
+  // Après un scan / tap : demande QUOI FAIRE (étiquette ou stock).
+  function pickProduct(p: Product) { setPending(p); setQ(''); setMsg(null); }
   function openProduct(p: Product) { setSelected(p); setQtyStr(''); setQ(''); setMsg(null); }
   function backToList() { setSelected(null); setMsg(null); }
+
+  // ---- Entrée de stock ----
+  async function startStock(p: Product) {
+    setStockFor(p); setStockQtyStr(''); setStockLevel(null); setStockMsg(null);
+    if (!station) return;
+    try {
+      const r = await fetch(`/api/stock/levels?store_id=${encodeURIComponent(station.store_id)}`);
+      if (r.ok) {
+        const lv = ((await r.json()).levels as Array<{ product_id: string; quantity: string }>)
+          .find((x) => x.product_id === p.id);
+        setStockLevel(lv ? Number(lv.quantity) : 0);
+      }
+    } catch { /* niveau inconnu */ }
+  }
+  function pressStockQty(k: string) {
+    setStockQtyStr((cur) => {
+      if (k === 'C') return '';
+      if (k === '⌫') return cur.slice(0, -1);
+      const next = (cur + k).replace(/^0+(?=\d)/, '');
+      return next.length > 4 ? cur : next;
+    });
+  }
+  async function validateStock() {
+    if (!stockFor || !station) return;
+    const qty = parseInt(stockQtyStr || '0', 10) || 0;
+    if (qty < 1) return;
+    setStockSending(true); setStockMsg(null);
+    const r = await fetch('/api/stock/movement', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        store_id: station.store_id, product_id: stockFor.id,
+        movement_type: 'purchase', quantity_delta: qty, reason: 'Entrée PDA (scan)',
+      }),
+    });
+    setStockSending(false);
+    if (r.ok) {
+      setStockLevel((cur) => (cur ?? 0) + qty);
+      setStockMsg(`✅ +${qty} en stock (total : ${(stockLevel ?? 0) + qty}).`);
+      setStockQtyStr('');
+    } else {
+      const j = await r.json().catch(() => null);
+      setStockMsg(j?.error === 'FORBIDDEN' ? "Droits insuffisants pour ajuster le stock." : "❌ Échec de l'entrée de stock.");
+    }
+  }
 
   function pressQty(k: string) {
     setQtyStr((cur) => {
@@ -343,6 +395,51 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
     );
   }
 
+  // ---- Entrée de stock : PLEINE PAGE ----
+  if (stockFor) {
+    const sQty = parseInt(stockQtyStr || '0', 10) || 0;
+    return (
+      <div
+        className="h-screen flex flex-col bg-bg text-ink overflow-hidden"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+      >
+        <header
+          className="shrink-0 border-b border-border bg-surface flex items-center gap-3 px-4"
+          style={{ paddingTop: 'env(safe-area-inset-top, 0px)', minHeight: 'calc(3.5rem + env(safe-area-inset-top, 0px))' }}
+        >
+          <button onClick={() => { setStockFor(null); setStockMsg(null); }} className="text-sm text-accent-deep hover:underline">← Retour</button>
+          <div className="flex-1 text-center font-semibold">Entrée de stock</div>
+          <div className="w-16" />
+        </header>
+        <div className="flex-1 min-h-0 overflow-y-auto p-4 flex flex-col">
+          <div className="font-semibold text-lg leading-tight">{stockFor.name}</div>
+          <div className="text-sm text-ink-soft">
+            {stockFor.barcode ?? 'pas de code-barres'} · Stock actuel :{' '}
+            <span className="font-semibold text-ink">{stockLevel == null ? '…' : stockLevel}</span>
+          </div>
+          <div className="mt-4 text-xs text-ink-soft">Quantité à ajouter</div>
+          <div className="mt-1 rounded-xl border border-border h-14 px-4 flex items-center justify-end text-3xl font-semibold tabular-nums bg-white">
+            {stockQtyStr === '' ? <span className="text-ink-soft/40">0</span> : `+${stockQtyStr}`}
+          </div>
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            {['1','2','3','4','5','6','7','8','9','C','0','⌫'].map((k) => (
+              <button key={k} onClick={() => pressStockQty(k)}
+                className={`h-14 rounded-xl text-xl font-semibold ${
+                  k === 'C' ? 'bg-danger/10 text-danger'
+                  : k === '⌫' ? 'bg-gray-100 text-ink-soft'
+                  : 'bg-gray-50 border border-border'}`}>{k}</button>
+            ))}
+          </div>
+          {stockMsg && <p className="mt-3 text-sm text-center">{stockMsg}</p>}
+          <button onClick={() => void validateStock()} disabled={sQty < 1 || stockSending}
+                  className="btn-primary h-14 mt-4 text-base">
+            {stockSending ? '…' : sQty > 0 ? `Valider l'entrée (+${sQty})` : "Valider l'entrée de stock"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className="h-screen flex flex-col bg-bg text-ink overflow-hidden"
@@ -462,7 +559,7 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
                 <ul className="divide-y divide-border">
                   {filtered.map((p) => (
                     <li key={p.id}>
-                      <button onClick={() => openProduct(p)} className="w-full text-left px-3 py-2.5 flex items-center gap-3 active:bg-gray-100">
+                      <button onClick={() => pickProduct(p)} className="w-full text-left px-3 py-2.5 flex items-center gap-3 active:bg-gray-100">
                         {p.image_url
                           // eslint-disable-next-line @next/next/no-img-element
                           ? <img src={p.image_url} alt="" className="h-10 w-10 rounded object-cover shrink-0 bg-gray-100" />
@@ -521,6 +618,31 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
           onClose={() => setShowScanner(false)}
           onScan={(code) => { setShowScanner(false); handleCode(code); }}
         />
+      )}
+
+      {/* Choix après un scan : étiquette ou entrée de stock */}
+      {pending && (
+        <div className="fixed inset-0 z-[65] grid place-items-center bg-ink/40 backdrop-blur-sm p-6"
+             onClick={() => setPending(null)}>
+          <div className="card w-full max-w-sm p-5 text-center" onClick={(e) => e.stopPropagation()}>
+            <div className="text-base font-semibold leading-tight">{pending.name}</div>
+            <div className="text-sm text-ink-soft">{pending.barcode ?? 'pas de code-barres'}</div>
+            <div className="mt-4 text-sm text-ink-soft">Que faire ?</div>
+            <button
+              onClick={() => { const p = pending; setPending(null); openProduct(p); }}
+              className="btn-primary w-full h-14 mt-2 text-base">
+              🖨 Imprimer une étiquette
+            </button>
+            {canWrite && (
+              <button
+                onClick={() => { const p = pending; setPending(null); void startStock(p); }}
+                className="btn-soft w-full h-14 mt-2 text-base">
+                📦 Ajouter au stock
+              </button>
+            )}
+            <button onClick={() => setPending(null)} className="mt-3 text-sm text-ink-soft hover:text-ink">Annuler</button>
+          </div>
+        </div>
       )}
 
       {/* Input photo caché (capture appareil) */}
