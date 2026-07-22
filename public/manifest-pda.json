@@ -12,6 +12,11 @@
   "categories": ["business", "productivity"],
   "icons": [
     {
+      "src": "/api/brand/icon?scope=pda",
+      "sizes": "512x512",
+      "purpose": "any"
+    },
+    {
       "src": "/icons/icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
