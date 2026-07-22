@@ -52,7 +52,9 @@ interface Station { id: string; store_id: string; store_name: string; name: stri
 interface TaxRate { id: string; code: string; rate: number; label: string; is_default: boolean }
 
 export default function PdaLabelApp({ userName, canWrite }: { userName: string; canWrite: boolean }) {
-  const brand = useBrand();
+  const rawBrand = useBrand();
+  // Logo spécifique PDA si configuré, sinon logo principal.
+  const brand = { ...rawBrand, logo_url: rawBrand.pda_logo_url || rawBrand.logo_url };
   const [station, setStation] = useState<Station | null | undefined>(undefined);
 
   const [products, setProducts] = useState<Product[]>([]);

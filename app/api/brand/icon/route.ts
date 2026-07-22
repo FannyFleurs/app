@@ -14,7 +14,7 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(req: Request) {
   const raw = new URL(req.url).searchParams.get('scope');
-  const scope = raw === 'ca' || raw === 'bo' || raw === 'admin' ? raw : 'app';
+  const scope = raw === 'ca' || raw === 'bo' || raw === 'admin' || raw === 'pda' ? raw : 'app';
 
   let p: PlatformSettings;
   try {
@@ -30,8 +30,9 @@ export async function GET(req: Request) {
   // favicon/logo principal.
   const src =
     scope === 'ca' ? (p.ca_favicon_url || p.ca_logo_url || p.favicon_url || p.logo_url)
-    : scope === 'bo' ? (p.bo_favicon_url || p.favicon_url || p.logo_url)
-    : scope === 'admin' ? (p.admin_favicon_url || p.favicon_url || p.logo_url)
+    : scope === 'bo' ? (p.bo_favicon_url || p.bo_logo_url || p.favicon_url || p.logo_url)
+    : scope === 'admin' ? (p.admin_favicon_url || p.admin_logo_url || p.favicon_url || p.logo_url)
+    : scope === 'pda' ? (p.pda_favicon_url || p.pda_logo_url || p.favicon_url || p.logo_url)
     : (p.favicon_url || p.logo_url);
 
   // Aucun logo/favicon configuré : on renvoie un visuel NEUTRE (sac), jamais

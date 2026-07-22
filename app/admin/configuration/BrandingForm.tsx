@@ -7,16 +7,21 @@ type BrandingData = {
   brand_name: string;
   logo_url: string;
   favicon_url: string;
+  login_image_url: string;
+  bo_logo_url: string;
   bo_favicon_url: string;
+  admin_logo_url: string;
   admin_favicon_url: string;
+  pda_logo_url: string;
+  pda_favicon_url: string;
   ca_logo_url: string;
   ca_favicon_url: string;
-  login_image_url: string;
 };
 
 const KEYS: (keyof BrandingData)[] = [
-  'brand_name', 'logo_url', 'favicon_url', 'bo_favicon_url', 'admin_favicon_url',
-  'ca_logo_url', 'ca_favicon_url', 'login_image_url',
+  'brand_name', 'logo_url', 'favicon_url', 'login_image_url',
+  'bo_logo_url', 'bo_favicon_url', 'admin_logo_url', 'admin_favicon_url',
+  'pda_logo_url', 'pda_favicon_url', 'ca_logo_url', 'ca_favicon_url',
 ];
 
 export default function BrandingForm({ initial }: { initial: BrandingData }) {
@@ -46,7 +51,6 @@ export default function BrandingForm({ initial }: { initial: BrandingData }) {
     const res = await savePlatformConfig(payload);
     setSaving(false);
     if (!res.ok) { setError(res.error); return; }
-    // On ne conserve que les clés de branding depuis la réponse.
     const next = { ...s };
     for (const k of KEYS) if (res.settings[k] !== undefined) (next as Record<string, unknown>)[k] = res.settings[k];
     setS(next);
@@ -54,10 +58,41 @@ export default function BrandingForm({ initial }: { initial: BrandingData }) {
     setTimeout(() => setSaved(false), 2500);
   }
 
+  // Bloc d'un espace : titre (nom de la page) + logo + favicon dans le même bloc.
+  function SpaceBlock({ title, sub, logoKey, favKey }: {
+    title: string; sub: string;
+    logoKey: keyof BrandingData; favKey: keyof BrandingData;
+  }) {
+    return (
+      <section className="card p-5 space-y-4">
+        <div>
+          <h2 className="font-semibold">{title}</h2>
+          <p className="mt-1 text-xs text-ink-soft">{sub}</p>
+        </div>
+        <ImageField
+          label="Logo"
+          hint="Affiché dans cet espace. Vide = le logo principal."
+          value={s[logoKey]}
+          onFile={(e) => onImageFile(e, logoKey)}
+          onUrl={(v) => patch(logoKey, v)}
+          onClear={() => patch(logoKey, '')}
+        />
+        <ImageField
+          label="Favicon"
+          hint="Onglet du navigateur. Vide = le favicon (puis le logo) est utilisé."
+          value={s[favKey]}
+          onFile={(e) => onImageFile(e, favKey)}
+          onUrl={(v) => patch(favKey, v)}
+          onClear={() => patch(favKey, '')}
+        />
+      </section>
+    );
+  }
+
   return (
     <div className="space-y-5">
       <div className="lg:columns-2 lg:gap-5 [&>section]:mb-5 [&>section]:break-inside-avoid space-y-5 lg:space-y-0">
-        {/* Marque + logo + favicon principal + visuel connexion */}
+        {/* Marque & logo — inchangé */}
         <section className="card p-5 space-y-4">
           <h2 className="font-semibold">Marque &amp; logo</h2>
           <div>
@@ -126,59 +161,15 @@ export default function BrandingForm({ initial }: { initial: BrandingData }) {
           />
         </section>
 
-        {/* Favicons par espace (BO / admin) */}
-        <section className="card p-5 space-y-4">
-          <div>
-            <h2 className="font-semibold">Favicons par espace</h2>
-            <p className="mt-1 text-xs text-ink-soft">
-              Icône d'onglet distincte pour chaque espace. Vide = le favicon
-              principal (puis le logo) est utilisé.
-            </p>
-          </div>
-          <ImageField
-            label="Favicon Back-office (bo.)"
-            hint="Onglet du navigateur dans le back-office. Vide = favicon principal."
-            value={s.bo_favicon_url}
-            onFile={(e) => onImageFile(e, 'bo_favicon_url')}
-            onUrl={(v) => patch('bo_favicon_url', v)}
-            onClear={() => patch('bo_favicon_url', '')}
-          />
-          <ImageField
-            label="Favicon Admin SaaS (admin.)"
-            hint="Onglet du navigateur dans la console super-admin. Vide = favicon principal."
-            value={s.admin_favicon_url}
-            onFile={(e) => onImageFile(e, 'admin_favicon_url')}
-            onUrl={(v) => patch('admin_favicon_url', v)}
-            onClear={() => patch('admin_favicon_url', '')}
-          />
-        </section>
-
-        {/* Espace CA (logo + favicon distincts) */}
-        <section className="card p-5 space-y-4">
-          <div>
-            <h2 className="font-semibold">Espace CA (suivi du chiffre d&apos;affaires)</h2>
-            <p className="mt-1 text-xs text-ink-soft">
-              Logo et favicon distincts pour le sous-domaine <code>ca.</code>
-              Vides = le logo principal est utilisé.
-            </p>
-          </div>
-          <ImageField
-            label="Logo CA"
-            hint="Affiché sur l'espace CA."
-            value={s.ca_logo_url}
-            onFile={(e) => onImageFile(e, 'ca_logo_url')}
-            onUrl={(v) => patch('ca_logo_url', v)}
-            onClear={() => patch('ca_logo_url', '')}
-          />
-          <ImageField
-            label="Favicon CA"
-            hint="Onglet du navigateur sur ca. Vide = le logo CA est utilisé."
-            value={s.ca_favicon_url}
-            onFile={(e) => onImageFile(e, 'ca_favicon_url')}
-            onUrl={(v) => patch('ca_favicon_url', v)}
-            onClear={() => patch('ca_favicon_url', '')}
-          />
-        </section>
+        {/* Un bloc par espace : logo + favicon, titré par le nom de la page. */}
+        <SpaceBlock title="Back-office" sub="Sous-domaine bo. Vides = branding principal."
+                    logoKey="bo_logo_url" favKey="bo_favicon_url" />
+        <SpaceBlock title="Console admin (SaaS)" sub="Sous-domaine admin. Vides = branding principal."
+                    logoKey="admin_logo_url" favKey="admin_favicon_url" />
+        <SpaceBlock title="PDA (étiquettes)" sub="Sous-domaine pda. Vides = branding principal."
+                    logoKey="pda_logo_url" favKey="pda_favicon_url" />
+        <SpaceBlock title="Espace CA" sub="Sous-domaine ca. (suivi du chiffre d'affaires). Vides = branding principal."
+                    logoKey="ca_logo_url" favKey="ca_favicon_url" />
       </div>
 
       <SaveBar saving={saving} saved={saved} error={error} onSave={() => void submit()} />

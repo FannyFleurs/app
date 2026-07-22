@@ -72,9 +72,9 @@ export default function LeftRail({
           className="flex items-center gap-2 px-4 h-16 shrink-0"
           title="Back-office"
         >
-          {brand.logo_url ? (
+          {(brand.bo_logo_url || brand.logo_url) ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={brand.logo_url} alt={brand.brand_name} className="h-10 w-auto max-w-[140px] object-contain shrink-0" />
+            <img src={brand.bo_logo_url || brand.logo_url} alt={brand.brand_name} className="h-10 w-auto max-w-[140px] object-contain shrink-0" />
           ) : (
             <span
               className="grid h-10 w-10 place-items-center rounded-2xl text-white font-semibold text-lg shrink-0"

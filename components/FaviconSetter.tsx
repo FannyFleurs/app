@@ -26,7 +26,9 @@ export default function FaviconSetter() {
     // qui reste le signal fiable hors sous-domaine (dev, domaine unique).
     const isBO =
       host.startsWith('bo.') || /(?:^|;\s*)webpos_bo=1(?:;|$)/.test(cookies);
-    const scope = isCA ? 'ca' : isAdmin ? 'admin' : isBO ? 'bo' : 'app';
+    const isPda =
+      host.startsWith('pda.') || path === '/pda' || (path?.startsWith('/pda/') ?? false);
+    const scope = isCA ? 'ca' : isAdmin ? 'admin' : isBO ? 'bo' : isPda ? 'pda' : 'app';
 
     void (async () => {
       // On calcule un jeton de version basé sur l'image effective : l'URL du
@@ -40,8 +42,9 @@ export default function FaviconSetter() {
           const b = await r.json();
           const eff =
             scope === 'ca' ? (b.ca_favicon_url || b.ca_logo_url || b.favicon_url || b.logo_url || '')
-            : scope === 'admin' ? (b.admin_favicon_url || b.favicon_url || b.logo_url || '')
-            : scope === 'bo' ? (b.bo_favicon_url || b.favicon_url || b.logo_url || '')
+            : scope === 'admin' ? (b.admin_favicon_url || b.admin_logo_url || b.favicon_url || b.logo_url || '')
+            : scope === 'bo' ? (b.bo_favicon_url || b.bo_logo_url || b.favicon_url || b.logo_url || '')
+            : scope === 'pda' ? (b.pda_favicon_url || b.pda_logo_url || b.favicon_url || b.logo_url || '')
             : (b.favicon_url || b.logo_url || '');
           v = hashStr(String(eff));
         }

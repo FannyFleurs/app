@@ -36,7 +36,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const brandName = brand.brand_name || 'HelloPos';
 
   return (
-    <AdminShell brandName={brandName} logoUrl={brand.logo_url || null} fullName={user.fullName}>
+    <AdminShell brandName={brandName} logoUrl={brand.admin_logo_url || brand.logo_url || null} fullName={user.fullName}>
       {children}
     </AdminShell>
   );

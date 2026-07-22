@@ -12,7 +12,8 @@ import BarcodeScannerModal from '@/app/(app)/caisse/BarcodeScannerModal';
  * L'appairage ouvre une session longue durée rattachée à la boutique.
  */
 export default function PdaPairing() {
-  const brand = useBrand();
+  const rawBrand = useBrand();
+  const brand = { ...rawBrand, logo_url: rawBrand.pda_logo_url || rawBrand.logo_url };
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
