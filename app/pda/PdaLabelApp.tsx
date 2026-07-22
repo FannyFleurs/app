@@ -50,6 +50,7 @@ function toEditable(r: Record<string, unknown>): EditableProduct {
 }
 interface Station { id: string; store_id: string; store_name: string; name: string }
 interface TaxRate { id: string; code: string; rate: number; label: string; is_default: boolean }
+interface RecentAction { kind: 'label' | 'stock' | 'create'; title: string; sub: string; at: string }
 
 export default function PdaLabelApp({ userName, canWrite }: { userName: string; canWrite: boolean }) {
   const rawBrand = useBrand();
@@ -83,6 +84,28 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
   const [stockSending, setStockSending] = useState(false);
   const [lastStockQty, setLastStockQty] = useState(0); // qté de la dernière entrée validée
   const photoRef = useRef<HTMLInputElement>(null);
+  // Tableau de bord : onglet actif + mode de scan « armé » + activité récente.
+  const [homeTab, setHomeTab] = useState<'home' | 'articles' | 'history' | 'settings'>('home');
+  const [scanPrompt, setScanPrompt] = useState<null | 'choice' | 'label' | 'stock'>(null);
+  const promptRef = useRef<HTMLInputElement>(null);
+  const [recent, setRecent] = useState<RecentAction[]>([]);
+
+  // Activité récente (persistée sur l'appareil).
+  useEffect(() => {
+    try {
+      const s = localStorage.getItem('webpos_pda_recent');
+      if (s) setRecent(JSON.parse(s) as RecentAction[]);
+    } catch { /* ignore */ }
+  }, []);
+  function addRecent(kind: RecentAction['kind'], title: string, sub: string) {
+    let hh = '';
+    try { hh = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }); } catch { /* ignore */ }
+    setRecent((cur) => {
+      const next = [{ kind, title, sub, at: hh }, ...cur].slice(0, 30);
+      try { localStorage.setItem('webpos_pda_recent', JSON.stringify(next)); } catch { /* quota */ }
+      return next;
+    });
+  }
 
   // ---- Résolution de la station (PDA ↔ boutique), définie à l'appairage ----
   // Pas d'écran de choix de boutique : la boutique vient de l'appairage
@@ -153,8 +176,9 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
 
   // Garde le focus sur la recherche : le scanner PDA « tape » le code + Entrée.
   useEffect(() => {
-    if (station && !selected && !showScanner && createFor === null && !pending && !stockFor && !editing) searchRef.current?.focus();
-  }, [station, selected, showScanner, createFor, loading, pending, stockFor, editing]);
+    if (station && homeTab !== 'articles' && !selected && !showScanner && createFor === null
+        && !pending && !stockFor && !editing && !scanPrompt) searchRef.current?.focus();
+  }, [station, selected, showScanner, createFor, loading, pending, stockFor, editing, scanPrompt, homeTab]);
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -166,16 +190,22 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
     );
   }, [products, q]);
 
-  // Traite un code (scan matériel via Entrée, ou caméra) : propose l'action
-  // (étiquette / stock) si trouvé, sinon propose la création (code prérempli).
-  function handleCode(raw: string) {
+  // Traite un code (scan matériel via Entrée, ou caméra). `mode` = action
+  // « armée » (via une carte du tableau de bord) : label / stock / choice.
+  function handleCode(raw: string, mode: 'choice' | 'label' | 'stock' = 'choice') {
     const s = raw.trim();
     if (!s) return;
+    setScanPrompt(null);
     const exact = products.find((p) => p.barcode === s || p.sku === s || p.barcode === s.toUpperCase());
-    if (exact) { pickProduct(exact); return; }
-    if (filtered.length === 1) { pickProduct(filtered[0]!); return; }
+    const hit = exact ?? (filtered.length === 1 ? filtered[0] : undefined);
+    if (hit) { routeProduct(hit, mode); return; }
     if (canWrite) setCreateFor(s);
     else setMsg('Article introuvable pour ce code.');
+  }
+  function routeProduct(p: Product, mode: 'choice' | 'label' | 'stock') {
+    if (mode === 'label') openProduct(p);
+    else if (mode === 'stock') void startStock(p);
+    else pickProduct(p);
   }
 
   // Après un scan / tap : demande QUOI FAIRE (étiquette ou stock).
@@ -222,6 +252,7 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
       setStockMsg(`✅ +${qty} en stock (total : ${(stockLevel ?? 0) + qty}).`);
       setLastStockQty(qty);
       setStockQtyStr('');
+      addRecent('stock', 'Stock entré', `${stockFor.name} · +${qty}`);
     } else {
       const j = await r.json().catch(() => null);
       setStockMsg(j?.error === 'FORBIDDEN' ? "Droits insuffisants pour ajuster le stock." : "❌ Échec de l'entrée de stock.");
@@ -259,6 +290,7 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
     const m = await printLabelsFor(selected, qty);
     setSending(false);
     if (m) setMsg(m);
+    if (!m.startsWith('❌')) addRecent('label', 'Étiquette imprimée', `${selected.name} · ${qty}`);
   }
 
   // Impression des étiquettes correspondant à l'entrée de stock qui vient
@@ -353,7 +385,7 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
             prefillBarcode={createFor || undefined}
             posteStoreOverride={station.store_id}
             onClose={() => setCreateFor(null)}
-            onSaved={async () => { setCreateFor(null); await reloadProducts(station.store_id); }}
+            onSaved={async () => { setCreateFor(null); addRecent('create', 'Nouvel article créé', ''); await reloadProducts(station.store_id); }}
           />
         </div>
       </div>
@@ -486,161 +518,257 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
         <span className="text-xs text-ink-soft truncate max-w-[45%]">{userName}</span>
       </header>
 
-      {/* ============ PARTIE HAUTE ============ */}
-      <section className="h-[46%] shrink-0 border-b-2 border-border bg-surface overflow-y-auto">
-        {!selected ? (
-          <div className="h-full p-4 flex flex-col gap-3">
-            <div className="flex items-center gap-2">
-              {/* Scan caméra : petit bouton d'appoint (le lecteur du PDA
-                  reste le moyen principal, sans bouton). */}
-              <button onClick={() => setShowScanner(true)} className="btn-soft h-11 px-3 text-sm shrink-0">
-                📷 Scanner
-              </button>
-              {canWrite && (
-                <button onClick={() => setCreateFor('')} className="btn-primary h-11 flex-1 text-base">
-                  ＋ Créer un article
-                </button>
-              )}
-            </div>
-            <p className="text-xs text-ink-soft">
-              Scannez directement avec le lecteur du PDA — la recherche se fait sans bouton.
-            </p>
-            {msg && <p className="text-sm text-ink-soft">{msg}</p>}
-          </div>
-        ) : (
-          <div className="h-full p-4 flex flex-col">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <div className="font-semibold leading-tight line-clamp-2">{selected.name}</div>
-                <div className="text-sm text-ink-soft">
-                  {disc != null && <span className="line-through mr-1">{formatEUR(selected.sale_price_ttc)}</span>}
-                  <span className="font-semibold text-ink">{formatEUR(disc ?? selected.sale_price_ttc)}</span>
-                  {selected.barcode ? ` · ${selected.barcode}` : ' · pas de code-barres'}
+      {selected ? (
+        <>
+          {/* ===== ÉDITEUR D'ÉTIQUETTE ===== */}
+          <section className="h-[46%] shrink-0 border-b-2 border-border bg-surface overflow-y-auto">
+            <div className="h-full p-4 flex flex-col">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="font-semibold leading-tight line-clamp-2">{selected.name}</div>
+                  <div className="text-sm text-ink-soft">
+                    {disc != null && <span className="line-through mr-1">{formatEUR(selected.sale_price_ttc)}</span>}
+                    <span className="font-semibold text-ink">{formatEUR(disc ?? selected.sale_price_ttc)}</span>
+                    {selected.barcode ? ` · ${selected.barcode}` : ' · pas de code-barres'}
+                  </div>
                 </div>
+                <button onClick={backToList} className="text-ink-soft hover:text-ink text-xl leading-none shrink-0">✕</button>
               </div>
-              <button onClick={backToList} className="text-ink-soft hover:text-ink text-xl leading-none shrink-0">✕</button>
-            </div>
-
-            <div className="mt-2 flex-1 min-h-0 grid grid-cols-[1fr_auto] gap-3">
-              <div className="flex flex-col min-h-0">
-                <div className="text-xs text-ink-soft">Nombre d&apos;étiquettes</div>
-                <div className="mt-1 rounded-xl border border-border h-12 px-4 flex items-center justify-end text-2xl font-semibold tabular-nums bg-white">
-                  {qtyStr === '' ? <span className="text-ink-soft/40">0</span> : qtyStr}
+              <div className="mt-2 flex-1 min-h-0 grid grid-cols-[1fr_auto] gap-3">
+                <div className="flex flex-col min-h-0">
+                  <div className="text-xs text-ink-soft">Nombre d&apos;étiquettes</div>
+                  <div className="mt-1 rounded-xl border border-border h-12 px-4 flex items-center justify-end text-2xl font-semibold tabular-nums bg-white">
+                    {qtyStr === '' ? <span className="text-ink-soft/40">0</span> : qtyStr}
+                  </div>
+                  <div className="mt-2 grid grid-cols-3 gap-1.5 flex-1 min-h-0">
+                    {['1','2','3','4','5','6','7','8','9','C','0','⌫'].map((k) => (
+                      <button key={k} onClick={() => pressQty(k)}
+                        className={`rounded-lg text-lg font-semibold min-h-[40px] ${
+                          k === 'C' ? 'bg-danger/10 text-danger'
+                          : k === '⌫' ? 'bg-gray-100 text-ink-soft'
+                          : 'bg-gray-50 border border-border'}`}>{k}</button>
+                    ))}
+                  </div>
                 </div>
-                <div className="mt-2 grid grid-cols-3 gap-1.5 flex-1 min-h-0">
-                  {['1','2','3','4','5','6','7','8','9','C','0','⌫'].map((k) => (
-                    <button key={k} onClick={() => pressQty(k)}
-                      className={`rounded-lg text-lg font-semibold min-h-[40px] ${
-                        k === 'C' ? 'bg-danger/10 text-danger'
-                        : k === '⌫' ? 'bg-gray-100 text-ink-soft'
-                        : 'bg-gray-50 border border-border'}`}>{k}</button>
-                  ))}
-                </div>
-              </div>
-              <div className="w-32 flex flex-col gap-2">
-                <button onClick={() => void print()} disabled={qty < 1 || sending}
-                        className="btn-primary flex-1 flex-col gap-1 text-sm">
-                  <span className="text-2xl">🖨</span>
-                  <span>{sending ? '…' : 'Imprimer'}</span>
-                </button>
-                {canWrite && (
-                  <button onClick={() => photoRef.current?.click()} disabled={photoBusy}
-                          className="btn-soft flex-1 flex-col gap-1 text-sm">
-                    <span className="text-2xl">📷</span>
-                    <span>{photoBusy ? '…' : 'Photo'}</span>
+                <div className="w-32 flex flex-col gap-2">
+                  <button onClick={() => void print()} disabled={qty < 1 || sending}
+                          className="btn-primary flex-1 flex-col gap-1 text-sm">
+                    <span className="text-2xl">🖨</span>
+                    <span>{sending ? '…' : 'Imprimer'}</span>
                   </button>
-                )}
+                  {canWrite && (
+                    <button onClick={() => photoRef.current?.click()} disabled={photoBusy}
+                            className="btn-soft flex-1 flex-col gap-1 text-sm">
+                      <span className="text-2xl">📷</span>
+                      <span>{photoBusy ? '…' : 'Photo'}</span>
+                    </button>
+                  )}
+                </div>
               </div>
+              {msg && <p className="mt-1 text-sm text-center">{msg}</p>}
             </div>
-            {msg && <p className="mt-1 text-sm text-center">{msg}</p>}
-          </div>
-        )}
-      </section>
-
-      {/* ============ PARTIE BASSE ============ */}
-      <section className="flex-1 min-h-0 flex flex-col">
-        {!selected ? (
-          <>
-            {/* Séparateur de zone */}
-            <div className="shrink-0 px-4 py-2 border-y border-border bg-muted/60 text-xs font-semibold uppercase tracking-wide text-ink-soft">
-              Liste des articles
+          </section>
+          {/* ===== FICHE ARTICLE ===== */}
+          <section className="flex-1 min-h-0 flex flex-col">
+            <div className="flex-1 min-h-0 overflow-y-auto p-4">
+              <div className="flex items-center justify-between">
+                <button onClick={backToList} className="text-sm text-accent-deep hover:underline">← Retour</button>
+                <button onClick={() => selected.raw && setEditing(toEditable(selected.raw))}
+                        className="btn-soft h-9 px-3 text-sm">✎ Éditer l&apos;article</button>
+              </div>
+              <button onClick={() => selected.raw && setEditing(toEditable(selected.raw))}
+                      className="mt-3 w-full text-left flex gap-4 rounded-xl p-1 -m-1 active:bg-gray-100">
+                <div className="h-28 w-28 rounded-xl overflow-hidden bg-gray-100 shrink-0">
+                  {selected.image_url && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={selected.image_url} alt="" className="h-full w-full object-cover" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1 space-y-1">
+                  <div className="text-lg font-semibold leading-tight">{selected.name}</div>
+                  <div className="text-2xl font-bold">{formatEUR(disc ?? selected.sale_price_ttc)}</div>
+                  <dl className="text-sm text-ink-soft space-y-0.5">
+                    <div>Code-barres : <span className="font-mono text-ink">{selected.barcode ?? '—'}</span></div>
+                    {selected.sku && <div>SKU : <span className="font-mono text-ink">{selected.sku}</span></div>}
+                    {selected.category_name && <div>Catégorie : <span className="text-ink">{selected.category_name}</span></div>}
+                  </dl>
+                  <div className="text-xs text-accent-deep pt-1">Appuyer pour modifier →</div>
+                </div>
+              </button>
             </div>
+          </section>
+        </>
+      ) : (
+        <>
+          {/* ===== TABLEAU DE BORD ===== */}
+          <main className="flex-1 min-h-0 overflow-y-auto">
             {/* Champ caché : capte le lecteur intégré du PDA (scan sans bouton). */}
             <input
-              ref={searchRef}
-              className="sr-only"
-              value={q}
+              ref={searchRef} className="sr-only" value={q}
               onChange={(e) => setQ(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleCode(q); } }}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleCode(q, 'choice'); } }}
               autoFocus autoComplete="off" aria-hidden tabIndex={-1}
             />
-            <div className="flex-1 min-h-0 overflow-y-auto">
-              {loading ? (
-                <div className="p-6 text-sm text-ink-soft">Chargement…</div>
-              ) : filtered.length === 0 ? (
-                <div className="p-6 text-sm text-ink-soft">Aucun article.</div>
-              ) : (
-                <ul className="divide-y divide-border">
-                  {filtered.map((p) => (
-                    <li key={p.id}>
-                      <button onClick={() => pickProduct(p)} className="w-full text-left px-3 py-2.5 flex items-center gap-3 active:bg-gray-100">
-                        {p.image_url
-                          // eslint-disable-next-line @next/next/no-img-element
-                          ? <img src={p.image_url} alt="" className="h-10 w-10 rounded object-cover shrink-0 bg-gray-100" />
-                          : <span className="h-10 w-10 rounded bg-gray-100 shrink-0" />}
-                        <div className="min-w-0 flex-1">
-                          <div className="font-medium truncate">{p.name}</div>
-                          <div className="text-xs text-ink-soft truncate">{p.barcode ?? '— pas de code-barres —'}</div>
-                        </div>
-                        <div className="font-semibold tabular-nums whitespace-nowrap">{formatEUR(p.sale_price_ttc)}</div>
+
+            {homeTab === 'home' && (
+              <div className="p-4 space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h1 className="text-2xl font-bold leading-tight">Bonjour {userName.split(' ')[0]}</h1>
+                    <p className="text-sm text-ink-soft">Que souhaitez-vous faire aujourd&apos;hui ?</p>
+                  </div>
+                  <div className="text-3xl shrink-0">📦</div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <ActionCard tone="rose" title="Imprimer une étiquette"
+                    desc="Scannez un code-barres pour imprimer l'étiquette du produit."
+                    icon={<IconPrinter />} onClick={() => setScanPrompt('label')} />
+                  {canWrite && (
+                    <ActionCard tone="green" title="Entrer en stock"
+                      desc="Scannez un code-barres pour entrer la marchandise en stock."
+                      icon={<IconBoxDown />} onClick={() => setScanPrompt('stock')} />
+                  )}
+                  {canWrite && (
+                    <ActionCard tone="blue" title="Créer un nouvel article"
+                      desc="Créez un nouvel article dans le catalogue."
+                      icon={<IconBoxPlus />} onClick={() => setCreateFor('')} />
+                  )}
+                </div>
+
+                <div className="card p-4 flex items-center gap-4">
+                  <div className="h-14 w-14 rounded-2xl bg-rose-50 grid place-items-center text-rose-500 shrink-0"><IconBarcode /></div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold">Scan rapide</div>
+                    <div className="text-sm text-ink-soft">Scannez un code-barres pour accéder aux actions disponibles.</div>
+                  </div>
+                  <button onClick={() => setScanPrompt('choice')} className="btn-primary h-11 px-4 shrink-0">Scanner</button>
+                </div>
+
+                <div>
+                  <div className="font-semibold mb-2">Dernières actions</div>
+                  <div className="card divide-y divide-border">
+                    {recent.length === 0 ? (
+                      <div className="p-4 text-sm text-ink-soft">Aucune action récente.</div>
+                    ) : recent.slice(0, 3).map((r, i) => <RecentRow key={i} r={r} />)}
+                    {recent.length > 3 && (
+                      <button onClick={() => setHomeTab('history')} className="w-full p-3 text-sm font-semibold text-accent-deep">
+                        Voir tout l&apos;historique
                       </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </>
-        ) : (
-          <div className="flex-1 min-h-0 overflow-y-auto p-4">
-            <div className="flex items-center justify-between">
-              <button onClick={backToList} className="text-sm text-accent-deep hover:underline">← Retour à la liste</button>
-              <button
-                onClick={() => selected.raw && setEditing(toEditable(selected.raw))}
-                className="btn-soft h-9 px-3 text-sm">
-                ✎ Éditer l&apos;article
-              </button>
-            </div>
-            {/* Fiche cliquable : ouvre l'édition. */}
-            <button
-              onClick={() => selected.raw && setEditing(toEditable(selected.raw))}
-              className="mt-3 w-full text-left flex gap-4 rounded-xl p-1 -m-1 active:bg-gray-100"
-            >
-              <div className="h-28 w-28 rounded-xl overflow-hidden bg-gray-100 shrink-0">
-                {selected.image_url && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={selected.image_url} alt="" className="h-full w-full object-cover" />
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {homeTab === 'articles' && (
+              <div className="flex flex-col">
+                <div className="p-3 border-b border-border bg-surface sticky top-0">
+                  <input className="input h-11 w-full" placeholder="Rechercher un article…"
+                         value={q} onChange={(e) => setQ(e.target.value)} />
+                </div>
+                {loading ? (
+                  <div className="p-6 text-sm text-ink-soft">Chargement…</div>
+                ) : filtered.length === 0 ? (
+                  <div className="p-6 text-sm text-ink-soft">Aucun article.</div>
+                ) : (
+                  <ul className="divide-y divide-border">
+                    {filtered.map((p) => (
+                      <li key={p.id}>
+                        <button onClick={() => pickProduct(p)} className="w-full text-left px-3 py-2.5 flex items-center gap-3 active:bg-gray-100">
+                          {p.image_url
+                            // eslint-disable-next-line @next/next/no-img-element
+                            ? <img src={p.image_url} alt="" className="h-10 w-10 rounded object-cover shrink-0 bg-gray-100" />
+                            : <span className="h-10 w-10 rounded bg-gray-100 shrink-0" />}
+                          <div className="min-w-0 flex-1">
+                            <div className="font-medium truncate">{p.name}</div>
+                            <div className="text-xs text-ink-soft truncate">{p.barcode ?? '— pas de code-barres —'}</div>
+                          </div>
+                          <div className="font-semibold tabular-nums whitespace-nowrap">{formatEUR(p.sale_price_ttc)}</div>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
                 )}
               </div>
-              <div className="min-w-0 flex-1 space-y-1">
-                <div className="text-lg font-semibold leading-tight">{selected.name}</div>
-                <div className="text-2xl font-bold">{formatEUR(disc ?? selected.sale_price_ttc)}</div>
-                <dl className="text-sm text-ink-soft space-y-0.5">
-                  <div>Code-barres : <span className="font-mono text-ink">{selected.barcode ?? '—'}</span></div>
-                  {selected.sku && <div>SKU : <span className="font-mono text-ink">{selected.sku}</span></div>}
-                  {selected.category_name && <div>Catégorie : <span className="text-ink">{selected.category_name}</span></div>}
-                </dl>
-                <div className="text-xs text-accent-deep pt-1">Appuyer pour modifier →</div>
+            )}
+
+            {homeTab === 'history' && (
+              <div className="p-4">
+                <div className="font-semibold mb-2">Historique</div>
+                {recent.length === 0 ? (
+                  <div className="card p-4 text-sm text-ink-soft">Aucune action récente.</div>
+                ) : (
+                  <div className="card divide-y divide-border">
+                    {recent.map((r, i) => <RecentRow key={i} r={r} />)}
+                  </div>
+                )}
               </div>
-            </button>
+            )}
+
+            {homeTab === 'settings' && (
+              <div className="p-4 space-y-3">
+                <div className="font-semibold">Paramètres</div>
+                <div className="card p-4 text-sm space-y-1">
+                  <div>Boutique : <strong>{station.store_name}</strong></div>
+                  <div className="text-ink-soft">Utilisateur : {userName}</div>
+                </div>
+                <button onClick={() => void logout()} className="btn-soft w-full h-11 text-danger">Ré-appairer ce PDA</button>
+              </div>
+            )}
+          </main>
+
+          {/* ===== BARRE DE NAVIGATION ===== */}
+          <nav className="shrink-0 border-t border-border bg-surface grid grid-cols-5 items-end px-2 pt-1 pb-1">
+            <NavItem active={homeTab === 'home'} label="Accueil" icon={<IconHome />} onClick={() => setHomeTab('home')} />
+            <NavItem active={homeTab === 'history'} label="Historique" icon={<IconClock />} onClick={() => setHomeTab('history')} />
+            <div className="grid place-items-center">
+              <button onClick={() => setScanPrompt('choice')}
+                      className="h-14 w-14 -mt-5 rounded-full accent-bar text-white grid place-items-center shadow-lg">
+                <IconBarcode />
+              </button>
+              <span className="text-[10px] mt-0.5 text-ink-soft">Scanner</span>
+            </div>
+            <NavItem active={homeTab === 'articles'} label="Articles" icon={<IconBox />} onClick={() => setHomeTab('articles')} />
+            <NavItem active={homeTab === 'settings'} label="Paramètres" icon={<IconGear />} onClick={() => setHomeTab('settings')} />
+          </nav>
+        </>
+      )}
+
+      {/* ===== Invite de scan (mode armé par une carte) ===== */}
+      {scanPrompt && (
+        <div className="fixed inset-0 z-[64] flex flex-col bg-bg"
+             style={{ paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+          <div className="h-14 flex items-center px-4 border-b border-border">
+            <button onClick={() => setScanPrompt(null)} className="text-sm text-accent-deep">← Annuler</button>
+            <div className="flex-1 text-center font-semibold">
+              {scanPrompt === 'label' ? 'Imprimer une étiquette' : scanPrompt === 'stock' ? 'Entrer en stock' : 'Scan rapide'}
+            </div>
+            <div className="w-16" />
           </div>
-        )}
-      </section>
+          <div className="flex-1 grid place-items-center p-6 text-center">
+            <div>
+              <div className="text-rose-500 mx-auto w-16 h-16 grid place-items-center"><IconBarcode big /></div>
+              <p className="mt-4 text-lg font-semibold">Scannez un article</p>
+              <p className="mt-1 text-sm text-ink-soft">Avec le lecteur du PDA, ou via la caméra.</p>
+              <input
+                ref={promptRef} className="input h-12 mt-4 text-center text-lg w-64 max-w-full"
+                placeholder="Code-barres…" autoFocus autoComplete="off"
+                onKeyDown={(e) => { if (e.key === 'Enter') { const v = (e.target as HTMLInputElement).value; (e.target as HTMLInputElement).value = ''; handleCode(v, scanPrompt); } }}
+              />
+              <div className="mt-3">
+                <button onClick={() => setShowScanner(true)} className="btn-soft h-11 px-4">📷 Ouvrir la caméra</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Caméra de scan */}
       {showScanner && (
         <BarcodeScannerModal
           onClose={() => setShowScanner(false)}
-          onScan={(code) => { setShowScanner(false); handleCode(code); }}
+          onScan={(code) => { const m = scanPrompt ?? 'choice'; setShowScanner(false); handleCode(code, m); }}
         />
       )}
 
@@ -708,3 +836,63 @@ function compressImage(file: File, maxSize: number, quality: number): Promise<st
     img.src = url;
   });
 }
+
+// ---- Tableau de bord : briques UI ----
+function ActionCard({ tone, title, desc, icon, onClick }: {
+  tone: 'rose' | 'green' | 'blue'; title: string; desc: string;
+  icon: React.ReactNode; onClick: () => void;
+}) {
+  const bg = tone === 'rose' ? 'bg-rose-50 text-rose-500'
+    : tone === 'green' ? 'bg-[var(--primary-soft)] text-[var(--primary)]'
+    : 'bg-blue-50 text-blue-500';
+  const arrow = tone === 'rose' ? 'text-rose-500' : tone === 'green' ? 'text-[var(--primary)]' : 'text-blue-500';
+  return (
+    <button onClick={onClick} className="card p-4 text-left flex flex-col active:scale-[0.99] transition-transform min-h-[150px]">
+      <div className={`h-12 w-12 rounded-2xl grid place-items-center ${bg}`}>{icon}</div>
+      <div className="mt-3 font-semibold leading-tight">{title}</div>
+      <div className="mt-1 text-xs text-ink-soft flex-1">{desc}</div>
+      <div className={`mt-2 ${arrow}`}>→</div>
+    </button>
+  );
+}
+
+function RecentRow({ r }: { r: RecentAction }) {
+  const tone = r.kind === 'label' ? 'bg-rose-50 text-rose-500'
+    : r.kind === 'stock' ? 'bg-[var(--primary-soft)] text-[var(--primary)]'
+    : 'bg-blue-50 text-blue-500';
+  const icon = r.kind === 'label' ? <IconPrinter /> : r.kind === 'stock' ? <IconBoxDown /> : <IconBoxPlus />;
+  return (
+    <div className="p-3 flex items-center gap-3">
+      <div className={`h-9 w-9 rounded-xl grid place-items-center shrink-0 ${tone}`}>{icon}</div>
+      <div className="min-w-0 flex-1">
+        <div className="font-medium truncate">{r.title}</div>
+        {r.sub && <div className="text-xs text-ink-soft truncate">{r.sub}</div>}
+      </div>
+      {r.at && <div className="text-xs text-ink-soft tabular-nums">{r.at}</div>}
+    </div>
+  );
+}
+
+function NavItem({ active, label, icon, onClick }: {
+  active: boolean; label: string; icon: React.ReactNode; onClick: () => void;
+}) {
+  return (
+    <button onClick={onClick} className={`flex flex-col items-center gap-0.5 py-1 ${active ? 'text-[var(--primary)]' : 'text-ink-soft'}`}>
+      {icon}
+      <span className="text-[10px]">{label}</span>
+    </button>
+  );
+}
+
+// ---- Icônes (SVG stroke, currentColor) ----
+const sv = (d: React.ReactNode, size = 22) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{d}</svg>
+);
+function IconPrinter() { return sv(<><path d="M6 9V3h12v6" /><rect x="4" y="9" width="16" height="8" rx="2" /><path d="M8 17h8v4H8z" /></>); }
+function IconBoxDown() { return sv(<><path d="M21 8l-9-5-9 5 9 5 9-5z" /><path d="M3 8v8l9 5 9-5V8" /><path d="M12 13v6" /><path d="M9.5 16.5L12 19l2.5-2.5" /></>); }
+function IconBoxPlus() { return sv(<><path d="M21 8l-9-5-9 5 9 5 9-5z" /><path d="M3 8v8l9 5 9-5V8" /><path d="M12 12v6M9 15h6" /></>); }
+function IconBarcode({ big }: { big?: boolean }) { return sv(<path d="M4 6v12M7 6v12M10 6v12M13 6v12M16 6v12M19 6v12" />, big ? 44 : 22); }
+function IconHome() { return sv(<><path d="M3 11l9-8 9 8" /><path d="M5 10v10h14V10" /></>); }
+function IconClock() { return sv(<><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>); }
+function IconBox() { return sv(<><path d="M21 8l-9-5-9 5 9 5 9-5z" /><path d="M3 8v8l9 5 9-5V8" /><path d="M12 13v8" /></>); }
+function IconGear() { return sv(<><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 7 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0-1.1-2.7H1a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 2.6 7a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H7a1.6 1.6 0 0 0 1-1.5V1a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V7a1.6 1.6 0 0 0 1.5 1H23a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z" /></>); }
