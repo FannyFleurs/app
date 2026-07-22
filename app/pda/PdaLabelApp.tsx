@@ -62,7 +62,6 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
   const [selected, setSelected] = useState<Product | null>(null);
-  const searchRef = useRef<HTMLInputElement>(null);
 
   const [settings, setSettings] = useState<LabelSettings>(LABEL_DEFAULTS);
   const [cloudPrinter, setCloudPrinter] = useState<string | null>(null);
@@ -174,11 +173,41 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [station]);
 
-  // Garde le focus sur la recherche : le scanner PDA « tape » le code + Entrée.
+  // Scan GLOBAL : le lecteur du PDA « tape » le code + Entrée, où qu'on soit
+  // dans l'app (sans focus sur un champ, sans tuile ni menu). On tamponne les
+  // frappes rapides ; sur Entrée, on traite le code (→ « Scanner un article »).
+  const scanFnRef = useRef<(code: string) => void>(() => {});
   useEffect(() => {
-    if (station && homeTab !== 'articles' && !selected && !showScanner && createFor === null
-        && !pending && !stockFor && !editing && !scanPrompt) searchRef.current?.focus();
-  }, [station, selected, showScanner, createFor, loading, pending, stockFor, editing, scanPrompt, homeTab]);
+    scanFnRef.current = (code: string) => {
+      // On ignore si on est déjà dans un sous-écran (étiquette, stock, création,
+      // édition, choix, invite de scan) ou dans la caméra.
+      if (selected || createFor !== null || editing || stockFor || pending || scanPrompt || showScanner) return;
+      handleCode(code, 'choice');
+    };
+  });
+  useEffect(() => {
+    let buf = '';
+    let last = 0;
+    function onKey(e: KeyboardEvent) {
+      const el = document.activeElement as HTMLElement | null;
+      const tag = el?.tagName;
+      // Champ de saisie actif (recherche, formulaire, caméra) : on laisse faire.
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el?.isContentEditable) return;
+      if (e.key === 'Enter') {
+        if (buf.length >= 3) scanFnRef.current(buf);
+        buf = '';
+        return;
+      }
+      if (e.key.length === 1) {
+        const now = Date.now();
+        if (now - last > 300) buf = '';   // pause = nouvelle séquence
+        last = now;
+        buf += e.key;
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -602,24 +631,8 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
         <>
           {/* ===== TABLEAU DE BORD ===== */}
           <main className="flex-1 min-h-0 overflow-y-auto">
-            {/* Champ caché : capte le lecteur intégré du PDA (scan sans bouton). */}
-            <input
-              ref={searchRef} className="sr-only" value={q}
-              onChange={(e) => setQ(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleCode(q, 'choice'); } }}
-              autoFocus autoComplete="off" aria-hidden tabIndex={-1}
-            />
-
             {homeTab === 'home' && (
               <div className="p-4 space-y-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h1 className="text-2xl font-bold leading-tight">Bonjour {userName.split(' ')[0]}</h1>
-                    <p className="text-sm text-ink-soft">Que souhaitez-vous faire aujourd&apos;hui ?</p>
-                  </div>
-                  <div className="text-3xl shrink-0">📦</div>
-                </div>
-
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <ActionCard tone="rose" title="Imprimer une étiquette"
                     desc="Scannez un code-barres pour imprimer l'étiquette du produit."
@@ -634,15 +647,6 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
                       desc="Créez un nouvel article dans le catalogue."
                       icon={<IconBoxPlus />} onClick={() => setCreateFor('')} />
                   )}
-                </div>
-
-                <div className="card p-4 flex items-center gap-4">
-                  <div className="h-14 w-14 rounded-2xl bg-rose-50 grid place-items-center text-rose-500 shrink-0"><IconBarcode /></div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-semibold">Scan rapide</div>
-                    <div className="text-sm text-ink-soft">Scannez un code-barres pour accéder aux actions disponibles.</div>
-                  </div>
-                  <button onClick={() => setScanPrompt('choice')} className="btn-primary h-11 px-4 shrink-0">Scanner</button>
                 </div>
 
                 <div>
@@ -665,7 +669,8 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
               <div className="flex flex-col">
                 <div className="p-3 border-b border-border bg-surface sticky top-0">
                   <input className="input h-11 w-full" placeholder="Rechercher un article…"
-                         value={q} onChange={(e) => setQ(e.target.value)} />
+                         value={q} onChange={(e) => setQ(e.target.value)}
+                         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleCode(q, 'choice'); } }} />
                 </div>
                 {loading ? (
                   <div className="p-6 text-sm text-ink-soft">Chargement…</div>
