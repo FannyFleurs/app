@@ -211,7 +211,7 @@ export default function SetupWizard() {
   }
 
   return (
-    <main className="min-h-screen bg-white">
+    <main className="min-h-screen bg-bg">
       <div className="max-w-3xl mx-auto p-6 sm:p-10">
         <header className="flex items-center gap-3 mb-6">
           <BrandMark size={44} showName={false} />

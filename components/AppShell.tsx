@@ -129,7 +129,7 @@ export default function AppShell({
   }, [autoLogoutMode]);
 
   return (
-    <div className="h-screen overflow-hidden flex flex-col bg-white pt-safe pl-safe pr-safe pb-safe">
+    <div className="h-screen overflow-hidden flex flex-col bg-bg pt-safe pl-safe pr-safe pb-safe">
       <SchoolModeBanner />
       <div className="flex-1 flex flex-row overflow-hidden min-h-0">
         {/* Sidebar verticale (desktop / tablette) */}
@@ -160,7 +160,7 @@ export default function AppShell({
           {/* Scroll vertical autorisé par défaut sur toutes les pages.
               Les pages à mise en page fixe (CAISSE) appliquent leur propre
               overflow-hidden + h-full pour ne pas scroller. */}
-          <main className="flex-1 overflow-y-auto overflow-x-hidden bg-white relative">{children}</main>
+          <main className="flex-1 overflow-y-auto overflow-x-hidden bg-bg relative">{children}</main>
         </div>
       </div>
 

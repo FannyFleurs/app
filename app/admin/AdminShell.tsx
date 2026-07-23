@@ -36,7 +36,7 @@ export default function AdminShell({
   useEffect(() => { setOpen(false); }, [pathname]);
 
   return (
-    <div className="min-h-screen bg-white md:flex">
+    <div className="min-h-screen bg-bg md:flex">
       {/* Barre supérieure mobile — hamburger + logo. */}
       <header className="md:hidden sticky top-0 z-30 h-14 flex items-center gap-3 border-b border-border bg-white px-4">
         <button

@@ -168,7 +168,7 @@ export default function PinLogin() {
   }
 
   return (
-    <main className="h-screen overflow-hidden bg-white grid grid-cols-1 lg:grid-cols-[520px_1fr] pt-safe pb-safe pl-safe pr-safe">
+    <main className="h-screen overflow-hidden bg-bg grid grid-cols-1 lg:grid-cols-[520px_1fr] pt-safe pb-safe pl-safe pr-safe">
       {/* COLONNE GAUCHE — sélection utilisateur. Sur mobile, on masque la
           liste quand un user est sélectionné, pour laisser place au PIN. */}
       <aside className={`${selected ? 'hidden lg:flex' : 'flex'} flex-col border-r border-border bg-white overflow-hidden`}>

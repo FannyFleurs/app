@@ -46,7 +46,7 @@ export default function AuthForm({
   }
 
   return (
-    <main className="min-h-screen grid place-items-center px-4 py-10 bg-gray-50 pt-safe pb-safe">
+    <main className="min-h-screen grid place-items-center px-4 py-10 bg-bg pt-safe pb-safe">
       <div className="w-full max-w-md">
         <form onSubmit={submit} className="card p-8 space-y-5">
           <div className="text-center">
