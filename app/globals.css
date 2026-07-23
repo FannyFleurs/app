@@ -12,7 +12,7 @@
   /* Palette neutre — surchargée par data-mode="dark".
      --bg : blanc cassé très léger, neutre (pas beige). Les cartes/surfaces
      restent en blanc pur (--surface) pour ressortir. */
-  --bg: #F6F6F7;
+  --bg: #ECEEF1;
   --surface: #FFFFFF;
   --muted: #F5F5F5;
   --ink: #1F2A24;
