@@ -19,18 +19,22 @@ export interface OrgInfo {
   phone?: string | null;
 }
 
-async function loadBwip(): Promise<null | {
-  toBuffer: (
-    opts: Record<string, unknown>,
-    cb: (err: Error | null, png: Buffer) => void,
-  ) => void;
-}> {
+type BwipNode = {
+  toBuffer: (opts: Record<string, unknown>) => Promise<Buffer>;
+};
+
+async function loadBwip(): Promise<BwipNode | null> {
   try {
-    // Indirection : webpack ne trace pas, et si bwip-js n'est pas installé
-    // on tombe dans le catch et le PDF se rend sans visuel de code-barre.
-    const nodeRequire = eval('require') as NodeJS.Require;
-    const mod = nodeRequire('bwip-js');
-    return mod?.default ?? mod;
+    // Import dynamique du build Node de bwip-js (spécifieur statique → tracé
+    // et bundlé par Next). L'ancien `eval('require')('bwip-js')` échouait au
+    // runtime dans le bundle serveur Next, d'où le repli « installer bwip-js »
+    // sur le ticket. bwip-js est du JS pur (pas de binaire natif).
+    const mod = (await import('bwip-js/node')) as unknown as {
+      default?: BwipNode; toBuffer?: BwipNode['toBuffer'];
+    };
+    if (mod.toBuffer) return { toBuffer: mod.toBuffer };
+    if (mod.default?.toBuffer) return { toBuffer: mod.default.toBuffer };
+    return null;
   } catch {
     return null;
   }
@@ -48,19 +52,17 @@ export async function renderGiftCardPdf(data: GiftCardPdfData, org: OrgInfo): Pr
   let barcodePng: Buffer | null = null;
   if (bwip) {
     try {
-      barcodePng = await new Promise<Buffer>((resolve, reject) => {
-        bwip.toBuffer({
-          bcid: 'ean13',
-          text: data.code,
-          scale: 2,
-          height: 12,
-          includetext: true,
-          textxalign: 'center',
-          textsize: 10,
-          backgroundcolor: 'FFFFFF',
-          paddingwidth: 4,
-          paddingheight: 4,
-        }, (err: Error | null, png: Buffer) => (err ? reject(err) : resolve(png)));
+      barcodePng = await bwip.toBuffer({
+        bcid: 'ean13',
+        text: data.code,
+        scale: 2,
+        height: 12,
+        includetext: true,
+        textxalign: 'center',
+        textsize: 10,
+        backgroundcolor: 'FFFFFF',
+        paddingwidth: 4,
+        paddingheight: 4,
       });
     } catch {
       barcodePng = null;

@@ -1002,17 +1002,22 @@ export default function CashRegister({
     setError(null);
     try {
       const lookup = await fetch(`/api/wallet/lookup?serial=${encodeURIComponent(serial)}`);
-      if (!lookup.ok) return;
+      if (!lookup.ok) {
+        // Ne pas échouer en silence : afficher un message clair au lieu de
+        // « rien ne se passe » (ex. 403 perm, erreur réseau).
+        setError(`Lecture carte fidélité impossible (${lookup.status}).`);
+        return;
+      }
       const j = await lookup.json() as { customer_id: string | null };
       if (!j.customer_id) {
         setError(`Carte fidélité inconnue (${serial})`);
         return;
       }
       const cr = await fetch(`/api/customers/${j.customer_id}`);
-      if (!cr.ok) return;
+      if (!cr.ok) { setError('Client de la carte introuvable.'); return; }
       const cj = await cr.json();
       const cu = cj.customer;
-      if (!cu) return;
+      if (!cu) { setError('Client de la carte introuvable.'); return; }
       await pickCustomer({
         id: cu.id,
         display_name: cu.company_name

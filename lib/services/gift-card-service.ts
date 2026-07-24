@@ -16,6 +16,11 @@ export class GiftCardService {
     beneficiaryId?: string | null;
   }): Promise<{ id: string; code: string }> {
     if (args.amount <= 0) throw new Error('AMOUNT_REQUIRED');
+    // Validité par défaut : 1 an à compter de l'émission si aucune date n'est
+    // fournie (une carte cadeau sans date d'expiration est l'exception, pas la
+    // règle).
+    const expiresAt = args.expiresAt
+      ?? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
     return withTransaction(async (client) => {
       // Génère un code unique
       let code = '';
@@ -47,7 +52,7 @@ export class GiftCardService {
            RETURNING id`,
           [
             args.organizationId, code, args.amount,
-            args.expiresAt ?? null,
+            expiresAt,
             args.buyer?.id ?? null,
             args.beneficiaryId ?? null,
             args.buyer?.name ?? null,
@@ -65,7 +70,7 @@ export class GiftCardService {
            RETURNING id`,
           [
             args.organizationId, code, args.amount,
-            args.expiresAt ?? null,
+            expiresAt,
             args.buyer?.id ?? null,
             args.beneficiaryId ?? null,
           ],
