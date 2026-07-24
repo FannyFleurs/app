@@ -24,6 +24,9 @@ type Encoder = import('star-prnt-encoder').default;
 function appendLabel(enc: Encoder, p: LabelProduct, s: LabelSettings): void {
   enc.align('center');
 
+  // Petite marge haute pour ne pas coller au bord supérieur de l'étiquette.
+  enc.newline();
+
   if (s.show_name && p.name) {
     // Nom sur 1-2 lignes, tronqué pour ne pas déborder d'une petite étiquette.
     const name = p.name.length > 40 ? `${p.name.slice(0, 39)}…` : p.name;
@@ -36,7 +39,7 @@ function appendLabel(enc: Encoder, p: LabelProduct, s: LabelSettings): void {
 
   if (s.show_barcode && p.barcode) {
     if (isValidEan13(p.barcode)) {
-      enc.barcode(p.barcode, 'ean13', 48);
+      enc.barcode(p.barcode, 'ean13', 56);
       // Numéro lisible sous le code-barres (l'encodeur n'imprime pas le HRI).
       enc.newline().text(p.barcode).newline();
     } else {
@@ -55,8 +58,13 @@ function appendLabel(enc: Encoder, p: LabelProduct, s: LabelSettings): void {
     }
   }
 
-  // Avance + coupe : sur média prédécoupé, positionne l'étiquette suivante.
-  enc.newline().cut();
+  // Fin d'étiquette : on AVANCE jusqu'au prochain gap (form feed 0x0C, géré
+  // par le capteur de l'imprimante en mode die-cut) PUIS on coupe. Ainsi la
+  // coupe tombe au bord de l'étiquette (hauteur pleine, ex. 51 mm) quel que
+  // soit le contenu — sinon, en « cut command prioritized », la coupe se
+  // ferait à la fin du texte (étiquette trop courte, 12-31 mm).
+  enc.raw([0x0c]);
+  enc.cut();
 }
 
 /**
