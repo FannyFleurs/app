@@ -43,6 +43,12 @@ export default function LabelPrinterForm({ stores, canWrite }: {
     setLoading(false);
   }, []);
   useEffect(() => { void load(); }, [load]);
+  // Rafraîchit la liste toutes les 4 s : on voit « vue à » avancer en direct
+  // (l'imprimante sonde-t-elle bien ?) et la file se vider quand un job part.
+  useEffect(() => {
+    const t = setInterval(() => { void load(); }, 4000);
+    return () => clearInterval(t);
+  }, [load]);
 
   async function add() {
     if (!mac.trim() || !label.trim()) { setErr('Renseigne le MAC et un nom.'); return; }
@@ -131,6 +137,21 @@ export default function LabelPrinterForm({ stores, canWrite }: {
                     {p.last_seen_at
                       ? ` · vue ${new Date(p.last_seen_at).toLocaleString('fr-FR')}`
                       : ' · jamais vue'}
+                  </div>
+                  <div className="text-xs mt-0.5">
+                    {(() => {
+                      const secs = p.last_seen_at
+                        ? Math.round((Date.now() - new Date(p.last_seen_at).getTime()) / 1000)
+                        : null;
+                      if (secs == null) {
+                        return <span className="text-danger">● Jamais vue — l'imprimante ne sonde pas encore (URL/CloudPRNT à vérifier).</span>;
+                      }
+                      if (secs <= 15) {
+                        return <span className="text-success">● En ligne — sonde active ({secs}s)</span>;
+                      }
+                      return <span className="text-warning">● Silencieuse depuis {secs}s — l'imprimante a cessé de sonder (redémarre-la / vérifie CloudPRNT activé).</span>;
+                    })()}
+                    {p.last_status ? <span className="text-ink-soft"> · état : {p.last_status}</span> : null}
                   </div>
                 </div>
                 {canWrite && (
