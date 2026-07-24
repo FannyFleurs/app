@@ -25,6 +25,13 @@ declare module 'star-prnt-encoder' {
     size(value: number | string): this;
     barcode(value: string, symbology: string, height?: number | Record<string, unknown>): this;
     qrcode(value: string, ...args: unknown[]): this;
+    image(
+      element: { data: Uint8Array | Uint8ClampedArray; width: number; height: number },
+      width: number,
+      height: number,
+      algorithm?: 'threshold' | 'bayer' | 'floydsteinberg' | 'atkinson',
+      threshold?: number,
+    ): this;
     cut(value?: string): this;
     raw(data: number[] | Uint8Array): this;
     encode(): Uint8Array;
