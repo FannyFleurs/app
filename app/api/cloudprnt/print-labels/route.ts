@@ -4,7 +4,7 @@ import { requirePermission } from '@/lib/auth/guards';
 import { parseJson } from '@/lib/validation/api';
 import { query } from '@/lib/db/client';
 import { mergeLabelDefaults, LABEL_KEY } from '@/lib/settings/label';
-import { renderLabelPng, countLabels, IMAGE_CONTENT_TYPE } from '@/lib/services/cloudprnt/label-image';
+import { renderLabelSheets, countLabels, IMAGE_CONTENT_TYPE } from '@/lib/services/cloudprnt/label-image';
 import { resolveLabelPrinter, enqueueJob } from '@/lib/services/cloudprnt/queue';
 import type { LabelProduct } from '@/lib/services/label-print';
 
@@ -47,25 +47,28 @@ export async function POST(req: Request) {
   const entries = parsed.data.entries.map((e) => ({ product: e.product as LabelProduct, qty: e.qty }));
   const count = countLabels(entries);
 
-  // Une IMAGE = une étiquette. On rend le PNG une fois par article puis on
-  // met en file autant de jobs que de copies demandées : l'imprimante pose
-  // chaque image sur une étiquette prédécoupée (top-of-form, pas de
-  // débordement d'une étiquette sur la suivante).
-  let firstJobId: string | null = null;
+  // On aplatit le lot (article × quantité) puis on rend TOUTES les étiquettes
+  // dans une seule image (empilées au pas du média). Un seul job → les
+  // étiquettes s'enchaînent sans coupe entre elles, coupe unique en fin de lot.
+  // Au-delà de la borne mémoire, plusieurs feuillets (donc plusieurs coupes).
+  const flat: LabelProduct[] = [];
   for (const e of entries) {
-    const png = await renderLabelPng(e.product, settings);
     const n = Math.max(1, Math.min(200, Math.round(e.qty || 0)));
-    for (let i = 0; i < n; i++) {
-      const job = await enqueueJob({
-        organizationId: g.user.organizationId,
-        printerId: printer.id,
-        contentType: IMAGE_CONTENT_TYPE,
-        payload: png,
-        title: e.product.name?.slice(0, 40) || 'Étiquette',
-        userId: g.user.id,
-      });
-      if (!firstJobId) firstJobId = job.id;
-    }
+    for (let i = 0; i < n; i++) flat.push(e.product);
+  }
+
+  const sheets = await renderLabelSheets(flat, settings);
+  let firstJobId: string | null = null;
+  for (const png of sheets) {
+    const job = await enqueueJob({
+      organizationId: g.user.organizationId,
+      printerId: printer.id,
+      contentType: IMAGE_CONTENT_TYPE,
+      payload: png,
+      title: `${count} étiquette${count > 1 ? 's' : ''}`,
+      userId: g.user.id,
+    });
+    if (!firstJobId) firstJobId = job.id;
   }
 
   return NextResponse.json({ ok: true, job_id: firstJobId, printer: printer.label, count });

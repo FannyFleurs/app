@@ -6,17 +6,23 @@ import { type LabelSettings } from '@/lib/settings/label';
 import { type LabelProduct, discountedPrice } from '@/lib/services/label-print';
 
 /**
- * Rendu d'une étiquette en IMAGE PNG (`image/png`), format supporté nativement
- * par la mC-Label3. Une image = exactement UNE étiquette : l'imprimante la pose
- * sur une étiquette prédécoupée en partant du haut (top-of-form), ce qui
- * supprime tout débordement d'une étiquette sur la suivante — contrairement au
- * mode « commandes texte » qui glissait sur le média die-cut.
+ * Rendu des étiquettes en IMAGE PNG (`image/png`), format supporté nativement
+ * par la mC-Label3.
  *
- * Bonus : ce pipeline (canvas serveur) est aussi la base du futur éditeur
- * visuel d'étiquette (placement + taille libres).
+ * Un LOT entier est rendu dans UNE seule image : chaque étiquette occupe une
+ * « case » au pas physique du média (hauteur étiquette + gap prédécoupé), le
+ * contenu étant dessiné dans la partie haute (l'étiquette), le gap laissé
+ * blanc. Ainsi, en un seul job :
+ *   - les étiquettes s'enchaînent sans coupe entre elles,
+ *   - l'imprimante ne coupe qu'UNE fois, en fin de lot,
+ *   - pas d'étiquette vierge intercalaire.
+ *
+ * Ce pipeline (canvas serveur) est aussi la base du futur éditeur visuel.
  */
 
 const DPMM = 8; // 203 dpi ≈ 8 points/mm
+// Nombre max d'étiquettes par image (borne mémoire). Au-delà, plusieurs jobs.
+const MAX_PER_SHEET = 30;
 
 let fontsReady = false;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -26,46 +32,33 @@ let bwip: any = null;
 
 async function ensureDeps(): Promise<void> {
   if (!PImageMod) PImageMod = await import('pureimage');
-  if (!bwip) bwip = (await import('bwip-js/node')).default ?? (await import('bwip-js/node'));
+  if (!bwip) {
+    const m = await import('bwip-js/node');
+    bwip = m.default ?? m;
+  }
   if (!fontsReady) {
     const dir = path.join(process.cwd(), 'assets', 'fonts');
-    const bold = PImageMod.registerFont(path.join(dir, 'BricolageGrotesque-Bold.ttf'), 'LabelBold');
-    const reg = PImageMod.registerFont(path.join(dir, 'BricolageGrotesque-Regular.ttf'), 'LabelReg');
-    bold.loadSync();
-    reg.loadSync();
+    PImageMod.registerFont(path.join(dir, 'BricolageGrotesque-Bold.ttf'), 'LabelBold').loadSync();
+    PImageMod.registerFont(path.join(dir, 'BricolageGrotesque-Regular.ttf'), 'LabelReg').loadSync();
     fontsReady = true;
   }
 }
 
 interface Block {
   kind: 'text' | 'image';
-  // texte
   text?: string;
   pt?: number;
   bold?: boolean;
-  // image (code-barres)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   img?: any;
   w?: number;
   h?: number;
-  lineH: number; // hauteur réservée dans le flux
+  lineH: number;
 }
 
-/** Génère le PNG d'une étiquette pour un produit. */
-export async function renderLabelPng(p: LabelProduct, s: LabelSettings): Promise<Buffer> {
-  await ensureDeps();
+/** Prépare les blocs d'UNE étiquette (texte + code-barres décodé). */
+async function buildBlocks(p: LabelProduct, s: LabelSettings, W: number, scale: number): Promise<Block[]> {
   const PImage = PImageMod;
-
-  const W = Math.max(120, Math.round((s.width_mm || 51) * DPMM));
-  const H = Math.max(120, Math.round((s.height_mm || 51) * DPMM));
-  const scale = H / 408; // proportions calées sur une étiquette 51 mm
-
-  const img = PImage.make(W, H);
-  const ctx = img.getContext('2d');
-  ctx.fillStyle = '#FFFFFF';
-  ctx.fillRect(0, 0, W, H);
-  ctx.fillStyle = '#000000';
-
   const blocks: Block[] = [];
 
   if (s.show_name && p.name) {
@@ -73,12 +66,10 @@ export async function renderLabelPng(p: LabelProduct, s: LabelSettings): Promise
     const pt = Math.round(26 * scale);
     blocks.push({ kind: 'text', text: name, pt, bold: true, lineH: Math.round(pt * 1.5) });
   }
-
   if (s.show_sku && p.sku) {
     const pt = Math.round(13 * scale);
     blocks.push({ kind: 'text', text: p.sku, pt, bold: false, lineH: Math.round(pt * 1.5) });
   }
-
   if (s.show_barcode && p.barcode && isValidEan13(p.barcode)) {
     const bcPng: Buffer = await bwip.toBuffer({
       bcid: 'ean13',
@@ -90,7 +81,6 @@ export async function renderLabelPng(p: LabelProduct, s: LabelSettings): Promise
       backgroundcolor: 'FFFFFF',
     });
     const bcImg = await PImage.decodePNGFromStream(Readable.from(bcPng));
-    // Rétrécit si plus large que l'étiquette (marge 12 %).
     const maxW = Math.round(W * 0.88);
     let w = bcImg.width;
     let h = bcImg.height;
@@ -100,7 +90,6 @@ export async function renderLabelPng(p: LabelProduct, s: LabelSettings): Promise
     const pt = Math.round(16 * scale);
     blocks.push({ kind: 'text', text: p.barcode, pt, bold: false, lineH: Math.round(pt * 1.5) });
   }
-
   if (s.show_price) {
     const disc = s.show_discount ? discountedPrice(p) : null;
     if (disc != null) {
@@ -113,17 +102,20 @@ export async function renderLabelPng(p: LabelProduct, s: LabelSettings): Promise
       blocks.push({ kind: 'text', text: formatEUR(p.sale_price_ttc), pt, bold: true, lineH: Math.round(pt * 1.4) });
     }
   }
+  return blocks;
+}
 
-  // Centrage vertical du bloc complet.
+/** Dessine les blocs d'une étiquette, centrés dans la case [offsetY, offsetY+contentH]. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function drawBlocks(ctx: any, blocks: Block[], W: number, offsetY: number, contentH: number, scale: number): void {
   const gap = Math.round(10 * scale);
   const totalH = blocks.reduce((sum, b) => sum + b.lineH, 0) + gap * Math.max(0, blocks.length - 1);
-  let y = Math.max(Math.round(8 * scale), Math.round((H - totalH) / 2));
+  let y = offsetY + Math.max(Math.round(8 * scale), Math.round((contentH - totalH) / 2));
 
   for (const b of blocks) {
     if (b.kind === 'text' && b.text) {
       ctx.font = `${b.pt}pt ${b.bold ? 'LabelBold' : 'LabelReg'}`;
       const tw = ctx.measureText(b.text).width;
-      // baseline ≈ y + hauteur de capitale (~ pt * 1.1 px)
       const baseline = y + Math.round((b.pt ?? 12) * 1.15);
       ctx.fillText(b.text, Math.max(0, (W - tw) / 2), baseline);
     } else if (b.kind === 'image' && b.img) {
@@ -131,13 +123,51 @@ export async function renderLabelPng(p: LabelProduct, s: LabelSettings): Promise
     }
     y += b.lineH + gap;
   }
+}
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function encode(img: any): Promise<Buffer> {
   const chunks: Buffer[] = [];
   const sink = new Writable({
     write(chunk: Buffer, _enc: BufferEncoding, cb: () => void) { chunks.push(Buffer.from(chunk)); cb(); },
   });
-  await PImage.encodePNGToStream(img, sink);
+  await PImageMod.encodePNGToStream(img, sink);
   return Buffer.concat(chunks);
+}
+
+/**
+ * Rend un « feuillet » : plusieurs étiquettes empilées dans une seule image,
+ * au pas physique (étiquette + gap). Renvoie une liste de PNG (un par tranche
+ * de MAX_PER_SHEET étiquettes) — chaque PNG = un job = une coupe en fin.
+ */
+export async function renderLabelSheets(labels: LabelProduct[], s: LabelSettings): Promise<Buffer[]> {
+  await ensureDeps();
+  const PImage = PImageMod;
+
+  const W = Math.max(120, Math.round((s.width_mm || 51) * DPMM));
+  const contentH = Math.max(80, Math.round((s.height_mm || 51) * DPMM)); // zone étiquette
+  const gapPx = Math.round((s.gap_mm ?? 3) * DPMM);
+  const slotH = contentH + gapPx; // pas physique
+  const scale = contentH / 408;
+
+  const out: Buffer[] = [];
+  for (let start = 0; start < labels.length; start += MAX_PER_SHEET) {
+    const slice = labels.slice(start, start + MAX_PER_SHEET);
+    // Dernière case sans gap final (coupe au ras de la dernière étiquette).
+    const H = slotH * slice.length - gapPx;
+    const img = PImage.make(W, Math.max(contentH, H));
+    const ctx = img.getContext('2d');
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, W, Math.max(contentH, H));
+    ctx.fillStyle = '#000000';
+
+    for (let i = 0; i < slice.length; i++) {
+      const blocks = await buildBlocks(slice[i]!, s, W, scale);
+      drawBlocks(ctx, blocks, W, i * slotH, contentH, scale);
+    }
+    out.push(await encode(img));
+  }
+  return out;
 }
 
 export const IMAGE_CONTENT_TYPE = 'image/png';
