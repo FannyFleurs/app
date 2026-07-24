@@ -23,7 +23,10 @@ function esc(s: string): string {
 
 /** Markup d'UNE étiquette (sans avance/coupe finale). */
 export function oneLabelMarkup(p: LabelProduct, s: LabelSettings): string {
-  const lines: string[] = ['[align: centre]'];
+  // NB : Star Document Markup n'accepte que l'orthographe américaine
+  // « center » (pas « centre ») — sinon la directive est invalide et
+  // l'étiquette entière peut être rejetée (rien ne s'imprime).
+  const lines: string[] = ['[align: center]'];
 
   if (s.show_name && p.name) {
     lines.push('[magnify: width 1; height 1]');
