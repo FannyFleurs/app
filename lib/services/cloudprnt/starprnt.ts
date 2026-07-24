@@ -27,25 +27,35 @@ function feed(enc: Encoder, mm: number): void {
   if (dots > 0) enc.raw([0x1b, 0x4a, dots]);
 }
 
-// Réglages de mise en page (faciles à ajuster au dixième après un test réel).
+// Centrage MATÉRIEL (ESC GS a 1) : l'imprimante centre elle-même la ligne,
+// y compris en texte agrandi — contrairement au centrage par espaces de
+// l'encodeur qui casse dès qu'on magnifie. À ré-émettre avant chaque bloc.
+function center(enc: Encoder): void {
+  enc.raw([0x1b, 0x1d, 0x61, 0x01]);
+}
+
+// Réglages de mise en page (faciles à ajuster après un test réel). Valeurs
+// volontairement modérées : le contenu doit tenir SOUS 51 mm sinon il déborde
+// sur l'étiquette suivante.
 const LAYOUT = {
-  topMarginMm: 2,     // marge haute
-  nameToPriceMm: 9,   // espace nom → prix (positionne le prix vers le centre)
-  priceToBarcodeMm: 10, // espace prix → code-barres (pousse le code-barres en bas)
-  cutExtraMm: 1,      // avance après le form feed avant coupe (gap ≈ 3 mm mais 3 = 2 mm trop tard)
+  topMarginMm: 2,       // marge haute
+  nameToPriceMm: 5,     // espace nom → prix
+  priceToBarcodeMm: 6,  // espace prix → code-barres
+  cutExtraMm: 1,        // avance après le form feed avant coupe
 };
 
 /** Ajoute une étiquette au flux de l'encodeur (sans initialisation). */
 function appendLabel(enc: Encoder, p: LabelProduct, s: LabelSettings): void {
-  enc.align('center');
   feed(enc, LAYOUT.topMarginMm);
 
   // --- HAUT : NOM (plus gros) ---
   if (s.show_name && p.name) {
-    const name = p.name.length > 18 ? `${p.name.slice(0, 17)}…` : p.name;
+    const name = p.name.length > 15 ? `${p.name.slice(0, 14)}…` : p.name;
+    center(enc);
     enc.width(2).height(2).bold(true).text(name).bold(false).width(1).height(1).newline();
   }
   if (s.show_sku && p.sku) {
+    center(enc);
     enc.text(p.sku).newline();
   }
 
@@ -54,20 +64,24 @@ function appendLabel(enc: Encoder, p: LabelProduct, s: LabelSettings): void {
   if (s.show_price) {
     const disc = s.show_discount ? discountedPrice(p) : null;
     if (disc != null) {
+      center(enc);
       enc.text(`au lieu de ${formatEUR(p.sale_price_ttc)}`).newline();
-      enc.width(2).height(3).bold(true).text(formatEUR(disc)).bold(false).width(1).height(1).newline();
+      center(enc);
+      enc.width(2).height(2).bold(true).text(formatEUR(disc)).bold(false).width(1).height(1).newline();
     } else {
-      enc.width(2).height(3).bold(true).text(formatEUR(p.sale_price_ttc)).bold(false).width(1).height(1).newline();
+      center(enc);
+      enc.width(2).height(2).bold(true).text(formatEUR(p.sale_price_ttc)).bold(false).width(1).height(1).newline();
     }
   }
 
   // --- BAS : CODE-BARRES + EAN collés (HRI imprimé par l'imprimante) ---
   feed(enc, LAYOUT.priceToBarcodeMm);
   if (s.show_barcode && p.barcode) {
+    center(enc);
     if (isValidEan13(p.barcode)) {
       // text:true → l'imprimante imprime le numéro EAN directement sous les
-      // barres (collé), pas besoin d'une ligne séparée.
-      enc.barcode(p.barcode, 'ean13', { height: 52, text: true });
+      // barres (collé), pas de ligne séparée.
+      enc.barcode(p.barcode, 'ean13', { height: 48, text: true });
       enc.newline();
     } else {
       enc.text(p.barcode).newline();
