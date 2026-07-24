@@ -255,12 +255,19 @@ export class SaleService {
       }
 
       const totalTtc = Number(sale.total_ttc);
-      if (totalTtc <= 0) throw new Error('SALE_EMPTY');
+      // Un total NÉGATIF n'a pas de sens ici. En revanche une vente à 0 €
+      // (entièrement remisée / offerte) est légitime : elle est scellée sans
+      // règlement. On distingue « panier vide » (aucune ligne → SALE_EMPTY,
+      // vérifié plus bas) d'un « total 0 € avec des lignes ».
+      if (totalTtc < 0) throw new Error('SALE_EMPTY');
 
-      // Vérifie la somme des paiements
-      const sumPayments = args.payments.reduce((s, p) => s + Number(p.amount), 0);
-      if (Math.abs(sumPayments - totalTtc) > 0.005) {
-        throw new Error('PAYMENTS_MISMATCH');
+      // Vérifie la somme des paiements. Pour une vente à 0 €, aucun règlement
+      // n'est requis (tableau de paiements vide autorisé).
+      if (totalTtc > 0) {
+        const sumPayments = args.payments.reduce((s, p) => s + Number(p.amount), 0);
+        if (Math.abs(sumPayments - totalTtc) > 0.005) {
+          throw new Error('PAYMENTS_MISMATCH');
+        }
       }
 
       const linesRes = await client.query(
@@ -270,6 +277,8 @@ export class SaleService {
            FROM sale_lines WHERE sale_id = $1 ORDER BY line_index`,
         [sale.id],
       );
+      // Panier réellement vide : rien à sceller.
+      if (linesRes.rowCount === 0) throw new Error('SALE_EMPTY');
 
       // 2. Paiements
       for (const p of args.payments) {
@@ -355,6 +364,11 @@ export class SaleService {
 
         // "En compte" (deferred) → débite le solde du client (négatif).
         // Le solde devient positif quand le client règle son ardoise plus tard.
+        // Interdit sur une vente anonyme : sans client, la créance n'a pas de
+        // porteur (sinon la vente serait scellée « payée » sans dette).
+        if (p.method === 'deferred' && !sale.customer_id) {
+          throw new Error('DEFERRED_REQUIRES_CUSTOMER');
+        }
         if (p.method === 'deferred' && sale.customer_id) {
           try {
             await client.query(

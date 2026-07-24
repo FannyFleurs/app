@@ -663,6 +663,9 @@ export default function CashRegister({
       body: JSON.stringify({ label: autoLabel }),
     });
     if (res.ok) {
+      // Incrémente immédiatement le compteur « En attente » sans attendre un
+      // rechargement de la caisse.
+      setHeldCount((n) => n + 1);
       setSaleId(null); setLines([]); setCustomer(null);
       setView({ kind: 'categories' }); setSearch('');
     }
@@ -825,6 +828,45 @@ export default function CashRegister({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           payments: [{ method, amount: totals.ttc }],
+          loyalty_redemption_amount: loyalty.used > 0 ? loyalty.used : undefined,
+        }),
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        setError(j.error ?? j.message ?? 'Erreur d\'encaissement');
+        return;
+      }
+      const j = await r.json();
+      await onValidated(j.receipt_id, j.receipt_number, j.loyalty);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
+  /**
+   * Validation d'une vente à 0 € (entièrement remisée / offerte). Aucun
+   * règlement n'est nécessaire : on scelle directement avec un tableau de
+   * paiements vide.
+   */
+  async function validateZeroSale() {
+    if (lines.length === 0 || totals.ttc !== 0) return;
+    setError(null);
+    if (shouldGoOffline()) { await finalizeOffline([], loyalty.used); return; }
+    const id = await ensureSale();
+    if (!id) return;
+    await syncLines();
+    if (schoolMode) {
+      const fakeId = `school-receipt-${Date.now()}`;
+      const fakeNumber = `ECOLE-${new Date().toISOString().slice(11, 19).replace(/:/g, '')}`;
+      await onValidated(fakeId, fakeNumber, null);
+      return;
+    }
+    try {
+      const r = await fetch(`/api/sales/${id}/validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          payments: [],
           loyalty_redemption_amount: loyalty.used > 0 ? loyalty.used : undefined,
         }),
       });
@@ -1197,7 +1239,7 @@ export default function CashRegister({
           {/* Barre de recherche VISIBLE : champ dès qu'ouverte, sinon une barre
               cliquable claire (pas une simple loupe). */}
           {searchOpen ? (
-            <div className="flex-1 md:max-w-sm relative">
+            <div className="flex-1 md:flex-none md:w-80 md:ml-auto relative">
               <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-soft" aria-hidden>
                 <Icon name="search" size={18} />
               </span>
@@ -1231,7 +1273,7 @@ export default function CashRegister({
               onClick={() => setSearchOpen(true)}
               title="Rechercher / scanner ( / )"
               aria-label="Rechercher un article"
-              className="flex-1 md:max-w-sm min-h-[44px] h-11 rounded-xl border border-border bg-white hover:bg-gray-50 flex items-center gap-2 px-3 text-ink-soft text-sm text-left transition-colors"
+              className="flex-1 md:flex-none md:w-80 md:ml-auto min-h-[44px] h-11 rounded-xl border border-border bg-white hover:bg-gray-50 flex items-center gap-2 px-3 text-ink-soft text-sm text-left transition-colors"
             >
               <Icon name="search" size={18} />
               <span>Rechercher / scanner…</span>
@@ -1584,7 +1626,19 @@ export default function CashRegister({
               "Autres" (paiements multiples, chèque, lien Stripe, fidélité…). */}
           {/* Règlements rapides : groupe aligné, espacement régulier, cibles
               tactiles ≥ 48px. Espèces + Autres (secondaires) sur une ligne,
-              Carte (principal, mis en avant) sur toute la largeur en dessous. */}
+              Carte (principal, mis en avant) sur toute la largeur en dessous.
+              Cas particulier : vente à 0 € (offerte / entièrement remisée) →
+              un seul bouton « Valider » car aucun règlement n'est nécessaire. */}
+          {lines.length > 0 && totals.ttc === 0 ? (
+            <button
+              onClick={() => void validateZeroSale()}
+              className="btn-primary h-16 w-full text-xl font-semibold rounded-xl flex items-center justify-center gap-3"
+              title="Valider la vente offerte (0 €)"
+            >
+              <span className="text-2xl leading-none">🎁</span>
+              <span>Valider · 0 €</span>
+            </button>
+          ) : (
           <div className="flex flex-col gap-2">
             <div className="grid grid-cols-2 gap-2">
               <button
@@ -1619,6 +1673,7 @@ export default function CashRegister({
               <span>Carte</span>
             </button>
           </div>
+          )}
         </div>
 
         {error && (
@@ -1633,6 +1688,7 @@ export default function CashRegister({
           saleId={saleId ?? ''}
           totalTtc={totals.ttc}
           storeId={storeId}
+          hasCustomer={!!customer}
           loyaltyRedemption={loyalty.used > 0 ? loyalty.used : undefined}
           schoolMode={schoolMode}
           offlineEnabled={offlinePosEnabled()}

@@ -29,6 +29,9 @@ interface Props {
   totalTtc: number;
   /** Boutique du poste : ne propose que les modes disponibles pour elle. */
   storeId?: string;
+  /** Un client est-il rattaché à la vente ? Requis pour le paiement « en
+   *  compte » (différé) : interdit sur une vente anonyme. */
+  hasCustomer?: boolean;
   loyaltyRedemption?: number;
   /** Si true, on génère un faux ticket localement sans appel serveur. */
   schoolMode?: boolean;
@@ -43,7 +46,7 @@ interface Props {
   onValidated: (receiptId: string, receiptNumber: string, loyalty?: { earned: number; redeemed: number; new_balance: number } | null) => void;
 }
 
-export default function PaymentModal({ saleId, totalTtc, storeId, loyaltyRedemption, schoolMode, offlineEnabled, onOfflineFinalize, onClose, onValidated }: Props) {
+export default function PaymentModal({ saleId, totalTtc, storeId, hasCustomer = false, loyaltyRedemption, schoolMode, offlineEnabled, onOfflineFinalize, onClose, onValidated }: Props) {
   const [methods, setMethods] = useState<Array<{ kind: Method; label: string }>>(FALLBACK_METHODS);
   const [amountStr, setAmountStr] = useState<string>('');
   const [payments, setPayments] = useState<RegisteredPayment[]>([]);
@@ -118,6 +121,13 @@ export default function PaymentModal({ saleId, totalTtc, storeId, loyaltyRedempt
   async function tapMethod(m: { kind: Method; label: string }) {
     setError(null);
     const typed = Number(amountStr || '0');
+
+    // Paiement « en compte » (différé) : impossible sur une vente anonyme —
+    // il faut un client pour porter la créance.
+    if (m.kind === 'deferred' && !hasCustomer) {
+      setError('Le paiement « en compte » nécessite un client rattaché à la vente.');
+      return;
+    }
 
     // Avoir / Carte cadeau : on ouvre une recherche pour récupérer la référence + solde
     if (m.kind === 'credit_note' || m.kind === 'gift_card') {
@@ -324,16 +334,21 @@ export default function PaymentModal({ saleId, totalTtc, storeId, loyaltyRedempt
             </div>
             {/* Mobile : grille 2 colonnes pour gagner de la place. Desktop : pile verticale. */}
             <div className="grid grid-cols-2 lg:grid-cols-1 gap-1.5 lg:gap-2.5">
-              {methods.map((m) => (
+              {methods.map((m) => {
+                // « En compte » désactivé sans client (vente anonyme).
+                const blockedDeferred = m.kind === 'deferred' && !hasCustomer;
+                return (
                 <button
                   key={m.kind + m.label}
                   onClick={() => tapMethod(m)}
-                  disabled={remaining <= 0 && Number(amountStr || '0') <= 0}
-                  className="btn-soft h-11 lg:h-16 text-sm lg:text-base font-medium px-2 leading-tight"
+                  disabled={(remaining <= 0 && Number(amountStr || '0') <= 0) || blockedDeferred}
+                  title={blockedDeferred ? 'Rattachez un client pour payer en compte' : undefined}
+                  className="btn-soft h-11 lg:h-16 text-sm lg:text-base font-medium px-2 leading-tight disabled:opacity-40"
                 >
                   {m.label}
                 </button>
-              ))}
+                );
+              })}
             </div>
           </div>
 

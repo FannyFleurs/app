@@ -16,7 +16,10 @@ const paymentSchema = z.object({
 });
 
 const schema = z.object({
-  payments: z.array(paymentSchema).min(1),
+  // Tableau vide autorisé : une vente à 0 € (entièrement remisée / offerte)
+  // est scellée sans règlement. Le service refuse toujours un total > 0 sans
+  // paiements suffisants (PAYMENTS_MISMATCH).
+  payments: z.array(paymentSchema),
   loyalty_redemption_amount: z.number().min(0).optional(),
 });
 
@@ -82,6 +85,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       msg === 'SALE_NOT_FOUND' ? 404 :
       msg === 'SALE_EMPTY' ? 422 :
       msg === 'LOYALTY_INSUFFICIENT_BALANCE' ? 422 :
+      msg === 'DEFERRED_REQUIRES_CUSTOMER' ? 422 :
       msg.startsWith('CREDIT_NOTE_') ? 422 :
       msg.startsWith('GIFT_CARD_') ? 422 : 400;
     return jsonError(msg, status);
