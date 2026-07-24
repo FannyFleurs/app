@@ -20,55 +20,64 @@ export const STARPRNT_CONTENT_TYPE = 'application/vnd.star.starprnt';
 // Type de l'encodeur, importé dynamiquement (paquet ESM `type: module`).
 type Encoder = import('star-prnt-encoder').default;
 
+// Avance papier de `mm` millimètres (ESC J n ; n en points de 0,125 mm à
+// 203 dpi). Sert à positionner verticalement les blocs sur l'étiquette.
+function feed(enc: Encoder, mm: number): void {
+  const dots = Math.min(255, Math.max(0, Math.round(mm / 0.125)));
+  if (dots > 0) enc.raw([0x1b, 0x4a, dots]);
+}
+
+// Réglages de mise en page (faciles à ajuster au dixième après un test réel).
+const LAYOUT = {
+  topMarginMm: 2,     // marge haute
+  nameToPriceMm: 9,   // espace nom → prix (positionne le prix vers le centre)
+  priceToBarcodeMm: 10, // espace prix → code-barres (pousse le code-barres en bas)
+  cutExtraMm: 1,      // avance après le form feed avant coupe (gap ≈ 3 mm mais 3 = 2 mm trop tard)
+};
+
 /** Ajoute une étiquette au flux de l'encodeur (sans initialisation). */
 function appendLabel(enc: Encoder, p: LabelProduct, s: LabelSettings): void {
   enc.align('center');
+  feed(enc, LAYOUT.topMarginMm);
 
-  // Petite marge haute pour ne pas coller au bord supérieur de l'étiquette.
-  enc.newline();
-
+  // --- HAUT : NOM (plus gros) ---
   if (s.show_name && p.name) {
-    // Nom sur 1-2 lignes, tronqué pour ne pas déborder d'une petite étiquette.
-    const name = p.name.length > 40 ? `${p.name.slice(0, 39)}…` : p.name;
-    enc.bold(true).text(name).bold(false).newline();
+    const name = p.name.length > 18 ? `${p.name.slice(0, 17)}…` : p.name;
+    enc.width(2).height(2).bold(true).text(name).bold(false).width(1).height(1).newline();
   }
-
   if (s.show_sku && p.sku) {
     enc.text(p.sku).newline();
   }
 
-  if (s.show_barcode && p.barcode) {
-    if (isValidEan13(p.barcode)) {
-      enc.barcode(p.barcode, 'ean13', 56);
-      // Numéro lisible sous le code-barres (l'encodeur n'imprime pas le HRI).
-      enc.newline().text(p.barcode).newline();
-    } else {
-      // Code-barres non EAN-13 : au moins imprimer le code en clair.
-      enc.text(p.barcode).newline();
-    }
-  }
-
+  // --- CENTRE : PRIX en gros ---
+  feed(enc, LAYOUT.nameToPriceMm);
   if (s.show_price) {
     const disc = s.show_discount ? discountedPrice(p) : null;
     if (disc != null) {
       enc.text(`au lieu de ${formatEUR(p.sale_price_ttc)}`).newline();
-      enc.width(2).height(2).bold(true).text(formatEUR(disc)).bold(false).width(1).height(1).newline();
+      enc.width(2).height(3).bold(true).text(formatEUR(disc)).bold(false).width(1).height(1).newline();
     } else {
-      enc.width(2).height(2).bold(true).text(formatEUR(p.sale_price_ttc)).bold(false).width(1).height(1).newline();
+      enc.width(2).height(3).bold(true).text(formatEUR(p.sale_price_ttc)).bold(false).width(1).height(1).newline();
     }
   }
 
-  // Fin d'étiquette :
-  //  1) form feed (0x0C) : le capteur de gap arrête l'imprimante au bord de
-  //     l'étiquette (fin des 51 mm),
-  //  2) avance de la largeur du gap prédécoupé pour amener la lame au milieu
-  //     du gap (sinon la coupe tombe ~3 mm trop tôt, au ras du texte/étiquette),
-  //  3) coupe.
-  // Avance en pas de 0,125 mm (1 point à 203 dpi) via ESC J n. Gap ≈ 3 mm.
-  const gapMm = 3;
-  const gapDots = Math.min(255, Math.max(0, Math.round(gapMm / 0.125)));
+  // --- BAS : CODE-BARRES + EAN collés (HRI imprimé par l'imprimante) ---
+  feed(enc, LAYOUT.priceToBarcodeMm);
+  if (s.show_barcode && p.barcode) {
+    if (isValidEan13(p.barcode)) {
+      // text:true → l'imprimante imprime le numéro EAN directement sous les
+      // barres (collé), pas besoin d'une ligne séparée.
+      enc.barcode(p.barcode, 'ean13', { height: 52, text: true });
+      enc.newline();
+    } else {
+      enc.text(p.barcode).newline();
+    }
+  }
+
+  // Fin d'étiquette : form feed jusqu'au gap (capteur), petite avance pour
+  // amener la lame dans le gap, puis coupe.
   enc.raw([0x0c]);
-  enc.raw([0x1b, 0x4a, gapDots]); // ESC J n : avance n points (~3 mm)
+  feed(enc, LAYOUT.cutExtraMm);
   enc.cut();
 }
 
