@@ -36,6 +36,8 @@ export async function buildLabelsStarPrnt(
   const enc = new StarPrntEncoder({});
   enc.initialize();
 
+  const total = countLabels(entries);
+  let idx = 0;
   for (const { product, qty } of entries) {
     const n = Math.max(1, Math.min(200, Math.round(qty || 0)));
     const bmp = await renderLabelBitmap(product, settings);
@@ -47,11 +49,19 @@ export async function buildLabelsStarPrnt(
         bmp.height,
         'threshold',
       );
-      // Coupe : avance jusqu'au gap prédécoupé (capteur), petite avance pour
-      // amener la lame dans le gap, puis coupe.
-      enc.raw([0x0c]);
-      feed(enc, CUT_EXTRA_MM);
-      enc.cut();
+      idx += 1;
+      if (idx < total) {
+        // Étiquette intermédiaire : on avance simplement à l'étiquette suivante
+        // (form feed = re-calage sur le gap), SANS couper. Les étiquettes
+        // restent enchaînées, séparées par le prédécoupé → aucune vierge entre
+        // elles (couper à chaque étiquette éjectait une vierge à chaque fois).
+        enc.raw([0x0c]);
+      } else {
+        // Dernière étiquette du lot : avance au gap puis UNE seule coupe.
+        enc.raw([0x0c]);
+        feed(enc, CUT_EXTRA_MM);
+        enc.cut();
+      }
     }
   }
 

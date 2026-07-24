@@ -57,28 +57,31 @@ export async function renderLabelBitmap(p: LabelProduct, s: LabelSettings): Prom
     ctx.fillText(text, Math.max(0, (W - tw) / 2), baseline);
   };
 
+  // Mise en page COMPACTE, ancrée en HAUT : nom → prix → code-barres, avec une
+  // grande marge basse pour que l'EAN reste toujours sur l'étiquette (robuste
+  // à l'offset top-of-form de l'imprimante). Positions verticales en fraction
+  // de la hauteur (scale), faciles à ajuster.
   // --- HAUT : nom (gros) ---
   if (s.show_name && p.name) {
     const name = p.name.length > 22 ? `${p.name.slice(0, 21)}…` : p.name;
-    centerText(name, Math.round(30 * scale), true, Math.round(60 * scale));
+    centerText(name, Math.round(30 * scale), true, Math.round(46 * scale));
   }
   if (s.show_sku && p.sku) {
-    centerText(p.sku, Math.round(13 * scale), false, Math.round(92 * scale));
+    centerText(p.sku, Math.round(13 * scale), false, Math.round(72 * scale));
   }
 
-  // --- CENTRE : prix (très gros) ---
+  // --- PRIX (très gros), juste sous le nom ---
   if (s.show_price) {
     const disc = s.show_discount ? discountedPrice(p) : null;
     if (disc != null) {
-      centerText(`au lieu de ${formatEUR(p.sale_price_ttc)}`, Math.round(15 * scale), false, Math.round(160 * scale));
-      centerText(formatEUR(disc), Math.round(56 * scale), true, Math.round(215 * scale));
+      centerText(`au lieu de ${formatEUR(p.sale_price_ttc)}`, Math.round(15 * scale), false, Math.round(100 * scale));
+      centerText(formatEUR(disc), Math.round(54 * scale), true, Math.round(145 * scale));
     } else {
-      centerText(formatEUR(p.sale_price_ttc), Math.round(58 * scale), true, Math.round(205 * scale));
+      centerText(formatEUR(p.sale_price_ttc), Math.round(56 * scale), true, Math.round(135 * scale));
     }
   }
 
-  // --- BAS : code-barres + EAN collés (avec marge basse pour ne pas déborder
-  // sur l'étiquette suivante) ---
+  // --- CODE-BARRES + EAN collés, ancrés en haut vers ~42 % de la hauteur ---
   if (s.show_barcode && p.barcode) {
     if (isValidEan13(p.barcode)) {
       const bcPng: Buffer = await bwip.toBuffer({
@@ -94,10 +97,9 @@ export async function renderLabelBitmap(p: LabelProduct, s: LabelSettings): Prom
       const maxW = Math.round(W * 0.9);
       let w = bcImg.width; let h = bcImg.height;
       if (w > maxW) { const r = maxW / w; w = maxW; h = Math.round(h * r); }
-      // Marge basse ~5 mm (40 px) pour garder le numéro EAN sur l'étiquette.
-      ctx.drawImage(bcImg, Math.round((W - w) / 2), H - h - Math.round(40 * scale), w, h);
+      ctx.drawImage(bcImg, Math.round((W - w) / 2), Math.round(170 * scale), w, h);
     } else {
-      centerText(p.barcode, Math.round(16 * scale), false, H - Math.round(40 * scale));
+      centerText(p.barcode, Math.round(16 * scale), false, Math.round(200 * scale));
     }
   }
 
