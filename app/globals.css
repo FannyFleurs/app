@@ -16,8 +16,13 @@
   --surface: #FFFFFF;
   --muted: #F5F5F5;
   --ink: #1F2A24;
-  --ink-soft: #6B6F73;
-  --border: #E7E7EA;
+  /* Texte secondaire : assombri pour rester ≥ 4.5:1 (WCAG AA) sur le fond
+     blanc cassé (#ECEEF1) comme sur le blanc pur. */
+  --ink-soft: #565A5F;
+  --border: #E1E2E6;
+  /* Vert dédié au TEXTE (assez foncé pour ≥ 4.5:1 sur fond clair). Distinct du
+     vert d'accent (--primary) réservé aux fonds/boutons. */
+  --accent-text: #3B4F2C;
 
   /* Barre de navigation supérieure (foncée façon application POS) */
   --topbar-bg: #1F2A24;
@@ -241,8 +246,11 @@ select.input {
     color: var(--ink);
   }
   .accent-bar { background-color: var(--primary); }
-  .text-accent { color: var(--primary); }
-  .text-accent-deep { color: var(--primary-deep); }
+  /* Texte vert : on utilise le vert TEXTE (foncé, lisible) et non le vert
+     d'accent clair, pour respecter les seuils de contraste WCAG. */
+  .text-accent { color: var(--accent-text); }
+  .text-accent-deep { color: var(--accent-text); }
+  body[data-mode="dark"] .text-accent { color: color-mix(in srgb, var(--primary) 65%, white); }
   body[data-mode="dark"] .text-accent-deep { color: color-mix(in srgb, var(--primary) 60%, white); }
   .bg-accent-soft { background-color: var(--primary-soft); }
 }

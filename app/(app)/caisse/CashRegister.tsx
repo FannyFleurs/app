@@ -1192,64 +1192,64 @@ export default function CashRegister({
         onTouchEnd={(e) => onTouchEnd(e, 'open')}
       >
         <OfflineBanner />
-        <div className="flex items-center gap-2 px-3 md:px-5 h-14 shrink-0 border-b border-border bg-white">
-          {/* Champ de recherche : ouvert seulement à la demande (via la loupe
-              ci-dessous ou « / »). Sinon, l'espace reste libre pour le
-              catalogue. */}
-          {searchOpen && (
-            <input
-              ref={searchRef}
-              autoFocus
-              className="input h-10 flex-1 md:flex-none md:w-64"
-              placeholder="Rechercher / scanner…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onBlur={() => { if (!search.trim()) setSearchOpen(false); }}
-              onKeyDown={(e) => {
-                if (e.key === 'Escape') { setSearch(''); setSearchOpen(false); return; }
-                if (e.key === 'Enter' && search.trim()) {
-                  const raw = search.trim();
-                  // Detection carte fidelite : "FID..." (normalise pour
-                  // gerer le mangling clavier iPad AZERTY qui remplace '-' par '§').
-                  const normalized = raw.replace(/[^A-Z0-9]/gi, '').toUpperCase();
-                  if (normalized.startsWith('FID') && normalized.length >= 6) {
-                    void attachCustomerBySerial(normalized);
-                    setSearch('');
-                    return;
+        <div className="flex items-center gap-2 px-3 md:px-5 h-16 shrink-0 border-b border-border bg-white">
+          {/* Barre de recherche VISIBLE : champ dès qu'ouverte, sinon une barre
+              cliquable claire (pas une simple loupe). */}
+          {searchOpen ? (
+            <div className="flex-1 md:max-w-sm relative">
+              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-soft" aria-hidden>
+                <Icon name="search" size={18} />
+              </span>
+              <input
+                ref={searchRef}
+                autoFocus
+                className="input h-11 w-full pl-10"
+                placeholder="Rechercher / scanner…"
+                aria-label="Rechercher un article"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onBlur={() => { if (!search.trim()) setSearchOpen(false); }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') { setSearch(''); setSearchOpen(false); return; }
+                  if (e.key === 'Enter' && search.trim()) {
+                    const raw = search.trim();
+                    const normalized = raw.replace(/[^A-Z0-9]/gi, '').toUpperCase();
+                    if (normalized.startsWith('FID') && normalized.length >= 6) {
+                      void attachCustomerBySerial(normalized);
+                      setSearch('');
+                      return;
+                    }
+                    const match = products.find((p) => p.barcode === raw);
+                    if (match) { addProduct(match); setSearch(''); }
                   }
-                  const match = products.find((p) => p.barcode === raw);
-                  if (match) { addProduct(match); setSearch(''); }
-                }
-              }}
-            />
+                }}
+              />
+            </div>
+          ) : (
+            <button
+              onClick={() => setSearchOpen(true)}
+              title="Rechercher / scanner ( / )"
+              aria-label="Rechercher un article"
+              className="flex-1 md:max-w-sm min-h-[44px] h-11 rounded-xl border border-border bg-white hover:bg-gray-50 flex items-center gap-2 px-3 text-ink-soft text-sm text-left transition-colors"
+            >
+              <Icon name="search" size={18} />
+              <span>Rechercher / scanner…</span>
+            </button>
           )}
-          <div className="flex-1" />
-          {/* Scanner caméra : uniquement sur mobile/tablette (BarcodeDetector
-              n'est pas disponible sur la plupart des navigateurs desktop). */}
+          {/* Scanner caméra : uniquement sur mobile/tablette. */}
           <button
-            className="btn-ghost px-3 md:hidden"
+            className="btn-ghost min-h-[44px] px-3 md:hidden"
             onClick={() => setShowScanner(true)}
             title="Scanner code-barres / QR"
             aria-label="Scanner"
           >
-            <Icon name="camera" size={18} />
+            <Icon name="camera" size={20} />
           </button>
-          {/* Loupe : ouvre le champ de recherche (à gauche du panier en attente) */}
-          {!searchOpen && (
-            <button
-              className="btn-ghost px-3"
-              onClick={() => setSearchOpen(true)}
-              title="Rechercher / scanner ( / )"
-              aria-label="Rechercher"
-            >
-              <Icon name="search" size={18} />
-            </button>
-          )}
-          <button className="btn-ghost px-3 inline-flex items-center gap-1" onClick={() => setShowHeld(true)} title="F4">
-            <span className="hidden md:inline">Panier en attente</span>
+          <button className="btn-soft min-h-[44px] px-4 inline-flex items-center gap-1.5 whitespace-nowrap" onClick={() => setShowHeld(true)} title="F4" aria-label="Paniers en attente">
+            <span className="hidden md:inline">En attente</span>
             <span className="md:hidden"><Icon name="pause" size={18} /></span>
             {heldCount > 0 && (
-              <span className="ml-1.5 inline-flex items-center justify-center h-5 min-w-[1.25rem] px-1.5 rounded-full text-[11px] font-semibold accent-bar text-white">
+              <span className="inline-flex items-center justify-center h-5 min-w-[1.25rem] px-1.5 rounded-full text-[11px] font-semibold accent-bar text-white">
                 {heldCount}
               </span>
             )}
@@ -1387,7 +1387,7 @@ export default function CashRegister({
           <button
             disabled={lines.length === 0}
             onClick={() => setShowCartActions(true)}
-            className="btn-soft text-sm h-10 px-3 whitespace-nowrap"
+            className="btn-soft text-sm min-h-[44px] px-4 whitespace-nowrap"
             title="Remise globale / commentaire"
           >
             Actions
@@ -1395,24 +1395,27 @@ export default function CashRegister({
           <button
             disabled={lines.length === 0 || !saleId}
             onClick={() => void holdSale()}
-            className="btn-soft text-sm h-10 px-3 whitespace-nowrap"
+            className="btn-soft text-sm min-h-[44px] px-4 whitespace-nowrap"
             title="Mettre ce ticket en attente"
           >
             En attente
           </button>
           <button
             disabled={lines.length === 0}
-            onClick={() => { setLines([]); setSaleId(null); setCartComment(''); void detachCustomer(); }}
-            className="btn-ghost text-sm h-10 px-3 whitespace-nowrap"
+            onClick={() => { if (confirm('Vider le ticket ? Les articles en cours seront retirés.')) { setLines([]); setSaleId(null); setCartComment(''); void detachCustomer(); } }}
+            className="btn-soft text-sm min-h-[44px] px-4 whitespace-nowrap"
+            title="Retirer tous les articles du ticket"
           >
             Vider
           </button>
+          {/* Action destructive, nettement séparée + style danger + confirmation. */}
           <button
             disabled={lines.length === 0 && !saleId}
-            onClick={() => void cancelTicket()}
-            className="btn-ghost text-sm h-10 px-3 text-danger hover:bg-danger/10 whitespace-nowrap"
+            onClick={() => { if (confirm('Annuler ce ticket ? La vente en cours sera définitivement abandonnée.')) void cancelTicket(); }}
+            className="ml-2 md:ml-3 text-sm min-h-[44px] px-4 rounded-xl font-medium whitespace-nowrap border border-danger/40 text-danger hover:bg-danger/10 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
             title="Annuler ce ticket"
           >
+            <span aria-hidden className="text-base leading-none">✕</span>
             Annuler
           </button>
         </div>
@@ -1578,35 +1581,40 @@ export default function CashRegister({
               (chacun sur la moitié de la hauteur), Carte à droite sur toute
               la hauteur. La modale de règlement n'est ouverte que pour
               "Autres" (paiements multiples, chèque, lien Stripe, fidélité…). */}
-          <div className="grid grid-cols-2 grid-rows-2 gap-2 h-32">
-            <button
-              disabled={lines.length === 0 || totals.ttc <= 0}
-              onClick={() => void quickPay('cash')}
-              className="col-start-1 row-start-1 btn-primary text-lg font-semibold rounded-[5px] flex flex-col items-center justify-center gap-0.5 disabled:opacity-40"
-              title="Encaisser en espèces"
-            >
-              <span className="text-xl leading-none">💶</span>
-              <span>Espèces</span>
-            </button>
-            <button
-              disabled={lines.length === 0 || totals.ttc <= 0}
-              onClick={async () => {
-                if (shouldGoOffline()) { setShowPayment(true); return; }
-                const id = await ensureSale(); if (id) { await syncLines(); setShowPayment(true); }
-              }}
-              className="col-start-1 row-start-2 btn-soft text-base font-semibold rounded-[5px] flex flex-col items-center justify-center gap-0.5 disabled:opacity-40"
-              title="Choisir le mode de règlement (multiple, chèque, lien Stripe…)"
-            >
-              <span className="text-lg leading-none">⋯</span>
-              <span>Autres</span>
-            </button>
+          {/* Règlements rapides : groupe aligné, espacement régulier, cibles
+              tactiles ≥ 48px. Espèces + Autres (secondaires) sur une ligne,
+              Carte (principal, mis en avant) sur toute la largeur en dessous. */}
+          <div className="flex flex-col gap-2">
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                disabled={lines.length === 0 || totals.ttc <= 0}
+                onClick={() => void quickPay('cash')}
+                className="btn-soft h-14 text-base font-semibold rounded-xl flex items-center justify-center gap-2 disabled:opacity-40"
+                title="Encaisser en espèces"
+              >
+                <span className="text-xl leading-none">💶</span>
+                <span>Espèces</span>
+              </button>
+              <button
+                disabled={lines.length === 0 || totals.ttc <= 0}
+                onClick={async () => {
+                  if (shouldGoOffline()) { setShowPayment(true); return; }
+                  const id = await ensureSale(); if (id) { await syncLines(); setShowPayment(true); }
+                }}
+                className="btn-soft h-14 text-base font-semibold rounded-xl flex items-center justify-center gap-2 disabled:opacity-40"
+                title="Choisir le mode de règlement (multiple, chèque, lien Stripe…)"
+              >
+                <span className="text-xl leading-none">⋯</span>
+                <span>Autres</span>
+              </button>
+            </div>
             <button
               disabled={lines.length === 0 || totals.ttc <= 0}
               onClick={() => void quickPay('card')}
-              className="col-start-2 row-start-1 row-span-2 btn-primary text-2xl font-semibold rounded-[5px] flex flex-col items-center justify-center gap-1 disabled:opacity-40"
+              className="btn-primary h-16 w-full text-xl font-semibold rounded-xl flex items-center justify-center gap-3 disabled:opacity-40"
               title="Encaisser par carte bancaire"
             >
-              <span className="text-3xl leading-none">💳</span>
+              <span className="text-2xl leading-none">💳</span>
               <span>Carte</span>
             </button>
           </div>

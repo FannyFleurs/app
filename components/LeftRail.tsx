@@ -189,17 +189,20 @@ export default function LeftRail({
             <Link
               key={t.href}
               href={t.href}
-              className={`group relative grid place-items-center h-14 w-14 lg:h-16 lg:w-16 rounded-2xl transition-colors ${
+              aria-current={active ? 'page' : undefined}
+              className={`group relative flex flex-col items-center justify-center gap-0.5 w-16 lg:w-[4.75rem] min-h-[56px] py-1.5 px-1 rounded-2xl transition-colors ${
                 active
-                  ? 'text-white shadow-sm'
-                  : 'text-ink-soft hover:text-ink hover:bg-gray-50'
+                  ? 'text-white shadow-sm font-semibold'
+                  : 'text-ink-soft hover:text-ink hover:bg-gray-100'
               }`}
               style={active ? { backgroundColor: 'var(--primary)' } : undefined}
               title={t.label}
               aria-label={t.label}
             >
-              <Icon name={t.icon} size={26} />
-              {/* Tooltip label au survol */}
+              <Icon name={t.icon} size={22} />
+              {/* Libellé visible sous l'icône (tronqué si long ; texte complet
+                  via aria-label + tooltip au survol). */}
+              <span className="text-[10px] leading-tight text-center max-w-full truncate">{t.label}</span>
               <span
                 className="pointer-events-none absolute left-full ml-2 top-1/2 -translate-y-1/2
                            whitespace-nowrap rounded-lg px-2 py-1 text-xs font-medium
