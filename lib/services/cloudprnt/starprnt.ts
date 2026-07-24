@@ -58,11 +58,12 @@ function appendLabel(enc: Encoder, p: LabelProduct, s: LabelSettings): void {
     }
   }
 
-  // Fin d'étiquette : une seule coupe. En mode die-cut, si l'imprimante est
-  // réglée pour couper au GAP détecté (et non « command prioritized »), elle
-  // aligne elle-même la coupe sur le bord de l'étiquette (hauteur pleine),
-  // en tenant compte de l'offset physique de la lame — ce que le logiciel ne
-  // peut pas deviner. Voir la note de config imprimante.
+  // Fin d'étiquette : on AVANCE d'abord jusqu'au prochain gap prédécoupé
+  // (form feed 0x0C ; le capteur de gap étant calibré, l'imprimante s'arrête
+  // pile au bord de l'étiquette), PUIS on coupe. Ainsi la coupe tombe à la
+  // hauteur pleine de l'étiquette (ex. 51 mm) quel que soit le contenu — sans
+  // ça, « Follow Command » coupe à la fin du texte (étiquette trop courte).
+  enc.raw([0x0c]);
   enc.cut();
 }
 
