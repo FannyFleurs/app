@@ -70,21 +70,22 @@ export async function renderLabelBitmap(p: LabelProduct, s: LabelSettings): Prom
   if (s.show_price) {
     const disc = s.show_discount ? discountedPrice(p) : null;
     if (disc != null) {
-      centerText(`au lieu de ${formatEUR(p.sale_price_ttc)}`, Math.round(15 * scale), false, Math.round(175 * scale));
-      centerText(formatEUR(disc), Math.round(58 * scale), true, Math.round(240 * scale));
+      centerText(`au lieu de ${formatEUR(p.sale_price_ttc)}`, Math.round(15 * scale), false, Math.round(160 * scale));
+      centerText(formatEUR(disc), Math.round(56 * scale), true, Math.round(215 * scale));
     } else {
-      centerText(formatEUR(p.sale_price_ttc), Math.round(60 * scale), true, Math.round(230 * scale));
+      centerText(formatEUR(p.sale_price_ttc), Math.round(58 * scale), true, Math.round(205 * scale));
     }
   }
 
-  // --- BAS : code-barres + EAN collés ---
+  // --- BAS : code-barres + EAN collés (avec marge basse pour ne pas déborder
+  // sur l'étiquette suivante) ---
   if (s.show_barcode && p.barcode) {
     if (isValidEan13(p.barcode)) {
       const bcPng: Buffer = await bwip.toBuffer({
         bcid: 'ean13',
         text: p.barcode,
         scale: Math.max(2, Math.round(3 * scale)),
-        height: Math.round(13 * scale),
+        height: Math.round(12 * scale),
         includetext: true,
         textsize: Math.round(11 * scale),
         backgroundcolor: 'FFFFFF',
@@ -93,9 +94,10 @@ export async function renderLabelBitmap(p: LabelProduct, s: LabelSettings): Prom
       const maxW = Math.round(W * 0.9);
       let w = bcImg.width; let h = bcImg.height;
       if (w > maxW) { const r = maxW / w; w = maxW; h = Math.round(h * r); }
-      ctx.drawImage(bcImg, Math.round((W - w) / 2), H - h - Math.round(12 * scale), w, h);
+      // Marge basse ~5 mm (40 px) pour garder le numéro EAN sur l'étiquette.
+      ctx.drawImage(bcImg, Math.round((W - w) / 2), H - h - Math.round(40 * scale), w, h);
     } else {
-      centerText(p.barcode, Math.round(16 * scale), false, H - Math.round(18 * scale));
+      centerText(p.barcode, Math.round(16 * scale), false, H - Math.round(40 * scale));
     }
   }
 
