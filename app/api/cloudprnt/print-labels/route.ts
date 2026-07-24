@@ -4,7 +4,7 @@ import { requirePermission } from '@/lib/auth/guards';
 import { parseJson } from '@/lib/validation/api';
 import { query } from '@/lib/db/client';
 import { mergeLabelDefaults, LABEL_KEY } from '@/lib/settings/label';
-import { renderLabelPng, countLabels, IMAGE_CONTENT_TYPE } from '@/lib/services/cloudprnt/label-image';
+import { buildLabelsStarPrnt, countLabels, STARPRNT_CONTENT_TYPE } from '@/lib/services/cloudprnt/starprnt';
 import { resolveLabelPrinter, enqueueJob } from '@/lib/services/cloudprnt/queue';
 import type { LabelProduct } from '@/lib/services/label-print';
 
@@ -45,28 +45,17 @@ export async function POST(req: Request) {
   const settings = mergeLabelDefaults((st.rows[0]?.value as Record<string, unknown>) ?? null);
 
   const entries = parsed.data.entries.map((e) => ({ product: e.product as LabelProduct, qty: e.qty }));
+  const payload = await buildLabelsStarPrnt(entries, settings);
   const count = countLabels(entries);
 
-  // Une IMAGE = une étiquette. On rend le PNG une fois par article puis on
-  // met en file autant de jobs que de copies demandées : l'imprimante pose
-  // chaque image sur une étiquette prédécoupée (top-of-form, pas de
-  // débordement d'une étiquette sur la suivante).
-  let firstJobId: string | null = null;
-  for (const e of entries) {
-    const png = await renderLabelPng(e.product, settings);
-    const n = Math.max(1, Math.min(200, Math.round(e.qty || 0)));
-    for (let i = 0; i < n; i++) {
-      const job = await enqueueJob({
-        organizationId: g.user.organizationId,
-        printerId: printer.id,
-        contentType: IMAGE_CONTENT_TYPE,
-        payload: png,
-        title: e.product.name?.slice(0, 40) || 'Étiquette',
-        userId: g.user.id,
-      });
-      if (!firstJobId) firstJobId = job.id;
-    }
-  }
+  const job = await enqueueJob({
+    organizationId: g.user.organizationId,
+    printerId: printer.id,
+    contentType: STARPRNT_CONTENT_TYPE,
+    payload,
+    title: `${count} étiquette${count > 1 ? 's' : ''}`,
+    userId: g.user.id,
+  });
 
-  return NextResponse.json({ ok: true, job_id: firstJobId, printer: printer.label, count });
+  return NextResponse.json({ ok: true, job_id: job.id, printer: printer.label, count });
 }
