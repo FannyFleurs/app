@@ -58,12 +58,17 @@ function appendLabel(enc: Encoder, p: LabelProduct, s: LabelSettings): void {
     }
   }
 
-  // Fin d'étiquette : on AVANCE d'abord jusqu'au prochain gap prédécoupé
-  // (form feed 0x0C ; le capteur de gap étant calibré, l'imprimante s'arrête
-  // pile au bord de l'étiquette), PUIS on coupe. Ainsi la coupe tombe à la
-  // hauteur pleine de l'étiquette (ex. 51 mm) quel que soit le contenu — sans
-  // ça, « Follow Command » coupe à la fin du texte (étiquette trop courte).
+  // Fin d'étiquette :
+  //  1) form feed (0x0C) : le capteur de gap arrête l'imprimante au bord de
+  //     l'étiquette (fin des 51 mm),
+  //  2) avance de la largeur du gap prédécoupé pour amener la lame au milieu
+  //     du gap (sinon la coupe tombe ~3 mm trop tôt, au ras du texte/étiquette),
+  //  3) coupe.
+  // Avance en pas de 0,125 mm (1 point à 203 dpi) via ESC J n. Gap ≈ 3 mm.
+  const gapMm = 3;
+  const gapDots = Math.min(255, Math.max(0, Math.round(gapMm / 0.125)));
   enc.raw([0x0c]);
+  enc.raw([0x1b, 0x4a, gapDots]); // ESC J n : avance n points (~3 mm)
   enc.cut();
 }
 
