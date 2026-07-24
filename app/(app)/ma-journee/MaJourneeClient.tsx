@@ -12,6 +12,7 @@ import PaymentCorrectionModal from './PaymentCorrectionModal';
 import AttachCustomerAfterSaleModal from './AttachCustomerAfterSaleModal';
 import DayReportView from './DayReportView';
 import type { DayReport } from '@/lib/services/day-report';
+import { promptThemed } from '@/lib/ui/dialog';
 
 interface Sale {
   id: string; receipt_number: string;
@@ -409,6 +410,68 @@ export default function MaJourneeClient() {
   );
 }
 
+/**
+ * Actions sur le ticket d'une vente passée : réimpression (ouvre le PDF et
+ * déclenche l'impression) et renvoi par email (à l'email du client, ou saisi
+ * à la volée si absent).
+ */
+function ReceiptActions({ saleId, receiptNumber, onSent, onError }: {
+  saleId: string;
+  receiptNumber: string;
+  onSent: (email: string) => void;
+  onError: (message: string) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+
+  function reprint() {
+    const w = window.open(`/api/receipts/by-sale/${saleId}/pdf`, '_blank');
+    if (w) {
+      w.addEventListener('load', () => { try { w.print(); } catch { /* iOS bloque parfois */ } });
+    }
+  }
+
+  async function resend(email?: string) {
+    setBusy(true);
+    try {
+      const r = await fetch(`/api/receipts/by-sale/${saleId}/email`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(email ? { email } : {}),
+      });
+      if (!r.ok) {
+        if (r.status === 422) {
+          // Pas d'email client : on le demande.
+          const entered = await promptThemed({
+            title: 'Renvoyer le ticket',
+            message: `Adresse email pour le ticket ${receiptNumber} :`,
+            placeholder: 'client@exemple.fr',
+          });
+          if (entered && entered.includes('@')) { await resend(entered.trim()); }
+          return;
+        }
+        onError('Envoi du ticket impossible.');
+        return;
+      }
+      const j = await r.json();
+      if (j.delivered === false) { onError(j.send_error || 'Email non envoyé (vérifier la configuration).'); return; }
+      onSent(j.email);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <button onClick={reprint} className="btn-soft text-xs whitespace-nowrap" title="Réimprimer le ticket">
+        🖨 Réimprimer
+      </button>
+      <button onClick={() => void resend()} disabled={busy}
+              className="btn-soft text-xs whitespace-nowrap disabled:opacity-40" title="Renvoyer le ticket par email">
+        {busy ? 'Envoi…' : '✉ Renvoyer'}
+      </button>
+    </>
+  );
+}
+
 function SendInvoiceButton({
   invoiceId, invoiceNumber, onSent,
 }: {
@@ -589,10 +652,18 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
             </div>
           </div>
           <div className="flex flex-col items-end gap-2">
-            <a href={`/api/receipts/by-sale/${s.id}/pdf`} target="_blank" rel="noreferrer"
-               className="btn-soft text-xs whitespace-nowrap">
-              Voir le ticket
-            </a>
+            <div className="flex flex-wrap items-center justify-end gap-1.5">
+              <a href={`/api/receipts/by-sale/${s.id}/pdf`} target="_blank" rel="noreferrer"
+                 className="btn-soft text-xs whitespace-nowrap">
+                Voir le ticket
+              </a>
+              <ReceiptActions
+                saleId={s.id}
+                receiptNumber={s.receipt_number}
+                onSent={(email) => setInfo(`Ticket renvoyé à ${email}`)}
+                onError={(m) => setError(m)}
+              />
+            </div>
             {detail.invoice ? (
               <div className="flex flex-col items-end gap-1.5">
                 <a href={`/api/invoices/${detail.invoice.id}/pdf`} target="_blank" rel="noreferrer"

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { promptThemed } from '@/lib/ui/dialog';
 
 interface Props {
   receipt: {
@@ -117,6 +118,36 @@ export default function ReceiptPreviewModal({ receipt, storeId, onClose }: Props
     setInvoice({ id: j.invoice_id, number: j.number });
   }
 
+  const [invoiceSending, setInvoiceSending] = useState(false);
+  const [invoiceToast, setInvoiceToast] = useState<string | null>(null);
+
+  async function sendInvoice(invoiceId: string, invoiceNumber: string, email?: string) {
+    setInvoiceSending(true);
+    try {
+      const r = await fetch(`/api/invoices/${invoiceId}/email`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(email ? { email } : {}),
+      });
+      if (!r.ok) {
+        if (r.status === 400 || r.status === 422) {
+          const entered = await promptThemed({
+            title: 'Envoyer la facture',
+            message: `Adresse email pour la facture ${invoiceNumber} :`,
+            placeholder: 'client@exemple.fr',
+          });
+          if (entered && entered.includes('@')) { await sendInvoice(invoiceId, invoiceNumber, entered.trim()); }
+          return;
+        }
+        setError('Envoi de la facture impossible.');
+        return;
+      }
+      const j = await r.json();
+      setInvoiceToast(`Facture envoyée à ${j.email}`);
+    } finally {
+      setInvoiceSending(false);
+    }
+  }
+
   return (
     <div
       className="fixed inset-0 z-50 grid place-items-center bg-ink/30 backdrop-blur-sm p-2 md:p-4"
@@ -203,18 +234,32 @@ export default function ReceiptPreviewModal({ receipt, storeId, onClose }: Props
 
         <div className={`mt-4 rounded-xl border border-border p-4 bg-gray-50 ${isSchool ? 'hidden' : ''}`}>
           {invoice ? (
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
               <div>
                 <div className="text-xs uppercase tracking-wider text-ink-soft">Facture émise</div>
                 <div className="font-medium">{invoice.number}</div>
               </div>
-              <a
-                href={`/api/invoices/${invoice.id}/pdf`}
-                target="_blank" rel="noreferrer"
-                className="btn-primary h-12 text-base px-5 inline-flex items-center"
-              >
-                Ouvrir la facture
-              </a>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => void sendInvoice(invoice.id, invoice.number)}
+                  disabled={invoiceSending}
+                  className="btn-soft h-12 text-base px-5 inline-flex items-center disabled:opacity-40"
+                >
+                  {invoiceSending ? 'Envoi…' : '✉ Envoyer'}
+                </button>
+                <a
+                  href={`/api/invoices/${invoice.id}/pdf`}
+                  target="_blank" rel="noreferrer"
+                  className="btn-primary h-12 text-base px-5 inline-flex items-center"
+                >
+                  Ouvrir la facture
+                </a>
+              </div>
+              {invoiceToast && (
+                <div className="w-full mt-1 rounded-lg bg-success/10 px-3 py-1.5 text-xs text-success">
+                  {invoiceToast}
+                </div>
+              )}
             </div>
           ) : receipt.customerId ? (
             <div className="flex items-center justify-between gap-3">
