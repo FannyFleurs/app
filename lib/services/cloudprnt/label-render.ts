@@ -6,14 +6,18 @@ import { type LabelSettings } from '@/lib/settings/label';
 import { type LabelProduct, discountedPrice } from '@/lib/services/label-print';
 
 /**
- * Rendu d'une étiquette en BITMAP (canvas serveur pureimage), destiné à être
- * inséré dans un job StarPRNT via `encoder.image(...)`. Permet un placement 2D
- * précis (nom centré en haut, prix centré au milieu, code-barres en bas) — ce
- * que le mode texte StarPRNT ne sait pas faire — tout en conservant la coupe
- * propre (form feed + gap) gérée côté commandes.
+ * Rendu des étiquettes en BITMAP (canvas serveur pureimage), destiné à être
+ * inséré dans un job StarPRNT via `encoder.image(...)`.
+ *
+ * Un LOT entier est rendu dans UNE seule image continue : chaque étiquette
+ * occupe une « case » au pas physique du média (hauteur étiquette + gap
+ * prédécoupé). Aucune commande (feed/coupe) n'est insérée ENTRE les étiquettes
+ * → elles s'enchaînent sans vierge intercalaire. Placement 2D précis (nom
+ * centré en haut, prix au centre, code-barres en bas).
  */
 
-const DPMM = 8; // 203 dpi ≈ 8 points/mm
+const DPMM = 8;        // 203 dpi ≈ 8 points/mm
+const GAP_MM = 3;      // gap prédécoupé entre étiquettes (Fanny Fleurs : 3 mm)
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let PImageMod: any = null;
@@ -34,74 +38,82 @@ async function ensureDeps() {
 
 export interface LabelBitmap { data: Uint8Array; width: number; height: number; }
 
-/** Rend une étiquette en bitmap RGBA (largeur multiple de 8 pour StarPRNT). */
-export async function renderLabelBitmap(p: LabelProduct, s: LabelSettings): Promise<LabelBitmap> {
-  await ensureDeps();
-  const PImage = PImageMod;
-
-  // Largeur alignée sur 8 px (packing raster StarPRNT).
-  let W = Math.round((s.width_mm || 51) * DPMM);
-  W = Math.max(64, Math.round(W / 8) * 8);
-  const H = Math.max(80, Math.round((s.height_mm || 51) * DPMM));
-  const scale = H / 408;
-
-  const img = PImage.make(W, H);
-  const ctx = img.getContext('2d');
-  ctx.fillStyle = '#FFFFFF';
-  ctx.fillRect(0, 0, W, H);
+/** Dessine le contenu d'UNE étiquette dans la case [offsetY, offsetY+contentH]. */
+async function drawLabel(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ctx: any, W: number, offsetY: number, contentH: number, p: LabelProduct, s: LabelSettings,
+) {
+  const scale = contentH / 408;
   ctx.fillStyle = '#000000';
-
-  const centerText = (text: string, pt: number, bold: boolean, baseline: number) => {
+  const cText = (text: string, pt: number, bold: boolean, y: number) => {
     ctx.font = `${pt}pt ${bold ? 'LabelBold' : 'LabelReg'}`;
     const tw = ctx.measureText(text).width;
-    ctx.fillText(text, Math.max(0, (W - tw) / 2), baseline);
+    ctx.fillText(text, Math.max(0, (W - tw) / 2), offsetY + y);
   };
 
-  // Mise en page COMPACTE, ancrée en HAUT : nom → prix → code-barres, avec une
-  // grande marge basse pour que l'EAN reste toujours sur l'étiquette (robuste
-  // à l'offset top-of-form de l'imprimante). Positions verticales en fraction
-  // de la hauteur (scale), faciles à ajuster.
-  // --- HAUT : nom (gros) ---
   if (s.show_name && p.name) {
     const name = p.name.length > 22 ? `${p.name.slice(0, 21)}…` : p.name;
-    centerText(name, Math.round(30 * scale), true, Math.round(46 * scale));
+    cText(name, Math.round(30 * scale), true, Math.round(46 * scale));
   }
   if (s.show_sku && p.sku) {
-    centerText(p.sku, Math.round(13 * scale), false, Math.round(72 * scale));
+    cText(p.sku, Math.round(13 * scale), false, Math.round(72 * scale));
   }
 
-  // --- PRIX (très gros), juste sous le nom ---
   if (s.show_price) {
     const disc = s.show_discount ? discountedPrice(p) : null;
     if (disc != null) {
-      centerText(`au lieu de ${formatEUR(p.sale_price_ttc)}`, Math.round(15 * scale), false, Math.round(100 * scale));
-      centerText(formatEUR(disc), Math.round(54 * scale), true, Math.round(145 * scale));
+      cText(`au lieu de ${formatEUR(p.sale_price_ttc)}`, Math.round(15 * scale), false, Math.round(100 * scale));
+      cText(formatEUR(disc), Math.round(54 * scale), true, Math.round(145 * scale));
     } else {
-      centerText(formatEUR(p.sale_price_ttc), Math.round(56 * scale), true, Math.round(135 * scale));
+      cText(formatEUR(p.sale_price_ttc), Math.round(56 * scale), true, Math.round(135 * scale));
     }
   }
 
-  // --- CODE-BARRES + EAN collés, ancrés en haut vers ~42 % de la hauteur ---
   if (s.show_barcode && p.barcode) {
     if (isValidEan13(p.barcode)) {
       const bcPng: Buffer = await bwip.toBuffer({
-        bcid: 'ean13',
-        text: p.barcode,
+        bcid: 'ean13', text: p.barcode,
         scale: Math.max(2, Math.round(3 * scale)),
         height: Math.round(12 * scale),
-        includetext: true,
-        textsize: Math.round(11 * scale),
+        includetext: true, textsize: Math.round(11 * scale),
         backgroundcolor: 'FFFFFF',
       });
-      const bcImg = await PImage.decodePNGFromStream(Readable.from(bcPng));
+      const bcImg = await PImageMod.decodePNGFromStream(Readable.from(bcPng));
       const maxW = Math.round(W * 0.9);
       let w = bcImg.width; let h = bcImg.height;
       if (w > maxW) { const r = maxW / w; w = maxW; h = Math.round(h * r); }
-      ctx.drawImage(bcImg, Math.round((W - w) / 2), Math.round(170 * scale), w, h);
+      ctx.drawImage(bcImg, Math.round((W - w) / 2), offsetY + Math.round(170 * scale), w, h);
     } else {
-      centerText(p.barcode, Math.round(16 * scale), false, Math.round(200 * scale));
+      cText(p.barcode, Math.round(16 * scale), false, Math.round(200 * scale));
     }
   }
+}
 
-  return { data: img.data as Uint8Array, width: W, height: H };
+/**
+ * Rend un « feuillet » : plusieurs étiquettes empilées dans UNE image continue
+ * (chacune dans une case au pas étiquette+gap). Une seule image = un seul
+ * enc.image() → aucune séparation entre étiquettes.
+ */
+export async function renderLabelSheetBitmap(labels: LabelProduct[], s: LabelSettings): Promise<LabelBitmap> {
+  await ensureDeps();
+  const PImage = PImageMod;
+
+  let W = Math.round((s.width_mm || 51) * DPMM);
+  W = Math.max(64, Math.round(W / 8) * 8); // largeur multiple de 8 (raster)
+  const contentH = Math.max(80, Math.round((s.height_mm || 51) * DPMM));
+  const gapPx = Math.round(GAP_MM * DPMM);
+  const pitch = contentH + gapPx;
+  // Dernière case sans gap final (coupe au ras de la dernière étiquette).
+  const H = pitch * labels.length - gapPx;
+
+  const img = PImage.make(W, Math.max(contentH, H));
+  const ctx = img.getContext('2d');
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillRect(0, 0, W, Math.max(contentH, H));
+
+  for (let i = 0; i < labels.length; i++) {
+    await drawLabel(ctx, W, i * pitch, contentH, labels[i]!, s);
+  }
+
+  return { data: img.data as Uint8Array, width: W, height: Math.max(contentH, H) };
 }

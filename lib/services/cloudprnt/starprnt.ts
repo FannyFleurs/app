@@ -1,6 +1,6 @@
 import { type LabelSettings } from '@/lib/settings/label';
 import { type LabelProduct } from '@/lib/services/label-print';
-import { renderLabelBitmap } from '@/lib/services/cloudprnt/label-render';
+import { renderLabelSheetBitmap } from '@/lib/services/cloudprnt/label-render';
 
 /**
  * Génère un job StarPRNT (`application/vnd.star.starprnt`) où chaque étiquette
@@ -26,6 +26,9 @@ function feed(enc: Encoder, mm: number): void {
 
 // Réglage fin de la coupe (avance après le form feed, avant coupe).
 const CUT_EXTRA_MM = 1;
+// Nombre max d'étiquettes par image continue (borne mémoire du bitmap).
+// Au-delà, une nouvelle image (donc une coupe) — rare pour les lots courants.
+const MAX_PER_SHEET = 20;
 
 export async function buildLabelsStarPrnt(
   entries: Array<{ product: LabelProduct; qty: number }>,
@@ -36,33 +39,28 @@ export async function buildLabelsStarPrnt(
   const enc = new StarPrntEncoder({});
   enc.initialize();
 
-  const total = countLabels(entries);
-  let idx = 0;
+  // Aplatit le lot (article × quantité).
+  const flat: LabelProduct[] = [];
   for (const { product, qty } of entries) {
     const n = Math.max(1, Math.min(200, Math.round(qty || 0)));
-    const bmp = await renderLabelBitmap(product, settings);
-    for (let i = 0; i < n; i++) {
-      // Insère l'image (RGBA → monochrome par seuillage, net pour texte/EAN).
-      enc.image(
-        { data: bmp.data, width: bmp.width, height: bmp.height },
-        bmp.width,
-        bmp.height,
-        'threshold',
-      );
-      idx += 1;
-      if (idx < total) {
-        // Étiquette intermédiaire : on avance simplement à l'étiquette suivante
-        // (form feed = re-calage sur le gap), SANS couper. Les étiquettes
-        // restent enchaînées, séparées par le prédécoupé → aucune vierge entre
-        // elles (couper à chaque étiquette éjectait une vierge à chaque fois).
-        enc.raw([0x0c]);
-      } else {
-        // Dernière étiquette du lot : avance au gap puis UNE seule coupe.
-        enc.raw([0x0c]);
-        feed(enc, CUT_EXTRA_MM);
-        enc.cut();
-      }
-    }
+    for (let i = 0; i < n; i++) flat.push(product);
+  }
+
+  // Une seule IMAGE continue par tranche (aucune commande entre les étiquettes
+  // → aucune vierge intercalaire). Une seule coupe à la fin de chaque tranche.
+  for (let start = 0; start < flat.length; start += MAX_PER_SHEET) {
+    const slice = flat.slice(start, start + MAX_PER_SHEET);
+    const bmp = await renderLabelSheetBitmap(slice, settings);
+    enc.image(
+      { data: bmp.data, width: bmp.width, height: bmp.height },
+      bmp.width,
+      bmp.height,
+      'threshold',
+    );
+    // Avance au gap puis UNE coupe (fin de tranche).
+    enc.raw([0x0c]);
+    feed(enc, CUT_EXTRA_MM);
+    enc.cut();
   }
 
   return Buffer.from(enc.encode());
