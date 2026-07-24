@@ -1,4 +1,5 @@
 'use client';
+import { confirmThemed, promptThemed } from '@/lib/ui/dialog';
 
 import { useEffect, useMemo, useState } from 'react';
 import PageHeader from '@/components/PageHeader';
@@ -51,7 +52,7 @@ export default function LabelStationsManager({ canWrite, stores }: {
   }, [stations, stores]);
 
   async function rename(st: Station) {
-    const name = prompt('Nom du PDA', st.name);
+    const name = await promptThemed({ title: 'Renommer le PDA', message: 'Nom du PDA', defaultValue: st.name });
     if (name == null || !name.trim()) return;
     setBusy(true);
     await fetch(`/api/label-stations/${st.id}`, {
@@ -74,7 +75,7 @@ export default function LabelStationsManager({ canWrite, stores }: {
   }
 
   async function remove(st: Station) {
-    if (!confirm(`Dissocier le PDA « ${st.name} » ? Il redemandera sa boutique à la prochaine ouverture.`)) return;
+    if (!(await confirmThemed({ message: `Dissocier le PDA « ${st.name} » ? Il redemandera sa boutique à la prochaine ouverture.` }))) return;
     setBusy(true);
     await fetch(`/api/label-stations/${st.id}`, { method: 'DELETE' });
     setBusy(false);

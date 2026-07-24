@@ -1,4 +1,5 @@
 'use client';
+import { confirmThemed } from '@/lib/ui/dialog';
 
 import { useEffect, useState } from 'react';
 import { getOrCreateDeviceId } from '@/lib/device';
@@ -187,7 +188,7 @@ function CategoryFormModal({ category, backOffice, stores, posteStoreId, deleteS
         + 'Elle restera disponible dans les autres boutiques.'
       : `Supprimer la catégorie « ${category.name} » de TOUTES les boutiques ?\n\n`
         + 'Les articles rattachés ne seront pas supprimés : ils passeront « sans catégorie ».';
-    if (!confirm(msg)) return;
+    if (!(await confirmThemed({ message: msg }))) return;
     setSaving(true); setError(null);
     const url = perStore
       ? `/api/categories/${category.id}?store_id=${encodeURIComponent(deleteStoreId)}`

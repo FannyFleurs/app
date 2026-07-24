@@ -1,4 +1,5 @@
 'use client';
+import { confirmThemed } from '@/lib/ui/dialog';
 
 import { useCallback, useEffect, useState } from 'react';
 import PageHeader from '@/components/PageHeader';
@@ -69,7 +70,7 @@ export default function LabelPrinterForm({ stores, canWrite }: {
   }
 
   async function remove(p: Printer) {
-    if (!confirm(`Supprimer l'imprimante « ${p.label} » ?`)) return;
+    if (!(await confirmThemed({ message: `Supprimer l'imprimante « ${p.label} » ?` }))) return;
     await fetch(`/api/cloudprnt/printers/${p.id}`, { method: 'DELETE' });
     await load();
   }

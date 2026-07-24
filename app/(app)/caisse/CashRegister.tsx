@@ -12,6 +12,7 @@ import dynamic from 'next/dynamic';
 import Icon from '@/components/Icon';
 import { useSchoolMode } from '@/lib/school-mode';
 import { tileMetrics, type PosUiSettings } from '@/lib/settings/pos-ui';
+import { confirmThemed } from '@/lib/ui/dialog';
 
 // Modales chargées à la demande : aucune ne s'affiche au premier rendu, donc
 // on les sort du bundle initial de la caisse (temps d'affichage plus court).
@@ -1402,7 +1403,7 @@ export default function CashRegister({
           </button>
           <button
             disabled={lines.length === 0}
-            onClick={() => { if (confirm('Vider le ticket ? Les articles en cours seront retirés.')) { setLines([]); setSaleId(null); setCartComment(''); void detachCustomer(); } }}
+            onClick={async () => { if (await confirmThemed({ title: 'Vider le ticket', message: 'Les articles en cours seront retirés.', confirmLabel: 'Vider', danger: true })) { setLines([]); setSaleId(null); setCartComment(''); void detachCustomer(); } }}
             className="btn-soft text-sm min-h-[44px] px-4 whitespace-nowrap"
             title="Retirer tous les articles du ticket"
           >
@@ -1411,7 +1412,7 @@ export default function CashRegister({
           {/* Action destructive, nettement séparée + style danger + confirmation. */}
           <button
             disabled={lines.length === 0 && !saleId}
-            onClick={() => { if (confirm('Annuler ce ticket ? La vente en cours sera définitivement abandonnée.')) void cancelTicket(); }}
+            onClick={async () => { if (await confirmThemed({ title: 'Annuler ce ticket', message: 'La vente en cours sera définitivement abandonnée.', confirmLabel: 'Annuler le ticket', cancelLabel: 'Retour', danger: true })) void cancelTicket(); }}
             className="ml-2 md:ml-3 text-sm min-h-[44px] px-4 rounded-xl font-medium whitespace-nowrap border border-danger/40 text-danger hover:bg-danger/10 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
             title="Annuler ce ticket"
           >

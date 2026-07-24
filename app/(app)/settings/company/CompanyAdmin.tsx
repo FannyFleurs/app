@@ -1,4 +1,5 @@
 'use client';
+import { confirmThemed, alertThemed } from '@/lib/ui/dialog';
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -232,13 +233,13 @@ function StoresPanel({ stores, canWrite, onChange, planLabel, maxStores }: {
   const atLimit = maxStores !== null && stores.length >= maxStores;
 
   async function remove(s: Store) {
-    if (!confirm(`Supprimer définitivement la boutique « ${s.name} » et ses caisses ?\n\nImpossible si des ventes y sont enregistrées.`)) return;
+    if (!(await confirmThemed({ message: `Supprimer définitivement la boutique « ${s.name} » et ses caisses ?\n\nImpossible si des ventes y sont enregistrées.` }))) return;
     setDeleting(s.id);
     try {
       const r = await fetch(`/api/stores/${s.id}`, { method: 'DELETE' });
       if (!r.ok) {
         const j = await r.json().catch(() => ({}));
-        alert(j.message ?? j.error ?? 'Suppression impossible.');
+        void alertThemed({ message: j.message ?? j.error ?? 'Suppression impossible.' });
         return;
       }
       onChange();
@@ -257,7 +258,7 @@ function StoresPanel({ stores, canWrite, onChange, planLabel, maxStores }: {
       });
       if (!r.ok) {
         const j = await r.json().catch(() => ({}));
-        alert(j.message ?? j.error ?? 'Réactivation impossible.');
+        void alertThemed({ message: j.message ?? j.error ?? 'Réactivation impossible.' });
         return;
       }
       onChange();
@@ -539,7 +540,7 @@ function RegistersPanel({
   // Souscrit une caisse supplémentaire (+prix/mois) puis ouvre la
   // création de caisse (la limite a augmenté).
   async function buyExtraAndAdd() {
-    if (!confirm(`Souscrire une caisse supplémentaire (+${extraRegisterPrice} €/mois) ?\n\nFacturée au prorata sur votre abonnement Stripe.`)) return;
+    if (!(await confirmThemed({ message: `Souscrire une caisse supplémentaire (+${extraRegisterPrice} €/mois) ?\n\nFacturée au prorata sur votre abonnement Stripe.` }))) return;
     setBuyingAddon(true);
     try {
       const r = await fetch('/api/billing/addon/register', {
@@ -548,7 +549,7 @@ function RegistersPanel({
       });
       if (!r.ok) {
         const j = await r.json().catch(() => ({}));
-        alert(j.message ?? j.error ?? 'Impossible de souscrire l\'option.');
+        void alertThemed({ message: j.message ?? j.error ?? 'Impossible de souscrire l\'option.' });
         return;
       }
       onChange(); // recharge (la limite serveur a augmenté)
@@ -560,17 +561,17 @@ function RegistersPanel({
 
   async function release(r: Register) {
     const label = r.device_name ? `"${r.device_name}"` : 'ce poste';
-    if (!confirm(
+    if (!(await confirmThemed({ message:
       `Liberer la caisse "${r.name}" de ${label} ?\n\n` +
       `Le poste actuellement lie ne pourra plus utiliser cette caisse, ` +
       `et vous devrez la re-selectionner sur un autre appareil au prochain acces.`,
-    )) return;
+    }))) return;
     setReleasing(r.id);
     try {
       const res = await fetch(`/api/registers/${r.id}/release`, { method: 'POST' });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
-        alert(j.message ?? j.error ?? 'Erreur');
+        void alertThemed({ message: j.message ?? j.error ?? 'Erreur' });
         return;
       }
       onChange();

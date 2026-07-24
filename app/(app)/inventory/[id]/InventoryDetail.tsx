@@ -1,4 +1,5 @@
 'use client';
+import { confirmThemed } from '@/lib/ui/dialog';
 
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -126,7 +127,7 @@ export default function InventoryDetail({ inventoryId }: { inventoryId: string }
   }
 
   async function goReview() {
-    if (!confirm('Passer à la phase de pointage ?\n\nSeules les lignes avec écart resteront visibles pour correction manuelle.')) return;
+    if (!(await confirmThemed({ message: 'Passer à la phase de pointage ?\n\nSeules les lignes avec écart resteront visibles pour correction manuelle.' }))) return;
     const r = await fetch(`/api/inventories/${inventoryId}/review`, { method: 'POST' });
     if (r.ok) await reload();
     else {
@@ -136,7 +137,7 @@ export default function InventoryDetail({ inventoryId }: { inventoryId: string }
   }
 
   async function finalize() {
-    if (!confirm('Valider définitivement l\'inventaire ?\n\nLes mouvements de stock (+ / -) vont être enregistrés. Cette action est irréversible.')) return;
+    if (!(await confirmThemed({ message: 'Valider définitivement l\'inventaire ?\n\nLes mouvements de stock (+ / -) vont être enregistrés. Cette action est irréversible.' }))) return;
     const r = await fetch(`/api/inventories/${inventoryId}/finalize`, { method: 'POST' });
     if (!r.ok) {
       const j = await r.json().catch(() => ({}));
@@ -149,7 +150,7 @@ export default function InventoryDetail({ inventoryId }: { inventoryId: string }
   }
 
   async function cancelInventory() {
-    if (!confirm('Annuler cet inventaire ?\n\nAucun mouvement de stock ne sera enregistré.')) return;
+    if (!(await confirmThemed({ message: 'Annuler cet inventaire ?\n\nAucun mouvement de stock ne sera enregistré.' }))) return;
     const r = await fetch(`/api/inventories/${inventoryId}/cancel`, { method: 'POST' });
     if (r.ok) await reload();
   }

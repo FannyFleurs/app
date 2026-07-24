@@ -1,4 +1,5 @@
 'use client';
+import { confirmThemed, alertThemed } from '@/lib/ui/dialog';
 
 import { useEffect, useMemo, useState } from 'react';
 import { formatEUR } from '@/lib/services/money';
@@ -116,7 +117,7 @@ export default function OrdersClient({ orgId: _orgId }: { orgId: string }) {
   }
 
   async function cancel(item: Order) {
-    if (!confirm('Annuler cette commande ?')) return;
+    if (!(await confirmThemed({ message: 'Annuler cette commande ?' }))) return;
     setBusy(true);
     if (item.source === 'sale') {
       // Pour une vente : on passe juste prep_status='cancelled'
@@ -143,15 +144,15 @@ export default function OrdersClient({ orgId: _orgId }: { orgId: string }) {
     setBusy(false);
     if (!r.ok) {
       const j = await r.json().catch(() => ({}));
-      alert(j.message ?? j.error ?? 'Erreur');
+      void alertThemed({ message: j.message ?? j.error ?? 'Erreur' });
       return;
     }
     const j = await r.json();
     if (j.email_sent_to) {
-      alert(`✓ Lien envoyé à ${j.email_sent_to}`);
+      void alertThemed({ message: `✓ Lien envoyé à ${j.email_sent_to}` });
     } else {
       try { await navigator.clipboard?.writeText(j.url); } catch {}
-      alert(`Lien créé :\n${j.url}\n\n(Copié dans le presse-papier.)`);
+      void alertThemed({ message: `Lien créé :\n${j.url}\n\n(Copié dans le presse-papier.)` });
     }
     void reload();
   }

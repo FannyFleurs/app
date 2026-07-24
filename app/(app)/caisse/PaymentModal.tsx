@@ -1,4 +1,5 @@
 'use client';
+import { alertThemed } from '@/lib/ui/dialog';
 
 import { useEffect, useMemo, useState } from 'react';
 import { formatEUR, round2 } from '@/lib/services/money';
@@ -249,18 +250,18 @@ export default function PaymentModal({ saleId, totalTtc, storeId, loyaltyRedempt
             const lj = await linkRes.json();
             // Toast info au commerçant : lien créé (et email envoyé si client a un email)
             if (lj.email_sent_to) {
-              alert(`✓ Lien de paiement Stripe créé et envoyé à ${lj.email_sent_to}`);
+              void alertThemed({ message: `✓ Lien de paiement Stripe créé et envoyé à ${lj.email_sent_to}` });
             } else if (lj.url) {
               // Pas d'email : on copie l'URL pour que le commerçant la transmette manuellement
               try { await navigator.clipboard?.writeText(lj.url); } catch {}
-              alert(`Lien de paiement créé :\n\n${lj.url}\n\n(Copié dans le presse-papier — aucun email client renseigné.)`);
+              void alertThemed({ message: `Lien de paiement créé :\n\n${lj.url}\n\n(Copié dans le presse-papier — aucun email client renseigné.)` });
             }
           } else {
             const lj = await linkRes.json().catch(() => ({}));
-            alert(`Vente validée, mais création du lien Stripe impossible : ${lj.message ?? lj.error ?? 'erreur'}`);
+            void alertThemed({ message: `Vente validée, mais création du lien Stripe impossible : ${lj.message ?? lj.error ?? 'erreur'}` });
           }
         } catch (e) {
-          alert(`Vente validée, mais le lien Stripe n'a pas pu être créé : ${(e as Error).message}`);
+          void alertThemed({ message: `Vente validée, mais le lien Stripe n'a pas pu être créé : ${(e as Error).message}` });
         }
       }
 

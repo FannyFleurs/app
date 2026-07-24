@@ -1,4 +1,5 @@
 'use client';
+import { confirmThemed } from '@/lib/ui/dialog';
 
 import { useEffect, useRef, useState } from 'react';
 import { generateEan13 } from '@/lib/services/ean';
@@ -155,11 +156,10 @@ export default function ProductFormModal({
 
   async function remove() {
     if (!product) return;
-    if (!confirm(
-      `Supprimer l'article « ${product.name} » ?\n\n`
-      + "S'il a déjà été vendu, il sera archivé (retiré des listes) pour préserver "
+    if (!(await confirmThemed({ title: `Supprimer « ${product.name} »`, danger: true, confirmLabel: 'Supprimer',
+      message: "S'il a déjà été vendu, il sera archivé (retiré des listes) pour préserver "
       + "l'historique. Sinon, il sera supprimé définitivement.",
-    )) return;
+    }))) return;
     setDeleting(true); setError(null);
     const r = await fetch(`/api/products/${product.id}`, { method: 'DELETE' });
     setDeleting(false);

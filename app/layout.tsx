@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from 'next';
 import InstallPrompt from '@/components/InstallPrompt';
 import FaviconSetter from '@/components/FaviconSetter';
 import ServiceWorkerRegister from '@/components/ServiceWorkerRegister';
+import DialogHost from '@/lib/ui/dialog';
 
 export const metadata: Metadata = {
   title: 'HelloPos',
@@ -63,6 +64,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ServiceWorkerRegister />
         {children}
         <InstallPrompt />
+        <DialogHost />
       </body>
     </html>
   );

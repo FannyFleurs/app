@@ -1,4 +1,5 @@
 'use client';
+import { confirmThemed, alertThemed, promptThemed } from '@/lib/ui/dialog';
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -354,7 +355,7 @@ function ActiveSessions({ id, version, onChange }: {
   useEffect(() => { void reload(); /* eslint-disable-next-line */ }, [id, version]);
 
   async function revoke(sid: string) {
-    if (!confirm('Libérer cette place ? L\'utilisateur sera déconnecté.')) return;
+    if (!(await confirmThemed({ message: 'Libérer cette place ? L\'utilisateur sera déconnecté.' }))) return;
     setBusy(sid);
     const r = await fetch(`/api/admin/organizations/${id}/sessions/${sid}`, { method: 'DELETE' });
     setBusy(null);
@@ -362,7 +363,7 @@ function ActiveSessions({ id, version, onChange }: {
   }
 
   async function revokeAll() {
-    if (!confirm(`Forcer la déconnexion des ${sessions.length} appareil(s) connecté(s) ? Tout le monde devra se reconnecter.`)) return;
+    if (!(await confirmThemed({ message: `Forcer la déconnexion des ${sessions.length} appareil(s) connecté(s) ? Tout le monde devra se reconnecter.` }))) return;
     setBusy('all');
     for (const s of sessions) {
       await fetch(`/api/admin/organizations/${id}/sessions/${s.id}`, { method: 'DELETE' });
@@ -503,7 +504,7 @@ function BoundRegisters({ id, version }: { id: string; version: number }) {
   useEffect(() => { void reload(); /* eslint-disable-next-line */ }, [id, version]);
 
   async function release(rid: string, label: string) {
-    if (!confirm(`Libérer la caisse « ${label} » de son poste ?\n\nLe poste devra re-sélectionner sa caisse au prochain accès.`)) return;
+    if (!(await confirmThemed({ message: `Libérer la caisse « ${label} » de son poste ?\n\nLe poste devra re-sélectionner sa caisse au prochain accès.` }))) return;
     setBusy(rid);
     const r = await fetch(`/api/admin/organizations/${id}/registers/${rid}`, { method: 'DELETE' });
     setBusy(null);
@@ -598,11 +599,12 @@ function OrgUsers({ id }: { id: string }) {
   useEffect(() => { void reload(); /* eslint-disable-next-line */ }, [id]);
 
   async function reset(u: OrgUserRow) {
-    const pwd = window.prompt(
-      `Nouveau mot de passe pour ${u.full_name} (${u.email}) — 8 caractères minimum :`,
-    );
+    const pwd = await promptThemed({
+      title: 'Réinitialiser le mot de passe',
+      message: `Nouveau mot de passe pour ${u.full_name} (${u.email}) — 8 caractères minimum :`,
+    });
     if (!pwd) return;
-    if (pwd.length < 8) { alert('8 caractères minimum.'); return; }
+    if (pwd.length < 8) { void alertThemed({ message: '8 caractères minimum.' }); return; }
     setBusy(u.id);
     const r = await fetch(`/api/admin/organizations/${id}/users/${u.id}/reset-password`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -610,10 +612,10 @@ function OrgUsers({ id }: { id: string }) {
     });
     setBusy(null);
     if (r.ok) {
-      alert(`Mot de passe réinitialisé. Communiquez-le à ${u.full_name} :\n\n${pwd}`);
+      void alertThemed({ message: `Mot de passe réinitialisé. Communiquez-le à ${u.full_name} :\n\n${pwd}` });
     } else {
       const j = await r.json().catch(() => ({}));
-      alert(j.message ?? j.error ?? 'Erreur');
+      void alertThemed({ message: j.message ?? j.error ?? 'Erreur' });
     }
   }
 

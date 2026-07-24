@@ -1,4 +1,5 @@
 'use client';
+import { confirmThemed } from '@/lib/ui/dialog';
 
 import { useEffect, useMemo, useState } from 'react';
 import { getOrCreateDeviceId } from '@/lib/device';
@@ -115,7 +116,7 @@ export default function ProductsList({
   async function applyBulkStore() {
     if (selectedIds.size === 0) return;
     if (bulkStores.length === 0
-        && !confirm('Aucune boutique sélectionnée : les articles seront visibles dans TOUTES les boutiques. Continuer ?')) {
+        && !(await confirmThemed({ message: 'Aucune boutique sélectionnée : les articles seront visibles dans TOUTES les boutiques. Continuer ?' }))) {
       return;
     }
     setBulkBusy(true); setBulkMsg(null);
@@ -147,8 +148,8 @@ export default function ProductsList({
   async function assignAllUnassigned() {
     if (!assignTarget) return;
     const name = storeName.get(assignTarget) ?? 'cette boutique';
-    if (!confirm(`Ranger les ${unassignedCount} article(s) « toutes boutiques » sous « ${name} » ? `
-      + `Ils n'apparaîtront alors QUE sur la caisse de cette boutique.`)) return;
+    if (!(await confirmThemed({ message: `Ranger les ${unassignedCount} article(s) « toutes boutiques » sous « ${name} » ? `
+      + `Ils n'apparaîtront alors QUE sur la caisse de cette boutique.` }))) return;
     setAssignBusy(true); setAssignMsg(null);
     const r = await fetch('/api/products/assign-unassigned', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },

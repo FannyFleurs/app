@@ -1,4 +1,5 @@
 'use client';
+import { confirmThemed } from '@/lib/ui/dialog';
 
 import { useSchoolMode, deactivateSchoolMode } from '@/lib/school-mode';
 
@@ -11,8 +12,8 @@ export default function SchoolModeBanner() {
   const active = useSchoolMode();
   if (!active) return null;
 
-  function exit() {
-    if (!confirm('Quitter le mode école ?\n\nToutes les ventes fictives et données de démonstration vont être supprimées.')) {
+  async function exit() {
+    if (!(await confirmThemed({ title: 'Quitter le mode école', message: 'Toutes les ventes fictives et données de démonstration vont être supprimées.' }))) {
       return;
     }
     deactivateSchoolMode();

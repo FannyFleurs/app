@@ -1,4 +1,5 @@
 'use client';
+import { confirmThemed } from '@/lib/ui/dialog';
 
 import { useEffect, useState } from 'react';
 import PageHeader from '@/components/PageHeader';
@@ -146,7 +147,7 @@ function SupplierFormModal({ supplier, onClose, onSaved }: {
 
   async function archive() {
     if (!supplier) return;
-    if (!confirm('Archiver ce fournisseur ? Les articles rattachés le perdront.')) return;
+    if (!(await confirmThemed({ message: 'Archiver ce fournisseur ? Les articles rattachés le perdront.' }))) return;
     setSaving(true);
     await fetch(`/api/suppliers/${supplier.id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },

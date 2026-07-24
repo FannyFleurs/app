@@ -1,4 +1,5 @@
 'use client';
+import { confirmThemed } from '@/lib/ui/dialog';
 
 import { useEffect } from 'react';
 import Link from 'next/link';
@@ -23,17 +24,17 @@ export default function AllPagesOverlay({ role, hiddenPaths, permissions, backOf
   const schoolActive = useSchoolMode();
   const brand = useBrand();
 
-  function toggleSchool() {
+  async function toggleSchool() {
     if (schoolActive) {
-      if (!confirm('Quitter le mode école ?\n\nToutes les ventes fictives et données de démonstration vont être supprimées.')) return;
+      if (!(await confirmThemed({ message: 'Quitter le mode école ?\n\nToutes les ventes fictives et données de démonstration vont être supprimées.' }))) return;
       deactivateSchoolMode();
       onClose();
       window.location.reload();
       return;
     }
-    if (!confirm(
-      'Activer le mode école ?\n\nDans ce mode, AUCUNE vente ne sera enregistrée. Toutes les actions sont uniquement locales et seront supprimées en sortant.\n\nUtile pour former un nouvel employé sans polluer la caisse réelle.',
-    )) return;
+    if (!(await confirmThemed({ title: 'Activer le mode école',
+      message: 'Dans ce mode, AUCUNE vente ne sera enregistrée. Toutes les actions sont uniquement locales et seront supprimées en sortant.\n\nUtile pour former un nouvel employé sans polluer la caisse réelle.',
+    }))) return;
     activateSchoolMode();
     onClose();
     window.location.reload();
