@@ -147,17 +147,40 @@ input[type=radio] {
   accent-color: var(--primary);
 }
 
-/* <select> : sur mobile (iOS notamment) le texte est tronqué en bas quand la
-   hauteur est trop contrainte (ex. utilitaire h-9). On garantit une hauteur
-   suffisante et une ligne de base correcte, en neutralisant la hauteur fixe. */
+/* <select> : on neutralise complètement le rendu système (chrome + flèche
+   natifs, qui ne suivent pas le thème, surtout en mode sombre) et on dessine
+   notre propre flèche (chevron) aux couleurs du thème. Le fond, le texte et la
+   bordure viennent déjà de la classe .input (tokens du thème). Le popup de
+   choix suit le mode clair/sombre via `color-scheme` défini sur :root/body. */
 select.input {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  /* Chevron dessiné en SVG (gris neutre lisible sur clair comme sur foncé). */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23565A5F' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.7rem center;
+  background-size: 1rem 1rem;
+  /* Réserve la place de la flèche pour ne pas chevaucher le texte. */
+  padding-right: 2.25rem;
+  /* Sur mobile (iOS notamment) le texte est tronqué en bas quand la hauteur
+     est trop contrainte (ex. utilitaire h-9) : on garantit une hauteur
+     suffisante et une ligne de base correcte, en neutralisant la hauteur fixe. */
   height: auto;
   min-height: 2.75rem;
   padding-top: 0.5rem;
   padding-bottom: 0.5rem;
   line-height: 1.4;
-  /* Réserve la place de la flèche native pour ne pas chevaucher le texte. */
-  padding-right: 2rem;
+}
+/* En mode sombre, chevron plus clair pour rester visible. */
+body[data-mode="dark"] select.input {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23A0A199' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+}
+/* Les <option> suivent aussi le thème là où c'est supporté (Firefox, Chrome
+   récent). Sur iOS/Safari le popup reste piloté par `color-scheme`. */
+select.input option {
+  background-color: var(--surface);
+  color: var(--ink);
 }
 
 @layer components {
