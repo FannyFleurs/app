@@ -4,7 +4,7 @@ import { requirePermission } from '@/lib/auth/guards';
 import { parseJson } from '@/lib/validation/api';
 import { query } from '@/lib/db/client';
 import { mergeLabelDefaults, LABEL_KEY } from '@/lib/settings/label';
-import { buildLabelsMarkup, countLabels, STAR_MARKUP_CONTENT_TYPE } from '@/lib/services/cloudprnt/markup';
+import { buildLabelsStarPrnt, countLabels, STARPRNT_CONTENT_TYPE } from '@/lib/services/cloudprnt/starprnt';
 import { resolveLabelPrinter, enqueueJob } from '@/lib/services/cloudprnt/queue';
 import type { LabelProduct } from '@/lib/services/label-print';
 
@@ -45,14 +45,14 @@ export async function POST(req: Request) {
   const settings = mergeLabelDefaults((st.rows[0]?.value as Record<string, unknown>) ?? null);
 
   const entries = parsed.data.entries.map((e) => ({ product: e.product as LabelProduct, qty: e.qty }));
-  const markup = buildLabelsMarkup(entries, settings);
+  const payload = await buildLabelsStarPrnt(entries, settings);
   const count = countLabels(entries);
 
   const job = await enqueueJob({
     organizationId: g.user.organizationId,
     printerId: printer.id,
-    contentType: STAR_MARKUP_CONTENT_TYPE,
-    payload: Buffer.from(markup, 'utf-8'),
+    contentType: STARPRNT_CONTENT_TYPE,
+    payload,
     title: `${count} étiquette${count > 1 ? 's' : ''}`,
     userId: g.user.id,
   });

@@ -6,7 +6,7 @@ const nextConfig = {
   transpilePackages: ['@zxing/browser', '@zxing/library'],
   experimental: {
     serverActions: { bodySizeLimit: '2mb' },
-    serverComponentsExternalPackages: ['pdfkit', 'fontkit', 'bwip-js'],
+    serverComponentsExternalPackages: ['pdfkit', 'fontkit', 'bwip-js', 'star-prnt-encoder'],
   },
   async headers() {
     return [
