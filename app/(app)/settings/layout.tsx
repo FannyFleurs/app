@@ -36,6 +36,7 @@ export default async function SettingsLayout({ children }: { children: React.Rea
     { href: '/settings/pos-settings',     label: 'Paramètres caisse',     icon: 'pos-settings' as const, perm: 'pos.use' as const,          boOnly: false, proOnly: false },
     { href: '/settings/opening-float',    label: 'Fond de caisse',        icon: 'closures' as const,     perm: 'pos.use' as const,          boOnly: false, proOnly: false },
     { href: '/settings/payment-methods',  label: 'Modes de règlement',    icon: 'invoices' as const,     perm: 'settings.write' as const,   boOnly: false, proOnly: false },
+    { href: '/settings/tva',              label: 'TVA (par boutique)',    icon: 'invoices' as const,     perm: 'settings.read' as const,    boOnly: true,  proOnly: false },
     { href: '/settings/screen-delivery',  label: 'Écran & Livraison',     icon: 'truck' as const,        perm: 'settings.write' as const,   boOnly: false, proOnly: true },
     { href: '/settings/loyalty',          label: 'Fidélité',              icon: 'loyalty' as const,      perm: 'settings.write' as const,   boOnly: false, proOnly: false },
     { href: '/settings/cash',             label: 'Gestion argent',        icon: 'closures' as const,     perm: 'pos.use' as const,          boOnly: false, proOnly: false },

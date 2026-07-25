@@ -82,6 +82,8 @@ interface Props {
     device_id: string | null; device_name: string | null;
   }[];
   taxRates: TaxRate[];
+  /** Taux TVA par défaut spécifique à chaque boutique (code), sinon défaut org. */
+  storeTaxDefaults?: Record<string, string>;
   currentUser: { id: string; name: string; role: string };
   posUi: PosUiSettings;
   /** Si false, le bouton "Commande differee (retrait a date)" est masque. */
@@ -93,7 +95,7 @@ type View = { kind: 'categories' } | { kind: 'products'; categoryId: string | 'u
 const FREE_PRICE_TAX_CODE_DEFAULT = 'TVA20';
 
 export default function CashRegister({
-  stores, registers, taxRates, currentUser, posUi, deferredOrdersEnabled,
+  stores, registers, taxRates, storeTaxDefaults, currentUser, posUi, deferredOrdersEnabled,
 }: Props) {
   const metrics = useMemo(() => tileMetrics(posUi.tile_size), [posUi.tile_size]);
   // Mode école : quand actif, on ne fait AUCUN appel mutant côté serveur.
@@ -1723,7 +1725,7 @@ export default function CashRegister({
       )}
       {showFreePrice && (
         <FreePriceModal
-          defaultTaxCode={taxRates.find((t) => t.is_default)?.code ?? FREE_PRICE_TAX_CODE_DEFAULT}
+          defaultTaxCode={storeTaxDefaults?.[storeId] ?? taxRates.find((t) => t.is_default)?.code ?? FREE_PRICE_TAX_CODE_DEFAULT}
           defaultLabel={showFreePrice.label}
           taxRates={taxRates}
           onClose={() => setShowFreePrice(null)}

@@ -40,7 +40,7 @@ export default async function CaissePage() {
   //   comptes vendeur / caisse creees sans configuration explicite.
   // Les 5 requêtes ci-dessous sont indépendantes → on les lance en parallèle
   // (un seul aller-retour groupé au lieu de 5 séquentiels).
-  const [stores, registers, taxRates, posSettingsRows, screenDeliveryRows] = await Promise.all([
+  const [stores, registers, taxRates, posSettingsRows, screenDeliveryRows, storeTaxRows] = await Promise.all([
     query<{ id: string; code: string; name: string }>(
       `SELECT s.id, s.code, s.name FROM stores s
         WHERE s.organization_id = $2 AND s.is_active
@@ -74,7 +74,18 @@ export default async function CaissePage() {
       `SELECT value FROM settings WHERE organization_id = $1 AND key = $2`,
       [user.organizationId, SCREEN_DELIVERY_KEY],
     ),
+    // Taux TVA par défaut spécifiques à chaque boutique (clé 'tax:<storeId>').
+    query<{ key: string; value: { default_code?: string | null } }>(
+      `SELECT key, value FROM settings
+        WHERE organization_id = $1 AND key LIKE 'tax:%'`,
+      [user.organizationId],
+    ),
   ]);
+  const storeTaxDefaults: Record<string, string> = {};
+  for (const row of storeTaxRows.rows) {
+    const sid = row.key.slice('tax:'.length);
+    if (sid && row.value?.default_code) storeTaxDefaults[sid] = row.value.default_code;
+  }
   const posSettings = mergeWithDefaults(posSettingsRows.rows[0]?.value ?? null);
   const screenDelivery = mergeScreenDeliveryDefaults(screenDeliveryRows.rows[0]?.value ?? null);
 
@@ -98,6 +109,7 @@ export default async function CaissePage() {
       stores={stores.rows}
       registers={registers.rows}
       taxRates={taxRates.rows.map((t) => ({ ...t, rate: Number(t.rate) }))}
+      storeTaxDefaults={storeTaxDefaults}
       currentUser={{ id: user.id, name: user.fullName, role: user.role }}
       posUi={posSettings}
       deferredOrdersEnabled={screenDelivery.enabled}
