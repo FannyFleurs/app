@@ -13,6 +13,20 @@ export const LABEL_SIZE_PRESETS = [
   { label: '32 × 25 mm (petit)',   w: 32, h: 25 },
 ] as const;
 
+/** Position (centre) + taille relative d'un élément sur l'étiquette. */
+export interface LabelElementLayout {
+  /** Centre horizontal, fraction 0..1 de la largeur. */
+  x: number;
+  /** Centre vertical, fraction 0..1 de la hauteur. */
+  y: number;
+  /** Taille relative (1 = taille par défaut). */
+  size: number;
+}
+
+export type LabelElementKey = 'name' | 'price' | 'barcode' | 'sku';
+
+export type LabelLayout = Record<LabelElementKey, LabelElementLayout>;
+
 export interface LabelSettings {
   /** Dimensions de l'étiquette en millimètres. */
   width_mm: number;
@@ -25,7 +39,16 @@ export interface LabelSettings {
   show_discount: boolean;
   /** Affiche la référence (SKU). */
   show_sku: boolean;
+  /** Disposition (position + taille) de chaque élément (éditeur d'étiquette). */
+  layout: LabelLayout;
 }
+
+export const LABEL_LAYOUT_DEFAULT: LabelLayout = {
+  name:    { x: 0.5, y: 0.13, size: 1 },
+  price:   { x: 0.5, y: 0.36, size: 1 },
+  barcode: { x: 0.5, y: 0.68, size: 1 },
+  sku:     { x: 0.5, y: 0.22, size: 1 },
+};
 
 export const LABEL_DEFAULTS: LabelSettings = {
   width_mm: 50,
@@ -35,6 +58,7 @@ export const LABEL_DEFAULTS: LabelSettings = {
   show_price: true,
   show_discount: true,
   show_sku: false,
+  layout: LABEL_LAYOUT_DEFAULT,
 };
 
 function clampMm(v: unknown, fallback: number): number {
@@ -43,8 +67,30 @@ function clampMm(v: unknown, fallback: number): number {
   return Math.min(200, Math.max(10, Math.round(n)));
 }
 
+function clamp01(v: unknown, fallback: number): number {
+  const n = typeof v === 'number' ? v : Number(v);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(1, Math.max(0, n));
+}
+function clampSize(v: unknown, fallback: number): number {
+  const n = typeof v === 'number' ? v : Number(v);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(3, Math.max(0.3, n));
+}
+function mergeEl(p: Partial<LabelElementLayout> | undefined, d: LabelElementLayout): LabelElementLayout {
+  return { x: clamp01(p?.x, d.x), y: clamp01(p?.y, d.y), size: clampSize(p?.size, d.size) };
+}
+function mergeLayout(p: Partial<LabelLayout> | undefined): LabelLayout {
+  return {
+    name: mergeEl(p?.name, LABEL_LAYOUT_DEFAULT.name),
+    price: mergeEl(p?.price, LABEL_LAYOUT_DEFAULT.price),
+    barcode: mergeEl(p?.barcode, LABEL_LAYOUT_DEFAULT.barcode),
+    sku: mergeEl(p?.sku, LABEL_LAYOUT_DEFAULT.sku),
+  };
+}
+
 export function mergeLabelDefaults(partial: Partial<LabelSettings> | null | undefined): LabelSettings {
-  if (!partial) return { ...LABEL_DEFAULTS };
+  if (!partial) return { ...LABEL_DEFAULTS, layout: mergeLayout(undefined) };
   return {
     width_mm: clampMm(partial.width_mm, LABEL_DEFAULTS.width_mm),
     height_mm: clampMm(partial.height_mm, LABEL_DEFAULTS.height_mm),
@@ -53,5 +99,6 @@ export function mergeLabelDefaults(partial: Partial<LabelSettings> | null | unde
     show_price: partial.show_price ?? LABEL_DEFAULTS.show_price,
     show_discount: partial.show_discount ?? LABEL_DEFAULTS.show_discount,
     show_sku: partial.show_sku ?? LABEL_DEFAULTS.show_sku,
+    layout: mergeLayout(partial.layout),
   };
 }

@@ -44,28 +44,35 @@ async function drawLabel(
   ctx: any, W: number, offsetY: number, contentH: number, p: LabelProduct, s: LabelSettings,
 ) {
   const scale = contentH / 408;
+  const L = s.layout;
   ctx.fillStyle = '#000000';
-  const cText = (text: string, pt: number, bold: boolean, y: number) => {
+
+  // Dessine un texte CENTRÉ au point (cx, cy) fourni en fraction de l'étiquette.
+  const cTextAt = (text: string, basePt: number, bold: boolean, el: { x: number; y: number; size: number }) => {
+    const pt = Math.max(6, Math.round(basePt * el.size * scale));
     ctx.font = `${pt}pt ${bold ? 'LabelBold' : 'LabelReg'}`;
     const tw = ctx.measureText(text).width;
-    ctx.fillText(text, Math.max(0, (W - tw) / 2), offsetY + y);
+    const cx = el.x * W;
+    const cy = offsetY + el.y * contentH;
+    // baseline ≈ centre vertical + demi-hauteur de capitale.
+    ctx.fillText(text, Math.max(0, cx - tw / 2), Math.round(cy + pt * 0.5));
   };
 
   if (s.show_name && p.name) {
     const name = p.name.length > 22 ? `${p.name.slice(0, 21)}…` : p.name;
-    cText(name, Math.round(30 * scale), true, Math.round(46 * scale));
+    cTextAt(name, 30, true, L.name);
   }
   if (s.show_sku && p.sku) {
-    cText(p.sku, Math.round(13 * scale), false, Math.round(72 * scale));
+    cTextAt(p.sku, 13, false, L.sku);
   }
 
   if (s.show_price) {
     const disc = s.show_discount ? discountedPrice(p) : null;
     if (disc != null) {
-      cText(`au lieu de ${formatEUR(p.sale_price_ttc)}`, Math.round(15 * scale), false, Math.round(100 * scale));
-      cText(formatEUR(disc), Math.round(54 * scale), true, Math.round(145 * scale));
+      cTextAt(`au lieu de ${formatEUR(p.sale_price_ttc)}`, 15, false, { ...L.price, y: Math.max(0, L.price.y - 0.09) });
+      cTextAt(formatEUR(disc), 54, true, L.price);
     } else {
-      cText(formatEUR(p.sale_price_ttc), Math.round(56 * scale), true, Math.round(135 * scale));
+      cTextAt(formatEUR(p.sale_price_ttc), 56, true, L.price);
     }
   }
 
@@ -73,18 +80,20 @@ async function drawLabel(
     if (isValidEan13(p.barcode)) {
       const bcPng: Buffer = await bwip.toBuffer({
         bcid: 'ean13', text: p.barcode,
-        scale: Math.max(2, Math.round(2 * scale)),
+        scale: Math.max(2, Math.round(2 * L.barcode.size * scale)),
         height: Math.round(9 * scale),
         includetext: true, textsize: Math.round(8 * scale),
         backgroundcolor: 'FFFFFF',
       });
       const bcImg = await PImageMod.decodePNGFromStream(Readable.from(bcPng));
-      const maxW = Math.round(W * 0.66);
+      const maxW = Math.round(W * 0.92);
       let w = bcImg.width; let h = bcImg.height;
       if (w > maxW) { const r = maxW / w; w = maxW; h = Math.round(h * r); }
-      ctx.drawImage(bcImg, Math.round((W - w) / 2), offsetY + Math.round(170 * scale), w, h);
+      const cx = L.barcode.x * W;
+      const cy = offsetY + L.barcode.y * contentH;
+      ctx.drawImage(bcImg, Math.round(cx - w / 2), Math.round(cy - h / 2), w, h);
     } else {
-      cText(p.barcode, Math.round(16 * scale), false, Math.round(200 * scale));
+      cTextAt(p.barcode, 16, false, L.barcode);
     }
   }
 }

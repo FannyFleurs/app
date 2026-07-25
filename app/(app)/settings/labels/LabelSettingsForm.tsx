@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { formatEUR } from '@/lib/services/money';
 import { ean13Svg } from '@/lib/services/barcode';
 import { LABEL_SIZE_PRESETS, type LabelSettings } from '@/lib/settings/label';
+import LabelEditor from './LabelEditor';
 
 const SAMPLE = {
   name: 'Bouquet de roses',
@@ -101,6 +102,16 @@ export default function LabelSettingsForm({ initial, canEdit }: {
             <Check label="Prix remisé (si remise sur l'article)"
                    checked={form.show_discount} disabled={!canEdit || !form.show_price}
                    onChange={(v) => set('show_discount', v)} />
+          </div>
+
+          {/* Éditeur : placement & taille des éléments (drag-and-drop) */}
+          <div className="card p-5 space-y-3">
+            <h2 className="font-semibold">Disposition (glisser-déposer)</h2>
+            <LabelEditor
+              settings={form}
+              canEdit={canEdit}
+              onChange={(layout) => set('layout', layout)}
+            />
           </div>
 
           {error && <div className="rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}

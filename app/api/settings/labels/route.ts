@@ -6,6 +6,11 @@ import { parseJson } from '@/lib/validation/api';
 import { audit } from '@/lib/audit/log';
 import { LABEL_KEY, mergeLabelDefaults, type LabelSettings } from '@/lib/settings/label';
 
+const elLayout = z.object({
+  x: z.number().min(0).max(1),
+  y: z.number().min(0).max(1),
+  size: z.number().min(0.3).max(3),
+});
 const schema = z.object({
   width_mm: z.number().min(10).max(200).optional(),
   height_mm: z.number().min(10).max(200).optional(),
@@ -14,6 +19,9 @@ const schema = z.object({
   show_price: z.boolean().optional(),
   show_discount: z.boolean().optional(),
   show_sku: z.boolean().optional(),
+  layout: z.object({
+    name: elLayout, price: elLayout, barcode: elLayout, sku: elLayout,
+  }).optional(),
 });
 
 export async function GET() {
