@@ -89,9 +89,11 @@ export async function GET(req: Request) {
   if ('response' in g) return g.response;
   const url = new URL(req.url);
   const productId = url.searchParams.get('product_id');
+  const storeId = url.searchParams.get('store_id');
   const params: unknown[] = [g.user.organizationId];
   let where = `m.organization_id = $1`;
   if (productId) { params.push(productId); where += ` AND m.product_id = $${params.length}`; }
+  if (storeId) { params.push(storeId); where += ` AND m.store_id = $${params.length}`; }
   const { rows } = await query(
     `SELECT m.id, m.movement_type, m.quantity_delta::text,
             m.previous_quantity::text, m.new_quantity::text,

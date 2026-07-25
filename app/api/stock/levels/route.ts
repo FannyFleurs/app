@@ -8,10 +8,12 @@ export async function GET(req: Request) {
 
   const url = new URL(req.url);
   const storeId = url.searchParams.get('store_id') || undefined;
+  const productId = url.searchParams.get('product_id') || undefined;
 
   const params: unknown[] = [g.user.organizationId];
   let where = `p.organization_id = $1`;
   if (storeId) { params.push(storeId); where += ` AND sl.store_id = $${params.length}`; }
+  if (productId) { params.push(productId); where += ` AND sl.product_id = $${params.length}`; }
 
   const { rows } = await query(
     `SELECT p.id AS product_id, p.name AS product_name, p.sku AS product_sku,

@@ -68,19 +68,31 @@ export default function StockAdmin({ canAdjust, stores }: { canAdjust: boolean; 
   const [movements, setMovements] = useState<Movement[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
+  // Boutique visualisée : le stock et les mouvements sont TOUJOURS filtrés sur
+  // UNE boutique (celle du poste par défaut) — on ne mélange jamais les stocks
+  // de plusieurs boutiques. Sélecteur pour basculer.
+  const [storeId, setStoreId] = useState<string>('');
+  useEffect(() => {
+    let sid = '';
+    try { sid = localStorage.getItem('webpos_current_store_id') || ''; } catch { /* ignore */ }
+    if (!sid || !stores.some((s) => s.id === sid)) sid = stores[0]?.id ?? '';
+    setStoreId(sid);
+  }, [stores]);
 
   async function reload() {
+    if (!storeId) return;
     setLoading(true);
+    const qs = `?store_id=${encodeURIComponent(storeId)}`;
     if (section === 'movements') {
-      const r = await fetch('/api/stock/movement');
+      const r = await fetch(`/api/stock/movement${qs}`);
       if (r.ok) setMovements((await r.json()).movements);
     } else {
-      const r = await fetch('/api/stock/levels');
+      const r = await fetch(`/api/stock/levels${qs}`);
       if (r.ok) setLevels((await r.json()).levels);
     }
     setLoading(false);
   }
-  useEffect(() => { void reload(); /* eslint-disable-next-line */ }, [section]);
+  useEffect(() => { void reload(); /* eslint-disable-next-line */ }, [section, storeId]);
 
   const filteredLevels = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -107,8 +119,16 @@ export default function StockAdmin({ canAdjust, stores }: { canAdjust: boolean; 
 
   return (
     <div className="flex flex-col md:h-full md:overflow-hidden">
-      <div className="px-6 md:px-8 pt-6 md:pt-8 pb-4 shrink-0">
+      <div className="px-6 md:px-8 pt-6 md:pt-8 pb-4 shrink-0 flex items-start justify-between gap-3 flex-wrap">
         <PageHeader title="Stock" subtitle="Valeur du stock, mouvements et inventaires, par boutique." />
+        {stores.length > 1 && (
+          <label className="text-sm">
+            <span className="block text-xs font-medium text-ink-soft mb-1">Boutique</span>
+            <select className="input h-10 min-w-[180px]" value={storeId} onChange={(e) => setStoreId(e.target.value)}>
+              {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </label>
+        )}
       </div>
       <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[260px_1fr] md:overflow-hidden">
       {/* SIDEBAR */}
@@ -234,8 +254,8 @@ export default function StockAdmin({ canAdjust, stores }: { canAdjust: boolean; 
           <div className="p-6">
             {canAdjust ? (
               <MovementPicker
-                storeId={stores[0]?.id ?? ''}
-                storeName={stores[0]?.name ?? ''}
+                storeId={storeId || (stores[0]?.id ?? '')}
+                storeName={stores.find((s) => s.id === storeId)?.name ?? stores[0]?.name ?? ''}
                 onSaved={() => { setSection('movements'); }}
               />
             ) : (

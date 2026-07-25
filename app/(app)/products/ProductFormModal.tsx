@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { generateEan13 } from '@/lib/services/ean';
 import { getOrCreateDeviceId } from '@/lib/device';
 import ProductHistory from './ProductHistory';
+import ProductStock from './ProductStock';
 import LabelPrintModal from './LabelPrintModal';
 
 interface Product {
@@ -137,7 +138,7 @@ export default function ProductFormModal({
   });
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [tab, setTab] = useState<'details' | 'history'>('details');
+  const [tab, setTab] = useState<'details' | 'stock' | 'history'>('details');
   const [showLabel, setShowLabel] = useState(false);
 
   // Création rapide en ligne (catégorie / fournisseur inexistant).
@@ -305,7 +306,7 @@ export default function ProductFormModal({
             produit déjà créé). */}
         {product && (
           <div className="mb-4 flex gap-1 border-b border-border">
-            {(['details', 'history'] as const).map((t) => (
+            {(['details', 'stock', 'history'] as const).map((t) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
@@ -315,7 +316,7 @@ export default function ProductFormModal({
                     : 'border-transparent text-ink-soft hover:text-ink'
                 }`}
               >
-                {t === 'details' ? 'Détails' : 'Historique'}
+                {t === 'details' ? 'Détails' : t === 'stock' ? 'Stock' : 'Historique'}
               </button>
             ))}
           </div>
@@ -323,6 +324,8 @@ export default function ProductFormModal({
 
         {tab === 'history' && product ? (
           <ProductHistory productId={product.id} />
+        ) : tab === 'stock' && product ? (
+          <ProductStock productId={product.id} storeId={posteStoreOverride ?? undefined} />
         ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label="Nom" full>
