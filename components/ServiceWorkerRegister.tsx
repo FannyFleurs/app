@@ -3,17 +3,16 @@
 import { useEffect } from 'react';
 
 /**
- * Enregistre le service worker de résilience hors-ligne — UNIQUEMENT si le
- * mode hors-ligne est activé (NEXT_PUBLIC_OFFLINE_POS=1). Si le flag est
- * désactivé, on désenregistre proprement tout SW existant et on vide ses
- * caches : couper le flag remet l'app dans un état 100 % « en ligne », sans
- * SW collant.
+ * Enregistre le service worker de résilience hors-ligne — activé PAR DÉFAUT
+ * (comme offlinePosEnabled). Désactivable avec NEXT_PUBLIC_OFFLINE_POS='0' :
+ * dans ce cas on désenregistre proprement tout SW existant et on vide ses
+ * caches, remettant l'app dans un état 100 % « en ligne » sans SW collant.
  */
 export default function ServiceWorkerRegister() {
   useEffect(() => {
     if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
 
-    const enabled = process.env.NEXT_PUBLIC_OFFLINE_POS === '1';
+    const enabled = process.env.NEXT_PUBLIC_OFFLINE_POS !== '0';
 
     if (enabled) {
       navigator.serviceWorker.register('/sw.js').catch(() => { /* ignore */ });

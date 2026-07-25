@@ -2,9 +2,13 @@
 
 import { allQueuedSales, removeQueuedSale, type QueuedSale } from './queue';
 
-/** Mode hors-ligne activé ? (piloté par variable d'env, off par défaut). */
+/**
+ * Mode hors-ligne activé ? Activé PAR DÉFAUT : la caisse reste utilisable si le
+ * réseau tombe (ventes enregistrées en local puis synchronisées à la reprise).
+ * Désactivable explicitement avec NEXT_PUBLIC_OFFLINE_POS='0'.
+ */
 export function offlinePosEnabled(): boolean {
-  return process.env.NEXT_PUBLIC_OFFLINE_POS === '1';
+  return process.env.NEXT_PUBLIC_OFFLINE_POS !== '0';
 }
 
 let syncing = false;
