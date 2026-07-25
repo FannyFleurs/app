@@ -304,23 +304,28 @@ export default function ClosuresAdmin({ stores, registers }: { stores: Store[]; 
           )}
         </div>
         <div className="flex items-center gap-2">
-          {registersForStore.length > 1 && (
-            <select className="input h-10 max-w-[180px]" value={registerId} onChange={(e) => setRegisterId(e.target.value)}>
-              {registersForStore.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-            </select>
-          )}
-          <button onClick={() => void openDrawer()} disabled={!registerId} className="btn-soft text-sm h-10">
-            ◰ Ouvrir tiroir
+          <button onClick={() => void openDrawer()} disabled={!registerId}
+                  className="btn-soft h-10 px-3.5 text-sm font-medium inline-flex items-center gap-2 disabled:opacity-50"
+                  title="Ouvrir le tiroir-caisse">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <rect x="3" y="8" width="18" height="11" rx="1.5" /><path d="M3 12.5h18" /><path d="M10.5 15.5h3" />
+            </svg>
+            Ouvrir le tiroir
           </button>
           {alreadySealed && (
-            <a href="/caisse" className="btn-soft text-sm h-10"
-               style={{ backgroundColor: 'var(--primary)', color: 'white' }}
+            <a href="/caisse" className="btn-primary h-10 px-3.5 text-sm inline-flex items-center gap-2"
                title="Reprendre les ventes en ouvrant une nouvelle session caisse">
-              ↻ Réouvrir la journée
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /></svg>
+              Réouvrir la journée
             </a>
           )}
-          <button onClick={() => setShowDeposit(true)} disabled={!registerId || alreadySealed} className="btn-soft text-sm h-10">
-            ⤓ Remise en banque
+          <button onClick={() => setShowDeposit(true)} disabled={!registerId || alreadySealed}
+                  className="btn-soft h-10 px-3.5 text-sm font-medium inline-flex items-center gap-2 disabled:opacity-50"
+                  title="Enregistrer une remise d'espèces en banque">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M3 21h18" /><path d="M5 21V10" /><path d="M19 21V10" /><path d="M12 3 3.5 8h17L12 3Z" /><path d="M9 21v-7h6v7" />
+            </svg>
+            Remise en banque
           </button>
         </div>
       </div>
