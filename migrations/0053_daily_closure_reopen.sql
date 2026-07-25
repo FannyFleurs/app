@@ -22,10 +22,10 @@ BEGIN
    WHERE c.conrelid = 'daily_closures'::regclass
      AND c.contype = 'u'
      AND (
-       SELECT array_agg(a.attname ORDER BY a.attname)
+       SELECT array_agg(a.attname::text ORDER BY a.attname::text)
          FROM unnest(c.conkey) k
          JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k
-     ) = ARRAY['business_date','store_id']
+     ) = ARRAY['business_date','store_id']::text[]
    LIMIT 1;
   IF cname IS NOT NULL THEN
     EXECUTE format('ALTER TABLE daily_closures DROP CONSTRAINT %I', cname);
