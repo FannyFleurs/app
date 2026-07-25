@@ -105,7 +105,7 @@ export async function renderLabelSheetBitmap(labels: LabelProduct[], s: LabelSet
   const pitch = contentH + gapPx;
   // Réglage fin de la position de coupe : on raccourcit légèrement l'image en
   // fin de lot pour remonter la coupe (la coupe tombait ~2 mm trop loin).
-  const CUT_TRIM_MM = 10;
+  const CUT_TRIM_MM = 0;
   const trimPx = Math.round(CUT_TRIM_MM * DPMM);
   const H = Math.max(contentH - trimPx, pitch * labels.length - gapPx - trimPx);
 

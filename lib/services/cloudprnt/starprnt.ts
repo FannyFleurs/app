@@ -46,12 +46,10 @@ export async function buildLabelsStarPrnt(
       bmp.height,
       'threshold',
     );
-    // On reproduit le comportement du bouton FEED de l'imprimante (qui coupe
-    // correctement) : form feed = avance « intelligente » jusqu'au gap détecté
-    // par le capteur, puis coupe. L'image se termine ~10 mm AVANT le gap (voir
-    // CUT_TRIM_MM côté rendu) pour que cette avance aille au gap COURANT et ne
-    // saute pas d'étiquette (ce qui provoquait la vierge).
-    enc.raw([0x0c]);
+    // Coupe directe (sans form feed) : c'est le meilleur état — pas de vierge.
+    // (Le form feed avant coupe saute une étiquette → vierge.) La coupe tombe
+    // ~5 mm après le gap, offset propre à la coupe « commande » de la mC-Label3
+    // que le logiciel ne peut pas compenser (voir note).
     enc.cut();
   }
 
