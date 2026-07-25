@@ -150,7 +150,9 @@ export default function LeftRail({
       // Pas de bordure droite : le logo peut déborder du rail vers le
       // contenu (rendu plus « premium »). overflow-visible + z-30 pour que
       // le logo passe au-dessus du contenu adjacent.
-      className="hidden md:flex flex-col shrink-0 w-20 lg:w-24 bg-white h-full relative z-30 overflow-visible"
+      // Fond = couleur d'accent du thème choisi.
+      className="hidden md:flex flex-col shrink-0 w-20 lg:w-24 h-full relative z-30 overflow-visible"
+      style={{ backgroundColor: 'var(--primary)' }}
     >
       {/* Logo — déborde légèrement du rail, mais reste dans la « safe zone » :
           sa largeur est plafonnée pour ne JAMAIS passer sous les titres des
@@ -173,8 +175,8 @@ export default function LeftRail({
           />
         ) : (
           <span
-            className="grid h-14 w-14 place-items-center rounded-2xl text-white font-semibold text-xl"
-            style={{ backgroundColor: 'var(--primary)' }}
+            className="grid h-14 w-14 place-items-center rounded-2xl bg-white font-semibold text-xl"
+            style={{ color: 'var(--primary)' }}
           >
             {(brand.brand_name || 'H').charAt(0)}
           </span>
@@ -192,10 +194,10 @@ export default function LeftRail({
               aria-current={active ? 'page' : undefined}
               className={`group relative flex flex-col items-center justify-center gap-0.5 w-16 lg:w-[4.75rem] min-h-[56px] py-1.5 px-1 rounded-2xl transition-colors ${
                 active
-                  ? 'text-white shadow-sm font-semibold'
-                  : 'text-ink-soft hover:text-ink hover:bg-gray-100'
+                  ? 'bg-white shadow-sm font-semibold'
+                  : 'text-white/80 hover:text-white hover:bg-white/10'
               }`}
-              style={active ? { backgroundColor: 'var(--primary)' } : undefined}
+              style={active ? { color: 'var(--primary)' } : undefined}
               title={t.label}
               aria-label={t.label}
             >
@@ -218,11 +220,11 @@ export default function LeftRail({
       </nav>
 
       {/* Hamburger + monogramme utilisateur en bas */}
-      <div className="flex flex-col items-center gap-2 pb-3 border-t border-border pt-3 shrink-0">
+      <div className="flex flex-col items-center gap-2 pb-3 border-t border-white/15 pt-3 shrink-0">
         <button
           onClick={onOpenMenu}
           aria-label="Toutes les pages"
-          className="grid h-12 w-12 place-items-center rounded-xl border border-border hover:bg-gray-50 text-ink-soft hover:text-ink transition-colors"
+          className="grid h-12 w-12 place-items-center rounded-xl border border-white/30 hover:bg-white/10 text-white/80 hover:text-white transition-colors"
           title="Toutes les pages"
         >
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -232,8 +234,8 @@ export default function LeftRail({
         </button>
         <button
           onClick={onLogout}
-          className="grid h-12 w-12 place-items-center rounded-full text-white font-semibold text-base hover:opacity-90 transition-opacity"
-          style={{ backgroundColor: 'var(--primary)' }}
+          className="grid h-12 w-12 place-items-center rounded-full bg-white font-semibold text-base hover:opacity-90 transition-opacity"
+          style={{ color: 'var(--primary)' }}
           title={`${user.fullName} — se déconnecter`}
           aria-label={`${user.fullName} — se déconnecter`}
         >
