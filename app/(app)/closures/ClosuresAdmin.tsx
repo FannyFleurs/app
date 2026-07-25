@@ -6,6 +6,7 @@ import { PAYMENT_LABELS } from '@/components/labels';
 import Badge from '@/components/Badge';
 import EmptyState from '@/components/EmptyState';
 import BankDepositModal from './BankDepositModal';
+import { promptThemed } from '@/lib/ui/dialog';
 
 const DENOMINATIONS: Array<{ value: number; label: string }> = [
   { value: 500,  label: '500 €' },
@@ -161,6 +162,42 @@ export default function ClosuresAdmin({ stores, registers }: { stores: Store[]; 
   // Écart = compté − attendu, TOUJOURS. Tant qu'on n'a rien compté (0), l'écart
   // affiche donc −(montant attendu) : on « doit » encore compter cette somme.
   const cashVariance = Number((countedCash - expectedCash).toFixed(2));
+
+  // Comptage tactile : 1 clic sur une tuile = +1 ; appui long = saisir le
+  // nombre exact (évite de cliquer 50 fois pour 50 pièces).
+  const lpTimer = useRef<number | null>(null);
+  const lpFired = useRef(false);
+  function bump(value: number, delta: number) {
+    setDenomCount((c) => {
+      const cur = c[String(value)] ?? 0;
+      return { ...c, [String(value)]: Math.max(0, cur + delta) };
+    });
+  }
+  function pressStart(value: number, label: string) {
+    if (alreadySealed) return;
+    lpFired.current = false;
+    lpTimer.current = window.setTimeout(() => {
+      lpFired.current = true;
+      const cur = denomCount[String(value)] ?? 0;
+      void promptThemed({
+        title: `Nombre de ${label}`,
+        message: 'Saisis la quantité présente dans le tiroir.',
+        defaultValue: cur ? String(cur) : '',
+        placeholder: '0',
+      }).then((v) => {
+        if (v == null) return;
+        const n = Math.max(0, Math.floor(Number(v.replace(',', '.')) || 0));
+        setDenomCount((c) => ({ ...c, [String(value)]: n }));
+      });
+    }, 450);
+  }
+  function pressEnd(value: number) {
+    if (lpTimer.current) { clearTimeout(lpTimer.current); lpTimer.current = null; }
+    if (!lpFired.current && !alreadySealed) bump(value, 1);
+  }
+  function pressCancel() {
+    if (lpTimer.current) { clearTimeout(lpTimer.current); lpTimer.current = null; }
+  }
 
   async function seal() {
     if (!preview) return;
@@ -452,38 +489,68 @@ export default function ClosuresAdmin({ stores, registers }: { stores: Store[]; 
             <section className="card p-4 overflow-auto min-h-0">
               <h3 className="font-semibold">Comptage des espèces en caisse</h3>
               <p className="mt-1 text-sm text-ink-soft">
-                Saisissez le nombre de billets et pièces présents dans le tiroir.
+                Touche une valeur pour ajouter <strong>+1</strong>. <strong>Appui long</strong> pour saisir le nombre exact.
               </p>
-              {/* 1 colonne sur mobile : le champ de saisie garde une vraie
-                  largeur (sur 2 colonnes il était écrasé, saisie invisible). */}
-              <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-2">
                 {DENOMINATIONS.map((d) => {
                   const qty = denomCount[String(d.value)] ?? 0;
                   const sub = qty * d.value;
                   return (
-                    <div key={d.value} className="flex items-center gap-2 rounded-lg border border-border p-2">
-                      <span className="w-16 shrink-0 text-sm font-medium tabular-nums">{d.label}</span>
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        min={0}
-                        step={1}
-                        className="input h-10 flex-1 min-w-[4.5rem] text-center text-base tabular-nums"
-                        value={qty || ''}
-                        placeholder="0"
-                        onChange={(e) => {
-                          const v = Math.max(0, Math.floor(Number(e.target.value) || 0));
-                          setDenomCount({ ...denomCount, [String(d.value)]: v });
-                        }}
-                        disabled={alreadySealed}
-                      />
-                      <span className="w-20 shrink-0 text-right text-xs text-ink-soft tabular-nums">
-                        {formatEUR(sub)}
-                      </span>
-                    </div>
+                    <button
+                      key={d.value}
+                      type="button"
+                      disabled={alreadySealed}
+                      onPointerDown={() => pressStart(d.value, d.label)}
+                      onPointerUp={() => pressEnd(d.value)}
+                      onPointerLeave={pressCancel}
+                      onContextMenu={(e) => e.preventDefault()}
+                      className={`relative rounded-xl border p-2.5 text-center select-none touch-none transition-colors disabled:opacity-50 ${
+                        qty > 0 ? 'border-[color:var(--primary)] bg-primary-soft/40' : 'border-border hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="text-sm font-semibold tabular-nums">{d.label}</div>
+                      <div className="text-xl font-bold tabular-nums leading-tight mt-0.5">{qty}</div>
+                      <div className="text-[11px] text-ink-soft tabular-nums">{formatEUR(sub)}</div>
+                      {qty > 0 && !alreadySealed && (
+                        <span
+                          role="button"
+                          aria-label="Retirer un"
+                          onPointerDown={(e) => { e.stopPropagation(); }}
+                          onClick={(e) => { e.stopPropagation(); bump(d.value, -1); }}
+                          className="absolute top-1 right-1 grid h-6 w-6 place-items-center rounded-full bg-white border border-border text-ink-soft text-sm leading-none hover:bg-gray-100"
+                        >
+                          −
+                        </span>
+                      )}
+                    </button>
                   );
                 })}
               </div>
+
+              {/* Avancement vers le montant attendu */}
+              {expectedCash > 0 && (
+                <div className="mt-4">
+                  <div className="flex justify-between text-xs text-ink-soft mb-1">
+                    <span>Avancement du comptage</span>
+                    <span className="tabular-nums">{formatEUR(countedCash)} / {formatEUR(expectedCash)}</span>
+                  </div>
+                  <div className="h-2.5 rounded-full bg-gray-200 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${countedCash >= expectedCash ? 'bg-success' : 'bg-[color:var(--primary)]'}`}
+                      style={{ width: `${Math.min(100, Math.round((countedCash / expectedCash) * 100))}%` }}
+                    />
+                  </div>
+                  <div className={`text-xs mt-1 ${
+                    countedCash === expectedCash ? 'text-success' :
+                    countedCash > expectedCash ? 'text-warning' : 'text-ink-soft'}`}>
+                    {countedCash < expectedCash
+                      ? `Reste ${formatEUR(expectedCash - countedCash)} à compter`
+                      : countedCash === expectedCash
+                        ? '✓ Montant attendu atteint'
+                        : `Excédent de ${formatEUR(countedCash - expectedCash)}`}
+                  </div>
+                </div>
+              )}
 
               <div className="mt-4 space-y-1.5 text-sm rounded-xl bg-gray-50 p-4">
                 <div className="flex justify-between">
