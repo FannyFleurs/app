@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import TopBar from './TopBar';
 import LeftRail from './LeftRail';
 import AllPagesOverlay from './AllPagesOverlay';
@@ -45,6 +45,7 @@ export default function AppShell({
   const permSet = new Set(permissions);
   const [menuOpen, setMenuOpen] = useState(false);
   const router = useRouter();
+  const pathname = usePathname();
 
   // Couleur d'accent effective : celle choisie AU POSTE (localStorage) prime
   // sur celle de l'organisation. Se met à jour en direct quand le poste change
@@ -63,11 +64,19 @@ export default function AppShell({
 
   useEffect(() => { document.body.setAttribute('data-theme', effectiveTheme); }, [effectiveTheme]);
 
-  // Synchronise la meta theme-color (barre systeme iOS/Android + chrome
-  // Safari macOS) avec la couleur d'accent effective. Si la couleur
-  // n'est pas trouvee, on retombe sur blanc.
+  // Synchronise la meta theme-color (barre systeme iOS/Android, titre de
+  // fenêtre PWA macOS/Windows) : VERT d'accent sur la caisse, blanc ailleurs.
+  //
+  // IMPORTANT : la dépendance à `pathname` est indispensable. Next.js
+  // ré-applique la `themeColor` du viewport racine (#FFFFFF) sur CHAQUE
+  // navigation client. Sans re-run à chaque changement de route, le bandeau
+  // vert de la caisse disparaissait à la 1re navigation et ne revenait
+  // jamais. On ré-affirme donc la valeur après chaque navigation.
   useEffect(() => {
-    const hex = POS_THEME_COLOR_VALUES[effectiveTheme]?.main ?? '#FFFFFF';
+    const onCaisse = pathname === '/caisse' || (pathname?.startsWith('/caisse/') ?? false);
+    const hex = onCaisse
+      ? (POS_THEME_COLOR_VALUES[effectiveTheme]?.main ?? '#FFFFFF')
+      : '#FFFFFF';
     let meta = document.querySelector('meta[name="theme-color"]') as HTMLMetaElement | null;
     if (!meta) {
       meta = document.createElement('meta');
@@ -75,7 +84,7 @@ export default function AppShell({
       document.head.appendChild(meta);
     }
     meta.content = hex;
-  }, [effectiveTheme]);
+  }, [effectiveTheme, pathname]);
 
   useEffect(() => {
     function applyMode() {

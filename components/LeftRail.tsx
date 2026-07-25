@@ -154,14 +154,13 @@ export default function LeftRail({
     >
       {/* Logo — déborde légèrement du rail, mais reste dans la « safe zone » :
           sa largeur est plafonnée pour ne JAMAIS passer sous les titres des
-          pages (qui commencent à rail + padding p-8 du contenu). */}
+          pages (qui commencent à rail + padding p-8 du contenu).
+          Hauteur CONSTANTE quelle que soit la route : la nav est centrée dans
+          l'espace restant (flex-1), donc toute variation de hauteur du bloc
+          logo décalait verticalement les icônes en changeant de page. */}
       <Link
         href="/caisse"
-        // Hors caisse (h-24) : le centre vertical du logo (48px) s'aligne pile
-        // sur le centre de la 1re ligne du titre de page (32px + 16px). Sur la
-        // CAISSE, l'en-tête fait h-14 (56px) : on aligne le logo dessus (h-14)
-        // pour qu'il soit centré entre la barre verte du haut et la bordure.
-        className={`flex items-center pl-3 shrink-0 overflow-visible ${path === '/caisse' ? 'h-14' : 'h-24'}`}
+        className="flex items-center pl-3 shrink-0 overflow-visible h-16"
         title="Caisse"
       >
         {brand.logo_url ? (
@@ -169,7 +168,7 @@ export default function LeftRail({
           <img
             src={brand.logo_url}
             alt={brand.brand_name}
-            className={`w-auto max-w-[96px] lg:max-w-[112px] object-contain object-left ${path === '/caisse' ? 'h-10' : 'h-16'}`}
+            className="w-auto max-w-[96px] lg:max-w-[112px] object-contain object-left h-12"
           />
         ) : (
           <span
