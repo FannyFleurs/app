@@ -34,17 +34,20 @@ export class ClosingService {
     };
   }> {
     return withTransaction(async (client) => {
-      // 0. Refuse si déjà clôturé
-      const existing = await client.query(
-        `SELECT id FROM daily_closures
-          WHERE store_id = $1 AND business_date = $2`,
+      // 0. Période à sceller. S'il existe déjà des clôtures pour cette journée
+      //    (réouverture), on scelle une NOUVELLE période bornée par la dernière
+      //    clôture : on ne recompte QUE les ventes postérieures à son scellement.
+      const lastClose = await client.query<{ seq: number; sealed_at: string }>(
+        `SELECT seq, sealed_at FROM daily_closures
+          WHERE store_id = $1 AND business_date = $2
+          ORDER BY seq DESC LIMIT 1`,
         [args.storeId, args.businessDate],
       );
-      if (existing.rowCount && existing.rowCount > 0) {
-        throw new Error('DAILY_CLOSURE_ALREADY_SEALED');
-      }
+      const periodStart: string | null = lastClose.rows[0]?.sealed_at ?? null;
+      const seq = (lastClose.rows[0]?.seq ?? 0) + 1;
 
-      // 1. Cumuls de la journée (ventes validées de la boutique)
+      // 1. Cumuls de la période (ventes validées de la boutique). Le filtre
+      //    `$3 IS NULL OR validated_at > $3` borne la période après réouverture.
       const totalsRes = await client.query<{
         total_sales: string;
         total_ht: string;
@@ -60,10 +63,16 @@ export class ClosingService {
            FROM sales
           WHERE store_id = $1
             AND status = 'validated'
-            AND validated_at::date = $2::date`,
-        [args.storeId, args.businessDate],
+            AND validated_at::date = $2::date
+            AND ($3::timestamptz IS NULL OR validated_at > $3)`,
+        [args.storeId, args.businessDate, periodStart],
       );
       const totals = totalsRes.rows[0]!;
+
+      // Réouverture sans nouvelle vente : rien à sceller.
+      if (seq > 1 && Number(totals.total_sales) === 0) {
+        throw new Error('NOTHING_TO_SEAL');
+      }
 
       // 2. Répartition TVA agrégée (parcours des sale_lines)
       const tvaRes = await client.query<{
@@ -81,9 +90,10 @@ export class ClosingService {
           WHERE s.store_id = $1
             AND s.status = 'validated'
             AND s.validated_at::date = $2::date
+            AND ($3::timestamptz IS NULL OR s.validated_at > $3)
           GROUP BY sl.tax_rate
           ORDER BY sl.tax_rate DESC`,
-        [args.storeId, args.businessDate],
+        [args.storeId, args.businessDate, periodStart],
       );
       const tvaBreakdown = tvaRes.rows.map((r) => ({
         rate: Number(r.tax_rate),
@@ -103,9 +113,10 @@ export class ClosingService {
           WHERE s.store_id = $1
             AND s.status = 'validated'
             AND s.validated_at::date = $2::date
+            AND ($3::timestamptz IS NULL OR s.validated_at > $3)
           GROUP BY p.method
           ORDER BY p.method`,
-        [args.storeId, args.businessDate],
+        [args.storeId, args.businessDate, periodStart],
       );
       const paymentsBreakdown = payRes.rows.map((r) => ({
         method: r.method,
@@ -126,15 +137,18 @@ export class ClosingService {
                        WHERE cm.cash_session_id IN (
                          SELECT id FROM cash_sessions
                           WHERE store_id = $1 AND opened_at::date = $2::date
+                            AND ($3::timestamptz IS NULL OR opened_at > $3)
                        ) AND cm.movement_type = 'in'), 0)::text AS ins,
             COALESCE((SELECT SUM(cm.amount) FROM cash_movements cm
                        WHERE cm.cash_session_id IN (
                          SELECT id FROM cash_sessions
                           WHERE store_id = $1 AND opened_at::date = $2::date
+                            AND ($3::timestamptz IS NULL OR opened_at > $3)
                        ) AND cm.movement_type = 'out'), 0)::text AS outs
            FROM cash_sessions cs
-          WHERE cs.store_id = $1 AND cs.opened_at::date = $2::date`,
-        [args.storeId, args.businessDate],
+          WHERE cs.store_id = $1 AND cs.opened_at::date = $2::date
+            AND ($3::timestamptz IS NULL OR cs.opened_at > $3)`,
+        [args.storeId, args.businessDate, periodStart],
       );
       const openingFloats = Number(floatsRes.rows[0]?.opening_floats ?? 0);
       const cashIns = Number(floatsRes.rows[0]?.ins ?? 0);
@@ -176,6 +190,8 @@ export class ClosingService {
       const payload = {
         store_id: args.storeId,
         business_date: args.businessDate,
+        seq,
+        period_start: periodStart,
         totals: {
           total_sales: Number(totals.total_sales),
           total_ht: Number(totals.total_ht),
@@ -217,8 +233,9 @@ export class ClosingService {
             total_sales, total_ht, total_tva, total_ttc,
             tva_breakdown, payments_breakdown, discounts_total,
             cash_expected, cash_counted, cash_variance,
-            grand_total_ttc_running, fiscal_hash, previous_hash, fiscal_event_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+            grand_total_ttc_running, fiscal_hash, previous_hash, fiscal_event_id,
+            seq, period_start)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
          RETURNING id`,
         [
           args.organizationId,
@@ -239,6 +256,8 @@ export class ClosingService {
           event.currentHash,
           previousHash,
           event.id,
+          seq,
+          periodStart,
         ],
       );
 

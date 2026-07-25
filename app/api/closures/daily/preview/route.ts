@@ -15,6 +15,31 @@ export async function GET(req: Request) {
   const date = url.searchParams.get('date');
   if (!storeId || !date) return jsonError('store_id et date requis', 400);
 
+  // Dernière clôture de la journée + détection d'une RÉOUVERTURE : y a-t-il de
+  // l'activité (ventes validées ou session ouverte) APRÈS ce scellement ?
+  const lastClose = await query<{ id: string; sealed_at: string; seq: number }>(
+    `SELECT id, sealed_at, seq FROM daily_closures
+      WHERE store_id = $1 AND business_date = $2
+      ORDER BY seq DESC LIMIT 1`,
+    [storeId, date],
+  );
+  const lastSeal = lastClose.rows[0] ?? null;
+  let reopened = false;
+  if (lastSeal) {
+    const act = await query<{ n: string }>(
+      `SELECT (
+         (SELECT COUNT(*) FROM sales
+           WHERE store_id = $1 AND status = 'validated' AND validated_at > $2)
+       + (SELECT COUNT(*) FROM cash_sessions
+           WHERE store_id = $1 AND status = 'open' AND opened_at > $2)
+       )::text AS n`,
+      [storeId, lastSeal.sealed_at],
+    );
+    reopened = Number(act.rows[0]?.n ?? 0) > 0;
+  }
+  // Période courante à compter : après le dernier scellement si réouvert.
+  const periodStart: string | null = reopened && lastSeal ? lastSeal.sealed_at : null;
+
   const totals = await query<{
     sales: string; ht: string; tva: string; ttc: string; discount: string;
   }>(
@@ -24,8 +49,9 @@ export async function GET(req: Request) {
             COALESCE(SUM(total_ttc),0)::text AS ttc,
             COALESCE(SUM(total_discount),0)::text AS discount
        FROM sales
-      WHERE store_id = $1 AND status='validated' AND validated_at::date = $2::date`,
-    [storeId, date],
+      WHERE store_id = $1 AND status='validated' AND validated_at::date = $2::date
+        AND ($3::timestamptz IS NULL OR validated_at > $3)`,
+    [storeId, date, periodStart],
   );
 
   const tvaBreakdown = await query<{ rate: string; base_ht: string; tva: string; ttc: string }>(
@@ -36,8 +62,9 @@ export async function GET(req: Request) {
        FROM sale_lines sl
        JOIN sales s ON s.id = sl.sale_id
       WHERE s.store_id = $1 AND s.status='validated' AND s.validated_at::date = $2::date
+        AND ($3::timestamptz IS NULL OR s.validated_at > $3)
       GROUP BY sl.tax_rate ORDER BY sl.tax_rate DESC`,
-    [storeId, date],
+    [storeId, date, periodStart],
   );
 
   const payments = await query<{ method: string; total: string }>(
@@ -45,8 +72,9 @@ export async function GET(req: Request) {
        FROM payments p
        JOIN sales s ON s.id = p.sale_id
       WHERE s.store_id = $1 AND s.status='validated' AND s.validated_at::date = $2::date
+        AND ($3::timestamptz IS NULL OR s.validated_at > $3)
       GROUP BY p.method ORDER BY p.method`,
-    [storeId, date],
+    [storeId, date, periodStart],
   );
 
   // Fonds + mouvements espèces du jour pour la boutique
@@ -62,6 +90,7 @@ export async function GET(req: Request) {
            JOIN cash_sessions cs2 ON cs2.id = cm.cash_session_id
           WHERE cs2.store_id = $1
             AND cm.created_at::date = $2::date
+            AND ($3::timestamptz IS NULL OR cm.created_at > $3)
             AND cm.movement_type = 'in'
         ), 0)::text AS ins,
         COALESCE((
@@ -69,11 +98,13 @@ export async function GET(req: Request) {
            JOIN cash_sessions cs2 ON cs2.id = cm.cash_session_id
           WHERE cs2.store_id = $1
             AND cm.created_at::date = $2::date
+            AND ($3::timestamptz IS NULL OR cm.created_at > $3)
             AND cm.movement_type = 'out'
         ), 0)::text AS outs
        FROM cash_sessions cs
-      WHERE cs.store_id = $1 AND cs.opened_at::date = $2::date`,
-    [storeId, date],
+      WHERE cs.store_id = $1 AND cs.opened_at::date = $2::date
+        AND ($3::timestamptz IS NULL OR cs.opened_at > $3)`,
+    [storeId, date, periodStart],
   );
   const openingFloats = Number(cashBd.rows[0]?.opening_floats ?? 0);
   const cashIns = Number(cashBd.rows[0]?.ins ?? 0);
@@ -89,9 +120,10 @@ export async function GET(req: Request) {
        JOIN cash_sessions cs ON cs.id = cm.cash_session_id
       WHERE cs.store_id = $1
         AND cm.created_at::date = $2::date
+        AND ($3::timestamptz IS NULL OR cm.created_at > $3)
         AND cm.movement_type = 'out'
         AND cm.reason ILIKE '%banque%'`,
-    [storeId, date],
+    [storeId, date, periodStart],
   );
   const bankDeposits = Number(depositsRes.rows[0]?.total ?? 0);
 
@@ -105,16 +137,17 @@ export async function GET(req: Request) {
        FROM cash_movements cm
        JOIN cash_sessions cs ON cs.id = cm.cash_session_id
       WHERE cs.store_id = $1 AND cs.opened_at::date = $2::date
+        AND ($3::timestamptz IS NULL OR cs.opened_at > $3)
       ORDER BY cm.created_at DESC`,
-    [storeId, date],
+    [storeId, date, periodStart],
   );
 
-  // Vérifie si déjà clôturé
-  const sealed = await query<{ id: string; sealed_at: string }>(
-    `SELECT id, sealed_at FROM daily_closures
-      WHERE store_id = $1 AND business_date = $2`,
-    [storeId, date],
-  );
+  // « Scellé » = il existe une clôture ET la journée n'a PAS été rouverte
+  // depuis. Si rouverte (activité après le dernier scellement), on renvoie
+  // null → l'UI débloque le comptage de la nouvelle période.
+  const sealedRow = !reopened && lastSeal
+    ? { id: lastSeal.id, sealed_at: lastSeal.sealed_at }
+    : null;
 
   // Paniers encore en attente sur la boutique
   const held = await query<{ c: string }>(
@@ -152,7 +185,8 @@ export async function GET(req: Request) {
       amount: Number(m.amount), reason: m.reason,
       created_at: m.created_at,
     })),
-    sealed: sealed.rows[0] ?? null,
+    sealed: sealedRow,
+    reopened,
     held_count: heldCount,
   });
 }

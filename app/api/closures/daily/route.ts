@@ -42,7 +42,8 @@ export async function POST(req: Request) {
   } catch (e) {
     const msg = (e as Error).message;
     const status =
-      msg === 'DAILY_CLOSURE_ALREADY_SEALED' ? 409 : 400;
+      msg === 'DAILY_CLOSURE_ALREADY_SEALED' ? 409 :
+      msg === 'NOTHING_TO_SEAL' ? 422 : 400;
     return jsonError(msg, status);
   }
 }

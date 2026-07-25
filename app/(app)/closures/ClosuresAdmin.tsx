@@ -39,6 +39,7 @@ interface PreviewData {
   };
   movements: { id: string; movement_type: 'in' | 'out'; amount: number; reason: string; created_at: string }[];
   sealed: { id: string; sealed_at: string } | null;
+  reopened?: boolean;
   held_count: number;
 }
 
@@ -255,6 +256,11 @@ export default function ClosuresAdmin({ stores, registers }: { stores: Store[]; 
           {alreadySealed && (
             <Badge tone="success">
               Scellée le {new Date(preview!.sealed!.sealed_at).toLocaleString('fr-FR')}
+            </Badge>
+          )}
+          {!alreadySealed && preview?.reopened && (
+            <Badge tone="warning">
+              Journée rouverte — nouvelle clôture (période depuis la précédente)
             </Badge>
           )}
         </div>
