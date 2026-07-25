@@ -16,18 +16,7 @@ import { renderLabelSheetBitmap } from '@/lib/services/cloudprnt/label-render';
 
 export const STARPRNT_CONTENT_TYPE = 'application/vnd.star.starprnt';
 
-type Encoder = import('star-prnt-encoder').default;
-
-// Avance papier de `mm` mm (ESC J n ; n en points de 0,125 mm à 203 dpi).
-function feed(enc: Encoder, mm: number): void {
-  const dots = Math.min(255, Math.max(0, Math.round(mm / 0.125)));
-  if (dots > 0) enc.raw([0x1b, 0x4a, dots]);
-}
-
-// Réglage fin de la coupe (avance après le form feed, avant coupe).
-const CUT_EXTRA_MM = 1;
 // Nombre max d'étiquettes par image continue (borne mémoire du bitmap).
-// Au-delà, une nouvelle image (donc une coupe) — rare pour les lots courants.
 const MAX_PER_SHEET = 20;
 
 export async function buildLabelsStarPrnt(
@@ -57,10 +46,12 @@ export async function buildLabelsStarPrnt(
       bmp.height,
       'threshold',
     );
-    // Avance au gap puis UNE coupe (fin de tranche).
+    // PAS de coupe (couper génère une vierge à cause de l'offset de lame).
+    // On avance simplement jusqu'au prochain gap : la dernière étiquette est
+    // présentée et la prochaine impression démarre bien calée sur le gap.
+    // Les étiquettes sortent en bande sur le liner → on décolle les stickers
+    // (usage die-cut normal), ZÉRO vierge.
     enc.raw([0x0c]);
-    feed(enc, CUT_EXTRA_MM);
-    enc.cut();
   }
 
   return Buffer.from(enc.encode());

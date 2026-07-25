@@ -73,13 +73,13 @@ async function drawLabel(
     if (isValidEan13(p.barcode)) {
       const bcPng: Buffer = await bwip.toBuffer({
         bcid: 'ean13', text: p.barcode,
-        scale: Math.max(2, Math.round(3 * scale)),
-        height: Math.round(12 * scale),
-        includetext: true, textsize: Math.round(11 * scale),
+        scale: Math.max(2, Math.round(2 * scale)),
+        height: Math.round(9 * scale),
+        includetext: true, textsize: Math.round(8 * scale),
         backgroundcolor: 'FFFFFF',
       });
       const bcImg = await PImageMod.decodePNGFromStream(Readable.from(bcPng));
-      const maxW = Math.round(W * 0.9);
+      const maxW = Math.round(W * 0.66);
       let w = bcImg.width; let h = bcImg.height;
       if (w > maxW) { const r = maxW / w; w = maxW; h = Math.round(h * r); }
       ctx.drawImage(bcImg, Math.round((W - w) / 2), offsetY + Math.round(170 * scale), w, h);
