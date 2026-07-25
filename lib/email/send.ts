@@ -43,6 +43,26 @@ export async function loadEmailSettings(
   }
 }
 
+/** Version texte brute d'un HTML (pour l'alternative multipart anti-spam). */
+function htmlToText(html: string): string {
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<\s*br\s*\/?>/gi, '\n')
+    .replace(/<\/\s*(p|div|h[1-6]|li|tr)\s*>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&quot;/gi, '"')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .split('\n').map((l) => l.trim()).join('\n')
+    .trim();
+}
+
 /**
  * Envoie un email transactionnel via Brevo pour le compte d'une organisation.
  * No-op « échec propre » si l'envoi n'est pas configuré (enabled + clé + expéditeur).
@@ -74,8 +94,16 @@ export async function sendOrgEmail(args: {
   const body: Record<string, unknown> = {
     sender: { email: cfg.sender_email, name: cfg.sender_name || cfg.sender_email },
     to: [{ email: args.to, name: args.toName || args.to }],
+    // Un reply-to explicite (adresse humaine) renforce la légitimité du message
+    // aux yeux des filtres anti-spam.
+    replyTo: { email: cfg.sender_email, name: cfg.sender_name || cfg.sender_email },
     subject: args.subject,
     htmlContent: args.html,
+    // Alternative texte : un email HTML-seul est bien plus souvent classé en
+    // spam. On fournit une version texte dérivée du HTML (multipart).
+    textContent: htmlToText(args.html),
+    // Aide au classement transactionnel côté Brevo (et statistiques).
+    tags: ['transactionnel'],
   };
   if (args.attachments && args.attachments.length > 0) {
     body.attachment = args.attachments.map((a) => ({
