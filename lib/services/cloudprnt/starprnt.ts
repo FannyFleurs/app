@@ -16,17 +16,6 @@ import { renderLabelSheetBitmap } from '@/lib/services/cloudprnt/label-render';
 
 export const STARPRNT_CONTENT_TYPE = 'application/vnd.star.starprnt';
 
-type Encoder = import('star-prnt-encoder').default;
-
-// Avance papier de `mm` mm (ESC J n ; n en points de 0,125 mm à 203 dpi).
-function feed(enc: Encoder, mm: number): void {
-  const dots = Math.min(255, Math.max(0, Math.round(mm / 0.125)));
-  if (dots > 0) enc.raw([0x1b, 0x4a, dots]);
-}
-
-// Petite avance dans le gap (3 mm) avant la coupe, pour couper au milieu du
-// prédécoupé. Ajustable.
-const CUT_GAP_MM = 1.5;
 // Nombre max d'étiquettes par image continue (borne mémoire du bitmap).
 const MAX_PER_SHEET = 20;
 
@@ -57,11 +46,12 @@ export async function buildLabelsStarPrnt(
       bmp.height,
       'threshold',
     );
-    // PAS de form feed ici : l'image atteint déjà le bord de l'étiquette (le
-    // papier est au gap). Un form feed depuis le gap sauterait une étiquette
-    // entière → c'était la vierge du mode image. On avance juste un poil dans
-    // le gap, puis on coupe.
-    feed(enc, CUT_GAP_MM);
+    // On reproduit le comportement du bouton FEED de l'imprimante (qui coupe
+    // correctement) : form feed = avance « intelligente » jusqu'au gap détecté
+    // par le capteur, puis coupe. L'image se termine ~10 mm AVANT le gap (voir
+    // CUT_TRIM_MM côté rendu) pour que cette avance aille au gap COURANT et ne
+    // saute pas d'étiquette (ce qui provoquait la vierge).
+    enc.raw([0x0c]);
     enc.cut();
   }
 
