@@ -103,8 +103,11 @@ export async function renderLabelSheetBitmap(labels: LabelProduct[], s: LabelSet
   const contentH = Math.max(80, Math.round((s.height_mm || 51) * DPMM));
   const gapPx = Math.round(GAP_MM * DPMM);
   const pitch = contentH + gapPx;
-  // Dernière case sans gap final (coupe au ras de la dernière étiquette).
-  const H = pitch * labels.length - gapPx;
+  // Réglage fin de la position de coupe : on raccourcit légèrement l'image en
+  // fin de lot pour remonter la coupe (la coupe tombait ~2 mm trop loin).
+  const CUT_TRIM_MM = 2;
+  const trimPx = Math.round(CUT_TRIM_MM * DPMM);
+  const H = Math.max(contentH - trimPx, pitch * labels.length - gapPx - trimPx);
 
   const img = PImage.make(W, Math.max(contentH, H));
   const ctx = img.getContext('2d');
