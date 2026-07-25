@@ -65,18 +65,16 @@ export default function AppShell({
   useEffect(() => { document.body.setAttribute('data-theme', effectiveTheme); }, [effectiveTheme]);
 
   // Synchronise la meta theme-color (barre systeme iOS/Android, titre de
-  // fenêtre PWA macOS/Windows) : VERT d'accent sur la caisse, blanc ailleurs.
+  // fenêtre PWA macOS/Windows) avec la couleur d'accent du thème : le
+  // bandeau coloré reste présent sur TOUTES les pages de l'app.
   //
   // IMPORTANT : la dépendance à `pathname` est indispensable. Next.js
   // ré-applique la `themeColor` du viewport racine (#FFFFFF) sur CHAQUE
   // navigation client. Sans re-run à chaque changement de route, le bandeau
-  // vert de la caisse disparaissait à la 1re navigation et ne revenait
-  // jamais. On ré-affirme donc la valeur après chaque navigation.
+  // coloré disparaissait à la 1re navigation et ne revenait jamais. On
+  // ré-affirme donc la couleur d'accent après chaque navigation.
   useEffect(() => {
-    const onCaisse = pathname === '/caisse' || (pathname?.startsWith('/caisse/') ?? false);
-    const hex = onCaisse
-      ? (POS_THEME_COLOR_VALUES[effectiveTheme]?.main ?? '#FFFFFF')
-      : '#FFFFFF';
+    const hex = POS_THEME_COLOR_VALUES[effectiveTheme]?.main ?? '#FFFFFF';
     let meta = document.querySelector('meta[name="theme-color"]') as HTMLMetaElement | null;
     if (!meta) {
       meta = document.createElement('meta');
