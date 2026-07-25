@@ -48,6 +48,7 @@ export interface DayReport {
   cash: {
     fonds_de_caisse: number;
     entrees_argent: number;
+    remise_banque: number;
     total_espece_fermeture: number;
     tiroir_sans_ticket: number;
     counted: number | null;
@@ -130,12 +131,14 @@ export async function computeDayReport(opts: {
            FROM sale_lines sl JOIN sales s ON s.id=sl.sale_id
            LEFT JOIN products p ON p.id=sl.product_id
           WHERE s.store_id=$2 AND s.organization_id=$1 AND s.status='validated' AND s.validated_at::date=$3::date`, [...P]),
-      query<{ opening: string; ins: string; outs: string }>(
+      query<{ opening: string; ins: string; outs: string; deposits: string }>(
         `SELECT COALESCE(SUM(cs.opening_float),0)::text opening,
                 COALESCE((SELECT SUM(cm.amount) FROM cash_movements cm WHERE cm.cash_session_id IN
                           (SELECT id FROM cash_sessions WHERE store_id=$2 AND opened_at::date=$3::date) AND cm.movement_type='in'),0)::text ins,
                 COALESCE((SELECT SUM(cm.amount) FROM cash_movements cm WHERE cm.cash_session_id IN
-                          (SELECT id FROM cash_sessions WHERE store_id=$2 AND opened_at::date=$3::date) AND cm.movement_type='out'),0)::text outs
+                          (SELECT id FROM cash_sessions WHERE store_id=$2 AND opened_at::date=$3::date) AND cm.movement_type='out'),0)::text outs,
+                COALESCE((SELECT SUM(cm.amount) FROM cash_movements cm WHERE cm.cash_session_id IN
+                          (SELECT id FROM cash_sessions WHERE store_id=$2 AND opened_at::date=$3::date) AND cm.movement_type='out' AND cm.reason ILIKE '%banque%'),0)::text deposits
            FROM cash_sessions cs WHERE cs.organization_id=$1 AND cs.store_id=$2 AND cs.opened_at::date=$3::date`, [...P]),
       query<{ opened_at: string | null; closed_at: string | null }>(
         `SELECT MIN(opened_at)::text opened_at, MAX(closed_at)::text closed_at
@@ -212,6 +215,7 @@ export async function computeDayReport(opts: {
     cash: {
       fonds_de_caisse: openingFloats,
       entrees_argent: cashIns,
+      remise_banque: Number(floatsR.rows[0]?.deposits ?? 0),
       total_espece_fermeture: cashExpected,
       tiroir_sans_ticket: 0,
       counted: opts.sealed?.cash_counted ?? null,

@@ -158,7 +158,9 @@ export default function ClosuresAdmin({ stores, registers }: { stores: Store[]; 
   }, [denomCount]);
 
   const expectedCash = preview?.cash_breakdown.expected ?? 0;
-  const cashVariance = countedCash > 0 ? Number((countedCash - expectedCash).toFixed(2)) : 0;
+  // Écart = compté − attendu, TOUJOURS. Tant qu'on n'a rien compté (0), l'écart
+  // affiche donc −(montant attendu) : on « doit » encore compter cette somme.
+  const cashVariance = Number((countedCash - expectedCash).toFixed(2));
 
   async function seal() {
     if (!preview) return;
