@@ -1505,7 +1505,7 @@ export default function CashRegister({
               {/* Pastilles soldes : cartes cadeau, avoirs, en compte. */}
               {customerBalances.gift_card_balance > 0 && (
                 <div className="flex items-center justify-between rounded-xl bg-accent-soft px-3 py-2 text-sm">
-                  <span className="text-accent-deep font-medium">🎁 Carte cadeau dispo</span>
+                  <span className="text-accent-deep font-medium">Carte cadeau dispo</span>
                   <span className="font-semibold">{formatEUR(customerBalances.gift_card_balance)}</span>
                 </div>
               )}
@@ -1642,7 +1642,6 @@ export default function CashRegister({
               className="btn-primary h-16 w-full text-xl font-semibold rounded-xl flex items-center justify-center gap-3"
               title="Valider la vente offerte (0 €)"
             >
-              <span className="text-2xl leading-none">🎁</span>
               <span>Valider · 0 €</span>
             </button>
           ) : (
@@ -1654,7 +1653,6 @@ export default function CashRegister({
                 className="btn-soft h-14 text-base font-semibold rounded-xl flex items-center justify-center gap-2 disabled:opacity-40"
                 title="Encaisser en espèces"
               >
-                <span className="text-xl leading-none">💶</span>
                 <span>Espèces</span>
               </button>
               <button
@@ -1666,7 +1664,6 @@ export default function CashRegister({
                 className="btn-soft h-14 text-base font-semibold rounded-xl flex items-center justify-center gap-2 disabled:opacity-40"
                 title="Choisir le mode de règlement (multiple, chèque, lien Stripe…)"
               >
-                <span className="text-xl leading-none">⋯</span>
                 <span>Autres</span>
               </button>
             </div>
@@ -1676,7 +1673,6 @@ export default function CashRegister({
               className="btn-primary h-16 w-full text-xl font-semibold rounded-xl flex items-center justify-center gap-3 disabled:opacity-40"
               title="Encaisser par carte bancaire"
             >
-              <span className="text-2xl leading-none">💳</span>
               <span>Carte</span>
             </button>
           </div>
