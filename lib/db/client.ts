@@ -14,9 +14,16 @@ export function setTenant(org: string | null, bypass: boolean): void {
   tenantALS.enterWith({ org, bypass });
 }
 
-/** RLS effective seulement si RLS_ENFORCE=1 (rollout piloté, fail-open sinon). */
+/**
+ * RLS ACTIVE PAR DÉFAUT (défense en profondeur). Poser explicitement
+ * RLS_ENFORCE=0 pour la désactiver (échappatoire de secours si un flux
+ * légitime venait à casser en prod — bascule sans redéploiement de code).
+ * Rappel : la politique reste « fail-open » quand aucun contexte tenant
+ * n'est posé (auth, webhooks, super-admin), donc activer ne bloque que les
+ * accès cross-tenant illégitimes. Testé par scripts/rls-selftest.sql.
+ */
 function rlsOn(): boolean {
-  return process.env.RLS_ENFORCE === '1';
+  return process.env.RLS_ENFORCE !== '0';
 }
 
 /**
