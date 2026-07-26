@@ -59,7 +59,7 @@ self.addEventListener('fetch', (event) => {
   if (!(isNavigation || isAsset || isCatalog)) return; // le reste : comportement normal
 
   event.respondWith(networkFirst(req, isNavigation));
-}
+});
 
 async function cacheFirst(req) {
   const cache = await caches.open(CACHE);
@@ -70,7 +70,7 @@ async function cacheFirst(req) {
     cache.put(req, res.clone()).catch(() => {});
   }
   return res;
-});
+}
 
 async function networkFirst(req, isNavigation) {
   const cache = await caches.open(CACHE);
