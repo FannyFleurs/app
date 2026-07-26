@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import TopBar from './TopBar';
 import LeftRail from './LeftRail';
+import DesktopTopBar from './DesktopTopBar';
 import AllPagesOverlay from './AllPagesOverlay';
 import WakeLockKeeper from './WakeLockKeeper';
 import PaidOrderNotifier from './PaidOrderNotifier';
@@ -138,6 +139,9 @@ export default function AppShell({
   return (
     <div className="h-screen overflow-hidden flex flex-col bg-bg pt-safe pl-safe pr-safe pb-safe">
       <SchoolModeBanner />
+      {/* Barre supérieure desktop : logo seul, bordure basse pleine largeur.
+          Le back-office garde son propre en-tête (logo + libellé) dans le rail. */}
+      {!backOffice && <DesktopTopBar />}
       <div className="flex-1 flex flex-row overflow-hidden min-h-0">
         {/* Sidebar verticale (desktop / tablette) */}
         <LeftRail

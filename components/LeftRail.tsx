@@ -147,39 +147,11 @@ export default function LeftRail({
 
   return (
     <aside
-      // Pas de bordure droite : le logo peut déborder du rail vers le
-      // contenu (rendu plus « premium »). overflow-visible + z-30 pour que
-      // le logo passe au-dessus du contenu adjacent.
-      className="hidden md:flex flex-col shrink-0 w-20 lg:w-24 bg-white h-full relative z-30 overflow-visible"
+      // Le logo vit désormais dans la barre supérieure (DesktopTopBar). Le
+      // rail ne porte plus que la navigation : bordure droite pour un bord
+      // propre, plus aucun débordement au-dessus des titres de page.
+      className="hidden md:flex flex-col shrink-0 w-20 lg:w-24 bg-white h-full relative z-30 border-r border-border"
     >
-      {/* Logo — déborde légèrement du rail, mais reste dans la « safe zone » :
-          sa largeur est plafonnée pour ne JAMAIS passer sous les titres des
-          pages (qui commencent à rail + padding p-8 du contenu).
-          Hauteur CONSTANTE quelle que soit la route : la nav est centrée dans
-          l'espace restant (flex-1), donc toute variation de hauteur du bloc
-          logo décalait verticalement les icônes en changeant de page. */}
-      <Link
-        href="/caisse"
-        className="flex items-center pl-3 shrink-0 overflow-visible h-16"
-        title="Caisse"
-      >
-        {brand.logo_url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={brand.logo_url}
-            alt={brand.brand_name}
-            className="w-auto max-w-[96px] lg:max-w-[112px] object-contain object-left h-12"
-          />
-        ) : (
-          <span
-            className="grid h-14 w-14 place-items-center rounded-2xl text-white font-semibold text-xl"
-            style={{ backgroundColor: 'var(--primary)' }}
-          >
-            {(brand.brand_name || 'H').charAt(0)}
-          </span>
-        )}
-      </Link>
-
       {/* Icônes de navigation centrées verticalement */}
       <nav className="flex-1 flex flex-col items-center justify-center gap-2 py-4 overflow-y-auto no-scrollbar">
         {tabs.map((t) => {
