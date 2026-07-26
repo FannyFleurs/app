@@ -609,13 +609,21 @@ function SettleAccountModal({ customerId, due, onClose, onDone }: {
               <button
                 key={m.kind}
                 type="button"
+                aria-pressed={method === m.kind}
                 onClick={() => setMethod(m.kind)}
-                className={`h-11 rounded-xl border px-3 text-sm font-medium transition-colors ${
+                className={`h-11 rounded-xl border px-3 text-sm font-medium transition-colors inline-flex items-center justify-center gap-1.5 ${
                   method === m.kind
-                    ? 'border-accent-deep bg-accent-soft/40 text-accent-deep'
-                    : 'border-border hover:bg-gray-50'
+                    ? 'border-transparent text-white shadow-sm'
+                    : 'border-border hover:bg-gray-50 text-ink'
                 }`}
+                style={method === m.kind ? { backgroundColor: 'var(--primary)' } : undefined}
               >
+                {method === m.kind && (
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                       strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M20 6 9 17l-5-5" />
+                  </svg>
+                )}
                 {m.label}
               </button>
             ))}
