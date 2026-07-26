@@ -147,11 +147,34 @@ export default function LeftRail({
 
   return (
     <aside
-      // Le logo vit désormais dans la barre supérieure (DesktopTopBar). Le
-      // rail ne porte plus que la navigation : bordure droite pour un bord
-      // propre, plus aucun débordement au-dessus des titres de page.
       className="hidden md:flex flex-col shrink-0 w-20 lg:w-24 bg-white h-full relative z-30 border-r border-border"
     >
+      {/* Logo en haut du rail, au format carré à coins arrondis (façon icône
+          d'app). Contenu DANS le rail (plus de débordement vers les titres de
+          page). Hauteur du bloc constante quelle que soit la route pour ne pas
+          décaler la nav centrée en dessous. */}
+      <Link
+        href="/caisse"
+        className="flex items-center justify-center shrink-0 h-20"
+        title="Caisse"
+      >
+        {brand.logo_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={brand.logo_url}
+            alt={brand.brand_name}
+            className="h-14 w-14 rounded-2xl object-cover border border-border bg-white"
+          />
+        ) : (
+          <span
+            className="grid h-14 w-14 place-items-center rounded-2xl text-white font-semibold text-xl"
+            style={{ backgroundColor: 'var(--primary)' }}
+          >
+            {(brand.brand_name || 'H').charAt(0)}
+          </span>
+        )}
+      </Link>
+
       {/* Icônes de navigation centrées verticalement */}
       <nav className="flex-1 flex flex-col items-center justify-center gap-2 py-4 overflow-y-auto no-scrollbar">
         {tabs.map((t) => {
