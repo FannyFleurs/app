@@ -370,7 +370,7 @@ export class InvoiceService {
     amount: number;
     method?: string;
     storeId?: string | null;
-  }): Promise<{ new_balance: number; settled_invoice_ids: string[] }> {
+  }): Promise<{ new_balance: number; settled_invoice_ids: string[]; cash_untracked: boolean }> {
     return withTransaction(async (client) => {
       const custRes = await client.query<{ id: string; account_balance: string }>(
         `SELECT id, COALESCE(account_balance, 0)::text AS account_balance
@@ -440,7 +440,34 @@ export class InvoiceService {
         amountTtcDelta: 0,
       });
 
-      return { new_balance: newBalance, settled_invoice_ids: settled };
+      // Règlement EN ESPÈCES : l'argent entre physiquement dans le tiroir, il
+      // doit donc être compté à la clôture. On l'enregistre comme une entrée
+      // de caisse ('in') sur la session ouverte de la boutique — sinon la
+      // clôture afficherait un écart positif (surplus) inexpliqué.
+      // `cash_untracked` = espèces sans caisse ouverte (à saisir manuellement).
+      let cashUntracked = false;
+      if (args.method === 'cash') {
+        cashUntracked = true;
+        if (args.storeId) {
+          const sess = await client.query<{ id: string }>(
+            `SELECT id FROM cash_sessions
+              WHERE store_id = $1 AND organization_id = $2 AND status = 'open'
+              ORDER BY opened_at DESC LIMIT 1`,
+            [args.storeId, args.organizationId],
+          );
+          if (sess.rows[0]) {
+            await client.query(
+              `INSERT INTO cash_movements
+                 (organization_id, cash_session_id, movement_type, amount, reason, user_id)
+               VALUES ($1, $2, 'in', $3, $4, $5)`,
+              [args.organizationId, sess.rows[0].id, amount, 'Règlement compte client', args.userId],
+            );
+            cashUntracked = false;
+          }
+        }
+      }
+
+      return { new_balance: newBalance, settled_invoice_ids: settled, cash_untracked: cashUntracked };
     });
   }
 }
