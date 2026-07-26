@@ -8,6 +8,7 @@ import EmptyState from '@/components/EmptyState';
 import CustomerFormModal, { type CustomerLike } from '@/components/CustomerFormModal';
 import PageHeader from '@/components/PageHeader';
 import { formatEUR } from '@/lib/services/money';
+import { alertThemed } from '@/lib/ui/dialog';
 import WalletActions from './[id]/WalletActions';
 
 interface Customer {
@@ -576,13 +577,29 @@ function SettleAccountModal({ customerId, due, onClose, onDone }: {
     if (!(val > 0)) { setError('Montant invalide.'); return; }
     if (!method) { setError('Choisissez un mode de règlement.'); return; }
     setBusy(true); setError(null);
+    // Boutique courante du poste : permet de rattacher l'entrée d'espèces à la
+    // bonne caisse ouverte (pour le comptage de fin de journée).
+    const storeId = (typeof window !== 'undefined'
+      ? localStorage.getItem('webpos_current_store_id')
+      : null) || undefined;
     const r = await fetch(`/api/customers/${customerId}/settle-account`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ amount: val, method }),
+      body: JSON.stringify({ amount: val, method, store_id: storeId }),
     });
     setBusy(false);
-    if (r.ok) onDone();
-    else {
+    if (r.ok) {
+      const j = await r.json().catch(() => null);
+      // Espèces réglées sans caisse ouverte : le compte est soldé mais l'entrée
+      // n'a pas pu être ajoutée au comptage. On prévient plutôt que de laisser
+      // un écart inexpliqué à la clôture.
+      if (j?.cash_untracked) {
+        await alertThemed({
+          title: 'Compte soldé — pense au tiroir',
+          message: "Aucune caisse n'était ouverte : ces espèces n'ont pas été ajoutées au comptage. Ouvre la caisse et saisis une entrée de caisse du même montant pour que la clôture tombe juste.",
+        });
+      }
+      onDone();
+    } else {
       const j = await r.json().catch(() => null);
       setError(j?.message ?? 'Échec du règlement.');
     }
@@ -609,13 +626,21 @@ function SettleAccountModal({ customerId, due, onClose, onDone }: {
               <button
                 key={m.kind}
                 type="button"
+                aria-pressed={method === m.kind}
                 onClick={() => setMethod(m.kind)}
-                className={`h-11 rounded-xl border px-3 text-sm font-medium transition-colors ${
+                className={`h-11 rounded-xl border px-3 text-sm font-medium transition-colors inline-flex items-center justify-center gap-1.5 ${
                   method === m.kind
-                    ? 'border-accent-deep bg-accent-soft/40 text-accent-deep'
-                    : 'border-border hover:bg-gray-50'
+                    ? 'border-transparent text-white shadow-sm'
+                    : 'border-border hover:bg-gray-50 text-ink'
                 }`}
+                style={method === m.kind ? { backgroundColor: 'var(--primary)' } : undefined}
               >
+                {method === m.kind && (
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                       strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M20 6 9 17l-5-5" />
+                  </svg>
+                )}
                 {m.label}
               </button>
             ))}
