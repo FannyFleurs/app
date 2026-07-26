@@ -64,6 +64,11 @@ export default function AppShell({
 
   useEffect(() => { document.body.setAttribute('data-theme', effectiveTheme); }, [effectiveTheme]);
 
+  // Le rail gauche reste visible sous l'overlay « Toutes les pages ». Si
+  // l'utilisateur clique un item du rail, la route change : on referme alors
+  // l'overlay pour révéler la page demandée.
+  useEffect(() => { setMenuOpen(false); }, [pathname]);
+
   // Synchronise la meta theme-color (barre systeme iOS/Android, titre de
   // fenêtre PWA macOS/Windows) avec la couleur d'accent du thème : le
   // bandeau coloré reste présent sur TOUTES les pages de l'app.

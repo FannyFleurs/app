@@ -13,7 +13,7 @@ export default function VouchersAdmin() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="px-8 pt-6">
+      <div className="px-6 md:px-8 pt-6 md:pt-8">
         <h1 className="text-2xl font-semibold tracking-tight">Avoirs &amp; Cartes cadeaux</h1>
         <p className="mt-1 text-sm text-ink-soft">
           Gérez vos cartes cadeaux émises et les avoirs (remboursements différés).

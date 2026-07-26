@@ -59,9 +59,15 @@ export default function AllPagesOverlay({ role, hiddenPaths, permissions, backOf
     .filter((i) => i.required || !hiddenPaths.includes(i.href));
 
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col bg-white animate-[fadeIn_120ms_ease-out] pt-safe pb-safe pl-safe pr-safe">
+    // On laisse le rail gauche visible : l'overlay démarre après lui sur
+    // desktop (md:left-20 / lg:left-24), afin que le logo et la navigation
+    // restent au même endroit que sur les autres pages. Sur mobile (pas de
+    // rail), il couvre tout l'écran.
+    <div className="fixed inset-y-0 right-0 left-0 md:left-20 lg:left-24 z-[60] flex flex-col bg-white animate-[fadeIn_120ms_ease-out] pt-safe pb-safe pr-safe">
       <div className="h-14 flex items-center px-4 shrink-0 border-b border-border bg-white">
-        <div className="flex items-center gap-2.5">
+        {/* Logo affiché uniquement sur mobile : sur desktop, le rail gauche
+            (toujours visible) porte déjà le logo. */}
+        <div className="flex items-center gap-2.5 md:hidden">
           {brand.logo_url ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={brand.logo_url} alt={brand.brand_name || 'Logo'} className="h-10 w-auto max-w-[170px] object-contain" />
