@@ -8,7 +8,6 @@ import EmptyState from '@/components/EmptyState';
 import CustomerFormModal, { type CustomerLike } from '@/components/CustomerFormModal';
 import PageHeader from '@/components/PageHeader';
 import { formatEUR } from '@/lib/services/money';
-import { alertThemed } from '@/lib/ui/dialog';
 import WalletActions from './[id]/WalletActions';
 
 interface Customer {
@@ -588,18 +587,10 @@ function SettleAccountModal({ customerId, due, onClose, onDone }: {
     });
     setBusy(false);
     if (r.ok) {
-      const j = await r.json().catch(() => null);
-      // Espèces réglées sans caisse ouverte : le compte est soldé mais l'entrée
-      // n'a pas pu être ajoutée au comptage. On prévient plutôt que de laisser
-      // un écart inexpliqué à la clôture.
-      if (j?.cash_untracked) {
-        await alertThemed({
-          title: 'Compte soldé — pense au tiroir',
-          message: "Aucune caisse n'était ouverte : ces espèces n'ont pas été ajoutées au comptage. Ouvre la caisse et saisis une entrée de caisse du même montant pour que la clôture tombe juste.",
-        });
-      }
       onDone();
     } else {
+      // Ex. : espèces alors qu'aucune caisse n'est ouverte → opération refusée,
+      // rien n'est enregistré. On garde la modale ouverte avec le motif.
       const j = await r.json().catch(() => null);
       setError(j?.message ?? 'Échec du règlement.');
     }

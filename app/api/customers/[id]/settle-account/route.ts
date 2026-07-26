@@ -12,6 +12,10 @@ const schema = z.object({
 const ERR: Record<string, { status: number; message: string }> = {
   CUSTOMER_NOT_FOUND: { status: 404, message: 'Client introuvable.' },
   INVALID_AMOUNT: { status: 400, message: 'Montant invalide.' },
+  NO_OPEN_SESSION: {
+    status: 409,
+    message: 'Aucune caisse ouverte : ouvrez la caisse avant d’encaisser un règlement en espèces (ou choisissez un autre mode de règlement).',
+  },
 };
 
 /**
