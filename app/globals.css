@@ -73,13 +73,17 @@ body[data-mode="dark"] {
 .size-original .text-3xl  { font-size: 30px; line-height: 36px; }
 .size-original .text-4xl  { font-size: 36px; line-height: 40px; }
 
-body[data-theme="sage"]       { --primary: #556B3E; --primary-deep: #3F5430; --primary-soft: #EFF4EA; }
+body[data-theme="sage"]       { --primary: #5C6F5D; --primary-deep: #45543F; --primary-soft: #EDF1ED; }
 body[data-theme="charcoal"]   { --primary: #2A2F33; --primary-deep: #15191C; --primary-soft: #EEEEF0; }
 body[data-theme="navy"]       { --primary: #1F3A5F; --primary-deep: #15294A; --primary-soft: #E6EDF6; }
 body[data-theme="terracotta"] { --primary: #B5683E; --primary-deep: #8E4F2F; --primary-soft: #F7EAE0; }
 body[data-theme="rose"]       { --primary: #B85C5C; --primary-deep: #8E4040; --primary-soft: #F8E8E8; }
 body[data-theme="amber"]      { --primary: #B7791F; --primary-deep: #8E5B15; --primary-soft: #F7EFD7; }
 body[data-theme="plum"]       { --primary: #7A3C6E; --primary-deep: #5C2C53; --primary-soft: #F1E4EE; }
+body[data-theme="emerald"]    { --primary: #1E7A5E; --primary-deep: #155C46; --primary-soft: #E4F2EC; }
+body[data-theme="teal"]       { --primary: #0E7490; --primary-deep: #0B5B70; --primary-soft: #E1EFF3; }
+body[data-theme="bordeaux"]   { --primary: #7B2D3A; --primary-deep: #5D2029; --primary-soft: #F3E4E7; }
+body[data-theme="lavender"]   { --primary: #6D5D9C; --primary-deep: #524879; --primary-soft: #ECE9F4; }
 
 /* En dark mode, les versions "soft" sont assombries pour rester lisibles */
 body[data-mode="dark"] {
