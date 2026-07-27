@@ -163,7 +163,7 @@ export default function LeftRail({
           <img
             src={brand.logo_url}
             alt={brand.brand_name}
-            className="h-14 w-14 rounded-2xl object-cover border border-border bg-white"
+            className="h-14 w-14 rounded-2xl object-cover"
           />
         ) : (
           <span
