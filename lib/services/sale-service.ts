@@ -3,8 +3,10 @@ import { FiscalCore } from '@/lib/fiscal/core';
 import {
   computeLine,
   computeTotals,
+  round2,
   type LineComputed,
 } from './money';
+import { generateEan13 } from './ean';
 import { loyaltyGroupKey, type LoyaltySettings } from '@/lib/settings/pos-ui';
 import { loyaltyGroupReady } from './loyalty-schema';
 import { STOCK_TRACKED_SQL } from './stock-tracking';
@@ -197,6 +199,8 @@ export class SaleService {
     snapshot: Record<string, unknown>;
     loyalty?: { earned: number; redeemed: number; new_balance: number } | null;
     stock_movements?: number;
+    /** Cartes cadeaux effectivement émises par cette vente (lignes carte cadeau). */
+    gift_cards_issued: Array<{ id: string; code: string; amount: number }>;
   }> {
     return withTransaction(async (client) => {
       // 1. Lock vente + sanity checks
@@ -386,6 +390,99 @@ export class SaleService {
             if ((e as { code?: string }).code !== '42703') throw e;
           }
         }
+      }
+
+      // 2.b Émission des cartes cadeaux VENDUES dans ce panier.
+      //   Une ligne « carte cadeau » (metadata.gift_card === true, product_id
+      //   null) matérialise l'ACHAT d'une carte : on crée ici la carte réelle
+      //   (code EAN-13 interne, solde = montant), rattachée à la vente, DANS LA
+      //   MÊME transaction que le scellement fiscal. On inline la création (au
+      //   lieu d'appeler GiftCardService.create qui ouvrirait sa propre
+      //   transaction) pour rester atomique avec la vente. Le code émis est
+      //   réinjecté dans la metadata de la ligne, donc dans le snapshot/ticket.
+      //   Aucun impact sur les totaux ni sur le calcul fiscal (déjà figés).
+      const giftCardsIssued: Array<{ id: string; code: string; amount: number }> = [];
+      // Détection runtime des colonnes acheteur optionnelles (migration 0006) :
+      // on ne la fait qu'une fois, et seulement s'il y a au moins une carte.
+      let giftBuyerColsChecked = false;
+      let hasBuyerCols = false;
+      for (const row of linesRes.rows as Array<{
+        unit_price_ttc: string | number;
+        quantity: string | number;
+        metadata: Record<string, unknown> | null;
+      }>) {
+        const meta = (row.metadata ?? {}) as Record<string, unknown>;
+        if (meta.gift_card !== true) continue;
+        const face = round2(Number(row.unit_price_ttc) * Number(row.quantity));
+        if (face <= 0) continue;
+
+        // Code EAN-13 unique (préfixe interne 29), avec quelques essais.
+        let code = '';
+        for (let i = 0; i < 6; i++) {
+          const candidate = generateEan13('29');
+          const exists = await client.query(
+            `SELECT 1 FROM gift_cards WHERE code = $1`,
+            [candidate],
+          );
+          if (exists.rowCount === 0) { code = candidate; break; }
+        }
+        if (!code) throw new Error('GIFT_CARD_CODE_FAILED');
+
+        if (!giftBuyerColsChecked) {
+          const colsRes = await client.query<{ column_name: string }>(
+            `SELECT column_name FROM information_schema.columns
+              WHERE table_name = 'gift_cards'
+                AND column_name IN ('buyer_name','buyer_phone','buyer_email')`,
+          );
+          hasBuyerCols = colsRes.rowCount === 3;
+          giftBuyerColsChecked = true;
+        }
+
+        // Validité par défaut : 1 an à compter de l'émission (cf. GiftCardService).
+        const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
+        let gcIns;
+        if (hasBuyerCols) {
+          gcIns = await client.query<{ id: string }>(
+            `INSERT INTO gift_cards
+               (organization_id, code, initial_amount, balance,
+                expires_at, buyer_id, beneficiary_id,
+                buyer_name, buyer_phone, buyer_email, status, sale_id)
+             VALUES ($1,$2,$3,$3,$4,$5,$6,NULL,NULL,NULL,'active',$7)
+             RETURNING id`,
+            [
+              args.organizationId, code, face,
+              expiresAt, sale.customer_id, sale.customer_id, sale.id,
+            ],
+          );
+        } else {
+          gcIns = await client.query<{ id: string }>(
+            `INSERT INTO gift_cards
+               (organization_id, code, initial_amount, balance,
+                expires_at, buyer_id, beneficiary_id, status, sale_id)
+             VALUES ($1,$2,$3,$3,$4,$5,$6,'active',$7)
+             RETURNING id`,
+            [
+              args.organizationId, code, face,
+              expiresAt, sale.customer_id, sale.customer_id, sale.id,
+            ],
+          );
+        }
+        const gcId = gcIns.rows[0]!.id;
+
+        // Mouvement d'émission (ledger append-only, cohérent avec la création
+        // via l'admin — cf. GiftCardService.create).
+        await client.query(
+          `INSERT INTO gift_card_movements
+             (organization_id, gift_card_id, movement_type, amount_delta,
+              balance_after, sale_id, user_id)
+           VALUES ($1,$2,'issue',$3,$3,$4,$5)`,
+          [args.organizationId, gcId, face, sale.id, args.userId],
+        );
+
+        // Le code doit voyager dans le snapshot/ticket : on mute la metadata de
+        // la ligne AVANT la construction du snapshot ci-dessous.
+        row.metadata = { ...meta, gift_card_code: code };
+        giftCardsIssued.push({ id: gcId, code, amount: face });
       }
 
       // 3. Réservation du numéro de ticket
@@ -695,6 +792,7 @@ export class SaleService {
         snapshot,
         loyalty: loyaltyResult,
         stock_movements: stockMovementCount,
+        gift_cards_issued: giftCardsIssued,
       };
     });
   }
