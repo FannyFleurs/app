@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { formatEUR } from '@/lib/services/money';
+import { formatEUR, round2 } from '@/lib/services/money';
 import PageHeader from '@/components/PageHeader';
 import Badge from '@/components/Badge';
 import EmptyState from '@/components/EmptyState';
-import CustomerPickerModal, { type PickedCustomer } from '../caisse/CustomerPickerModal';
+import { useRouter } from 'next/navigation';
+import { promptThemed } from '@/lib/ui/dialog';
 
 interface GiftCard {
   id: string; code: string;
@@ -32,8 +33,42 @@ const STATUS: Record<string, { label: string; tone: 'success' | 'soft' | 'warnin
 export default function GiftCardsAdmin() {
   const [items, setItems] = useState<GiftCard[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showCreate, setShowCreate] = useState(false);
   const [q, setQ] = useState('');
+  const router = useRouter();
+
+  // Vendre une carte cadeau / un bon d'achat : on prépare l'article puis on
+  // ouvre la caisse avec dans le panier (encaissement classique). L'article en
+  // attente est transmis via localStorage et consommé au montage de la caisse.
+  async function sellGiftCard() {
+    const raw = await promptThemed({
+      title: 'Nouvelle carte cadeau', message: 'Montant de la carte cadeau (€)',
+      placeholder: 'ex : 50', confirmLabel: 'Envoyer au panier',
+    });
+    if (raw == null) return;
+    const amount = round2(Number(raw.replace(',', '.').trim()));
+    if (!Number.isFinite(amount) || amount <= 0) return;
+    try { localStorage.setItem('webpos_pending_cart_item', JSON.stringify({ kind: 'gift_card', amount })); } catch { /* quota */ }
+    router.push('/caisse');
+  }
+  async function sellVoucher() {
+    const rawFace = await promptThemed({
+      title: 'Nouveau bon d’achat', message: 'Valeur du bon d’achat (€)',
+      placeholder: 'ex : 20', confirmLabel: 'Continuer',
+    });
+    if (rawFace == null) return;
+    const face = round2(Number(rawFace.replace(',', '.').trim()));
+    if (!Number.isFinite(face) || face <= 0) return;
+    const rawPaid = await promptThemed({
+      title: 'Bon d’achat — montant payé',
+      message: 'Montant payé par le client (€) — 0 = offert, laisser vide = plein tarif',
+      defaultValue: String(face), confirmLabel: 'Envoyer au panier',
+    });
+    if (rawPaid == null) return;
+    const paidParsed = rawPaid.trim() === '' ? face : round2(Number(rawPaid.replace(',', '.').trim()));
+    const paid = Number.isFinite(paidParsed) ? Math.max(0, Math.min(face, paidParsed)) : face;
+    try { localStorage.setItem('webpos_pending_cart_item', JSON.stringify({ kind: 'voucher', amount: face, paid })); } catch { /* quota */ }
+    router.push('/caisse');
+  }
 
   async function reload() {
     setLoading(true);
@@ -71,9 +106,14 @@ export default function GiftCardsAdmin() {
         title="Cartes cadeaux"
         subtitle="Émettez et suivez vos cartes cadeaux. Chaque carte porte un code-barre EAN-13 scannable en caisse."
         actions={(
-          <button className="btn-primary" onClick={() => setShowCreate(true)}>
-            + Nouvelle carte cadeau
-          </button>
+          <div className="flex items-center gap-2">
+            <button className="btn-soft" onClick={() => void sellVoucher()}>
+              + Nouveau bon d’achat
+            </button>
+            <button className="btn-primary" onClick={() => void sellGiftCard()}>
+              + Nouvelle carte cadeau
+            </button>
+          </div>
         )}
       />
 
@@ -154,154 +194,7 @@ export default function GiftCardsAdmin() {
         </div>
       )}
 
-      {showCreate && (
-        <CreateGiftCardModal
-          onClose={() => setShowCreate(false)}
-          onCreated={(_id, code) => {
-            setShowCreate(false);
-            void reload();
-            // ouvre directement le PDF
-            window.open(`/api/gift-cards/${_id}/pdf`, '_blank');
-            void code;
-          }}
-        />
-      )}
     </div>
-  );
-}
-
-function CreateGiftCardModal({ onClose, onCreated }: {
-  onClose: () => void;
-  onCreated: (id: string, code: string) => void;
-}) {
-  const [amount, setAmount] = useState<number>(50);
-  const [beneficiary, setBeneficiary] = useState<PickedCustomer | null>(null);
-  const [showPicker, setShowPicker] = useState(false);
-  const [expires, setExpires] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function submit() {
-    if (amount <= 0) { setError('Montant invalide.'); return; }
-    if (!beneficiary?.id) {
-      setError('Sélectionnez ou créez un client bénéficiaire.');
-      return;
-    }
-    setSaving(true); setError(null);
-    const r = await fetch('/api/gift-cards', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        amount,
-        beneficiary_id: beneficiary.id,
-        // Copie également les coordonnées dans les champs "buyer" pour
-        // que les anciens écrans (recherche par nom/téléphone) continuent
-        // de matcher. Tous deux pointent vers le bénéficiaire.
-        buyer_name: beneficiary.display_name ?? undefined,
-        buyer_phone: beneficiary.phone ?? undefined,
-        buyer_email: beneficiary.email ?? undefined,
-        expires_at: expires || undefined,
-      }),
-    });
-    setSaving(false);
-    if (!r.ok) {
-      const j = await r.json().catch(() => ({}));
-      setError(j.message ?? j.error ?? 'Erreur');
-      return;
-    }
-    const j = await r.json();
-    onCreated(j.id, j.code);
-  }
-
-  return (
-    <>
-      <div className="fixed inset-0 z-50 grid place-items-center bg-ink/30 backdrop-blur-sm p-4 overflow-auto">
-        <div className="card w-full max-w-2xl lg:max-w-4xl p-6 my-8">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-semibold">Nouvelle carte cadeau</h2>
-            <button onClick={onClose} className="text-ink-soft hover:text-ink">✕</button>
-          </div>
-
-          <div className="space-y-3">
-            <div>
-              <label className="text-sm font-medium text-ink-soft">Montant (€)</label>
-              <input
-                type="number" step="0.5" min={1}
-                className="input mt-1 text-xl font-semibold"
-                value={amount}
-                onChange={(e) => setAmount(Number(e.target.value) || 0)}
-                autoFocus
-              />
-            </div>
-
-            <div>
-              <label className="text-sm font-medium text-ink-soft">
-                Bénéficiaire <span className="text-danger">*</span>
-              </label>
-              <p className="text-xs text-ink-soft mb-1.5">
-                La carte cadeau est rattachée au client qui la <strong>reçoit</strong>.
-              </p>
-              {beneficiary ? (
-                <div className="flex items-center justify-between gap-2 rounded-xl border border-border bg-accent-soft px-3 py-2.5">
-                  <div className="min-w-0">
-                    <div className="font-medium truncate">{beneficiary.display_name}</div>
-                    <div className="text-xs text-ink-soft truncate">
-                      {[beneficiary.phone, beneficiary.email].filter(Boolean).join(' · ') || '—'}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setBeneficiary(null)}
-                    className="text-ink-soft hover:text-danger text-sm"
-                  >
-                    Changer
-                  </button>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setShowPicker(true)}
-                  className="w-full rounded-xl border border-dashed border-border px-3 py-3 text-sm text-ink-soft hover:border-gray-300 hover:text-ink"
-                >
-                  + Choisir ou créer le client bénéficiaire
-                </button>
-              )}
-            </div>
-
-            <div>
-              <label className="text-sm font-medium text-ink-soft">
-                Date d&apos;expiration (optionnel)
-              </label>
-              <input
-                type="date"
-                className="input mt-1"
-                value={expires}
-                onChange={(e) => setExpires(e.target.value)}
-              />
-            </div>
-          </div>
-
-          {error && <div className="mt-3 rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
-
-          <div className="mt-4 flex justify-end gap-2">
-            <button onClick={onClose} className="btn-ghost">Annuler</button>
-            <button
-              onClick={() => void submit()}
-              disabled={saving || amount <= 0 || !beneficiary}
-              className="btn-primary"
-            >
-              {saving ? 'Création…' : `Créer et imprimer (${formatEUR(amount)})`}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {showPicker && (
-        <CustomerPickerModal
-          onClose={() => setShowPicker(false)}
-          onPick={(c) => { setBeneficiary(c); setShowPicker(false); }}
-        />
-      )}
-    </>
   );
 }
 

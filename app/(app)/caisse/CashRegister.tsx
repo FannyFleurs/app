@@ -12,7 +12,7 @@ import dynamic from 'next/dynamic';
 import Icon from '@/components/Icon';
 import { useSchoolMode } from '@/lib/school-mode';
 import { tileMetrics, type PosUiSettings } from '@/lib/settings/pos-ui';
-import { confirmThemed, promptThemed } from '@/lib/ui/dialog';
+import { confirmThemed } from '@/lib/ui/dialog';
 
 // Modales chargées à la demande : aucune ne s'affiche au premier rendu, donc
 // on les sort du bundle initial de la caisse (temps d'affichage plus court).
@@ -342,6 +342,12 @@ export default function CashRegister({
   // tenté de restaurer. Sans ce garde, au remount saleId=null supprimerait la
   // vente mémorisée avant même que l'effet de restauration ait pu la lire.
   const restoreAttemptedRef = useRef(false);
+  // Empêche d'ajouter deux fois l'article carte cadeau / bon d'achat en attente.
+  const pendingItemHandled = useRef(false);
+  // Passe à true quand la tentative de restauration d'un panier draft est
+  // terminée : on n'injecte l'article en attente qu'APRÈS, pour qu'il ne soit
+  // pas écrasé par le rechargement des lignes.
+  const [restoreDone, setRestoreDone] = useState(false);
 
   // Restauration EN PREMIER (déclarée avant l'effet de persistance pour
   // s'exécuter avant lui) : au (re)mount, si un saleId est mémorisé pour ce
@@ -352,7 +358,7 @@ export default function CashRegister({
     if (typeof window === 'undefined') return;
     restoredOnceRef.current = true;
     const stored = localStorage.getItem(cartKey);
-    if (!stored) { restoreAttemptedRef.current = true; return; }
+    if (!stored) { restoreAttemptedRef.current = true; setRestoreDone(true); return; }
     void (async () => {
       try {
         const r = await fetch(`/api/sales/${stored}`);
@@ -379,6 +385,7 @@ export default function CashRegister({
       } finally {
         // On n'autorise la persistance qu'après cette tentative.
         restoreAttemptedRef.current = true;
+        setRestoreDone(true);
       }
     })();
   }, [cartKey]);
@@ -601,78 +608,43 @@ export default function CashRegister({
     void ensureSale();
   }
 
-  /**
-   * Vend une CARTE CADEAU : on saisit un montant, puis on ajoute une ligne
-   * spéciale au panier (product_id null, TVA 0 % — les cartes cadeaux sont
-   * vendues sans TVA en France). La carte réelle (code EAN-13, solde = montant)
-   * est créée au moment du scellement de la vente (SaleService.validate), et
-   * son code est reporté sur le ticket. La ligne est ensuite encaissée
-   * normalement via le règlement.
-   */
-  async function addGiftCard() {
-    const raw = await promptThemed({
-      title: 'Carte cadeau',
-      message: 'Montant de la carte cadeau (€)',
-      placeholder: 'ex : 50',
-      confirmLabel: 'Ajouter au panier',
-    });
-    if (raw == null) return;
-    const amount = round2(Number(raw.replace(',', '.').trim()));
+  // Article « en attente » déposé par la page « Avoirs & Cartes cadeaux »
+  // (boutons « Nouvelle carte cadeau » / « Nouveau bon d'achat », qui saisissent
+  // le montant puis redirigent ici). Au montage — dès qu'une caisse est ouverte
+  // (panier disponible) — on ajoute la ligne au panier pour encaissement
+  // classique, puis on purge la clé. Une seule fois par arrivée.
+  useEffect(() => {
+    if (pendingItemHandled.current) return;
+    if (!sessionId || !restoreDone) return;
+    let pending: { kind?: string; amount?: number; paid?: number } | null = null;
+    try {
+      const raw = localStorage.getItem('webpos_pending_cart_item');
+      if (raw) pending = JSON.parse(raw);
+    } catch { pending = null; }
+    if (!pending) return;
+    pendingItemHandled.current = true;
+    try { localStorage.removeItem('webpos_pending_cart_item'); } catch { /* ignore */ }
+    const amount = round2(Number(pending.amount));
     if (!Number.isFinite(amount) || amount <= 0) return;
-    setLines((cur) => [...cur, {
-      key: cryptoKey(),
-      product_id: null, variant_id: null,
-      label: 'Carte cadeau', unit_price_ttc: amount, quantity: 1, discount_amount: 0,
-      tax_rate: 0, tax_rate_code: 'CADEAU', metadata: { gift_card: true },
-    }]);
-    void ensureSale();
-  }
-
-  /**
-   * Vend un BON D'ACHAT : même mécanique qu'une carte cadeau (crédit prépayé
-   * rédimable, TVA 0 %), mais remisable jusqu'à 100 % pour un geste commercial.
-   * On saisit la valeur faciale (ce que vaudra le bon), puis le montant
-   * réellement payé par le client (0 = offert, vide = plein tarif). La remise
-   * (discount_amount = valeur − payé) matérialise le geste ; la carte émise vaut
-   * toujours sa valeur faciale car le hook d'émission utilise unit_price × qty
-   * AVANT remise. La ligne porte metadata.kind = 'voucher' pour être distinguée.
-   */
-  async function addVoucher() {
-    const raw = await promptThemed({
-      title: 'Bon d\'achat',
-      message: 'Valeur du bon d\'achat (€)',
-      placeholder: 'ex : 50',
-      confirmLabel: 'Continuer',
-    });
-    if (raw == null) return;
-    const face = round2(Number(raw.replace(',', '.').trim()));
-    if (!Number.isFinite(face) || face <= 0) return;
-    const paidRaw = await promptThemed({
-      title: 'Bon d\'achat',
-      message: 'Montant payé par le client (€) — 0 = offert, laisser vide = plein tarif',
-      defaultValue: String(face),
-      confirmLabel: 'Ajouter au panier',
-    });
-    // Annulation explicite (bouton fermer) : on abandonne. Champ vide → plein tarif.
-    if (paidRaw == null) return;
-    let paid: number;
-    const trimmed = paidRaw.replace(',', '.').trim();
-    if (trimmed === '') {
-      paid = face;
+    if (pending.kind === 'voucher') {
+      const paidParsed = round2(Number(pending.paid ?? amount));
+      const paid = Number.isFinite(paidParsed) ? Math.max(0, Math.min(amount, paidParsed)) : amount;
+      setLines((cur) => [...cur, {
+        key: cryptoKey(), product_id: null, variant_id: null,
+        label: 'Bon d\'achat', unit_price_ttc: amount, quantity: 1,
+        discount_amount: round2(amount - paid),
+        tax_rate: 0, tax_rate_code: 'CADEAU', metadata: { gift_card: true, kind: 'voucher' },
+      }]);
     } else {
-      const parsed = round2(Number(trimmed));
-      if (!Number.isFinite(parsed)) return;
-      paid = Math.max(0, Math.min(face, parsed));
+      setLines((cur) => [...cur, {
+        key: cryptoKey(), product_id: null, variant_id: null,
+        label: 'Carte cadeau', unit_price_ttc: amount, quantity: 1, discount_amount: 0,
+        tax_rate: 0, tax_rate_code: 'CADEAU', metadata: { gift_card: true },
+      }]);
     }
-    setLines((cur) => [...cur, {
-      key: cryptoKey(),
-      product_id: null, variant_id: null,
-      label: 'Bon d\'achat', unit_price_ttc: face, quantity: 1,
-      discount_amount: round2(face - paid),
-      tax_rate: 0, tax_rate_code: 'CADEAU', metadata: { gift_card: true, kind: 'voucher' },
-    }]);
     void ensureSale();
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId, restoreDone]);
 
   function incLine(key: string, delta: number) {
     setLines((cur) => cur
@@ -1376,24 +1348,6 @@ export default function CashRegister({
             aria-label="Scanner"
           >
             <Icon name="camera" size={20} />
-          </button>
-          <button
-            className="btn-soft min-h-[44px] px-4 inline-flex items-center gap-1.5 whitespace-nowrap"
-            onClick={() => void addGiftCard()}
-            title="Vendre une carte cadeau"
-            aria-label="Vendre une carte cadeau"
-          >
-            <Icon name="gift" size={18} />
-            <span className="hidden md:inline">Carte cadeau</span>
-          </button>
-          <button
-            className="btn-soft min-h-[44px] px-4 inline-flex items-center gap-1.5 whitespace-nowrap"
-            onClick={() => void addVoucher()}
-            title="Vendre un bon d'achat (remisable, geste commercial)"
-            aria-label="Vendre un bon d'achat"
-          >
-            <Icon name="sparkle" size={18} />
-            <span className="hidden md:inline">Bon d&apos;achat</span>
           </button>
           <button className="btn-soft min-h-[44px] px-4 inline-flex items-center gap-1.5 whitespace-nowrap" onClick={() => setShowHeld(true)} title="F4" aria-label="Paniers en attente">
             <span className="hidden md:inline">En attente</span>
