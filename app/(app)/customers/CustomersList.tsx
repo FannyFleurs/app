@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Badge from '@/components/Badge';
 import EmptyState from '@/components/EmptyState';
 import CustomerFormModal, { type CustomerLike } from '@/components/CustomerFormModal';
+import CustomerImportModal from './CustomerImportModal';
 import PageHeader from '@/components/PageHeader';
 import { formatEUR } from '@/lib/services/money';
 import WalletActions from './[id]/WalletActions';
@@ -71,6 +72,7 @@ export default function CustomersList({ customers: initialCustomers, canWrite }:
   const router = useRouter();
   const searchParams = useSearchParams();
   const [customers, setCustomers] = useState(initialCustomers);
+  const [importOpen, setImportOpen] = useState(false);
   useEffect(() => { setCustomers(initialCustomers); }, [initialCustomers]);
   const [q, setQ] = useState('');
   const [type, setType] = useState<'all' | string>('all');
@@ -123,7 +125,21 @@ export default function CustomersList({ customers: initialCustomers, canWrite }:
           <PageHeader
             title="Comptes clients"
             subtitle="Fiches clients, fidélité et historique d'achat."
-            actions={<span className="text-sm text-ink-soft whitespace-nowrap">{customers.length} clients</span>}
+            actions={
+              <div className="flex items-center gap-3">
+                {canWrite && (
+                  <button
+                    onClick={() => setImportOpen(true)}
+                    className="btn-soft h-9 px-3 text-sm inline-flex items-center gap-1.5 whitespace-nowrap"
+                    title="Importer des clients depuis un fichier Excel"
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 15V3m0 12 4-4m-4 4-4-4M4 21h16"/></svg>
+                    Importer
+                  </button>
+                )}
+                <span className="text-sm text-ink-soft whitespace-nowrap">{customers.length} clients</span>
+              </div>
+            }
           />
         </div>
         <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[320px_240px_1fr] md:overflow-hidden">
@@ -254,6 +270,13 @@ export default function CustomersList({ customers: initialCustomers, canWrite }:
             void selectCustomer(id);
             router.refresh();
           }}
+        />
+      )}
+
+      {importOpen && (
+        <CustomerImportModal
+          onClose={() => setImportOpen(false)}
+          onDone={() => router.refresh()}
         />
       )}
     </>
