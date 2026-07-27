@@ -10,7 +10,7 @@
 export const POS_TILE_SIZES = ['mini', 'dense', 'compact', 'normal', 'large', 'xl'] as const;
 export type PosTileSize = (typeof POS_TILE_SIZES)[number];
 
-export const POS_THEME_COLORS = ['sage', 'charcoal', 'navy', 'terracotta', 'rose', 'amber', 'plum'] as const;
+export const POS_THEME_COLORS = ['sage', 'charcoal', 'navy', 'terracotta', 'rose', 'amber', 'plum', 'emerald', 'teal', 'bordeaux', 'lavender'] as const;
 export type PosThemeColor = (typeof POS_THEME_COLORS)[number];
 
 /**
@@ -198,13 +198,17 @@ export const POS_UI_DEFAULTS: PosUiSettings = {
 };
 
 export const POS_THEME_COLOR_VALUES: Record<PosThemeColor, { label: string; main: string; deep: string; soft: string }> = {
-  sage:       { label: 'Sauge',      main: '#556B3E', deep: '#3F5430', soft: '#EFF4EA' },
+  sage:       { label: 'Sauge',      main: '#5C6F5D', deep: '#45543F', soft: '#EDF1ED' },
   charcoal:   { label: 'Anthracite', main: '#2A2F33', deep: '#15191C', soft: '#EEEEF0' },
   navy:       { label: 'Bleu nuit',  main: '#1F3A5F', deep: '#15294A', soft: '#E6EDF6' },
   terracotta: { label: 'Terracotta', main: '#B5683E', deep: '#8E4F2F', soft: '#F7EAE0' },
   rose:       { label: 'Rose poudré',main: '#B85C5C', deep: '#8E4040', soft: '#F8E8E8' },
   amber:      { label: 'Ambre',      main: '#B7791F', deep: '#8E5B15', soft: '#F7EFD7' },
   plum:       { label: 'Prune',      main: '#7A3C6E', deep: '#5C2C53', soft: '#F1E4EE' },
+  emerald:    { label: 'Émeraude',   main: '#1E7A5E', deep: '#155C46', soft: '#E4F2EC' },
+  teal:       { label: 'Océan',      main: '#0E7490', deep: '#0B5B70', soft: '#E1EFF3' },
+  bordeaux:   { label: 'Bordeaux',   main: '#7B2D3A', deep: '#5D2029', soft: '#F3E4E7' },
+  lavender:   { label: 'Lavande',    main: '#6D5D9C', deep: '#524879', soft: '#ECE9F4' },
 };
 
 /**
