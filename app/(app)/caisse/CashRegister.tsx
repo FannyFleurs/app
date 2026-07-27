@@ -12,7 +12,7 @@ import dynamic from 'next/dynamic';
 import Icon from '@/components/Icon';
 import { useSchoolMode } from '@/lib/school-mode';
 import { tileMetrics, type PosUiSettings } from '@/lib/settings/pos-ui';
-import { confirmThemed } from '@/lib/ui/dialog';
+import { confirmThemed, promptThemed } from '@/lib/ui/dialog';
 
 // Modales chargées à la demande : aucune ne s'affiche au premier rendu, donc
 // on les sort du bundle initial de la caisse (temps d'affichage plus court).
@@ -601,6 +601,33 @@ export default function CashRegister({
     void ensureSale();
   }
 
+  /**
+   * Vend une CARTE CADEAU : on saisit un montant, puis on ajoute une ligne
+   * spéciale au panier (product_id null, TVA 0 % — les cartes cadeaux sont
+   * vendues sans TVA en France). La carte réelle (code EAN-13, solde = montant)
+   * est créée au moment du scellement de la vente (SaleService.validate), et
+   * son code est reporté sur le ticket. La ligne est ensuite encaissée
+   * normalement via le règlement.
+   */
+  async function addGiftCard() {
+    const raw = await promptThemed({
+      title: 'Carte cadeau',
+      message: 'Montant de la carte cadeau (€)',
+      placeholder: 'ex : 50',
+      confirmLabel: 'Ajouter au panier',
+    });
+    if (raw == null) return;
+    const amount = round2(Number(raw.replace(',', '.').trim()));
+    if (!Number.isFinite(amount) || amount <= 0) return;
+    setLines((cur) => [...cur, {
+      key: cryptoKey(),
+      product_id: null, variant_id: null,
+      label: 'Carte cadeau', unit_price_ttc: amount, quantity: 1, discount_amount: 0,
+      tax_rate: 0, tax_rate_code: 'CADEAU', metadata: { gift_card: true },
+    }]);
+    void ensureSale();
+  }
+
   function incLine(key: string, delta: number) {
     setLines((cur) => cur
       .map((l) => l.key === key ? { ...l, quantity: round2(l.quantity + delta) } : l)
@@ -839,7 +866,7 @@ export default function CashRegister({
         return;
       }
       const j = await r.json();
-      await onValidated(j.receipt_id, j.receipt_number, j.loyalty);
+      await onValidated(j.receipt_id, j.receipt_number, j.loyalty, j.gift_cards_issued);
     } catch (e) {
       setError((e as Error).message);
     }
@@ -878,7 +905,7 @@ export default function CashRegister({
         return;
       }
       const j = await r.json();
-      await onValidated(j.receipt_id, j.receipt_number, j.loyalty);
+      await onValidated(j.receipt_id, j.receipt_number, j.loyalty, j.gift_cards_issued);
     } catch (e) {
       setError((e as Error).message);
     }
@@ -888,6 +915,7 @@ export default function CashRegister({
     receiptId: string,
     receiptNumber: string,
     loyaltyInfo?: { earned: number; redeemed: number; new_balance: number } | null,
+    giftCardsIssued?: Array<{ id: string; code: string; amount: number }>,
   ) {
     setReceipt({
       id: receiptId, number: receiptNumber,
@@ -895,6 +923,14 @@ export default function CashRegister({
       customerId: customer?.id ?? null,
       loyalty: loyaltyInfo ?? null,
     });
+    // Carte(s) cadeau vendue(s) : on ouvre le PDF imprimable (code-barres) pour
+    // remise au client. Déclenché par l'action d'encaissement (pas bloqué par
+    // les popups). Chaque carte ouvre son PDF.
+    if (giftCardsIssued?.length) {
+      for (const gc of giftCardsIssued) {
+        try { window.open(`/api/gift-cards/${gc.id}/pdf`, '_blank'); } catch { /* ignore */ }
+      }
+    }
     setShowPayment(false);
     setSaleId(null); setLines([]); setCustomer(null);
     setLoyalty({ enabled: false, balance_euros: 0, min_redeem: 0, used: 0 });
@@ -1294,6 +1330,15 @@ export default function CashRegister({
             aria-label="Scanner"
           >
             <Icon name="camera" size={20} />
+          </button>
+          <button
+            className="btn-soft min-h-[44px] px-4 inline-flex items-center gap-1.5 whitespace-nowrap"
+            onClick={() => void addGiftCard()}
+            title="Vendre une carte cadeau"
+            aria-label="Vendre une carte cadeau"
+          >
+            <Icon name="gift" size={18} />
+            <span className="hidden md:inline">Carte cadeau</span>
           </button>
           <button className="btn-soft min-h-[44px] px-4 inline-flex items-center gap-1.5 whitespace-nowrap" onClick={() => setShowHeld(true)} title="F4" aria-label="Paniers en attente">
             <span className="hidden md:inline">En attente</span>
