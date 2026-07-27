@@ -11,6 +11,8 @@ interface GiftCard {
   id: string; code: string;
   initial_amount: string; balance: string;
   status: string;
+  /** 'gift_card' (carte cadeau) ou 'voucher' (bon d'achat). Défaut carte cadeau. */
+  kind?: string | null;
   issued_at: string; expires_at: string | null;
   buyer_name: string | null; buyer_phone: string | null;
   buyer_email: string | null;
@@ -104,6 +106,7 @@ export default function GiftCardsAdmin() {
             <thead className="bg-white text-ink-soft text-xs uppercase border-b border-border">
               <tr>
                 <th className="text-left px-4 py-3">Code</th>
+                <th className="text-left px-4 py-3">Type</th>
                 <th className="text-left px-4 py-3">Bénéficiaire</th>
                 <th className="text-right px-4 py-3">Initial</th>
                 <th className="text-right px-4 py-3">Solde</th>
@@ -120,6 +123,11 @@ export default function GiftCardsAdmin() {
                 return (
                   <tr key={c.id} className="border-t border-border">
                     <td className="px-4 py-3 font-mono text-xs">{c.code}</td>
+                    <td className="px-4 py-3">
+                      {c.kind === 'voucher'
+                        ? <Badge tone="warning">Bon d&apos;achat</Badge>
+                        : <Badge tone="soft">Carte cadeau</Badge>}
+                    </td>
                     <td className="px-4 py-3">
                       <div className="text-sm">{benefName ?? '—'}</div>
                       {benefPhone && (

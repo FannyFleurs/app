@@ -199,8 +199,8 @@ export class SaleService {
     snapshot: Record<string, unknown>;
     loyalty?: { earned: number; redeemed: number; new_balance: number } | null;
     stock_movements?: number;
-    /** Cartes cadeaux effectivement émises par cette vente (lignes carte cadeau). */
-    gift_cards_issued: Array<{ id: string; code: string; amount: number }>;
+    /** Cartes cadeaux / bons d'achat effectivement émis par cette vente. */
+    gift_cards_issued: Array<{ id: string; code: string; amount: number; kind: string }>;
   }> {
     return withTransaction(async (client) => {
       // 1. Lock vente + sanity checks
@@ -401,11 +401,16 @@ export class SaleService {
       //   transaction) pour rester atomique avec la vente. Le code émis est
       //   réinjecté dans la metadata de la ligne, donc dans le snapshot/ticket.
       //   Aucun impact sur les totaux ni sur le calcul fiscal (déjà figés).
-      const giftCardsIssued: Array<{ id: string; code: string; amount: number }> = [];
+      const giftCardsIssued: Array<{ id: string; code: string; amount: number; kind: string }> = [];
       // Détection runtime des colonnes acheteur optionnelles (migration 0006) :
       // on ne la fait qu'une fois, et seulement s'il y a au moins une carte.
       let giftBuyerColsChecked = false;
       let hasBuyerCols = false;
+      // Détection runtime de la colonne `kind` (migration 0054), même principe :
+      // une seule vérification, mise en cache. Si absente, on n'insère pas la
+      // colonne (le code reste fonctionnel avant l'application de la migration).
+      let giftKindColChecked = false;
+      let hasKindCol = false;
       for (const row of linesRes.rows as Array<{
         unit_price_ttc: string | number;
         quantity: string | number;
@@ -413,6 +418,9 @@ export class SaleService {
       }>) {
         const meta = (row.metadata ?? {}) as Record<string, unknown>;
         if (meta.gift_card !== true) continue;
+        // Carte cadeau (défaut) vs bon d'achat (voucher). Les deux types de
+        // lignes portent gift_card:true ; seul `kind` les distingue.
+        const kind = meta.kind === 'voucher' ? 'voucher' : 'gift_card';
         const face = round2(Number(row.unit_price_ttc) * Number(row.quantity));
         if (face <= 0) continue;
 
@@ -437,35 +445,68 @@ export class SaleService {
           hasBuyerCols = colsRes.rowCount === 3;
           giftBuyerColsChecked = true;
         }
+        if (!giftKindColChecked) {
+          const kindColRes = await client.query<{ column_name: string }>(
+            `SELECT column_name FROM information_schema.columns
+              WHERE table_name = 'gift_cards' AND column_name = 'kind'`,
+          );
+          hasKindCol = (kindColRes.rowCount ?? 0) > 0;
+          giftKindColChecked = true;
+        }
 
         // Validité par défaut : 1 an à compter de l'émission (cf. GiftCardService).
         const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
         let gcIns;
         if (hasBuyerCols) {
-          gcIns = await client.query<{ id: string }>(
-            `INSERT INTO gift_cards
-               (organization_id, code, initial_amount, balance,
-                expires_at, buyer_id, beneficiary_id,
-                buyer_name, buyer_phone, buyer_email, status, sale_id)
-             VALUES ($1,$2,$3,$3,$4,$5,$6,NULL,NULL,NULL,'active',$7)
-             RETURNING id`,
-            [
-              args.organizationId, code, face,
-              expiresAt, sale.customer_id, sale.customer_id, sale.id,
-            ],
-          );
+          gcIns = hasKindCol
+            ? await client.query<{ id: string }>(
+                `INSERT INTO gift_cards
+                   (organization_id, code, initial_amount, balance,
+                    expires_at, buyer_id, beneficiary_id,
+                    buyer_name, buyer_phone, buyer_email, status, sale_id, kind)
+                 VALUES ($1,$2,$3,$3,$4,$5,$6,NULL,NULL,NULL,'active',$7,$8)
+                 RETURNING id`,
+                [
+                  args.organizationId, code, face,
+                  expiresAt, sale.customer_id, sale.customer_id, sale.id, kind,
+                ],
+              )
+            : await client.query<{ id: string }>(
+                `INSERT INTO gift_cards
+                   (organization_id, code, initial_amount, balance,
+                    expires_at, buyer_id, beneficiary_id,
+                    buyer_name, buyer_phone, buyer_email, status, sale_id)
+                 VALUES ($1,$2,$3,$3,$4,$5,$6,NULL,NULL,NULL,'active',$7)
+                 RETURNING id`,
+                [
+                  args.organizationId, code, face,
+                  expiresAt, sale.customer_id, sale.customer_id, sale.id,
+                ],
+              );
         } else {
-          gcIns = await client.query<{ id: string }>(
-            `INSERT INTO gift_cards
-               (organization_id, code, initial_amount, balance,
-                expires_at, buyer_id, beneficiary_id, status, sale_id)
-             VALUES ($1,$2,$3,$3,$4,$5,$6,'active',$7)
-             RETURNING id`,
-            [
-              args.organizationId, code, face,
-              expiresAt, sale.customer_id, sale.customer_id, sale.id,
-            ],
-          );
+          gcIns = hasKindCol
+            ? await client.query<{ id: string }>(
+                `INSERT INTO gift_cards
+                   (organization_id, code, initial_amount, balance,
+                    expires_at, buyer_id, beneficiary_id, status, sale_id, kind)
+                 VALUES ($1,$2,$3,$3,$4,$5,$6,'active',$7,$8)
+                 RETURNING id`,
+                [
+                  args.organizationId, code, face,
+                  expiresAt, sale.customer_id, sale.customer_id, sale.id, kind,
+                ],
+              )
+            : await client.query<{ id: string }>(
+                `INSERT INTO gift_cards
+                   (organization_id, code, initial_amount, balance,
+                    expires_at, buyer_id, beneficiary_id, status, sale_id)
+                 VALUES ($1,$2,$3,$3,$4,$5,$6,'active',$7)
+                 RETURNING id`,
+                [
+                  args.organizationId, code, face,
+                  expiresAt, sale.customer_id, sale.customer_id, sale.id,
+                ],
+              );
         }
         const gcId = gcIns.rows[0]!.id;
 
@@ -482,7 +523,7 @@ export class SaleService {
         // Le code doit voyager dans le snapshot/ticket : on mute la metadata de
         // la ligne AVANT la construction du snapshot ci-dessous.
         row.metadata = { ...meta, gift_card_code: code };
-        giftCardsIssued.push({ id: gcId, code, amount: face });
+        giftCardsIssued.push({ id: gcId, code, amount: face, kind });
       }
 
       // 3. Réservation du numéro de ticket
