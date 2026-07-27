@@ -11,6 +11,13 @@ export default async function CustomersPage() {
     return <div className="p-8">Accès refusé.</div>;
   }
 
+  const totalRes = await query<{ n: string }>(
+    `SELECT COUNT(*)::text AS n FROM customers
+      WHERE organization_id = $1 AND is_anonymized = FALSE`,
+    [user.organizationId],
+  );
+  const total = Number(totalRes.rows[0]?.n ?? 0);
+
   const customers = await query<{
     id: string;
     type: string;
@@ -46,6 +53,7 @@ export default async function CustomersPage() {
   return (
     <CustomersList
       customers={customers.rows}
+      total={total}
       canWrite={(await userCan(user, 'customers.write'))}
     />
   );

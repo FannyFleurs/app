@@ -68,7 +68,7 @@ const TABS: Array<{ key: Tab; label: string }> = [
   { key: 'bons-achats',  label: 'Bons d\'achats' },
 ];
 
-export default function CustomersList({ customers: initialCustomers, canWrite }: { customers: Customer[]; canWrite: boolean }) {
+export default function CustomersList({ customers: initialCustomers, total, canWrite }: { customers: Customer[]; total: number; canWrite: boolean }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [customers, setCustomers] = useState(initialCustomers);
@@ -171,7 +171,7 @@ export default function CustomersList({ customers: initialCustomers, canWrite }:
                     Importer
                   </button>
                 )}
-                <span className="text-sm text-ink-soft whitespace-nowrap">{customers.length} clients</span>
+                <span className="text-sm text-ink-soft whitespace-nowrap">{total} clients</span>
               </div>
             }
           />
