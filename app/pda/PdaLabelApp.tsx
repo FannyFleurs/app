@@ -242,6 +242,27 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
   function openProduct(p: Product) { setSelected(p); setQtyStr(''); setQ(''); setMsg(null); }
   function backToList() { setSelected(null); setMsg(null); }
 
+  // Navigation basse partagée : rendue sur le tableau de bord, l'éditeur ET
+  // les invites de scan. Un onglet ferme l'invite/l'éditeur et revient au tab.
+  const goTab = (t: 'home' | 'articles' | 'history' | 'settings') => {
+    setScanPrompt(null); setSelected(null); setMsg(null); setHomeTab(t);
+  };
+  const renderBottomNav = () => (
+    <nav className="shrink-0 border-t border-border bg-surface grid grid-cols-5 items-end px-2 pt-1 pb-1 relative z-30 overflow-visible">
+      <NavItem active={!selected && !scanPrompt && homeTab === 'home'} label="Accueil" icon={<IconHome />} onClick={() => goTab('home')} />
+      <NavItem active={!selected && !scanPrompt && homeTab === 'history'} label="Historique" icon={<IconClock />} onClick={() => goTab('history')} />
+      <div className="grid place-items-center">
+        <button onClick={() => setScanPrompt('choice')}
+                className="h-14 w-14 -mt-5 rounded-full accent-bar text-white grid place-items-center shadow-lg relative z-10">
+          <IconBarcode />
+        </button>
+        <span className="text-[10px] mt-0.5 text-ink-soft">Scanner</span>
+      </div>
+      <NavItem active={!selected && !scanPrompt && homeTab === 'articles'} label="Articles" icon={<IconBox />} onClick={() => goTab('articles')} />
+      <NavItem active={!selected && !scanPrompt && homeTab === 'settings'} label="Paramètres" icon={<IconGear />} onClick={() => goTab('settings')} />
+    </nav>
+  );
+
   // ---- Entrée de stock ----
   async function startStock(p: Product) {
     setStockFor(p); setStockQtyStr(''); setStockLevel(null); setStockMsg(null); setLastStockQty(0);
@@ -725,23 +746,8 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
         </>
       )}
 
-      {/* ===== BARRE DE NAVIGATION — toujours visible sur toutes les pages,
-          au premier plan (z-30). overflow-visible pour que le bouton Scanner
-          surélevé (-mt-5) ne soit jamais coupé. Un clic sur un onglet quitte
-          l'éditeur pour revenir au tableau de bord. ===== */}
-      <nav className="shrink-0 border-t border-border bg-surface grid grid-cols-5 items-end px-2 pt-1 pb-1 relative z-30 overflow-visible">
-        <NavItem active={!selected && homeTab === 'home'} label="Accueil" icon={<IconHome />} onClick={() => { backToList(); setHomeTab('home'); }} />
-        <NavItem active={!selected && homeTab === 'history'} label="Historique" icon={<IconClock />} onClick={() => { backToList(); setHomeTab('history'); }} />
-        <div className="grid place-items-center">
-          <button onClick={() => setScanPrompt('choice')}
-                  className="h-14 w-14 -mt-5 rounded-full accent-bar text-white grid place-items-center shadow-lg relative z-10">
-            <IconBarcode />
-          </button>
-          <span className="text-[10px] mt-0.5 text-ink-soft">Scanner</span>
-        </div>
-        <NavItem active={!selected && homeTab === 'articles'} label="Articles" icon={<IconBox />} onClick={() => { backToList(); setHomeTab('articles'); }} />
-        <NavItem active={!selected && homeTab === 'settings'} label="Paramètres" icon={<IconGear />} onClick={() => { backToList(); setHomeTab('settings'); }} />
-      </nav>
+      {/* ===== BARRE DE NAVIGATION — toujours visible, au premier plan ===== */}
+      {renderBottomNav()}
 
       {/* ===== Invite de scan (mode armé par une carte) ===== */}
       {scanPrompt && (
@@ -769,6 +775,8 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
               </div>
             </div>
           </div>
+          {/* Barre de menu visible aussi sur l'invite de scan */}
+          {renderBottomNav()}
         </div>
       )}
 
