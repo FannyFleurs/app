@@ -75,6 +75,8 @@ export default function CustomersList({ customers: initialCustomers, canWrite }:
   const [importOpen, setImportOpen] = useState(false);
   useEffect(() => { setCustomers(initialCustomers); }, [initialCustomers]);
   const [q, setQ] = useState('');
+  const [serverResults, setServerResults] = useState<Customer[] | null>(null);
+  const [searching, setSearching] = useState(false);
   const [type, setType] = useState<'all' | string>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -90,11 +92,43 @@ export default function CustomersList({ customers: initialCustomers, canWrite }:
   const [editing, setEditing] = useState<CustomerLike | null | undefined>(undefined);
   const [tab, setTab] = useState<Tab>('dashboard');
 
+  // Recherche serveur : au-delà de 2 caractères, on interroge l'API pour
+  // couvrir TOUS les clients. La liste initiale est plafonnée aux 200 plus
+  // récents (par activité) : les clients importés sans vente n'y figurent pas
+  // forcément, d'où l'impossibilité de les retrouver sans cette recherche.
+  useEffect(() => {
+    const needle = q.trim();
+    if (needle.length < 2) { setServerResults(null); setSearching(false); return; }
+    let cancelled = false;
+    setSearching(true);
+    const t = setTimeout(() => {
+      void fetch(`/api/customers?q=${encodeURIComponent(needle)}&limit=200`)
+        .then((r) => (r.ok ? r.json() : { customers: [] }))
+        .then((j) => {
+          if (cancelled) return;
+          const rows: Customer[] = ((j.customers ?? []) as Record<string, unknown>[]).map((c) => ({
+            id: String(c.id), type: String(c.type ?? 'particulier'),
+            display_name: String(c.display_name ?? ''),
+            email: (c.email as string) ?? null, phone: (c.phone as string) ?? null,
+            company_name: (c.company_name as string) ?? null, siret: (c.siret as string) ?? null,
+            nb_sales: '0', last_visit: null, total_ttc: '0',
+            loyalty_points: null, default_discount_pct: (c.default_discount_pct as string) ?? null,
+          }));
+          setServerResults(rows);
+        })
+        .catch(() => { if (!cancelled) setServerResults([]); })
+        .finally(() => { if (!cancelled) setSearching(false); });
+    }, 250);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [q]);
+
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    return customers.filter((c) => {
+    const usingServer = needle.length >= 2 && serverResults != null;
+    const source = usingServer ? serverResults! : customers;
+    return source.filter((c) => {
       if (type !== 'all' && c.type !== type) return false;
-      if (!needle) return true;
+      if (usingServer || !needle) return true;
       return (
         c.display_name?.toLowerCase().includes(needle) ||
         c.email?.toLowerCase().includes(needle) ||
@@ -103,7 +137,7 @@ export default function CustomersList({ customers: initialCustomers, canWrite }:
         c.siret?.includes(needle)
       );
     });
-  }, [customers, q, type]);
+  }, [customers, serverResults, q, type]);
 
   async function selectCustomer(id: string) {
     setSelectedId(id);
@@ -172,7 +206,7 @@ export default function CustomersList({ customers: initialCustomers, canWrite }:
           <div className="flex-1 overflow-y-auto">
             {filtered.length === 0 ? (
               <div className="p-6 text-center text-ink-soft text-sm">
-                {customers.length === 0 ? 'Aucun client.' : 'Aucun résultat.'}
+                {searching ? 'Recherche…' : customers.length === 0 ? 'Aucun client.' : 'Aucun résultat.'}
               </div>
             ) : (
               <div className="divide-y divide-border">
