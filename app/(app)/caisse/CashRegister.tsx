@@ -628,6 +628,52 @@ export default function CashRegister({
     void ensureSale();
   }
 
+  /**
+   * Vend un BON D'ACHAT : même mécanique qu'une carte cadeau (crédit prépayé
+   * rédimable, TVA 0 %), mais remisable jusqu'à 100 % pour un geste commercial.
+   * On saisit la valeur faciale (ce que vaudra le bon), puis le montant
+   * réellement payé par le client (0 = offert, vide = plein tarif). La remise
+   * (discount_amount = valeur − payé) matérialise le geste ; la carte émise vaut
+   * toujours sa valeur faciale car le hook d'émission utilise unit_price × qty
+   * AVANT remise. La ligne porte metadata.kind = 'voucher' pour être distinguée.
+   */
+  async function addVoucher() {
+    const raw = await promptThemed({
+      title: 'Bon d\'achat',
+      message: 'Valeur du bon d\'achat (€)',
+      placeholder: 'ex : 50',
+      confirmLabel: 'Continuer',
+    });
+    if (raw == null) return;
+    const face = round2(Number(raw.replace(',', '.').trim()));
+    if (!Number.isFinite(face) || face <= 0) return;
+    const paidRaw = await promptThemed({
+      title: 'Bon d\'achat',
+      message: 'Montant payé par le client (€) — 0 = offert, laisser vide = plein tarif',
+      defaultValue: String(face),
+      confirmLabel: 'Ajouter au panier',
+    });
+    // Annulation explicite (bouton fermer) : on abandonne. Champ vide → plein tarif.
+    if (paidRaw == null) return;
+    let paid: number;
+    const trimmed = paidRaw.replace(',', '.').trim();
+    if (trimmed === '') {
+      paid = face;
+    } else {
+      const parsed = round2(Number(trimmed));
+      if (!Number.isFinite(parsed)) return;
+      paid = Math.max(0, Math.min(face, parsed));
+    }
+    setLines((cur) => [...cur, {
+      key: cryptoKey(),
+      product_id: null, variant_id: null,
+      label: 'Bon d\'achat', unit_price_ttc: face, quantity: 1,
+      discount_amount: round2(face - paid),
+      tax_rate: 0, tax_rate_code: 'CADEAU', metadata: { gift_card: true, kind: 'voucher' },
+    }]);
+    void ensureSale();
+  }
+
   function incLine(key: string, delta: number) {
     setLines((cur) => cur
       .map((l) => l.key === key ? { ...l, quantity: round2(l.quantity + delta) } : l)
@@ -1339,6 +1385,15 @@ export default function CashRegister({
           >
             <Icon name="gift" size={18} />
             <span className="hidden md:inline">Carte cadeau</span>
+          </button>
+          <button
+            className="btn-soft min-h-[44px] px-4 inline-flex items-center gap-1.5 whitespace-nowrap"
+            onClick={() => void addVoucher()}
+            title="Vendre un bon d'achat (remisable, geste commercial)"
+            aria-label="Vendre un bon d'achat"
+          >
+            <Icon name="sparkle" size={18} />
+            <span className="hidden md:inline">Bon d&apos;achat</span>
           </button>
           <button className="btn-soft min-h-[44px] px-4 inline-flex items-center gap-1.5 whitespace-nowrap" onClick={() => setShowHeld(true)} title="F4" aria-label="Paniers en attente">
             <span className="hidden md:inline">En attente</span>

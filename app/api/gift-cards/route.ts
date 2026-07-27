@@ -38,6 +38,9 @@ export async function GET(req: Request) {
     ? `buyer_name, buyer_phone, buyer_email`
     : `NULL AS buyer_name, NULL AS buyer_phone, NULL AS buyer_email`;
   const benefCol = has('beneficiary_id') ? `beneficiary_id` : `NULL AS beneficiary_id`;
+  // Colonne `kind` (migration 0054) : bon d'achat vs carte cadeau. Défaut
+  // 'gift_card' quand la migration n'est pas encore appliquée.
+  const kindCol = has('kind') ? `kind` : `'gift_card' AS kind`;
 
   let rows: Array<Record<string, unknown>> = [];
   try {
@@ -45,7 +48,8 @@ export async function GET(req: Request) {
       `SELECT id, code, initial_amount::text, balance::text, status,
               issued_at, expires_at,
               ${buyerCols},
-              ${benefCol}
+              ${benefCol},
+              ${kindCol}
          FROM gift_cards
         WHERE organization_id = $1
         ORDER BY issued_at DESC
