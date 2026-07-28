@@ -582,82 +582,59 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
 
       {selected ? (
         <>
-          {/* ===== ÉDITEUR D'ÉTIQUETTE ===== */}
-          <section className="h-[46%] shrink-0 border-b-2 border-border bg-surface overflow-y-auto">
-            <div className="h-full p-4 flex flex-col">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="font-semibold leading-tight line-clamp-2">{selected.name}</div>
-                  <div className="text-sm text-ink-soft">
-                    {disc != null && <span className="line-through mr-1">{formatEUR(selected.sale_price_ttc)}</span>}
-                    <span className="font-semibold text-ink">{formatEUR(disc ?? selected.sale_price_ttc)}</span>
-                    {selected.barcode ? ` · ${selected.barcode}` : ' · pas de code-barres'}
-                  </div>
-                </div>
-                <button onClick={backToList} className="text-ink-soft hover:text-ink text-xl leading-none shrink-0">✕</button>
-              </div>
-              <div className="mt-2 flex-1 min-h-0 grid grid-cols-[1fr_auto] gap-3">
-                <div className="flex flex-col min-h-0">
-                  <div className="text-xs text-ink-soft">Nombre d&apos;étiquettes</div>
-                  <div className="mt-1 rounded-xl border border-border h-12 px-4 flex items-center justify-end text-2xl font-semibold tabular-nums bg-white">
-                    {qtyStr === '' ? <span className="text-ink-soft/40">0</span> : qtyStr}
-                  </div>
-                  <div className="mt-2 grid grid-cols-3 gap-1.5 flex-1 min-h-0">
-                    {['1','2','3','4','5','6','7','8','9','C','0','⌫'].map((k) => (
-                      <button key={k} onClick={() => pressQty(k)}
-                        className={`rounded-lg text-lg font-semibold min-h-[40px] ${
-                          k === 'C' ? 'bg-danger/10 text-danger'
-                          : k === '⌫' ? 'bg-gray-100 text-ink-soft'
-                          : 'bg-gray-50 border border-border'}`}>{k}</button>
-                    ))}
-                  </div>
-                </div>
-                <div className="w-32 flex flex-col gap-2">
-                  <button onClick={() => void print()} disabled={qty < 1 || sending}
-                          className="btn-primary flex-1 flex-col gap-1 text-sm">
-                    <span className="text-2xl">🖨</span>
-                    <span>{sending ? '…' : 'Imprimer'}</span>
-                  </button>
-                  {canWrite && (
-                    <button onClick={() => photoRef.current?.click()} disabled={photoBusy}
-                            className="btn-soft flex-1 flex-col gap-1 text-sm">
-                      <span className="text-2xl">📷</span>
-                      <span>{photoBusy ? '…' : 'Photo'}</span>
-                    </button>
-                  )}
+          {/* ===== ÉDITEUR D'ÉTIQUETTE — plein écran : nombre + pavé numérique
+              en pleine largeur, boutons Imprimer / Photo dessous ===== */}
+          <section className="flex-1 min-h-0 flex flex-col p-4 bg-surface">
+            <div className="flex items-start justify-between gap-2 shrink-0">
+              <div className="min-w-0">
+                <div className="font-semibold leading-tight line-clamp-2 text-lg">{selected.name}</div>
+                <div className="text-sm text-ink-soft">
+                  {disc != null && <span className="line-through mr-1">{formatEUR(selected.sale_price_ttc)}</span>}
+                  <span className="font-semibold text-ink">{formatEUR(disc ?? selected.sale_price_ttc)}</span>
+                  {selected.barcode ? ` · ${selected.barcode}` : ' · pas de code-barres'}
                 </div>
               </div>
-              {msg && <p className="mt-1 text-sm text-center">{msg}</p>}
+              <div className="flex items-center gap-1.5 shrink-0">
+                {canWrite && (
+                  <button onClick={() => selected.raw && setEditing(toEditable(selected.raw))}
+                          className="btn-soft h-9 px-3 text-sm" aria-label="Éditer l'article">✎</button>
+                )}
+                <button onClick={backToList} className="text-ink-soft hover:text-ink text-2xl leading-none" aria-label="Fermer">✕</button>
+              </div>
             </div>
-          </section>
-          {/* ===== FICHE ARTICLE ===== */}
-          <section className="flex-1 min-h-0 flex flex-col">
-            <div className="flex-1 min-h-0 overflow-y-auto p-4">
-              <div className="flex items-center justify-between">
-                <button onClick={backToList} className="text-sm text-accent-deep hover:underline">← Retour</button>
-                <button onClick={() => selected.raw && setEditing(toEditable(selected.raw))}
-                        className="btn-soft h-9 px-3 text-sm">✎ Éditer l&apos;article</button>
-              </div>
-              <button onClick={() => selected.raw && setEditing(toEditable(selected.raw))}
-                      className="mt-3 w-full text-left flex gap-4 rounded-xl p-1 -m-1 active:bg-gray-100">
-                <div className="h-28 w-28 rounded-xl overflow-hidden bg-gray-100 shrink-0">
-                  {selected.image_url && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={selected.image_url} alt="" className="h-full w-full object-cover" />
-                  )}
-                </div>
-                <div className="min-w-0 flex-1 space-y-1">
-                  <div className="text-lg font-semibold leading-tight">{selected.name}</div>
-                  <div className="text-2xl font-bold">{formatEUR(disc ?? selected.sale_price_ttc)}</div>
-                  <dl className="text-sm text-ink-soft space-y-0.5">
-                    <div>Code-barres : <span className="font-mono text-ink">{selected.barcode ?? '—'}</span></div>
-                    {selected.sku && <div>SKU : <span className="font-mono text-ink">{selected.sku}</span></div>}
-                    {selected.category_name && <div>Catégorie : <span className="text-ink">{selected.category_name}</span></div>}
-                  </dl>
-                  <div className="text-xs text-accent-deep pt-1">Appuyer pour modifier →</div>
-                </div>
+
+            <div className="mt-3 text-xs text-ink-soft shrink-0">Nombre d&apos;étiquettes</div>
+            <div className="mt-1 rounded-xl border border-border h-14 px-4 flex items-center justify-end text-3xl font-semibold tabular-nums bg-white shrink-0">
+              {qtyStr === '' ? <span className="text-ink-soft/40">0</span> : qtyStr}
+            </div>
+
+            {/* Pavé numérique : pleine largeur, occupe la hauteur disponible */}
+            <div className="mt-2 grid grid-cols-3 gap-2 flex-1 min-h-0">
+              {['1','2','3','4','5','6','7','8','9','C','0','⌫'].map((k) => (
+                <button key={k} onClick={() => pressQty(k)}
+                  className={`rounded-xl text-2xl font-semibold min-h-[52px] ${
+                    k === 'C' ? 'bg-danger/10 text-danger'
+                    : k === '⌫' ? 'bg-gray-100 text-ink-soft'
+                    : 'bg-gray-50 border border-border active:bg-gray-100'}`}>{k}</button>
+              ))}
+            </div>
+
+            {/* Boutons Imprimer / Photo : dessous, pleine largeur */}
+            <div className={`mt-3 grid gap-2 shrink-0 ${canWrite ? 'grid-cols-2' : 'grid-cols-1'}`}>
+              <button onClick={() => void print()} disabled={qty < 1 || sending}
+                      className="btn-primary h-16 flex-col gap-0.5 text-base disabled:opacity-40">
+                <span className="text-2xl">🖨</span>
+                <span>{sending ? '…' : 'Imprimer'}</span>
               </button>
+              {canWrite && (
+                <button onClick={() => photoRef.current?.click()} disabled={photoBusy}
+                        className="btn-soft h-16 flex-col gap-0.5 text-base disabled:opacity-40">
+                  <span className="text-2xl">📷</span>
+                  <span>{photoBusy ? '…' : 'Photo'}</span>
+                </button>
+              )}
             </div>
+            {msg && <p className="mt-1 text-sm text-center shrink-0">{msg}</p>}
           </section>
         </>
       ) : (
