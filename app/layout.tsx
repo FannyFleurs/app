@@ -26,11 +26,10 @@ export const metadata: Metadata = {
     // (/api/brand/icon) qui reflète le logo configuré. Plus jamais l'ancien
     // monogramme « F ». FaviconSetter (client) surcharge ensuite au besoin.
     icon: [
-      { url: '/api/brand/icon?scope=app', type: 'image/svg+xml' },
-      { url: '/icons/icon-192.png', type: 'image/png', sizes: '192x192' },
+      { url: '/api/brand/icon?scope=app' },
     ],
     apple: [
-      { url: '/icons/icon-192.png', sizes: '192x192' },
+      { url: '/api/brand/icon?scope=app&size=180' },
     ],
   },
 };

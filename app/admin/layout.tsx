@@ -15,8 +15,8 @@ export const metadata: Metadata = {
   applicationName: 'Admin',
   manifest: '/manifest-admin.json',
   icons: {
-    icon: [{ url: '/api/brand/icon?scope=admin' }, { url: '/icons/icon.svg', type: 'image/svg+xml' }],
-    apple: [{ url: '/api/brand/icon?scope=admin' }],
+    icon: [{ url: '/api/brand/icon?scope=admin' }],
+    apple: [{ url: '/api/brand/icon?scope=admin&size=180' }],
   },
   appleWebApp: { capable: true, title: 'Admin', statusBarStyle: 'black-translucent' },
 };

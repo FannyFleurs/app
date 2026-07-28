@@ -11,7 +11,7 @@ export const metadata: Metadata = {
   // Icône d'écran d'accueil iOS = favicon CA servi en vraie image.
   icons: {
     icon: '/api/brand/icon?scope=ca',
-    apple: '/api/brand/icon?scope=ca',
+    apple: '/api/brand/icon?scope=ca&size=180',
   },
   appleWebApp: {
     capable: true,
