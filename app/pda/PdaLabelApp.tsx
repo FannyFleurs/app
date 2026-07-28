@@ -85,6 +85,8 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
   const [homeTab, setHomeTab] = useState<'home' | 'articles' | 'history' | 'settings'>('home');
   const [scanPrompt, setScanPrompt] = useState<null | 'choice' | 'label' | 'stock'>(null);
   const promptRef = useRef<HTMLInputElement>(null);
+  // Timer pour le mode « coller » (donnée injectée d'un bloc sans Entrée).
+  const scanTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [recent, setRecent] = useState<RecentAction[]>([]);
 
   // Activité récente (persistée sur l'appareil).
@@ -774,12 +776,36 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
             <div>
               <div className="text-rose-500 mx-auto w-16 h-16 grid place-items-center"><IconBarcode big /></div>
               <p className="mt-4 text-lg font-semibold">Scannez un article</p>
-              <p className="mt-1 text-sm text-ink-soft">Avec le lecteur du PDA. Touchez le champ pour saisir à la main.</p>
+              <p className="mt-1 text-sm text-ink-soft">Avec le lecteur du PDA (sans clavier).</p>
               <input
                 ref={promptRef} className="input h-12 mt-4 text-center text-lg w-64 max-w-full"
-                placeholder="Code-barres…" autoComplete="off" autoFocus
+                placeholder="Code-barres…" autoComplete="off" autoFocus inputMode="none"
                 onBlur={() => setTimeout(() => { if (scanPrompt) promptRef.current?.focus(); }, 60)}
-                onKeyDown={(e) => { if (e.key === 'Enter') { const v = (e.target as HTMLInputElement).value; (e.target as HTMLInputElement).value = ''; handleCode(v, scanPrompt); } }}
+                onKeyDown={(e) => {
+                  if (e.key !== 'Enter') return;
+                  e.preventDefault();
+                  const el = e.currentTarget; const v = el.value; el.value = '';
+                  if (scanTimer.current) { clearTimeout(scanTimer.current); scanTimer.current = null; }
+                  if (v.trim()) handleCode(v, scanPrompt);
+                }}
+                onInput={(e) => {
+                  // Mode « coller » (Paste) / donnée injectée d'un bloc : on lit
+                  // la valeur sans dépendre des frappes clavier. Fin de scan =
+                  // retour/tab collé → immédiat ; sinon petite pause anti-rebond.
+                  const el = e.currentTarget; const val = el.value;
+                  const nl = val.search(/[\r\n\t]/);
+                  if (nl >= 0) {
+                    const code = val.slice(0, nl); el.value = '';
+                    if (scanTimer.current) { clearTimeout(scanTimer.current); scanTimer.current = null; }
+                    if (code.trim()) handleCode(code, scanPrompt);
+                    return;
+                  }
+                  if (scanTimer.current) clearTimeout(scanTimer.current);
+                  scanTimer.current = setTimeout(() => {
+                    const code = el.value; el.value = ''; scanTimer.current = null;
+                    if (code.trim().length >= 3) handleCode(code, scanPrompt);
+                  }, 150);
+                }}
               />
             </div>
           </div>
