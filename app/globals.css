@@ -5,7 +5,7 @@
 :root {
   color-scheme: light;
   /* Palette du thème (couleur d'accent), surchargée par data-theme sur <body> */
-  --primary: #556B3E;
+  --primary: #5c6f5d;
   --primary-deep: #3F5430;
   --primary-soft: #EFF4EA;
 
