@@ -85,6 +85,13 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
   const [homeTab, setHomeTab] = useState<'home' | 'articles' | 'history' | 'settings'>('home');
   const [scanPrompt, setScanPrompt] = useState<null | 'choice' | 'label' | 'stock'>(null);
   const promptRef = useRef<HTMLInputElement>(null);
+  // Champ caché toujours focus sur l'accueil : le lecteur matériel n'envoie ses
+  // frappes qu'à un champ focus. inputMode="none" = pas de clavier virtuel.
+  const homeScanRef = useRef<HTMLInputElement>(null);
+  // Invite de scan : par défaut le champ est focus (capte le scan) SANS ouvrir
+  // le clavier (inputMode 'none'). Un appui sur le champ passe en saisie
+  // manuelle (clavier). Réinitialisé à chaque ouverture d'invite.
+  const [kbMode, setKbMode] = useState(false);
   const [recent, setRecent] = useState<RecentAction[]>([]);
 
   // Activité récente (persistée sur l'appareil).
@@ -174,6 +181,20 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
   // Scan GLOBAL : le lecteur du PDA « tape » le code + Entrée, où qu'on soit
   // dans l'app (sans focus sur un champ, sans tuile ni menu). On tamponne les
   // frappes rapides ; sur Entrée, on traite le code (→ « Scanner un article »).
+  // Invite de scan : repart en mode « scan » (pas de clavier) à chaque ouverture.
+  useEffect(() => { setKbMode(false); }, [scanPrompt]);
+  // Passage en saisie manuelle (appui sur le champ) : on (re)focus pour ouvrir
+  // le clavier maintenant que inputMode est 'text'.
+  useEffect(() => { if (kbMode) promptRef.current?.focus(); }, [kbMode]);
+  // Sur l'accueil « propre » (aucune invite/modale), on garde le champ caché
+  // focus pour capter les scans matériels.
+  useEffect(() => {
+    if (homeTab === 'home' && !scanPrompt && !selected && !pending
+        && !editing && createFor === null && !stockFor) {
+      homeScanRef.current?.focus();
+    }
+  }, [homeTab, scanPrompt, selected, pending, editing, createFor, stockFor]);
+
   const scanFnRef = useRef<(code: string) => void>(() => {});
   useEffect(() => {
     scanFnRef.current = (code: string) => {
@@ -664,6 +685,26 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
           <main className="flex-1 min-h-0 overflow-y-auto">
             {homeTab === 'home' && (
               <div className="p-4 space-y-4">
+                {/* Champ caché toujours focus : capte un scan « dans le vide »
+                    (le lecteur matériel n'écrit que dans un champ focus) et
+                    ouvre la page « Scanner un article ». inputMode 'none' = pas
+                    de clavier virtuel. */}
+                <input
+                  ref={homeScanRef}
+                  aria-hidden tabIndex={-1} autoComplete="off" inputMode="none" autoFocus
+                  className="absolute -left-[9999px] top-0 h-px w-px opacity-0 pointer-events-none"
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter') return;
+                    const v = e.currentTarget.value; e.currentTarget.value = '';
+                    if (v.trim().length >= 2) { setScanPrompt('choice'); handleCode(v, 'choice'); }
+                  }}
+                  onBlur={() => setTimeout(() => {
+                    if (homeTab === 'home' && !scanPrompt && !selected && !pending
+                        && !editing && createFor === null && !stockFor) {
+                      homeScanRef.current?.focus();
+                    }
+                  }, 60)}
+                />
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <ActionCard tone="rose" title="Imprimer une étiquette"
                     desc="Scannez un code-barres pour imprimer l'étiquette du produit."
@@ -777,7 +818,10 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
               <p className="mt-1 text-sm text-ink-soft">Avec le lecteur du PDA. Touchez le champ pour saisir à la main.</p>
               <input
                 ref={promptRef} className="input h-12 mt-4 text-center text-lg w-64 max-w-full"
-                placeholder="Code-barres…" autoComplete="off"
+                placeholder="Code-barres…" autoComplete="off" autoFocus
+                inputMode={kbMode ? 'text' : 'none'}
+                onClick={() => { if (!kbMode) setKbMode(true); }}
+                onBlur={() => { if (!kbMode) setTimeout(() => { if (scanPrompt) promptRef.current?.focus(); }, 60); }}
                 onKeyDown={(e) => { if (e.key === 'Enter') { const v = (e.target as HTMLInputElement).value; (e.target as HTMLInputElement).value = ''; handleCode(v, scanPrompt); } }}
               />
             </div>
