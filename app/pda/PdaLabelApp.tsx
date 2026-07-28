@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { getOrCreateDeviceId } from '@/lib/device';
 import { formatEUR } from '@/lib/services/money';
 import { useBrand } from '@/components/BrandMark';
-import BarcodeScannerModal from '@/app/(app)/caisse/BarcodeScannerModal';
 import ProductFormModal from '@/app/(app)/products/ProductFormModal';
 import {
   buildLabelsDocument, openPrintWindow, discountedPrice, type LabelProduct,
@@ -72,7 +71,6 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
   const [msg, setMsg] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [photoBusy, setPhotoBusy] = useState(false);
-  const [showScanner, setShowScanner] = useState(false);
   const [createFor, setCreateFor] = useState<string | null>(null); // barcode prérempli ('' = vide)
   const [editing, setEditing] = useState<EditableProduct | null>(null); // édition article
   const [pending, setPending] = useState<Product | null>(null); // choix étiquette / stock
@@ -179,10 +177,15 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
   const scanFnRef = useRef<(code: string) => void>(() => {});
   useEffect(() => {
     scanFnRef.current = (code: string) => {
-      // On ignore si on est déjà dans un sous-écran (étiquette, stock, création,
-      // édition, choix, invite de scan) ou dans la caméra.
-      if (selected || createFor !== null || editing || stockFor || pending || scanPrompt || showScanner) return;
-      handleCode(code, 'choice');
+      // On ignore uniquement si on est dans un plein écran (éditeur, stock,
+      // création, édition) ou une modale de choix. Un scan fonctionne donc sur
+      // l'ACCUEIL comme sur l'invite de scan (Imprimer étiquette / Entrer stock).
+      if (selected || createFor !== null || editing || stockFor || pending) return;
+      const mode = scanPrompt ?? 'choice';
+      // Sur l'accueil (aucune invite ouverte), un scan ouvre la page
+      // « Scanner un article » puis traite le code.
+      if (!scanPrompt) setScanPrompt('choice');
+      handleCode(code, mode);
     };
   });
   useEffect(() => {
@@ -224,10 +227,17 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
   function handleCode(raw: string, mode: 'choice' | 'label' | 'stock' = 'choice') {
     const s = raw.trim();
     if (!s) return;
-    setScanPrompt(null);
     const exact = products.find((p) => p.barcode === s || p.sku === s || p.barcode === s.toUpperCase());
     const hit = exact ?? (filtered.length === 1 ? filtered[0] : undefined);
-    if (hit) { routeProduct(hit, mode); return; }
+    if (hit) {
+      // Étiquette / stock ouvrent un plein écran → on ferme l'invite de scan.
+      // En mode « choix », l'invite reste ouverte derrière la modale de choix
+      // (permet d'enchaîner les scans sans revenir en arrière).
+      if (mode !== 'choice') setScanPrompt(null);
+      routeProduct(hit, mode);
+      return;
+    }
+    setScanPrompt(null);
     if (canWrite) setCreateFor(s);
     else setMsg('Article introuvable pour ce code.');
   }
@@ -764,28 +774,17 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
             <div>
               <div className="text-rose-500 mx-auto w-16 h-16 grid place-items-center"><IconBarcode big /></div>
               <p className="mt-4 text-lg font-semibold">Scannez un article</p>
-              <p className="mt-1 text-sm text-ink-soft">Avec le lecteur du PDA, ou via la caméra.</p>
+              <p className="mt-1 text-sm text-ink-soft">Avec le lecteur du PDA. Touchez le champ pour saisir à la main.</p>
               <input
                 ref={promptRef} className="input h-12 mt-4 text-center text-lg w-64 max-w-full"
-                placeholder="Code-barres…" autoFocus autoComplete="off"
+                placeholder="Code-barres…" autoComplete="off"
                 onKeyDown={(e) => { if (e.key === 'Enter') { const v = (e.target as HTMLInputElement).value; (e.target as HTMLInputElement).value = ''; handleCode(v, scanPrompt); } }}
               />
-              <div className="mt-3">
-                <button onClick={() => setShowScanner(true)} className="btn-soft h-11 px-4">📷 Ouvrir la caméra</button>
-              </div>
             </div>
           </div>
           {/* Barre de menu visible aussi sur l'invite de scan */}
           {renderBottomNav()}
         </div>
-      )}
-
-      {/* Caméra de scan */}
-      {showScanner && (
-        <BarcodeScannerModal
-          onClose={() => setShowScanner(false)}
-          onScan={(code) => { const m = scanPrompt ?? 'choice'; setShowScanner(false); handleCode(code, m); }}
-        />
       )}
 
       {/* Choix après un scan : étiquette ou entrée de stock */}
