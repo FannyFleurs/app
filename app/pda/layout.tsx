@@ -12,11 +12,8 @@ export const metadata: Metadata = {
   // Icône propre au PDA (favicon/logo PDA configuré) au lieu de celle de la
   // caisse. iOS home-screen : un PNG est fortement recommandé (SVG mal géré).
   icons: {
-    icon: [
-      { url: '/api/brand/icon?scope=pda' },
-      { url: '/icons/icon.svg', type: 'image/svg+xml' },
-    ],
-    apple: [{ url: '/api/brand/icon?scope=pda' }],
+    icon: [{ url: '/api/brand/icon?scope=pda' }],
+    apple: [{ url: '/api/brand/icon?scope=pda&size=180' }],
   },
   appleWebApp: {
     capable: true,
