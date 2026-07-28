@@ -27,10 +27,10 @@ export const metadata: Metadata = {
     // monogramme « F ». FaviconSetter (client) surcharge ensuite au besoin.
     icon: [
       { url: '/api/brand/icon?scope=app', type: 'image/svg+xml' },
-      { url: '/icons/icon.svg', type: 'image/svg+xml' },
+      { url: '/icons/icon-192.png', type: 'image/png', sizes: '192x192' },
     ],
     apple: [
-      { url: '/api/brand/icon?scope=app', type: 'image/svg+xml' },
+      { url: '/icons/icon-192.png', sizes: '192x192' },
     ],
   },
 };
