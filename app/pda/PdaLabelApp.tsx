@@ -608,31 +608,32 @@ export default function PdaLabelApp({ userName, canWrite }: { userName: string; 
               {qtyStr === '' ? <span className="text-ink-soft/40">0</span> : qtyStr}
             </div>
 
-            {/* Pavé numérique : pleine largeur, occupe la hauteur disponible */}
-            <div className="mt-2 grid grid-cols-3 gap-2 flex-1 min-h-0">
+            {/* Pavé numérique : pleine largeur, touches basses (hauteur réduite) */}
+            <div className="mt-2 grid grid-cols-3 gap-2 shrink-0">
               {['1','2','3','4','5','6','7','8','9','C','0','⌫'].map((k) => (
                 <button key={k} onClick={() => pressQty(k)}
-                  className={`rounded-xl text-2xl font-semibold min-h-[52px] ${
+                  className={`rounded-xl text-2xl font-semibold h-11 ${
                     k === 'C' ? 'bg-danger/10 text-danger'
                     : k === '⌫' ? 'bg-gray-100 text-ink-soft'
                     : 'bg-gray-50 border border-border active:bg-gray-100'}`}>{k}</button>
               ))}
             </div>
 
-            {/* Boutons Imprimer / Photo : dessous, pleine largeur */}
-            <div className={`mt-3 grid gap-2 shrink-0 ${canWrite ? 'grid-cols-2' : 'grid-cols-1'}`}>
-              <button onClick={() => void print()} disabled={qty < 1 || sending}
-                      className="btn-primary h-16 flex-col gap-0.5 text-base disabled:opacity-40">
-                <span className="text-2xl">🖨</span>
-                <span>{sending ? '…' : 'Imprimer'}</span>
-              </button>
+            {/* Boutons : Photo à GAUCHE, Imprimer à DROITE ; hauts (prennent la
+                hauteur restante). */}
+            <div className={`mt-3 grid gap-2 flex-1 min-h-0 ${canWrite ? 'grid-cols-2' : 'grid-cols-1'}`}>
               {canWrite && (
                 <button onClick={() => photoRef.current?.click()} disabled={photoBusy}
-                        className="btn-soft h-16 flex-col gap-0.5 text-base disabled:opacity-40">
-                  <span className="text-2xl">📷</span>
+                        className="btn-soft h-full min-h-[72px] flex-col gap-1 text-lg disabled:opacity-40">
+                  <span className="text-3xl">📷</span>
                   <span>{photoBusy ? '…' : 'Photo'}</span>
                 </button>
               )}
+              <button onClick={() => void print()} disabled={qty < 1 || sending}
+                      className="btn-primary h-full min-h-[72px] flex-col gap-1 text-lg disabled:opacity-40">
+                <span className="text-3xl">🖨</span>
+                <span>{sending ? '…' : 'Imprimer'}</span>
+              </button>
             </div>
             {msg && <p className="mt-1 text-sm text-center shrink-0">{msg}</p>}
           </section>
