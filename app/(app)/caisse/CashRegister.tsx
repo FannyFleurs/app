@@ -187,6 +187,12 @@ export default function CashRegister({
     swipeRef.current = null;
     const end = e.changedTouches[0];
     if (!start || !end) return;
+    // Un appui sur un bouton/lien du ticket (ex. « Annuler », « Vider ») peut,
+    // avec le pouce, dériver de >60 px et être pris pour un swipe de fermeture :
+    // le ticket glissait alors hors écran et la popup de confirmation
+    // apparaissait par-dessus le catalogue. On ignore donc les gestes qui se
+    // terminent sur un contrôle interactif.
+    if ((e.target as HTMLElement).closest('button, a, input, select, textarea, [role="button"]')) return;
     const dx = end.clientX - start.x;
     const dy = end.clientY - start.y;
     if (Math.abs(dy) > 60) return;
@@ -1506,7 +1512,7 @@ export default function CashRegister({
           </button>
           <button
             disabled={lines.length === 0}
-            onClick={async () => { if (await confirmThemed({ title: 'Vider le ticket', message: 'Les articles en cours seront retirés.', confirmLabel: 'Vider', danger: true })) { setLines([]); setSaleId(null); setCartComment(''); void detachCustomer(); } }}
+            onClick={async () => { setMobileCartOpen(true); if (await confirmThemed({ title: 'Vider le ticket', message: 'Les articles en cours seront retirés.', confirmLabel: 'Vider', danger: true })) { setLines([]); setSaleId(null); setCartComment(''); void detachCustomer(); } }}
             className="btn-soft text-sm min-h-[44px] px-4 whitespace-nowrap"
             title="Retirer tous les articles du ticket"
           >
@@ -1515,7 +1521,7 @@ export default function CashRegister({
           {/* Action destructive, nettement séparée + style danger + confirmation. */}
           <button
             disabled={lines.length === 0 && !saleId}
-            onClick={async () => { if (await confirmThemed({ title: 'Annuler ce ticket', message: 'La vente en cours sera définitivement abandonnée.', confirmLabel: 'Annuler le ticket', cancelLabel: 'Retour', danger: true })) void cancelTicket(); }}
+            onClick={async () => { setMobileCartOpen(true); if (await confirmThemed({ title: 'Annuler ce ticket', message: 'La vente en cours sera définitivement abandonnée.', confirmLabel: 'Annuler le ticket', cancelLabel: 'Retour', danger: true })) void cancelTicket(); }}
             className="ml-2 md:ml-3 text-sm min-h-[44px] px-4 rounded-xl font-medium whitespace-nowrap border border-danger/40 text-danger hover:bg-danger/10 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
             title="Annuler ce ticket"
           >
