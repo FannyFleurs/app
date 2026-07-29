@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/auth/guards';
 import { accessibleStores, storeInOrg } from '@/lib/auth/stores-server';
 import { computeDayReport } from '@/lib/services/day-report';
+import { resolveDeviceStoreId } from '@/lib/pos/current-store';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -19,7 +20,12 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'STORE_NOT_FOUND' }, { status: 400 });
     }
   } else {
-    storeId = (await accessibleStores(g.user))[0]?.id ?? null;
+    // Sans store_id explicite : on prend la boutique du POSTE (caisse appairée
+    // au device) pour que le X reflète la boutique où l'on encaisse, et non la
+    // première boutique de l'organisation. Repli : 1re boutique accessible.
+    storeId = (await resolveDeviceStoreId(g.user.organizationId))
+      ?? (await accessibleStores(g.user))[0]?.id
+      ?? null;
   }
   if (!storeId) return NextResponse.json({ error: 'NO_STORE' }, { status: 400 });
 
