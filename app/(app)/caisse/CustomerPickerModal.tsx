@@ -55,6 +55,13 @@ export default function CustomerPickerModal({ onClose, onPick }: Props) {
           <div className="flex gap-2">
             <input
               autoFocus
+              // iOS Safari : coupe la barre « Remplissage auto / Contacts »
+              // qui s'invitait sur ce champ (placeholder « Nom, email… »).
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              name="customer-search"
               className="input flex-1 h-12 text-base"
               placeholder="Nom, email, téléphone, SIRET…"
               value={q}
