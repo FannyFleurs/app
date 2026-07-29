@@ -301,9 +301,9 @@ export default function PaymentModal({ saleId, totalTtc, lines = [], storeId, ha
           <h2 className="text-base lg:text-lg font-semibold">Encaissement</h2>
         </div>
 
-        {/* Contenu en 3 colonnes (comme la caisse) :
+        {/* Contenu en 3 colonnes (comme la caisse), pleine largeur :
             gauche = articles du ticket · centre = à payer + pavé · droite = modes. */}
-        <div className="mx-auto w-full max-w-6xl lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)_300px] lg:gap-5 flex-1 overflow-y-auto px-3 py-3 lg:px-6 lg:py-6">
+        <div className="w-full lg:grid lg:grid-cols-3 lg:gap-8 flex-1 overflow-y-auto px-4 py-4 lg:px-8 lg:py-6">
 
           {/* Colonne 1 : récap du ticket (articles) */}
           <div className="flex flex-col min-h-0">
@@ -419,17 +419,20 @@ export default function PaymentModal({ saleId, totalTtc, lines = [], storeId, ha
           </div>
         </div>
 
-        {/* Footer Valider — barre pleine largeur, bouton centré */}
-        <div className="border-t border-border px-3 lg:px-6 py-2.5 bg-white pb-safe shrink-0">
-          <div className="mx-auto w-full max-w-5xl">
-            <button
-              disabled={loading || !canValidate}
-              onClick={() => void validate()}
-              className="btn-primary w-full h-14 lg:h-16 text-lg lg:text-xl font-semibold"
-            >
-              {loading ? 'Validation…' : canValidate ? `✓ Valider · ${formatEUR(totalTtc)}` : `Reste ${formatEUR(remaining)}`}
-            </button>
-          </div>
+        {/* Footer Valider — barre pleine largeur. padding bas garanti (≥1rem)
+            EN PLUS de la safe-area iOS : sinon le bouton colle au bord de
+            l'écran sur desktop (où env(safe-area)=0). */}
+        <div
+          className="border-t border-border px-4 lg:px-8 pt-3 bg-white shrink-0"
+          style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 0px))' }}
+        >
+          <button
+            disabled={loading || !canValidate}
+            onClick={() => void validate()}
+            className="btn-primary w-full h-14 lg:h-16 text-lg lg:text-xl font-semibold"
+          >
+            {loading ? 'Validation…' : canValidate ? `✓ Valider · ${formatEUR(totalTtc)}` : `Reste ${formatEUR(remaining)}`}
+          </button>
         </div>
       </div>
 
