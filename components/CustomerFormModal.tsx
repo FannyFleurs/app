@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export interface CustomerLike {
   id: string;
@@ -64,6 +64,20 @@ export default function CustomerFormModal({ customer, onClose, onSaved }: Props)
 
   const isPro = type !== 'particulier';
 
+  // iOS Safari : empêche la barre « Remplissage automatique / Contacts » de
+  // s'afficher sur les champs (nom, email, téléphone, adresse) — jugée
+  // gênante à la saisie. On désactive l'autofill sur tous les champs du
+  // formulaire, y compris ceux affichés conditionnellement (pro). Dépend de
+  // `type` pour couvrir les champs (dé)montés au changement de type.
+  const formRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    formRef.current?.querySelectorAll('input, textarea').forEach((el) => {
+      el.setAttribute('autocomplete', 'off');
+      el.setAttribute('autocorrect', 'off');
+      el.setAttribute('autocapitalize', 'off');
+    });
+  }, [type]);
+
   async function submit() {
     // Validation côté UI : un client doit au minimum avoir une identité
     // (nom + prénom pour un particulier, raison sociale pour les autres)
@@ -120,7 +134,7 @@ export default function CustomerFormModal({ customer, onClose, onSaved }: Props)
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-ink/30 backdrop-blur-sm p-4 overflow-auto">
-      <div className="card w-full max-w-2xl lg:max-w-4xl p-6 my-8">
+      <div ref={formRef} className="card w-full max-w-2xl lg:max-w-4xl p-6 my-8">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold">{customer ? 'Modifier le client' : 'Nouveau client'}</h2>
           <button onClick={onClose} className="text-ink-soft hover:text-ink">✕</button>
