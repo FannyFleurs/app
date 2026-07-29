@@ -1,7 +1,12 @@
 import type { Config } from 'tailwindcss';
 
 const config: Config = {
-  content: ['./app/**/*.{ts,tsx}', './components/**/*.{ts,tsx}'],
+  // `lib/` DOIT être scanné : des composants y vivent (ex. lib/ui/dialog.tsx,
+  // la popup de confirmation au thème). Sans ça, les classes utilisées
+  // UNIQUEMENT dans lib/ — comme `z-[300]` de la popup — sont purgées du CSS ;
+  // la popup se retrouvait alors sans z-index (auto) et passait DERRIÈRE le
+  // ticket mobile (z-40), visible seulement au-dessus du catalogue.
+  content: ['./app/**/*.{ts,tsx}', './components/**/*.{ts,tsx}', './lib/**/*.{ts,tsx}'],
   theme: {
     extend: {
       colors: {
