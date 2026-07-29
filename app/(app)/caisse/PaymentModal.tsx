@@ -282,22 +282,25 @@ export default function PaymentModal({ saleId, totalTtc, storeId, hasCustomer = 
   const canValidate = Math.abs(paidAllocated - totalTtc) < 0.005;
 
   return (
-    <div className="fixed inset-0 z-50 lg:grid lg:place-items-center bg-ink/30 backdrop-blur-sm lg:p-4 flex flex-col">
-      {/* Mobile : plein écran scrollable + bouton Valider sticky en bas.
-          Desktop : carte centrée 3 colonnes. */}
-      <div className="card w-full max-w-5xl flex flex-col lg:p-6 p-0 lg:rounded-2xl rounded-none flex-1 lg:flex-none lg:max-h-[90vh] overflow-hidden pt-safe">
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 lg:p-0 lg:mb-4 border-b border-border lg:border-0 shrink-0">
-          <h2 className="text-base lg:text-lg font-semibold">Encaissement</h2>
+    // Page de règlement PLEIN ÉCRAN (et non plus une modale) : fond opaque
+    // couvrant toute l'app, en-tête avec bouton retour, contenu centré.
+    <div className="fixed inset-0 z-50 bg-bg flex flex-col pt-safe">
+      <div className="w-full flex flex-col flex-1 overflow-hidden">
+        {/* En-tête page : retour vers la caisse + titre */}
+        <div className="flex items-center gap-3 px-3 lg:px-5 h-14 border-b border-border shrink-0 bg-white">
           <button
             onClick={onClose}
-            aria-label="Fermer"
-            className="h-10 w-10 grid place-items-center rounded-lg text-lg text-ink-soft hover:bg-gray-100 hover:text-ink"
-          >✕</button>
+            aria-label="Retour à la caisse"
+            className="inline-flex items-center gap-1.5 -ml-1 px-2 py-1.5 rounded-lg text-ink-soft hover:bg-gray-100 hover:text-ink"
+          >
+            <span className="text-xl leading-none">←</span>
+            <span className="text-sm font-medium">Caisse</span>
+          </button>
+          <h2 className="text-base lg:text-lg font-semibold">Encaissement</h2>
         </div>
 
-        {/* Zone scrollable (mobile) / grille (desktop) */}
-        <div className="lg:grid lg:grid-cols-[1fr_240px_280px] lg:gap-5 flex-1 overflow-y-auto px-3 py-3 lg:p-0">
+        {/* Zone scrollable (mobile) / grille (desktop), contenu centré */}
+        <div className="mx-auto w-full max-w-5xl lg:grid lg:grid-cols-[1fr_240px_280px] lg:gap-5 flex-1 overflow-y-auto px-3 py-3 lg:px-6 lg:py-6">
           {/* Colonne 1 : montant + numpad */}
           <div>
             <div className="rounded-xl border border-border p-2 lg:p-4 bg-gray-50">
@@ -402,15 +405,17 @@ export default function PaymentModal({ saleId, totalTtc, storeId, hasCustomer = 
           </div>
         </div>
 
-        {/* Footer Valider — sticky en bas sur mobile, intégré sur desktop */}
-        <div className="border-t border-border lg:border-0 px-3 py-2.5 lg:p-0 lg:mt-3 bg-white pb-safe shrink-0">
-          <button
-            disabled={loading || !canValidate}
-            onClick={() => void validate()}
-            className="btn-primary w-full h-14 lg:h-16 text-lg lg:text-xl font-semibold"
-          >
-            {loading ? 'Validation…' : canValidate ? `✓ Valider · ${formatEUR(totalTtc)}` : `Reste ${formatEUR(remaining)}`}
-          </button>
+        {/* Footer Valider — barre pleine largeur, bouton centré */}
+        <div className="border-t border-border px-3 lg:px-6 py-2.5 bg-white pb-safe shrink-0">
+          <div className="mx-auto w-full max-w-5xl">
+            <button
+              disabled={loading || !canValidate}
+              onClick={() => void validate()}
+              className="btn-primary w-full h-14 lg:h-16 text-lg lg:text-xl font-semibold"
+            >
+              {loading ? 'Validation…' : canValidate ? `✓ Valider · ${formatEUR(totalTtc)}` : `Reste ${formatEUR(remaining)}`}
+            </button>
+          </div>
         </div>
       </div>
 

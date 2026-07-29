@@ -9,6 +9,10 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   const g = await requirePermission('pos.use');
   if ('response' in g) return g.response;
 
+  // ?gift=1 → ticket « sans prix » (bon d'échange) : mêmes articles, sans
+  // aucun montant ni total.
+  const gift = new URL(_req.url).searchParams.get('gift') === '1';
+
   const r = await query<{
     id: string; number: string;
     snapshot: ReceiptSnapshot;
@@ -60,12 +64,13 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     registerCode: c.register_code ?? undefined,
     cashier: c.user_name ?? undefined,
     receipt: receiptSettings,
+    giftReceipt: gift,
   });
   return new NextResponse(buf, {
     status: 200,
     headers: {
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `inline; filename="ticket-${rec.number}.pdf"`,
+      'Content-Disposition': `inline; filename="${gift ? 'bon-echange' : 'ticket'}-${rec.number}.pdf"`,
       'Cache-Control': 'private, no-store',
     },
   });
