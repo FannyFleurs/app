@@ -27,6 +27,8 @@ interface RegisteredPayment {
 interface Props {
   saleId: string;
   totalTtc: number;
+  /** Articles du ticket, affichés en colonne gauche de la page de règlement. */
+  lines?: Array<{ label: string; quantity: number; unit_price_ttc: number; discount_amount: number }>;
   /** Boutique du poste : ne propose que les modes disponibles pour elle. */
   storeId?: string;
   /** Un client est-il rattaché à la vente ? Requis pour le paiement « en
@@ -46,7 +48,7 @@ interface Props {
   onValidated: (receiptId: string, receiptNumber: string, loyalty?: { earned: number; redeemed: number; new_balance: number } | null) => void;
 }
 
-export default function PaymentModal({ saleId, totalTtc, storeId, hasCustomer = false, loyaltyRedemption, schoolMode, offlineEnabled, onOfflineFinalize, onClose, onValidated }: Props) {
+export default function PaymentModal({ saleId, totalTtc, lines = [], storeId, hasCustomer = false, loyaltyRedemption, schoolMode, offlineEnabled, onOfflineFinalize, onClose, onValidated }: Props) {
   const [methods, setMethods] = useState<Array<{ kind: Method; label: string }>>(FALLBACK_METHODS);
   const [amountStr, setAmountStr] = useState<string>('');
   const [payments, setPayments] = useState<RegisteredPayment[]>([]);
@@ -286,90 +288,66 @@ export default function PaymentModal({ saleId, totalTtc, storeId, hasCustomer = 
     // couvrant toute l'app, en-tête avec bouton retour, contenu centré.
     <div className="fixed inset-0 z-50 bg-bg flex flex-col pt-safe">
       <div className="w-full flex flex-col flex-1 overflow-hidden">
-        {/* En-tête page : retour vers la caisse + titre */}
+        {/* En-tête page : bouton retour caisse (bien visible, à gauche) + titre */}
         <div className="flex items-center gap-3 px-3 lg:px-5 h-14 border-b border-border shrink-0 bg-white">
           <button
             onClick={onClose}
             aria-label="Retour à la caisse"
-            className="inline-flex items-center gap-1.5 -ml-1 px-2 py-1.5 rounded-lg text-ink-soft hover:bg-gray-100 hover:text-ink"
+            className="inline-flex items-center gap-1.5 rounded-xl accent-bar text-white px-3.5 h-9 text-sm font-semibold hover:opacity-90 active:scale-95 transition"
           >
-            <span className="text-xl leading-none">←</span>
-            <span className="text-sm font-medium">Caisse</span>
+            <span className="text-lg leading-none">←</span>
+            Caisse
           </button>
           <h2 className="text-base lg:text-lg font-semibold">Encaissement</h2>
         </div>
 
-        {/* Zone scrollable (mobile) / grille (desktop), contenu centré */}
-        <div className="mx-auto w-full max-w-5xl lg:grid lg:grid-cols-[1fr_240px_280px] lg:gap-5 flex-1 overflow-y-auto px-3 py-3 lg:px-6 lg:py-6">
-          {/* Colonne 1 : montant + numpad */}
-          <div>
-            <div className="rounded-xl border border-border p-2 lg:p-4 bg-gray-50">
-              <div className="text-[10px] lg:text-xs uppercase tracking-wider text-ink-soft">Montant à saisir</div>
-              <div className="mt-0.5 flex items-baseline justify-between">
-                <span className="text-xl lg:text-4xl font-semibold tabular-nums">
-                  {amountStr === '' ? '—' : formatEUR(Number(amountStr) || 0)}
-                </span>
-                <button onClick={() => setAmountStr('')}
-                        className="text-xs text-ink-soft hover:text-ink">Effacer</button>
-              </div>
-              <div className="mt-0.5 text-[11px] lg:text-xs text-ink-soft leading-tight">
-                Vide = la méthode prendra le restant ({formatEUR(remaining)}).
-              </div>
-            </div>
+        {/* Contenu en 3 colonnes (comme la caisse) :
+            gauche = articles du ticket · centre = à payer + pavé · droite = modes. */}
+        <div className="mx-auto w-full max-w-6xl lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)_300px] lg:gap-5 flex-1 overflow-y-auto px-3 py-3 lg:px-6 lg:py-6">
 
-            <div className="mt-1.5 lg:mt-3 grid grid-cols-3 gap-1.5 lg:gap-3">
-              {['7','8','9','4','5','6','1','2','3','.','0','⌫'].map((k) => (
-                <button
-                  key={k}
-                  onClick={() => press(k)}
-                  className="h-11 lg:h-20 rounded-xl border border-border bg-white text-xl lg:text-3xl font-medium hover:bg-gray-50 active:scale-95 transition"
-                >
-                  {k}
-                </button>
-              ))}
+          {/* Colonne 1 : récap du ticket (articles) */}
+          <div className="flex flex-col min-h-0">
+            <div className="text-[10px] lg:text-xs uppercase tracking-wider text-ink-soft mb-1.5">
+              Ticket · {lines.length} article{lines.length > 1 ? 's' : ''}
             </div>
-          </div>
-
-          {/* Colonne 2 : méthodes */}
-          <div className="mt-2 lg:mt-0">
-            <div className="text-[10px] lg:text-xs uppercase tracking-wider text-ink-soft mb-1">
-              Mode de règlement
-            </div>
-            {/* Mobile : grille 2 colonnes pour gagner de la place. Desktop : pile verticale. */}
-            <div className="grid grid-cols-2 lg:grid-cols-1 gap-1.5 lg:gap-2.5">
-              {methods.map((m) => {
-                // « En compte » désactivé sans client (vente anonyme).
-                const blockedDeferred = m.kind === 'deferred' && !hasCustomer;
+            <div className="rounded-xl border border-border bg-white divide-y divide-border overflow-y-auto">
+              {lines.length === 0 ? (
+                <div className="px-3 py-4 text-sm text-ink-soft text-center">Aucun article</div>
+              ) : lines.map((l, i) => {
+                const lineTtc = round2(l.unit_price_ttc * l.quantity - l.discount_amount);
                 return (
-                <button
-                  key={m.kind + m.label}
-                  onClick={() => tapMethod(m)}
-                  disabled={(remaining <= 0 && Number(amountStr || '0') <= 0) || blockedDeferred}
-                  title={blockedDeferred ? 'Rattachez un client pour payer en compte' : undefined}
-                  className="btn-soft h-11 lg:h-16 text-sm lg:text-base font-medium px-2 leading-tight disabled:opacity-40"
-                >
-                  {m.label}
-                </button>
+                  <div key={i} className="flex items-baseline justify-between gap-2 px-3 py-2">
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium truncate">{l.label}</div>
+                      <div className="text-xs text-ink-soft">
+                        {formatQty(l.quantity)} × {formatEUR(l.unit_price_ttc)}
+                        {l.discount_amount > 0 ? ` (-${formatEUR(l.discount_amount)})` : ''}
+                      </div>
+                    </div>
+                    <span className="text-sm font-semibold tabular-nums whitespace-nowrap">{formatEUR(lineTtc)}</span>
+                  </div>
                 );
               })}
             </div>
+            <div className="mt-2 flex items-baseline justify-between rounded-xl bg-gray-50 px-3 py-2.5">
+              <span className="text-sm font-medium">Total</span>
+              <span className="text-lg font-semibold tabular-nums">{formatEUR(totalTtc)}</span>
+            </div>
           </div>
 
-          {/* Colonne 3 : récap + paiements */}
-          <div className="flex flex-col mt-2 lg:mt-0">
-            <div className="rounded-xl border border-border p-2.5 lg:p-4 bg-white space-y-1 text-sm">
-              <div className="flex justify-between">
-                <span className="text-ink-soft text-xs lg:text-sm">Total dû</span>
-                <span className="font-semibold">{formatEUR(totalTtc)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-ink-soft text-xs lg:text-sm">Payé</span>
-                <span>{formatEUR(paidAllocated)}</span>
-              </div>
-              <div className="flex justify-between border-t border-border pt-1">
-                <span className="font-medium text-xs lg:text-sm">Reste</span>
-                <span className={`font-semibold ${remaining === 0 ? 'text-success' : 'text-warning'}`}>
+          {/* Colonne 2 : à payer + pavé numérique + paiements enregistrés */}
+          <div className="mt-3 lg:mt-0 flex flex-col">
+            <div className="rounded-xl border border-border p-3 lg:p-4 bg-gray-50">
+              <div className="flex items-baseline justify-between">
+                <span className="text-xs lg:text-sm uppercase tracking-wider text-ink-soft">À payer</span>
+                <span className={`text-2xl lg:text-4xl font-semibold tabular-nums ${remaining === 0 ? 'text-success' : ''}`}>
                   {formatEUR(remaining)}
+                </span>
+              </div>
+              <div className="mt-2 flex items-baseline justify-between border-t border-border pt-2">
+                <span className="text-[11px] lg:text-xs text-ink-soft">Montant saisi (vide = tout le reste)</span>
+                <span className="text-base lg:text-xl font-medium tabular-nums">
+                  {amountStr === '' ? '—' : formatEUR(Number(amountStr) || 0)}
                 </span>
               </div>
               {change > 0 && (
@@ -380,8 +358,20 @@ export default function PaymentModal({ saleId, totalTtc, storeId, hasCustomer = 
               )}
             </div>
 
+            <div className="mt-2 lg:mt-3 grid grid-cols-3 gap-1.5 lg:gap-3">
+              {['7','8','9','4','5','6','1','2','3','.','0','⌫'].map((k) => (
+                <button
+                  key={k}
+                  onClick={() => press(k)}
+                  className="h-12 lg:h-16 rounded-xl border border-border bg-white text-xl lg:text-2xl font-medium hover:bg-gray-50 active:scale-95 transition"
+                >
+                  {k}
+                </button>
+              ))}
+            </div>
+
             {payments.length > 0 && (
-              <div className="mt-2 lg:mt-3 flex-1">
+              <div className="mt-2 lg:mt-3">
                 <div className="text-[10px] lg:text-xs uppercase tracking-wider text-ink-soft mb-1.5">Paiements</div>
                 <ul className="space-y-1">
                   {payments.map((p) => (
@@ -389,10 +379,10 @@ export default function PaymentModal({ saleId, totalTtc, storeId, hasCustomer = 
                       <span className="font-medium truncate">{p.label}</span>
                       <span className="tabular-nums whitespace-nowrap">{formatEUR(p.amount)}</span>
                       <button
-                  onClick={() => removePayment(p.key)}
-                  aria-label="Retirer ce paiement"
-                  className="h-9 w-9 grid place-items-center rounded-md text-ink-soft hover:bg-danger/10 hover:text-danger shrink-0"
-                >✕</button>
+                        onClick={() => removePayment(p.key)}
+                        aria-label="Retirer ce paiement"
+                        className="h-9 w-9 grid place-items-center rounded-md text-ink-soft hover:bg-danger/10 hover:text-danger shrink-0"
+                      >✕</button>
                     </li>
                   ))}
                 </ul>
@@ -402,6 +392,30 @@ export default function PaymentModal({ saleId, totalTtc, storeId, hasCustomer = 
             {error && (
               <div className="mt-2 rounded-lg bg-danger/10 px-3 py-2 text-xs lg:text-sm text-danger">{error}</div>
             )}
+          </div>
+
+          {/* Colonne 3 : modes de règlement */}
+          <div className="mt-3 lg:mt-0">
+            <div className="text-[10px] lg:text-xs uppercase tracking-wider text-ink-soft mb-1">
+              Mode de règlement
+            </div>
+            <div className="grid grid-cols-2 lg:grid-cols-1 gap-1.5 lg:gap-2.5">
+              {methods.map((m) => {
+                // « En compte » désactivé sans client (vente anonyme).
+                const blockedDeferred = m.kind === 'deferred' && !hasCustomer;
+                return (
+                <button
+                  key={m.kind + m.label}
+                  onClick={() => tapMethod(m)}
+                  disabled={(remaining <= 0 && Number(amountStr || '0') <= 0) || blockedDeferred}
+                  title={blockedDeferred ? 'Rattachez un client pour payer en compte' : undefined}
+                  className="btn-soft h-12 lg:h-16 text-sm lg:text-base font-medium px-2 leading-tight disabled:opacity-40"
+                >
+                  {m.label}
+                </button>
+                );
+              })}
+            </div>
           </div>
         </div>
 
@@ -438,6 +452,10 @@ export default function PaymentModal({ saleId, totalTtc, storeId, hasCustomer = 
 function cryptoKey(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID();
   return Math.random().toString(36).slice(2);
+}
+
+function formatQty(q: number): string {
+  return Number.isInteger(q) ? String(q) : q.toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
 }
 
 interface RefLookupResult {

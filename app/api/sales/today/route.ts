@@ -99,12 +99,22 @@ export async function GET(req: Request) {
   const bankDeposits = Number(depositsRes.rows[0]?.total ?? 0);
   const cashRefunds = Number(cashRefundsRes.rows[0]?.total ?? 0);
 
-  // Heure d'ouverture de la caisse : première session ouverte ce jour-là.
-  const openRes = await query<{ opened_at: string | null }>(
-    `SELECT MIN(opened_at)::text AS opened_at
-       FROM cash_sessions
-      WHERE organization_id = $1
-        AND opened_at::date = COALESCE($2::date, CURRENT_DATE)`,
+  // Heure d'ouverture de la caisse pour ce jour :
+  //  - en priorité, la 1re session ouverte CE jour-là (fonds de caisse du matin) ;
+  //  - sinon (caisse ouverte un jour précédent et restée ouverte), l'ouverture
+  //    de la session encore ouverte qui couvre ce jour.
+  // On renvoie une vraie Date (→ ISO) et non ::text, pour un parsing fiable
+  // côté navigateur (Safari).
+  const openRes = await query<{ opened_at: Date | null }>(
+    `SELECT COALESCE(
+        (SELECT MIN(opened_at) FROM cash_sessions
+          WHERE organization_id = $1
+            AND opened_at::date = COALESCE($2::date, CURRENT_DATE)),
+        (SELECT opened_at FROM cash_sessions
+          WHERE organization_id = $1 AND status = 'open'
+            AND opened_at::date <= COALESCE($2::date, CURRENT_DATE)
+          ORDER BY opened_at DESC LIMIT 1)
+      ) AS opened_at`,
     [g.user.organizationId, date],
   ).catch(() => ({ rows: [{ opened_at: null }] }));
 
