@@ -191,7 +191,7 @@ export default function ReceiptPreviewModal({ receipt, storeId, onClose }: Props
             </button>
           </div>
         ) : (
-          <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             <a
               href={pdfUrl}
               target="_blank"
@@ -199,6 +199,15 @@ export default function ReceiptPreviewModal({ receipt, storeId, onClose }: Props
               className="btn-primary h-12 sm:h-14 text-base font-semibold grid place-items-center text-center leading-tight"
             >
               Imprimer / PDF
+            </a>
+            <a
+              href={`${pdfUrl}?gift=1`}
+              target="_blank"
+              rel="noreferrer"
+              className="btn-soft h-12 sm:h-14 text-base font-semibold grid place-items-center text-center leading-tight"
+              title="Imprimer un bon d'échange (mêmes articles, sans les prix)"
+            >
+              Ticket sans prix
             </a>
             <button
               onClick={() => setShowEmailModal(true)}

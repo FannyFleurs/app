@@ -56,6 +56,9 @@ export async function renderReceiptPdf(
     registerCode?: string;
     cashier?: string;
     receipt?: ReceiptSettings;
+    /** Ticket « sans prix » (bon d'échange) : liste quantité + désignation,
+     *  sans aucun montant, sans totaux/TVA/paiements. */
+    giftReceipt?: boolean;
   },
 ): Promise<Buffer> {
   return new Promise((resolve, reject) => {
@@ -69,6 +72,7 @@ export async function renderReceiptPdf(
     doc.on('error', reject);
 
     const rs = options.receipt;
+    const gift = options.giftReceipt === true;
 
     // Logo si configuré
     if (rs?.logo_data_url?.startsWith('data:image')) {
@@ -118,51 +122,70 @@ export async function renderReceiptPdf(
     if (options.storeName) doc.text(options.storeName, { align: 'center' });
     if (options.registerCode) doc.text(`Caisse ${options.registerCode}`, { align: 'center' });
 
+    // Ticket sans prix : bandeau « BON ÉCHANGE » bien visible.
+    if (gift) {
+      doc.moveDown(0.3);
+      doc.font('Helvetica-Bold').fontSize(11).text('BON ÉCHANGE', { align: 'center' });
+      doc.font('Helvetica').fontSize(8);
+    }
+
     doc.moveDown(0.5);
     doc.text('-'.repeat(40), { align: 'center' });
     doc.moveDown(0.3);
 
     // Lignes
     doc.font('Helvetica').fontSize(8);
-    for (const l of snapshot.lines) {
-      const qty = formatQty(l.quantity);
-      const unit = formatEUR(l.unit_price_ttc);
-      const ttc = formatEUR(l.line_ttc);
-      doc.text(l.label, { continued: false });
-      const sub = `${qty} × ${unit}${l.discount_amount > 0 ? ` (-${formatEUR(l.discount_amount)})` : ''}`;
-      const left = doc.x;
-      doc.text(sub, left, doc.y, { continued: true });
-      doc.text(ttc, { align: 'right' });
+    if (gift) {
+      // Sans prix : uniquement quantité + désignation.
+      doc.font('Helvetica-Bold').text('QTE  DÉSIGNATION');
+      doc.font('Helvetica');
+      doc.moveDown(0.2);
+      for (const l of snapshot.lines) {
+        doc.text(`${formatQty(l.quantity)}  ${l.label}`);
+      }
+    } else {
+      for (const l of snapshot.lines) {
+        const qty = formatQty(l.quantity);
+        const unit = formatEUR(l.unit_price_ttc);
+        const ttc = formatEUR(l.line_ttc);
+        doc.text(l.label, { continued: false });
+        const sub = `${qty} × ${unit}${l.discount_amount > 0 ? ` (-${formatEUR(l.discount_amount)})` : ''}`;
+        const left = doc.x;
+        doc.text(sub, left, doc.y, { continued: true });
+        doc.text(ttc, { align: 'right' });
+      }
     }
 
     doc.moveDown(0.2);
     doc.text('-'.repeat(40), { align: 'center' });
 
-    // Totaux
-    doc.font('Helvetica-Bold').fontSize(10);
-    rowLine(doc, 'TOTAL TTC', formatEUR(snapshot.totals.total_ttc));
-    doc.font('Helvetica').fontSize(8);
-    rowLine(doc, 'Dont HT', formatEUR(snapshot.totals.total_ht));
-    rowLine(doc, 'Dont TVA', formatEUR(snapshot.totals.total_tva));
-    if (snapshot.totals.total_discount > 0) {
-      rowLine(doc, 'Remises', `-${formatEUR(snapshot.totals.total_discount)}`);
-    }
-
-    if (rs?.show_tax_breakdown ?? true) {
-      doc.moveDown(0.3);
-      for (const t of snapshot.tva_breakdown) {
-        rowLine(
-          doc,
-          `TVA ${t.rate}% (HT ${formatEUR(t.base_ht)})`,
-          formatEUR(t.tva),
-        );
+    // Totaux / TVA / paiements : uniquement sur le ticket avec prix.
+    if (!gift) {
+      doc.font('Helvetica-Bold').fontSize(10);
+      rowLine(doc, 'TOTAL TTC', formatEUR(snapshot.totals.total_ttc));
+      doc.font('Helvetica').fontSize(8);
+      rowLine(doc, 'Dont HT', formatEUR(snapshot.totals.total_ht));
+      rowLine(doc, 'Dont TVA', formatEUR(snapshot.totals.total_tva));
+      if (snapshot.totals.total_discount > 0) {
+        rowLine(doc, 'Remises', `-${formatEUR(snapshot.totals.total_discount)}`);
       }
-    }
 
-    doc.moveDown(0.3);
-    doc.text('-'.repeat(40), { align: 'center' });
-    for (const p of snapshot.payments) {
-      rowLine(doc, PAYMENT_LABELS[p.method] ?? p.method, formatEUR(p.amount));
+      if (rs?.show_tax_breakdown ?? true) {
+        doc.moveDown(0.3);
+        for (const t of snapshot.tva_breakdown) {
+          rowLine(
+            doc,
+            `TVA ${t.rate}% (HT ${formatEUR(t.base_ht)})`,
+            formatEUR(t.tva),
+          );
+        }
+      }
+
+      doc.moveDown(0.3);
+      doc.text('-'.repeat(40), { align: 'center' });
+      for (const p of snapshot.payments) {
+        rowLine(doc, PAYMENT_LABELS[p.method] ?? p.method, formatEUR(p.amount));
+      }
     }
 
     // Code-barres du numéro de ticket
@@ -177,15 +200,19 @@ export async function renderReceiptPdf(
          .text(rs.footer_message.trim(), { align: 'center' });
     }
 
-    doc.moveDown(0.5);
-    doc.font('Helvetica').fontSize(7);
-    doc.text('Mention : ticket disponible par email sur demande.', { align: 'center' });
-    doc.moveDown(0.3);
-    doc.font('Helvetica-Oblique').fontSize(6);
-    doc.text(`Empreinte fiscale : ${options.fiscalHash.slice(0, 16)}…`, { align: 'center' });
-    doc.text('Système conforme aux exigences d\'inaltérabilité (art. 286, I, 3°bis CGI)', {
-      align: 'center',
-    });
+    // Mentions fiscales : uniquement sur le vrai ticket (le bon d'échange
+    // n'est pas le document fiscal — il ne porte ni prix ni empreinte).
+    if (!gift) {
+      doc.moveDown(0.5);
+      doc.font('Helvetica').fontSize(7);
+      doc.text('Mention : ticket disponible par email sur demande.', { align: 'center' });
+      doc.moveDown(0.3);
+      doc.font('Helvetica-Oblique').fontSize(6);
+      doc.text(`Empreinte fiscale : ${options.fiscalHash.slice(0, 16)}…`, { align: 'center' });
+      doc.text('Système conforme aux exigences d\'inaltérabilité (art. 286, I, 3°bis CGI)', {
+        align: 'center',
+      });
+    }
 
     doc.end();
   });

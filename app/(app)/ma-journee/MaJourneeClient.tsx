@@ -57,6 +57,7 @@ export default function MaJourneeClient() {
     cash_sales: number; bank_deposits: number; cash_refunds?: number; expected_cash: number;
   }>({ cash_sales: 0, bank_deposits: 0, cash_refunds: 0, expected_cash: 0 });
   const [returnsTotal, setReturnsTotal] = useState(0);
+  const [openedAt, setOpenedAt] = useState<string | null>(null);
   const [sealedAt, setSealedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<string | null>(null);
@@ -79,6 +80,7 @@ export default function MaJourneeClient() {
         setSales(j.sales ?? []);
         if (j.cash_summary) setCashSummary(j.cash_summary);
         setReturnsTotal(Number(j.returns_total ?? 0));
+        setOpenedAt(j.opened_at ?? null);
       })
       .finally(() => setLoading(false));
   }
@@ -169,6 +171,17 @@ export default function MaJourneeClient() {
       <aside className="border-r border-border bg-white overflow-y-auto flex flex-col">
         {/* Switch X Simple / X Complet */}
         <div className="px-5 pt-4">
+          {/* Heure d'ouverture de la caisse, juste au-dessus des boutons X. */}
+          {openedAt && (
+            <div className="mb-2 text-center text-xs text-ink-soft">
+              Caisse ouverte à{' '}
+              <span className="font-semibold text-ink">
+                {new Date(openedAt).toLocaleTimeString('fr-FR', {
+                  hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris',
+                })}
+              </span>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-1 rounded-2xl bg-gray-50 p-1">
             <button
               onClick={() => setMode('simple')}

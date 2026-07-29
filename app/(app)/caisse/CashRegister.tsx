@@ -856,46 +856,6 @@ export default function CashRegister({
     return offlinePosEnabled() && typeof navigator !== 'undefined' && !navigator.onLine;
   }
 
-  async function quickPay(method: 'cash' | 'card') {
-    if (lines.length === 0 || totals.ttc <= 0) return;
-    setError(null);
-    // Hors-ligne : on n'appelle pas le serveur, on enregistre en local.
-    if (shouldGoOffline()) {
-      await finalizeOffline([{ method, amount: totals.ttc }], loyalty.used);
-      return;
-    }
-    const id = await ensureSale();
-    if (!id) return;
-    await syncLines();
-    // Mode école : pas d'appel serveur, on fabrique un faux ticket comme
-    // PaymentModal le fait déjà.
-    if (schoolMode) {
-      const fakeId = `school-receipt-${Date.now()}`;
-      const fakeNumber = `ECOLE-${new Date().toISOString().slice(11, 19).replace(/:/g, '')}`;
-      await onValidated(fakeId, fakeNumber, null);
-      return;
-    }
-    try {
-      const r = await fetch(`/api/sales/${id}/validate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          payments: [{ method, amount: totals.ttc }],
-          loyalty_redemption_amount: loyalty.used > 0 ? loyalty.used : undefined,
-        }),
-      });
-      if (!r.ok) {
-        const j = await r.json().catch(() => ({}));
-        setError(j.error ?? j.message ?? 'Erreur d\'encaissement');
-        return;
-      }
-      const j = await r.json();
-      await onValidated(j.receipt_id, j.receipt_number, j.loyalty, j.gift_cards_issued);
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }
-
   /**
    * Validation d'une vente à 0 € (entièrement remisée / offerte). Aucun
    * règlement n'est nécessaire : on scelle directement avec un tableau de
@@ -1687,15 +1647,11 @@ export default function CashRegister({
             </button>
           )}
 
-          {/* Encaissements rapides : Espèces + Autres en colonne à gauche
-              (chacun sur la moitié de la hauteur), Carte à droite sur toute
-              la hauteur. La modale de règlement n'est ouverte que pour
-              "Autres" (paiements multiples, chèque, lien Stripe, fidélité…). */}
-          {/* Règlements rapides : groupe aligné, espacement régulier, cibles
-              tactiles ≥ 48px. Espèces + Autres (secondaires) sur une ligne,
-              Carte (principal, mis en avant) sur toute la largeur en dessous.
-              Cas particulier : vente à 0 € (offerte / entièrement remisée) →
-              un seul bouton « Valider » car aucun règlement n'est nécessaire. */}
+          {/* Un seul bouton « Paiement » : il ouvre la page de règlement plein
+              écran (choix du mode : espèces, carte, chèque, multiple, lien
+              Stripe, avoir, carte cadeau…). Cas particulier : vente à 0 €
+              (offerte / entièrement remisée) → bouton « Valider » direct car
+              aucun règlement n'est nécessaire. */}
           {lines.length > 0 && totals.ttc === 0 ? (
             <button
               onClick={() => void validateZeroSale()}
@@ -1705,37 +1661,17 @@ export default function CashRegister({
               <span>Valider · 0 €</span>
             </button>
           ) : (
-          <div className="flex flex-col gap-2">
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                disabled={lines.length === 0 || totals.ttc <= 0}
-                onClick={() => void quickPay('cash')}
-                className="btn-soft h-14 text-base font-semibold rounded-xl flex items-center justify-center gap-2 disabled:opacity-40"
-                title="Encaisser en espèces"
-              >
-                <span>Espèces</span>
-              </button>
-              <button
-                disabled={lines.length === 0 || totals.ttc <= 0}
-                onClick={async () => {
-                  if (shouldGoOffline()) { setShowPayment(true); return; }
-                  const id = await ensureSale(); if (id) { await syncLines(); setShowPayment(true); }
-                }}
-                className="btn-soft h-14 text-base font-semibold rounded-xl flex items-center justify-center gap-2 disabled:opacity-40"
-                title="Choisir le mode de règlement (multiple, chèque, lien Stripe…)"
-              >
-                <span>Autres</span>
-              </button>
-            </div>
             <button
               disabled={lines.length === 0 || totals.ttc <= 0}
-              onClick={() => void quickPay('card')}
+              onClick={async () => {
+                if (shouldGoOffline()) { setShowPayment(true); return; }
+                const id = await ensureSale(); if (id) { await syncLines(); setShowPayment(true); }
+              }}
               className="btn-primary h-16 w-full text-xl font-semibold rounded-xl flex items-center justify-center gap-3 disabled:opacity-40"
-              title="Encaisser par carte bancaire"
+              title="Ouvrir le règlement"
             >
-              <span>Carte</span>
+              <span>Paiement</span>
             </button>
-          </div>
           )}
         </div>
 

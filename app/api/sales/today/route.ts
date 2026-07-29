@@ -99,9 +99,19 @@ export async function GET(req: Request) {
   const bankDeposits = Number(depositsRes.rows[0]?.total ?? 0);
   const cashRefunds = Number(cashRefundsRes.rows[0]?.total ?? 0);
 
+  // Heure d'ouverture de la caisse : première session ouverte ce jour-là.
+  const openRes = await query<{ opened_at: string | null }>(
+    `SELECT MIN(opened_at)::text AS opened_at
+       FROM cash_sessions
+      WHERE organization_id = $1
+        AND opened_at::date = COALESCE($2::date, CURRENT_DATE)`,
+    [g.user.organizationId, date],
+  ).catch(() => ({ rows: [{ opened_at: null }] }));
+
   return NextResponse.json({
     sales: rows,
     returns_total: Number(returnsRes.rows[0]?.total ?? 0),
+    opened_at: openRes.rows[0]?.opened_at ?? null,
     cash_summary: {
       cash_sales: cashSales,
       bank_deposits: bankDeposits,
