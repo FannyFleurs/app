@@ -75,7 +75,13 @@ export default function DialogHost() {
 
   return (
     <div
-      className="fixed inset-0 z-[300] grid place-items-center bg-ink/40 backdrop-blur-sm p-4"
+      // Scrim sombre translucide sur toute la fenêtre. Le flou (backdrop-blur)
+      // est réservé au desktop : sur mobile, le ticket est un calque `fixed`
+      // composité à part et iOS/Android échantillonnent le document racine à
+      // travers le backdrop-filter (bug de compositing), affichant le catalogue
+      // derrière la popup au lieu du ticket. Sans flou, l'alpha se compose
+      // normalement par-dessus le calque réellement peint (le ticket).
+      className="fixed inset-0 z-[300] grid place-items-center bg-ink/40 md:backdrop-blur-sm p-4"
       onClick={() => { if (d.kind !== 'prompt') cancel(); }}
       onKeyDown={(e) => {
         if (e.key === 'Escape') cancel();
