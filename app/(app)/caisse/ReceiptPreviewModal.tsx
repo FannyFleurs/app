@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { promptThemed } from '@/lib/ui/dialog';
+import GiftReceiptPickerModal from '@/components/GiftReceiptPickerModal';
 
 interface Props {
   receipt: {
@@ -31,7 +32,6 @@ export default function ReceiptPreviewModal({ receipt, storeId, onClose }: Props
   // donc la position i ici = la position i côté PDF.
   const [saleLines, setSaleLines] = useState<Array<{ label: string; quantity: string }>>([]);
   const [showGiftPicker, setShowGiftPicker] = useState(false);
-  const [giftSel, setGiftSel] = useState<Set<number>>(new Set());
 
   // Charge l'éventuel delivery_info + les lignes de la vente.
   useEffect(() => {
@@ -59,15 +59,7 @@ export default function ReceiptPreviewModal({ receipt, storeId, onClose }: Props
       window.open(`${pdfUrl}?gift=1`, '_blank');
       return;
     }
-    setGiftSel(new Set(saleLines.map((_, i) => i))); // tout coché par défaut
     setShowGiftPicker(true);
-  }
-  function printGift() {
-    const idx = [...giftSel].sort((a, b) => a - b);
-    if (idx.length === 0) return;
-    const all = idx.length === saleLines.length;
-    window.open(`${pdfUrl}?gift=1${all ? '' : `&lines=${idx.join(',')}`}`, '_blank');
-    setShowGiftPicker(false);
   }
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -115,7 +107,7 @@ export default function ReceiptPreviewModal({ receipt, storeId, onClose }: Props
   // Auto-fermeture après 60s. Pause si on ouvre un sous-modal, survol carte,
   // ou facture en cours de génération.
   useEffect(() => {
-    if (paused || showEmailModal || generating) return;
+    if (paused || showEmailModal || showGiftPicker || generating) return;
     const start = Date.now();
     timerRef.current = window.setInterval(() => {
       const elapsed = Date.now() - start;
@@ -124,7 +116,7 @@ export default function ReceiptPreviewModal({ receipt, storeId, onClose }: Props
       setTimeLeft(left);
     }, 250);
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [paused, showEmailModal, generating, onClose]);
+  }, [paused, showEmailModal, showGiftPicker, generating, onClose]);
 
   // Le clic hors carte NE FERME PAS — l'utilisateur doit fermer explicitement
   // (sinon, fermeture intempestive en cliquant à côté pour viser un bouton).
@@ -367,57 +359,11 @@ export default function ReceiptPreviewModal({ receipt, storeId, onClose }: Props
       )}
 
       {showGiftPicker && (
-        <div className="fixed inset-0 z-[70] grid place-items-center bg-ink/40 p-4" onClick={() => setShowGiftPicker(false)}>
-          <div className="card w-full max-w-md p-5" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-semibold">Ticket sans prix</h3>
-            <p className="text-xs text-ink-soft mt-1">
-              Choisissez les articles à faire figurer sur le ticket sans prix.
-            </p>
-            <div className="mt-3 flex items-center justify-between text-xs">
-              <button className="text-accent-deep font-medium" onClick={() => setGiftSel(new Set(saleLines.map((_, i) => i)))}>
-                Tout sélectionner
-              </button>
-              <button className="text-ink-soft" onClick={() => setGiftSel(new Set())}>
-                Tout décocher
-              </button>
-            </div>
-            <ul className="mt-2 max-h-[50vh] overflow-auto divide-y divide-border rounded-xl border border-border">
-              {saleLines.map((l, i) => {
-                const checked = giftSel.has(i);
-                return (
-                  <li key={i}>
-                    <label className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-gray-50">
-                      <input
-                        type="checkbox"
-                        className="h-5 w-5"
-                        checked={checked}
-                        onChange={() => setGiftSel((cur) => {
-                          const next = new Set(cur);
-                          if (next.has(i)) next.delete(i); else next.add(i);
-                          return next;
-                        })}
-                      />
-                      <span className="flex-1 min-w-0">
-                        <span className="text-sm font-medium">{l.label}</span>
-                        <span className="ml-1.5 text-xs text-ink-soft">× {l.quantity}</span>
-                      </span>
-                    </label>
-                  </li>
-                );
-              })}
-            </ul>
-            <div className="mt-4 flex justify-end gap-2">
-              <button onClick={() => setShowGiftPicker(false)} className="btn-ghost min-h-[44px] px-4">Annuler</button>
-              <button
-                onClick={printGift}
-                disabled={giftSel.size === 0}
-                className="btn-primary min-h-[44px] px-4 disabled:opacity-40"
-              >
-                Imprimer ({giftSel.size})
-              </button>
-            </div>
-          </div>
-        </div>
+        <GiftReceiptPickerModal
+          lines={saleLines}
+          pdfBaseUrl={pdfUrl}
+          onClose={() => setShowGiftPicker(false)}
+        />
       )}
     </div>
   );
