@@ -1,5 +1,6 @@
 import { readSessionFromCookie } from '@/lib/auth/session';
 import { query } from '@/lib/db/client';
+import { resolveSettingsLockStoreId } from '@/lib/pos/current-store';
 import DashboardClient from './DashboardClient';
 
 export const dynamic = 'force-dynamic';
@@ -13,8 +14,9 @@ export default async function DashboardPage() {
       ORDER BY name`,
     [user.organizationId],
   );
+  const lockedStoreId = await resolveSettingsLockStoreId(user.organizationId);
 
   const firstName = user.fullName.split(' ')[0] ?? user.fullName;
 
-  return <DashboardClient firstName={firstName} stores={stores.rows} />;
+  return <DashboardClient firstName={firstName} stores={stores.rows} lockedStoreId={lockedStoreId} />;
 }

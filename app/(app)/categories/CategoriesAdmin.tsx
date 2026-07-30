@@ -88,7 +88,9 @@ export default function CategoriesAdmin({ canEdit, backOffice = false, stores = 
         subtitle="Organisez votre catalogue. Une catégorie peut avoir une couleur ET/OU une image qui s'affichera sur la tuile en caisse."
         actions={canEdit ? (
           <div className="flex items-center gap-2">
-            {stores.length > 1 && (
+            {/* Sélecteur de boutique réservé au back-office : sur un poste de
+                caisse, les catégories sont déjà scopées à la boutique du poste. */}
+            {backOffice && stores.length > 1 && (
               <select className="input h-10 text-sm" value={filterStore} onChange={(e) => setFilterStore(e.target.value)}>
                 <option value="">Toutes les boutiques</option>
                 {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}

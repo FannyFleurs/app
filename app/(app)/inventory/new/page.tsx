@@ -1,6 +1,7 @@
 import { readSessionFromCookie } from '@/lib/auth/session';
 import { userCan } from '@/lib/auth/permissions';
 import { query } from '@/lib/db/client';
+import { resolveSettingsLockStoreId } from '@/lib/pos/current-store';
 import InventoryNewForm from './InventoryNewForm';
 
 export const dynamic = 'force-dynamic';
@@ -38,11 +39,14 @@ export default async function InventoryNewPage() {
     [user.organizationId],
   );
 
+  const lockedStoreId = await resolveSettingsLockStoreId(user.organizationId);
+
   return (
     <InventoryNewForm
       stores={stores.rows}
       categories={categories.rows}
       suppliers={suppliers.rows}
+      lockedStoreId={lockedStoreId}
     />
   );
 }
