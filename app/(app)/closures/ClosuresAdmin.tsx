@@ -576,8 +576,6 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
                 <span className="text-sm font-medium">Total compté</span>
                 <span className="text-2xl font-bold tabular-nums">{formatEUR(countedCash)}</span>
               </div>
-              {expectedCash > 0 && countedCash < expectedCash && (
-              )}
 
               {/* Avancement vers le montant attendu */}
               {expectedCash > 0 && (
