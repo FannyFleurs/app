@@ -21,10 +21,11 @@ const DEFAULTS: Settings = {
   brand: '',
 };
 
-export default function PrinterSettingsForm({ canWrite, stores }: {
+export default function PrinterSettingsForm({ canWrite, stores, lockedStoreId }: {
   canWrite: boolean; stores: { id: string; name: string }[];
+  lockedStoreId?: string | null;
 }) {
-  const [storeId, setStoreId] = useState<string>(stores[0]?.id ?? '');
+  const [storeId, setStoreId] = useState<string>(lockedStoreId ?? stores[0]?.id ?? '');
   const [s, setS] = useState<Settings>(DEFAULTS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -91,7 +92,7 @@ export default function PrinterSettingsForm({ canWrite, stores }: {
         title="Imprimante ticket"
         subtitle="Connexion à une imprimante ESC/POS réseau (Epson, Star, Bixolon…), propre à chaque boutique."
         badge={!canWrite ? { label: 'Lecture seule pour votre rôle', tone: 'soft' } : undefined}
-        actions={<StoreScopeSelect stores={stores} value={storeId} onChange={setStoreId} />}
+        actions={<StoreScopeSelect stores={stores} value={storeId} onChange={setStoreId} lockedStoreId={lockedStoreId} />}
       />
 
       <div className="card p-5 space-y-4">

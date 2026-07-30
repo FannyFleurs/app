@@ -3,10 +3,13 @@
 import { useEffect, useState } from 'react';
 import { RECEIPT_DEFAULTS, type ReceiptSettings } from '@/lib/settings/receipt';
 
-export default function ReceiptSettingsForm({ stores, canEdit }: {
+export default function ReceiptSettingsForm({ stores, canEdit, lockedStoreId }: {
   stores: { id: string; name: string }[]; canEdit: boolean;
+  /** Boutique du poste : si défini, on édite UNIQUEMENT cette boutique et le
+   *  sélecteur est masqué (autonomie boutique). Le multi reste en back-office. */
+  lockedStoreId?: string | null;
 }) {
-  const [storeId, setStoreId] = useState<string>(stores[0]?.id ?? '');
+  const [storeId, setStoreId] = useState<string>(lockedStoreId ?? stores[0]?.id ?? '');
   const [form, setForm] = useState<ReceiptSettings>(RECEIPT_DEFAULTS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -62,7 +65,14 @@ export default function ReceiptSettingsForm({ stores, canEdit }: {
             En-tête, pied de page, options d&apos;impression — <strong>propre à chaque boutique</strong>.
           </p>
         </div>
-        {stores.length > 0 && (
+        {lockedStoreId ? (
+          <div className="text-sm">
+            <span className="block text-xs font-medium text-ink-soft mb-1">Boutique</span>
+            <div className="input h-10 min-w-[12rem] inline-flex items-center bg-gray-50 text-ink">
+              {stores.find((s) => s.id === lockedStoreId)?.name ?? 'Cette boutique'}
+            </div>
+          </div>
+        ) : stores.length > 0 && (
           <label className="text-sm">
             <span className="block text-xs font-medium text-ink-soft mb-1">Boutique</span>
             <select

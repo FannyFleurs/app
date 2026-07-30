@@ -3,6 +3,7 @@ import { userCan } from '@/lib/auth/permissions';
 import { query } from '@/lib/db/client';
 import { effectivePlan } from '@/lib/billing/plan-limits';
 import { accessibleStores } from '@/lib/auth/stores-server';
+import { resolveSettingsLockStoreId } from '@/lib/pos/current-store';
 import ScreenDeliveryForm from './ScreenDeliveryForm';
 
 export const dynamic = 'force-dynamic';
@@ -43,6 +44,7 @@ export default async function ScreenDeliverySettingsPage() {
 
   const canEdit = await userCan(user, 'settings.write');
   const stores = await accessibleStores(user);
+  const lockedStoreId = await resolveSettingsLockStoreId(user.organizationId);
 
-  return <ScreenDeliveryForm canEdit={canEdit} stores={stores} />;
+  return <ScreenDeliveryForm canEdit={canEdit} stores={stores} lockedStoreId={lockedStoreId} />;
 }

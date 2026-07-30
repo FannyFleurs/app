@@ -4,10 +4,11 @@ import { useEffect, useState } from 'react';
 import { CASH_DEFAULTS, type CashSettings } from '@/lib/settings/cash';
 import StoreScopeSelect from '@/components/StoreScopeSelect';
 
-export default function CashSettingsForm({ canEdit, stores }: {
+export default function CashSettingsForm({ canEdit, stores, lockedStoreId }: {
   canEdit: boolean; stores: { id: string; name: string }[];
+  lockedStoreId?: string | null;
 }) {
-  const [storeId, setStoreId] = useState<string>(stores[0]?.id ?? '');
+  const [storeId, setStoreId] = useState<string>(lockedStoreId ?? stores[0]?.id ?? '');
   const [form, setForm] = useState<CashSettings>(CASH_DEFAULTS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -53,7 +54,7 @@ export default function CashSettingsForm({ canEdit, stores }: {
             Plafond d&apos;espèces, fonds de caisse minimum, remises en banque — par boutique.
           </p>
         </div>
-        <StoreScopeSelect stores={stores} value={storeId} onChange={setStoreId} />
+        <StoreScopeSelect stores={stores} value={storeId} onChange={setStoreId} lockedStoreId={lockedStoreId} />
       </div>
 
       <div className="card p-5 space-y-4">

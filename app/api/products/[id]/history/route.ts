@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db/client';
 import { requirePermission } from '@/lib/auth/guards';
+import { resolveDeviceStoreId } from '@/lib/pos/current-store';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,6 +17,11 @@ export async function GET(
   if ('response' in g) return g.response;
   const org = g.user.organizationId;
   const productId = params.id;
+  // Isolation boutique : sur un poste de caisse appairé, l'historique des
+  // MOUVEMENTS de stock (ventes, entrées, pertes…) est limité à la boutique
+  // du poste — chaque boutique est autonome. Null (back-office / poste non
+  // appairé) => tous mouvements. (Les changements de prix sont au niveau org.)
+  const storeId = await resolveDeviceStoreId(org);
 
   const movements = await query<{
     id: string; movement_type: string; quantity_delta: string; new_quantity: string;
@@ -50,9 +56,10 @@ export async function GET(
        LEFT JOIN stores cp
          ON cp.id = COALESCE(tin.store_id, tout.store_id)
       WHERE m.organization_id = $1 AND m.product_id = $2
+        AND ($3::uuid IS NULL OR m.store_id = $3)
       ORDER BY m.created_at DESC
       LIMIT 500`,
-    [org, productId],
+    [org, productId, storeId],
   );
 
   const prices = await query<{

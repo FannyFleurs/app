@@ -10,10 +10,11 @@ import type { OpeningFloatSettings } from '@/lib/settings/opening-float';
 import { formatEUR } from '@/lib/services/money';
 import StoreScopeSelect from '@/components/StoreScopeSelect';
 
-export default function OpeningFloatForm({ canEdit, stores }: {
+export default function OpeningFloatForm({ canEdit, stores, lockedStoreId }: {
   canEdit: boolean; stores: { id: string; name: string }[];
+  lockedStoreId?: string | null;
 }) {
-  const [storeId, setStoreId] = useState<string>(stores[0]?.id ?? '');
+  const [storeId, setStoreId] = useState<string>(lockedStoreId ?? stores[0]?.id ?? '');
   const [mode, setMode] = useState<OpeningFloatMode>('manual');
   const [amount, setAmount] = useState<number>(0);
   const [loading, setLoading] = useState(true);
@@ -63,7 +64,7 @@ export default function OpeningFloatForm({ canEdit, stores }: {
             Comment pré-remplir le fond de caisse à l&apos;ouverture — par boutique.
           </p>
         </div>
-        <StoreScopeSelect stores={stores} value={storeId} onChange={setStoreId} />
+        <StoreScopeSelect stores={stores} value={storeId} onChange={setStoreId} lockedStoreId={lockedStoreId} />
       </div>
 
       <div className="card p-5 space-y-3">

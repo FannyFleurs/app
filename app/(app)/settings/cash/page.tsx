@@ -1,6 +1,7 @@
 import { readSessionFromCookie } from '@/lib/auth/session';
 import { userCan } from '@/lib/auth/permissions';
 import { accessibleStores } from '@/lib/auth/stores-server';
+import { resolveSettingsLockStoreId } from '@/lib/pos/current-store';
 import CashSettingsForm from './CashSettingsForm';
 
 export const dynamic = 'force-dynamic';
@@ -13,6 +14,7 @@ export default async function CashSettingsPage() {
 
   const canEdit = (await userCan(user, 'settings.write'));
   const stores = await accessibleStores(user);
+  const lockedStoreId = await resolveSettingsLockStoreId(user.organizationId);
 
-  return <CashSettingsForm canEdit={canEdit} stores={stores} />;
+  return <CashSettingsForm canEdit={canEdit} stores={stores} lockedStoreId={lockedStoreId} />;
 }

@@ -1,6 +1,7 @@
 import { readSessionFromCookie } from '@/lib/auth/session';
 import { userCan } from '@/lib/auth/permissions';
 import { query } from '@/lib/db/client';
+import { resolveSettingsLockStoreId } from '@/lib/pos/current-store';
 import ReceiptSettingsForm from './ReceiptSettingsForm';
 
 export const dynamic = 'force-dynamic';
@@ -29,6 +30,7 @@ export default async function ReceiptSettingsPage() {
   );
 
   const canEdit = (await userCan(user, 'settings.write'));
+  const lockedStoreId = await resolveSettingsLockStoreId(user.organizationId);
 
-  return <ReceiptSettingsForm stores={stores.rows} canEdit={canEdit} />;
+  return <ReceiptSettingsForm stores={stores.rows} canEdit={canEdit} lockedStoreId={lockedStoreId} />;
 }
