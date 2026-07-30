@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { formatEUR } from '@/lib/services/money';
 
 type StockEntry = {
@@ -40,9 +41,17 @@ function fmtDate(iso: string): string {
 }
 
 export default function ProductHistory({ productId }: { productId: string }) {
+  const router = useRouter();
   const [entries, setEntries] = useState<Entry[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
+
+  // Ouvre une vente dans « Ma journée » (même si la date est lointaine) :
+  // on force la date du jour de la vente et on présélectionne le ticket.
+  function openSaleInDay(saleId: string, createdAtIso: string) {
+    const day = createdAtIso.slice(0, 10); // YYYY-MM-DD
+    router.push(`/ma-journee?date=${day}&sale=${saleId}`);
+  }
 
   useEffect(() => {
     void (async () => {
@@ -90,7 +99,7 @@ export default function ProductHistory({ productId }: { productId: string }) {
       ) : (
         <ul className="space-y-2 max-h-[55vh] overflow-y-auto pr-0.5">
           {filtered.map((e) => e.kind === 'stock'
-            ? <StockRow key={e.id} e={e} />
+            ? <StockRow key={e.id} e={e} onOpenSale={openSaleInDay} />
             : <PriceRow key={e.id} e={e} />)}
         </ul>
       )}
@@ -104,15 +113,29 @@ function Dot({ tone }: { tone: 'in' | 'out' | 'neutral' | 'price' }) {
   return <span className={`mt-1 inline-block h-2.5 w-2.5 rounded-full shrink-0 ${cls}`} />;
 }
 
-function StockRow({ e }: { e: StockEntry }) {
+function StockRow({ e, onOpenSale }: { e: StockEntry; onOpenSale?: (saleId: string, createdAtIso: string) => void }) {
   const meta = TYPE_META[e.movement_type] ?? { label: e.movement_type, tone: 'neutral' as const };
+  // Une entrée « vente » rattachée à un ticket est cliquable : elle ouvre la
+  // vente dans « Ma journée » (à sa date, même lointaine).
+  const clickable = !!e.sale_id && !!onOpenSale;
+  const open = () => { if (clickable) onOpenSale!(e.sale_id!, e.created_at); };
   return (
-    <li className="rounded-xl border border-border p-3">
+    <li
+      className={`rounded-xl border border-border p-3 ${clickable ? 'cursor-pointer hover:border-accent-deep hover:bg-accent-soft/40 transition-colors' : ''}`}
+      onClick={clickable ? open : undefined}
+      role={clickable ? 'button' : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onKeyDown={clickable ? (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); open(); } } : undefined}
+      title={clickable ? 'Ouvrir cette vente dans Ma journée' : undefined}
+    >
       <div className="flex items-start gap-2.5">
         <Dot tone={meta.tone} />
         <div className="flex-1 min-w-0">
           <div className="flex items-baseline justify-between gap-2">
-            <span className="font-medium">{meta.label}</span>
+            <span className="font-medium">
+              {meta.label}
+              {clickable && <span className="ml-1.5 text-xs text-accent-deep font-normal">· voir la vente →</span>}
+            </span>
             <span className={`tabular-nums font-semibold whitespace-nowrap ${
               e.quantity_delta > 0 ? 'text-success' : e.quantity_delta < 0 ? 'text-danger' : ''
             }`}>

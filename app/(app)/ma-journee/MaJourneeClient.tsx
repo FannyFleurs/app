@@ -61,6 +61,9 @@ export default function MaJourneeClient() {
   const [sealedAt, setSealedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<string | null>(null);
+  // Vente à ouvrir automatiquement (deep-link depuis l'historique article :
+  // /ma-journee?date=…&sale=…). Ouverte une fois la journée chargée.
+  const [pendingSaleId, setPendingSaleId] = useState<string | null>(null);
   const [detail, setDetail] = useState<SaleDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [search, setSearch] = useState('');
@@ -95,6 +98,29 @@ export default function MaJourneeClient() {
       .catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date]);
+
+  // Deep-link depuis l'historique article : ?date=YYYY-MM-DD&sale=<id>.
+  // On force la date de la vente et on mémorise le ticket à ouvrir.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const sp = new URLSearchParams(window.location.search);
+    const d = sp.get('date');
+    const s = sp.get('sale');
+    if (d) setDate(d);
+    if (s) setPendingSaleId(s);
+    // Une seule lecture au montage.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Ouvre la vente en attente dès que la journée est chargée (après le
+  // reloadDay déclenché par le changement de date, qui vide la sélection).
+  useEffect(() => {
+    if (pendingSaleId && !loading) {
+      void pickSale(pendingSaleId);
+      setPendingSaleId(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingSaleId, loading]);
 
   // Charge le rapport X complet quand on passe en mode complet (ou change de date).
   useEffect(() => {
