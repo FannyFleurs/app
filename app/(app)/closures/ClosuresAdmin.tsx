@@ -691,7 +691,7 @@ export default function ClosuresAdmin({ stores, registers }: { stores: Store[]; 
                   onClick={() => void seal()}
                   className="btn-primary w-full h-11"
                 >
-                  {sealing ? 'Clôture…' : '🔒 Clôturer la journée et générer le Z'}
+                  {sealing ? 'Clôture…' : 'Clôturer la journée'}
                 </button>
               </>
             )}
