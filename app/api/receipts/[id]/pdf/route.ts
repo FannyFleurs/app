@@ -11,8 +11,13 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   if ('response' in g) return g.response;
 
   // ?gift=1 → ticket « sans prix » (bon d'échange) : mêmes articles, sans
-  // aucun montant ni total.
-  const gift = new URL(_req.url).searchParams.get('gift') === '1';
+  // aucun montant ni total. ?lines=0,2,3 → sous-ensemble d'articles à imprimer.
+  const url = new URL(_req.url);
+  const gift = url.searchParams.get('gift') === '1';
+  const linesParam = url.searchParams.get('lines');
+  const giftLineIndices = gift && linesParam
+    ? linesParam.split(',').map((s) => parseInt(s, 10)).filter((n) => Number.isInteger(n) && n >= 0)
+    : null;
 
   const r = await query<{
     id: string; number: string;
@@ -70,6 +75,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     cashier: c.user_name ?? undefined,
     receipt: receiptSettings,
     giftReceipt: gift,
+    giftLineIndices,
     customerName: extras.customerName,
     loyalty: extras.loyalty,
   });
