@@ -47,10 +47,16 @@ interface PreviewData {
 interface Store { id: string; name: string }
 interface Register { id: string; store_id: string; code: string; name: string }
 
-export default function ClosuresAdmin({ stores, registers }: { stores: Store[]; registers: Register[] }) {
-  const [storeId, setStoreId] = useState(stores[0]?.id ?? '');
+export default function ClosuresAdmin({ stores, registers, defaultStoreId, initialPreview }: {
+  stores: Store[]; registers: Register[];
+  /** Boutique du poste (rendu serveur). */
+  defaultStoreId?: string;
+  /** Aperçu déjà calculé côté serveur (1er rendu sans fetch). */
+  initialPreview?: PreviewData | null;
+}) {
+  const [storeId, setStoreId] = useState(defaultStoreId || stores[0]?.id || '');
   const [date] = useState(new Date().toISOString().slice(0, 10));
-  const [preview, setPreview] = useState<PreviewData | null>(null);
+  const [preview, setPreview] = useState<PreviewData | null>(initialPreview ?? null);
   const [denomCount, setDenomCount] = useState<Record<string, number>>({});
   const [declared, setDeclared] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState('');
@@ -60,7 +66,7 @@ export default function ClosuresAdmin({ stores, registers }: { stores: Store[]; 
   const [showDeposit, setShowDeposit] = useState(false);
   const [drawerToast, setDrawerToast] = useState<string | null>(null);
   const [restored, setRestored] = useState<boolean>(false);
-  const [loadingPreview, setLoadingPreview] = useState(true);
+  const [loadingPreview, setLoadingPreview] = useState(!initialPreview);
 
   // ---------------------------------------------------------------------------
   // PERSISTANCE LOCALE DU COMPTAGE
@@ -159,7 +165,15 @@ export default function ClosuresAdmin({ stores, registers }: { stores: Store[]; 
       setLoadingPreview(false);
     }
   }, [storeId, date]);
-  useEffect(() => { setSealedResult(null); void loadPreview(); }, [loadPreview]);
+  // On saute le 1er fetch client si l'aperçu vient déjà du serveur (même
+  // boutique/date) — la page est déjà peinte. On refetch ensuite normalement
+  // si la boutique/date change ou après un scellement/une remise.
+  const skipFirstLoad = useRef(!!initialPreview);
+  useEffect(() => {
+    setSealedResult(null);
+    if (skipFirstLoad.current) { skipFirstLoad.current = false; return; }
+    void loadPreview();
+  }, [loadPreview]);
 
   const countedCash = useMemo(() => {
     let total = 0;
