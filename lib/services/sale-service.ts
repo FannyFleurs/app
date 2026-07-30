@@ -854,14 +854,20 @@ export class SaleService {
     });
   }
 
-  static async listHeld(organizationId: string, registerId: string) {
+  /**
+   * Tickets en attente d'une BOUTIQUE (et non d'une caisse) : toutes les
+   * caisses d'une même boutique partagent les mêmes tickets en attente. On
+   * peut donc commencer une vente sur une caisse et la reprendre sur une autre
+   * — de la même boutique uniquement.
+   */
+  static async listHeld(organizationId: string, storeId: string) {
     const { rows } = await withTransaction(async (client: PoolClient) =>
       client.query(
         `SELECT id, held_label, total_ttc, created_at
            FROM sales
-          WHERE organization_id = $1 AND register_id = $2 AND status = 'on_hold'
+          WHERE organization_id = $1 AND store_id = $2 AND status = 'on_hold'
           ORDER BY created_at DESC`,
-        [organizationId, registerId],
+        [organizationId, storeId],
       ),
     );
     return rows;
