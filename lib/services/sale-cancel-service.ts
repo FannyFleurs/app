@@ -26,7 +26,7 @@ export class SaleCancelService {
     userId: string;
     saleId: string;
     reason: string;
-  }): Promise<{ credit_note_id: string; number: string; amount: number; fiscal_hash: string }> {
+  }): Promise<{ credit_note_id: string; number: string; amount: number; fiscal_hash: string; credit_invoice_id: string | null }> {
     if (!args.reason.trim()) throw new Error('REASON_REQUIRED');
 
     return withTransaction(async (client) => {
@@ -44,16 +44,26 @@ export class SaleCancelService {
       if (saleRes.rowCount === 0) throw new Error('SALE_NOT_FOUND');
       const sale = saleRes.rows[0]!;
       if (sale.status !== 'validated') throw new Error('SALE_NOT_CANCELABLE');
+      // Facture de PÉRIODE « en compte » (regroupe plusieurs ventes) : hors
+      // périmètre de l'annulation mono-vente.
       if (sale.account_invoice_id) throw new Error('SALE_INVOICED');
 
-      // Refuse si une facture (mono-vente) a déjà été émise pour cette vente :
-      // une facture validée est immuable, annuler la vente créerait une
-      // incohérence. L'annulation doit alors passer par un avoir de facture.
-      const invRef = await client.query(
-        `SELECT 1 FROM invoices WHERE sale_id = $1 AND status <> 'cancelled' LIMIT 1`,
-        [sale.id],
+      // Facture MONO-VENTE déjà émise : on ne bloque plus. Une facture est
+      // immuable, donc on émet une FACTURE D'AVOIR (credit-note invoice) qui la
+      // contre-passe (montants négatifs) et on marque l'originale « annulée ».
+      const invRes = await client.query<{
+        id: string; number: string | null; customer_id: string | null; store_id: string;
+        total_ht: string; total_tva: string; total_ttc: string;
+        tva_breakdown: { rate: number; base_ht: number; tva: number; ttc: number }[] | null;
+      }>(
+        `SELECT id, number, customer_id, store_id,
+                total_ht::text, total_tva::text, total_ttc::text, tva_breakdown
+           FROM invoices
+          WHERE sale_id = $1 AND organization_id = $2 AND status <> 'cancelled'
+          ORDER BY created_at DESC LIMIT 1`,
+        [sale.id, args.organizationId],
       );
-      if (invRef.rowCount && invRef.rowCount > 0) throw new Error('SALE_INVOICED');
+      const invoiceToReverse = invRes.rows[0] ?? null;
 
       // Refuse si des avoirs (reprises partielles) existent déjà : le montant a
       // déjà été partiellement contre-passé, l'annulation totale n'a plus de sens.
@@ -295,13 +305,98 @@ export class SaleCancelService {
         }
       }
 
+      // 8bis. FACTURE D'AVOIR : si la vente était facturée (facture mono-vente),
+      // on émet une facture d'avoir (invoice_type='credit_note') qui contre-passe
+      // la facture d'origine (montants négatifs), puis on annule l'originale.
+      // On réutilise le NUMÉRO de l'avoir (A-…) : un seul document d'avoir.
+      let creditInvoiceId: string | null = null;
+      if (invoiceToReverse) {
+        const issueDate = new Date().toISOString().slice(0, 10);
+        const negBreakdown = (invoiceToReverse.tva_breakdown ?? []).map((t) => ({
+          rate: t.rate, base_ht: -t.base_ht, tva: -t.tva, ttc: -t.ttc,
+        }));
+        const cnInv = await client.query<{ id: string }>(
+          `INSERT INTO invoices
+             (organization_id, store_id, customer_id, sale_id, invoice_type,
+              number, sequence_value, status, issue_date, service_date, due_date,
+              total_ht, total_tva, total_ttc, tva_breakdown, notes, metadata, validated_at)
+           VALUES ($1,$2,$3,$4,'credit_note',$5,$6,'validated',$7,$7,$7,$8,$9,$10,$11,$12,$13, now())
+           RETURNING id`,
+          [
+            args.organizationId, invoiceToReverse.store_id, invoiceToReverse.customer_id, sale.id,
+            number, seqValue.toString(), issueDate,
+            -Number(invoiceToReverse.total_ht), -Number(invoiceToReverse.total_tva), -Number(invoiceToReverse.total_ttc),
+            JSON.stringify(negBreakdown),
+            `Avoir sur facture ${invoiceToReverse.number ?? ''} — annulation vente ${sale.receipt_number} (${args.reason.trim()})`,
+            JSON.stringify({ credited_invoice_id: invoiceToReverse.id, credited_invoice_number: invoiceToReverse.number }),
+          ],
+        );
+        creditInvoiceId = cnInv.rows[0]!.id;
+
+        // Lignes = celles de la facture d'origine, en négatif.
+        const invLines = await client.query<{
+          line_index: number; label: string; quantity: string; unit_price_ht: string;
+          discount_pct: string; tax_rate: string; tax_rate_code: string;
+          line_ht: string; line_tva: string; line_ttc: string;
+        }>(
+          `SELECT line_index, label, quantity, unit_price_ht, discount_pct, tax_rate, tax_rate_code,
+                  line_ht, line_tva, line_ttc
+             FROM invoice_lines WHERE invoice_id = $1 ORDER BY line_index`,
+          [invoiceToReverse.id],
+        );
+        for (const l of invLines.rows) {
+          await client.query(
+            `INSERT INTO invoice_lines
+               (organization_id, invoice_id, line_index, label, quantity,
+                unit_price_ht, discount_pct, tax_rate, tax_rate_code,
+                line_ht, line_tva, line_ttc)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+            [
+              args.organizationId, creditInvoiceId, l.line_index, l.label, l.quantity,
+              l.unit_price_ht, l.discount_pct, l.tax_rate, l.tax_rate_code,
+              -Number(l.line_ht), -Number(l.line_tva), -Number(l.line_ttc),
+            ],
+          );
+        }
+
+        // Événement fiscal (inaltérabilité). Le cumul a déjà été ajusté par
+        // SALE_CANCELLED_BY_CREDIT_NOTE → delta 0 ici.
+        const invEvent = await fiscal.recordEvent({
+          organizationId: args.organizationId,
+          storeId: invoiceToReverse.store_id,
+          userId: args.userId,
+          eventType: 'INVOICE_VALIDATED',
+          entityType: 'invoice',
+          entityId: creditInvoiceId,
+          payload: {
+            invoice_id: creditInvoiceId, invoice_number: number, invoice_type: 'credit_note',
+            credited_invoice_id: invoiceToReverse.id, credited_invoice_number: invoiceToReverse.number,
+            sale_id: sale.id, total_ttc: -Number(invoiceToReverse.total_ttc),
+          },
+          amountTtcDelta: 0,
+        });
+        await client.query(
+          `UPDATE invoices SET fiscal_hash = $1, fiscal_event_id = $2 WHERE id = $3`,
+          [invEvent.currentHash, invEvent.id, creditInvoiceId],
+        );
+
+        // Annule la facture d'origine.
+        await client.query(
+          `UPDATE invoices SET status = 'cancelled', updated_at = now() WHERE id = $1`,
+          [invoiceToReverse.id],
+        );
+      }
+
       // 9. Marque la vente comme annulée (seule transition tolérée par le trigger)
       await client.query(
         `UPDATE sales SET status = 'cancelled_by_credit_note', updated_at = now() WHERE id = $1`,
         [sale.id],
       );
 
-      return { credit_note_id: creditNoteId, number, amount, fiscal_hash: event.currentHash };
+      return {
+        credit_note_id: creditNoteId, number, amount, fiscal_hash: event.currentHash,
+        credit_invoice_id: creditInvoiceId,
+      };
     });
   }
 }
