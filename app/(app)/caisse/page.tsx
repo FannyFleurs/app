@@ -1,3 +1,4 @@
+import { cookies } from 'next/headers';
 import { readSessionFromCookie } from '@/lib/auth/session';
 import { query } from '@/lib/db/client';
 import CashRegister from './CashRegister';
@@ -104,6 +105,22 @@ export default async function CaissePage() {
     );
   }
 
+  // Seed initial CÔTÉ SERVEUR : on résout le poste (cookie device → caisse
+  // appairée) et sa session ouverte, pour que le 1er rendu affiche déjà la
+  // caisse (sans « Chargement caisse… » dépendant d'un fetch client qui, sur
+  // certains contextes iOS PWA, ne se peignait qu'après un contact).
+  const deviceId = cookies().get('webpos_device_id')?.value ?? null;
+  const bound = deviceId ? registers.rows.find((r) => r.device_id === deviceId) : undefined;
+  let initial: { deviceId: string; storeId: string; registerId: string; sessionId: string | null } | null = null;
+  if (deviceId && bound) {
+    const sess = await query<{ id: string }>(
+      `SELECT id FROM cash_sessions WHERE register_id = $1 AND status = 'open'
+        ORDER BY opened_at DESC LIMIT 1`,
+      [bound.id],
+    );
+    initial = { deviceId, storeId: bound.store_id, registerId: bound.id, sessionId: sess.rows[0]?.id ?? null };
+  }
+
   return (
     <CashRegister
       stores={stores.rows}
@@ -113,6 +130,7 @@ export default async function CaissePage() {
       currentUser={{ id: user.id, name: user.fullName, role: user.role }}
       posUi={posSettings}
       deferredOrdersEnabled={screenDelivery.enabled}
+      initial={initial}
     />
   );
 }

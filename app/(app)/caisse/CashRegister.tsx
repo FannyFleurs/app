@@ -88,6 +88,9 @@ interface Props {
   posUi: PosUiSettings;
   /** Si false, le bouton "Commande differee (retrait a date)" est masque. */
   deferredOrdersEnabled: boolean;
+  /** État initial résolu côté serveur (poste appairé + session ouverte) pour
+   *  un 1er rendu sans « Chargement caisse… ». Null si non appairé. */
+  initial?: { deviceId: string; storeId: string; registerId: string; sessionId: string | null } | null;
 }
 
 type View = { kind: 'categories' } | { kind: 'products'; categoryId: string | 'uncategorized' };
@@ -95,7 +98,7 @@ type View = { kind: 'categories' } | { kind: 'products'; categoryId: string | 'u
 const FREE_PRICE_TAX_CODE_DEFAULT = 'TVA20';
 
 export default function CashRegister({
-  stores, registers, taxRates, storeTaxDefaults, currentUser, posUi, deferredOrdersEnabled,
+  stores, registers, taxRates, storeTaxDefaults, currentUser, posUi, deferredOrdersEnabled, initial,
 }: Props) {
   const metrics = useMemo(() => tileMetrics(posUi.tile_size), [posUi.tile_size]);
   // Mode école : quand actif, on ne fait AUCUN appel mutant côté serveur.
@@ -109,9 +112,10 @@ export default function CashRegister({
   // - registerId/storeId : non renseignes tant que la caisse n'a pas
   //   ete choisie (premier accès sur ce poste). Un ecran de selection
   //   s'affiche pour que l'utilisateur pique une caisse libre.
-  const [deviceId, setDeviceId] = useState<string | null>(null);
-  const [storeId, setStoreId] = useState<string>('');
-  const [registerId, setRegisterId] = useState<string>('');
+  // Seed serveur (poste appairé) : la caisse s'affiche dès le 1er rendu.
+  const [deviceId, setDeviceId] = useState<string | null>(initial?.deviceId ?? null);
+  const [storeId, setStoreId] = useState<string>(initial?.storeId ?? '');
+  const [registerId, setRegisterId] = useState<string>(initial?.registerId ?? '');
   const [pickerNeeded, setPickerNeeded] = useState(false);
 
   useEffect(() => {
@@ -133,8 +137,11 @@ export default function CashRegister({
     }
   }, [registers]);
 
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [sessionLoading, setSessionLoading] = useState(true);
+  const [sessionId, setSessionId] = useState<string | null>(initial?.sessionId ?? null);
+  // Session déjà résolue côté serveur (poste appairé) → pas d'écran de
+  // chargement au 1er rendu. La vérification client se fait ensuite en fond.
+  const [sessionLoading, setSessionLoading] = useState(!initial);
+  const sessionKnownRef = useRef<boolean>(!!initial);
   const [showOpenSession, setShowOpenSession] = useState(false);
 
   const [products, setProducts] = useState<PosProduct[]>([]);
@@ -281,10 +288,15 @@ export default function CashRegister({
   // Vérifie session caisse
   const refreshSession = useCallback(async () => {
     if (!registerId) return;
-    setSessionLoading(true);
+    // On n'affiche « Chargement caisse… » QUE si l'état session est encore
+    // inconnu. Si le serveur l'a déjà fourni (poste appairé) ou qu'on l'a déjà
+    // chargé, on rafraîchit EN FOND, sans écran de chargement (évite le flash
+    // et le blocage de peinture iOS PWA).
+    if (!sessionKnownRef.current) setSessionLoading(true);
     // Mode école : on simule une session ouverte sans appeler le serveur.
     if (schoolMode) {
       setSessionId('school-session');
+      sessionKnownRef.current = true;
       setSessionLoading(false);
       return;
     }
@@ -293,6 +305,7 @@ export default function CashRegister({
       const j = await res.json();
       setSessionId(j.session?.id ?? null);
     }
+    sessionKnownRef.current = true;
     setSessionLoading(false);
   }, [registerId, schoolMode]);
 
