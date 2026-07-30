@@ -1,5 +1,5 @@
 import PDFDocument from 'pdfkit';
-import { formatEUR } from './money';
+import { formatEUR, round2 } from './money';
 import type { ReceiptSettings } from '@/lib/settings/receipt';
 
 export interface ReceiptSnapshot {
@@ -20,7 +20,7 @@ export interface ReceiptSnapshot {
     tax_rate: number;
     line_ttc: number;
   }>;
-  payments: { method: string; amount: number; reference?: string | null }[];
+  payments: { method: string; amount: number; given_amount?: number | null; reference?: string | null }[];
 }
 
 export interface OrgInfo {
@@ -85,10 +85,11 @@ export async function renderReceiptPdf(
       } catch { /* ignore image errors */ }
     }
 
+    // En-tête : uniquement le NOM DE LA BOUTIQUE (nom de la société / raison
+    // sociale retiré à la demande du commerçant).
     const shopName = rs?.shop_name?.trim() || org.name;
     doc.font('Helvetica-Bold').fontSize(11).text(shopName, { align: 'center' });
     doc.font('Helvetica').fontSize(8);
-    if (org.legal_name && org.legal_name !== shopName) doc.text(org.legal_name, { align: 'center' });
 
     const address1 = rs?.address_line1?.trim() || org.address?.line1;
     if (address1) doc.text(address1, { align: 'center' });
@@ -97,20 +98,22 @@ export async function renderReceiptPdf(
       || [org.address?.zip, org.address?.city].filter(Boolean).join(' ');
     if (zipCity) doc.text(zipCity, { align: 'center' });
 
+    // Ordre demandé : téléphone AVANT le SIRET.
+    const phone = rs?.phone?.trim() || org.phone;
+    if (phone) doc.text(phone, { align: 'center' });
+
     const siret = rs?.siret?.trim() || org.siret;
     if (siret) doc.text(`SIRET ${siret}`, { align: 'center' });
 
     const vat = rs?.vat_number?.trim() || org.vat_number;
     if (vat) doc.text(`TVA ${vat}`, { align: 'center' });
 
-    const phone = rs?.phone?.trim() || org.phone;
-    if (phone) doc.text(phone, { align: 'center' });
+    // Site web propre à la boutique (réglages ticket, spécifiques boutique).
+    const website = rs?.website?.trim();
+    if (website) doc.text(website, { align: 'center' });
 
-    if (rs?.welcome_message?.trim()) {
-      doc.moveDown(0.2);
-      doc.font('Helvetica-Oblique').text(rs.welcome_message.trim(), { align: 'center' });
-      doc.font('Helvetica');
-    }
+    // NB : le message de remerciement (ex-« message de bienvenue ») est
+    // désormais imprimé TOUT EN BAS du ticket (cf. fin de fonction).
 
     doc.moveDown(0.5);
     doc.font('Helvetica-Bold').fontSize(9)
@@ -118,14 +121,14 @@ export async function renderReceiptPdf(
     doc.font('Helvetica').fontSize(8);
     const date = new Date(snapshot.validated_at);
     doc.text(date.toLocaleString('fr-FR', { timeZone: 'Europe/Paris' }), { align: 'center' });
+    // Vendeur conservé ; nom de boutique + n° de caisse retirés du sous-ticket
+    // (la boutique figure déjà en en-tête).
     if (options.cashier) doc.text(`Vendeur : ${options.cashier}`, { align: 'center' });
-    if (options.storeName) doc.text(options.storeName, { align: 'center' });
-    if (options.registerCode) doc.text(`Caisse ${options.registerCode}`, { align: 'center' });
 
-    // Ticket sans prix : bandeau « BON ÉCHANGE » bien visible.
+    // Ticket sans prix : bandeau bien visible.
     if (gift) {
       doc.moveDown(0.3);
-      doc.font('Helvetica-Bold').fontSize(11).text('BON ÉCHANGE', { align: 'center' });
+      doc.font('Helvetica-Bold').fontSize(11).text('TICKET SANS PRIX', { align: 'center' });
       doc.font('Helvetica').fontSize(8);
     }
 
@@ -144,15 +147,18 @@ export async function renderReceiptPdf(
         doc.text(`${formatQty(l.quantity)}  ${l.label}`);
       }
     } else {
+      // Ligne : « qté  désignation » ........ montant brut (avant remise).
+      // Si remise : sous-ligne « Remise x % » ........ -montant.
       for (const l of snapshot.lines) {
-        const qty = formatQty(l.quantity);
-        const unit = formatEUR(l.unit_price_ttc);
-        const ttc = formatEUR(l.line_ttc);
-        doc.text(l.label, { continued: false });
-        const sub = `${qty} × ${unit}${l.discount_amount > 0 ? ` (-${formatEUR(l.discount_amount)})` : ''}`;
+        const grossTtc = round2(l.unit_price_ttc * l.quantity);
         const left = doc.x;
-        doc.text(sub, left, doc.y, { continued: true });
-        doc.text(ttc, { align: 'right' });
+        doc.text(`${formatQty(l.quantity)}  ${l.label}`, left, doc.y, { continued: true });
+        doc.text(formatEUR(grossTtc), { align: 'right' });
+        if (l.discount_amount > 0) {
+          const pct = grossTtc > 0 ? (l.discount_amount / grossTtc) * 100 : 0;
+          doc.text(`   Remise ${formatPct(pct)}`, left, doc.y, { continued: true });
+          doc.text(`-${formatEUR(l.discount_amount)}`, { align: 'right' });
+        }
       }
     }
 
@@ -161,14 +167,18 @@ export async function renderReceiptPdf(
 
     // Totaux / TVA / paiements : uniquement sur le ticket avec prix.
     if (!gift) {
+      // Si des remises existent, on montre le sous-total et la remise avant le
+      // total (remise bien lisible, comme demandé).
+      if (snapshot.totals.total_discount > 0) {
+        doc.font('Helvetica').fontSize(8);
+        rowLine(doc, 'Sous-total', formatEUR(round2(snapshot.totals.total_ttc + snapshot.totals.total_discount)));
+        rowLine(doc, 'Remise totale', `-${formatEUR(snapshot.totals.total_discount)}`);
+      }
       doc.font('Helvetica-Bold').fontSize(10);
       rowLine(doc, 'TOTAL TTC', formatEUR(snapshot.totals.total_ttc));
       doc.font('Helvetica').fontSize(8);
       rowLine(doc, 'Dont HT', formatEUR(snapshot.totals.total_ht));
       rowLine(doc, 'Dont TVA', formatEUR(snapshot.totals.total_tva));
-      if (snapshot.totals.total_discount > 0) {
-        rowLine(doc, 'Remises', `-${formatEUR(snapshot.totals.total_discount)}`);
-      }
 
       if (rs?.show_tax_breakdown ?? true) {
         doc.moveDown(0.3);
@@ -183,9 +193,19 @@ export async function renderReceiptPdf(
 
       doc.moveDown(0.3);
       doc.text('-'.repeat(40), { align: 'center' });
+      // Règlements. Pour les espèces avec sur-paiement (rendu monnaie saisi en
+      // caisse), on affiche le montant DONNÉ puis le « Rendu ».
+      let change = 0;
       for (const p of snapshot.payments) {
-        rowLine(doc, PAYMENT_LABELS[p.method] ?? p.method, formatEUR(p.amount));
+        const label = PAYMENT_LABELS[p.method] ?? p.method;
+        if (p.method === 'cash' && p.given_amount != null && p.given_amount > p.amount) {
+          change = round2(change + (p.given_amount - p.amount));
+          rowLine(doc, label, formatEUR(p.given_amount));
+        } else {
+          rowLine(doc, label, formatEUR(p.amount));
+        }
       }
+      if (change > 0) rowLine(doc, 'Rendu', formatEUR(change));
     }
 
     // Code-barres du numéro de ticket
@@ -194,14 +214,10 @@ export async function renderReceiptPdf(
       drawCode128(doc, snapshot.receipt_number);
     }
 
-    if (rs?.footer_message?.trim()) {
-      doc.moveDown(0.5);
-      doc.font('Helvetica').fontSize(8)
-         .text(rs.footer_message.trim(), { align: 'center' });
-    }
-
-    // Mentions fiscales : uniquement sur le vrai ticket (le bon d'échange
-    // n'est pas le document fiscal — il ne porte ni prix ni empreinte).
+    // Mentions fiscales : uniquement sur le vrai ticket (le ticket sans prix
+    // n'est pas le document fiscal — il ne porte ni prix ni empreinte). Elles
+    // sont placées AVANT les messages personnalisés pour que le remerciement
+    // reste tout en bas.
     if (!gift) {
       doc.moveDown(0.5);
       doc.font('Helvetica').fontSize(7);
@@ -212,6 +228,20 @@ export async function renderReceiptPdf(
       doc.text('Système conforme aux exigences d\'inaltérabilité (art. 286, I, 3°bis CGI)', {
         align: 'center',
       });
+    }
+
+    // Messages personnalisés TOUT EN BAS : pied de page puis remerciement
+    // (« Merci de votre visite » par défaut). Les deux restent éditables dans
+    // les réglages ticket, par boutique.
+    if (rs?.footer_message?.trim()) {
+      doc.moveDown(0.5);
+      doc.font('Helvetica').fontSize(8)
+         .text(rs.footer_message.trim(), { align: 'center' });
+    }
+    if (rs?.welcome_message?.trim()) {
+      doc.moveDown(0.4);
+      doc.font('Helvetica-Oblique').fontSize(9)
+         .text(rs.welcome_message.trim(), { align: 'center' });
     }
 
     doc.end();
@@ -255,4 +285,10 @@ function rowLine(doc: PDFKit.PDFDocument, label: string, value: string) {
 
 function formatQty(q: number): string {
   return Number.isInteger(q) ? String(q) : q.toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
+}
+
+/** Pourcentage de remise formaté « 30 % » / « 12,5 % » (sans décimales inutiles). */
+function formatPct(p: number): string {
+  const s = Number.isInteger(p) ? String(p) : p.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+  return `${s.replace('.', ',')} %`;
 }

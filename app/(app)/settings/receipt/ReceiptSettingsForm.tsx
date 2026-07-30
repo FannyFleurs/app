@@ -142,15 +142,21 @@ export default function ReceiptSettingsForm({ stores, canEdit }: {
                        onChange={(e) => setForm({ ...form, vat_number: e.target.value })} />
               </Field>
             </div>
+
+            <Field label="Site web (propre à cette boutique)">
+              <input className="input" value={form.website} disabled={!canEdit}
+                     placeholder="ex : plante-verte.fr"
+                     onChange={(e) => setForm({ ...form, website: e.target.value })} />
+            </Field>
           </div>
 
           <div className="card p-5 space-y-4">
             <h2 className="font-semibold">Messages</h2>
-            <Field label="Message de bienvenue (1 ligne)">
+            <Field label="Message de remerciement (tout en bas, 1 ligne)" help="Ex : « Merci de votre visite ». Imprimé en dernière ligne du ticket.">
               <input className="input" value={form.welcome_message} disabled={!canEdit}
                      onChange={(e) => setForm({ ...form, welcome_message: e.target.value })} />
             </Field>
-            <Field label="Message de pied de page" help="Affiché tout en bas. Plusieurs lignes possibles.">
+            <Field label="Message de pied de page" help="Affiché en bas, au-dessus du remerciement. Plusieurs lignes possibles.">
               <textarea className="input h-24" value={form.footer_message} disabled={!canEdit}
                         onChange={(e) => setForm({ ...form, footer_message: e.target.value })} />
             </Field>
@@ -196,7 +202,7 @@ export default function ReceiptSettingsForm({ stores, canEdit }: {
             {form.phone && <div className="text-center">Tél : {form.phone}</div>}
             {form.siret && <div className="text-center">SIRET : {form.siret}</div>}
             {form.vat_number && <div className="text-center">TVA : {form.vat_number}</div>}
-            <div className="text-center mt-2 italic">{form.welcome_message}</div>
+            {form.website && <div className="text-center">{form.website}</div>}
             <div className="border-t border-dashed border-ink my-2" />
             <div className="flex justify-between"><span>Bouquet rose</span><span>24,90 €</span></div>
             <div className="flex justify-between"><span>Carte cadeau</span><span>50,00 €</span></div>
@@ -217,6 +223,9 @@ export default function ReceiptSettingsForm({ stores, canEdit }: {
             )}
             <div className="border-t border-dashed border-ink my-2" />
             <div className="text-center whitespace-pre-wrap">{form.footer_message}</div>
+            {form.welcome_message && (
+              <div className="text-center italic mt-1">{form.welcome_message}</div>
+            )}
           </div>
         </div>
       </div>

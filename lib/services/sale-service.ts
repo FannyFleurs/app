@@ -572,6 +572,9 @@ export class SaleService {
         payments: args.payments.map((p) => ({
           method: p.method,
           amount: p.amount,
+          // Montant donné (espèces) : permet d'imprimer le rendu monnaie sur
+          // le ticket. Null si non renseigné (paiement au montant exact).
+          given_amount: p.given_amount ?? null,
           reference: p.reference ?? null,
         })),
       };
