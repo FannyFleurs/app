@@ -57,9 +57,21 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     balance = Number(acc.rows[0]?.points_balance ?? 0);
   }
 
+  // Client exclu de la fidélité (opt-out sur sa fiche) : on renvoie enabled=false
+  // pour que la caisse masque la fidélité et n'autorise aucune utilisation de
+  // points. Défensif si la colonne 0055 n'est pas encore appliquée.
+  let customerOptedIn = true;
+  try {
+    const c = await query<{ loyalty_enabled: boolean }>(
+      `SELECT loyalty_enabled FROM customers WHERE id = $1 AND organization_id = $2`,
+      [params.id, g.user.organizationId],
+    );
+    customerOptedIn = c.rows[0]?.loyalty_enabled !== false;
+  } catch { /* colonne absente : opté-in */ }
+
   return NextResponse.json({
-    loyalty: ui.loyalty,
+    loyalty: customerOptedIn ? ui.loyalty : { ...ui.loyalty, enabled: false },
     account_id: accountId,
-    balance_euros: balance, // on stocke en € directement (1 point = 1 €)
+    balance_euros: customerOptedIn ? balance : 0, // 1 point = 1 €
   });
 }
