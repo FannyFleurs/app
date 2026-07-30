@@ -6,18 +6,19 @@ import { formatEUR } from '@/lib/services/money';
 interface Held { id: string; held_label: string; total_ttc: string; created_at: string }
 
 export default function HoldListModal({
-  registerId, onClose, onPick,
-}: { registerId: string; onClose: () => void; onPick: (id: string) => void }) {
+  storeId, onClose, onPick,
+}: { storeId: string; onClose: () => void; onPick: (id: string) => void }) {
   const [items, setItems] = useState<Held[]>([]);
   useEffect(() => {
     void (async () => {
-      const res = await fetch(`/api/sales/held?register_id=${registerId}`);
+      // Tickets en attente de la BOUTIQUE (toutes ses caisses).
+      const res = await fetch(`/api/sales/held?store_id=${encodeURIComponent(storeId)}`);
       if (res.ok) {
         const j = await res.json();
         setItems(j.held);
       }
     })();
-  }, [registerId]);
+  }, [storeId]);
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-ink/30 backdrop-blur-sm p-4">

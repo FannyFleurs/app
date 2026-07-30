@@ -323,13 +323,14 @@ export default function CashRegister({
   }, [sessionLoading, sessionId]);
 
   const refreshHeldCount = useCallback(async () => {
-    if (!registerId) return;
-    const r = await fetch(`/api/sales/held?register_id=${registerId}`);
+    if (!storeId) return;
+    // Tickets en attente partagés par toute la boutique (pas par caisse).
+    const r = await fetch(`/api/sales/held?store_id=${encodeURIComponent(storeId)}`);
     if (r.ok) {
       const j = await r.json();
       setHeldCount((j.held ?? []).length);
     }
-  }, [registerId]);
+  }, [storeId]);
   useEffect(() => { void refreshHeldCount(); }, [refreshHeldCount, showHeld]);
 
   // Persiste lignes côté serveur (debounced)
@@ -808,6 +809,22 @@ export default function CashRegister({
   }
 
   async function recallSale(id: string) {
+    // Reprise sur la caisse COURANTE : réaffecte la vente à ce poste + sa
+    // session (tiroir), même si le ticket a été démarré sur une autre caisse
+    // de la boutique. Refusé si la vente vient d'une autre boutique.
+    if (registerId) {
+      const rs = await fetch(`/api/sales/${id}/resume`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ register_id: registerId }),
+      });
+      if (!rs.ok) {
+        const j = await rs.json().catch(() => ({}));
+        setError(j.error === 'CROSS_STORE_FORBIDDEN'
+          ? 'Ce ticket appartient à une autre boutique.'
+          : (j.error ?? 'Reprise impossible'));
+        return;
+      }
+    }
     const res = await fetch(`/api/sales/${id}`);
     if (!res.ok) return;
     const j = await res.json();
@@ -1748,7 +1765,7 @@ export default function CashRegister({
       )}
       {showHeld && (
         <HoldListModal
-          registerId={registerId}
+          storeId={storeId}
           onClose={() => setShowHeld(false)}
           onPick={recallSale}
         />
