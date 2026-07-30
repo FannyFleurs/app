@@ -431,7 +431,7 @@ export default function PaymentModal({ saleId, totalTtc, lines = [], storeId, ha
             onClick={() => void validate()}
             className="btn-primary w-full h-14 lg:h-16 text-lg lg:text-xl font-semibold"
           >
-            {loading ? 'Validation…' : canValidate ? `✓ Valider · ${formatEUR(totalTtc)}` : `Reste ${formatEUR(remaining)}`}
+            {loading ? 'Validation…' : canValidate ? `✓ Valider · ${formatEUR(totalTtc)}` : `Reste à régler ${formatEUR(remaining)}`}
           </button>
         </div>
       </div>
