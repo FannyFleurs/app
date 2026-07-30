@@ -3,6 +3,7 @@ import { requirePermission } from '@/lib/auth/guards';
 import { jsonError } from '@/lib/validation/api';
 import { query } from '@/lib/db/client';
 import { renderReceiptPdf, type ReceiptSnapshot, type OrgInfo } from '@/lib/services/receipt-pdf';
+import { loadReceiptExtras } from '@/lib/services/receipt-extras';
 import { loadReceiptSettings } from '@/lib/settings/receipt-server';
 
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
@@ -57,6 +58,10 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   };
 
   const receiptSettings = await loadReceiptSettings(g.user.organizationId, c.store_id);
+  // Client + fidélité (hors snapshot). Inutile sur le ticket sans prix.
+  const extras = gift
+    ? { customerName: null, loyalty: null }
+    : await loadReceiptExtras(g.user.organizationId, rec.sale_id);
 
   const buf = await renderReceiptPdf(rec.snapshot, org, {
     fiscalHash: rec.fiscal_hash,
@@ -65,6 +70,8 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     cashier: c.user_name ?? undefined,
     receipt: receiptSettings,
     giftReceipt: gift,
+    customerName: extras.customerName,
+    loyalty: extras.loyalty,
   });
   return new NextResponse(buf, {
     status: 200,
