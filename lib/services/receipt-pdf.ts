@@ -59,6 +59,11 @@ export async function renderReceiptPdf(
     /** Ticket « sans prix » (bon d'échange) : liste quantité + désignation,
      *  sans aucun montant, sans totaux/TVA/paiements. */
     giftReceipt?: boolean;
+    /** Nom du client rattaché (affiché avec les points de fidélité). */
+    customerName?: string | null;
+    /** Fidélité au moment de la vente : points gagnés sur ce ticket +
+     *  solde du compte après la vente (figé via loyalty_movements). */
+    loyalty?: { earned: number; balance: number; redeemed: number } | null;
   },
 ): Promise<Buffer> {
   return new Promise((resolve, reject) => {
@@ -206,6 +211,24 @@ export async function renderReceiptPdf(
         }
       }
       if (change > 0) rowLine(doc, 'Rendu', formatEUR(change));
+
+      // Client + fidélité : nom du client rattaché et, s'il y a une activité
+      // fidélité, points gagnés sur ce ticket + solde du compte.
+      const loy = options.loyalty;
+      const hasLoyalty = !!loy && (loy.earned > 0 || loy.redeemed > 0 || loy.balance > 0);
+      if (options.customerName || hasLoyalty) {
+        doc.moveDown(0.3);
+        doc.text('-'.repeat(40), { align: 'center' });
+        if (options.customerName) {
+          doc.font('Helvetica-Bold').fontSize(9).text(options.customerName, { align: 'center' });
+          doc.font('Helvetica').fontSize(8);
+        }
+        if (hasLoyalty && loy) {
+          doc.text('Points de fidélité', { align: 'center' });
+          if (loy.redeemed > 0) doc.text(`Utilisés ce ticket : ${loy.redeemed}`, { align: 'center' });
+          doc.text(`Gagnés ce ticket : ${loy.earned} | Solde : ${loy.balance}`, { align: 'center' });
+        }
+      }
     }
 
     // Code-barres du numéro de ticket
