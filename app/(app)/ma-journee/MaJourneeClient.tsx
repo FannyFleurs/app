@@ -321,7 +321,7 @@ export default function MaJourneeClient() {
             href="/closures"
             className="btn-primary w-full text-sm h-11"
           >
-            Actions sur ma journée
+            Clôturer la journée
           </a>
         </div>
       </aside>
