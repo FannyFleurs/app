@@ -62,7 +62,7 @@ const NAV: Array<{ key: Section; group: 'Gestion' | 'Inventaire'; label: string;
   { key: 'inventory',  group: 'Inventaire', label: 'Inventaire',             icon: 'invoices' },
 ];
 
-export default function StockAdmin({ canAdjust, stores }: { canAdjust: boolean; stores: Store[] }) {
+export default function StockAdmin({ canAdjust, stores, lockedStoreId }: { canAdjust: boolean; stores: Store[]; lockedStoreId?: string | null }) {
   const [section, setSection] = useState<Section>('levels');
   const [levels, setLevels] = useState<StockLevel[]>([]);
   const [movements, setMovements] = useState<Movement[]>([]);
@@ -73,11 +73,13 @@ export default function StockAdmin({ canAdjust, stores }: { canAdjust: boolean; 
   // de plusieurs boutiques. Sélecteur pour basculer.
   const [storeId, setStoreId] = useState<string>('');
   useEffect(() => {
+    // Poste de caisse appairé : verrouillé sur sa boutique (pas de sélecteur).
+    if (lockedStoreId) { setStoreId(lockedStoreId); return; }
     let sid = '';
     try { sid = localStorage.getItem('webpos_current_store_id') || ''; } catch { /* ignore */ }
     if (!sid || !stores.some((s) => s.id === sid)) sid = stores[0]?.id ?? '';
     setStoreId(sid);
-  }, [stores]);
+  }, [stores, lockedStoreId]);
 
   async function reload() {
     if (!storeId) return;
@@ -121,7 +123,7 @@ export default function StockAdmin({ canAdjust, stores }: { canAdjust: boolean; 
     <div className="flex flex-col md:h-full md:overflow-hidden">
       <div className="px-6 md:px-8 pt-6 md:pt-8 pb-4 shrink-0 flex items-start justify-between gap-3 flex-wrap">
         <PageHeader title="Stock" subtitle="Valeur du stock, mouvements et inventaires, par boutique." />
-        {stores.length > 1 && (
+        {!lockedStoreId && stores.length > 1 && (
           <label className="text-sm">
             <span className="block text-xs font-medium text-ink-soft mb-1">Boutique</span>
             <select className="input h-10 min-w-[180px]" value={storeId} onChange={(e) => setStoreId(e.target.value)}>

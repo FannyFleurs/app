@@ -112,11 +112,12 @@ function Clock() {
   );
 }
 
-export default function AtelierScreen({ stores }: { stores: { id: string; name: string }[] }) {
+export default function AtelierScreen({ stores, lockedStoreId }: { stores: { id: string; name: string }[]; lockedStoreId?: string | null }) {
   const [items, setItems] = useState<AtelierItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
-  const [storeId, setStoreId] = useState('');
+  // Poste de caisse appairé : atelier verrouillé sur sa boutique.
+  const [storeId, setStoreId] = useState(lockedStoreId ?? '');
   const [tileSize, setTileSize] = useState(220);
   const [prepareItem, setPrepareItem] = useState<AtelierItem | null>(null);
   const [deliverItem, setDeliverItem] = useState<AtelierItem | null>(null);
@@ -124,13 +125,18 @@ export default function AtelierScreen({ stores }: { stores: { id: string; name: 
 
   // Préférences locales (boutique + taille tuiles) persistées sur l'écran.
   useEffect(() => {
+    if (lockedStoreId) {
+      // Verrouillé : on ignore la préférence locale de boutique.
+      try { const t = Number(localStorage.getItem('webpos_atelier_tile')); if (t >= 140 && t <= 420) setTileSize(t); } catch { /* ignore */ }
+      return;
+    }
     try {
       const s = localStorage.getItem('webpos_atelier_store');
       if (s) setStoreId(s);
       const t = Number(localStorage.getItem('webpos_atelier_tile'));
       if (t >= 140 && t <= 420) setTileSize(t);
     } catch { /* ignore */ }
-  }, []);
+  }, [lockedStoreId]);
 
   const reload = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -194,7 +200,7 @@ export default function AtelierScreen({ stores }: { stores: { id: string; name: 
           ‹ Caisse
         </a>
         <span className="font-semibold text-sm">Écran atelier</span>
-        {stores.length > 1 && (
+        {!lockedStoreId && stores.length > 1 && (
           <select
             className="input h-8 w-auto text-xs ml-1"
             value={storeId}

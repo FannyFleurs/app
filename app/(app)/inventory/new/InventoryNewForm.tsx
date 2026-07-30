@@ -8,13 +8,15 @@ interface Props {
   stores: { id: string; name: string }[];
   categories: { id: string; name: string }[];
   suppliers: { supplier_ref: string; product_count: number }[];
+  /** Poste de caisse appairé : inventaire verrouillé sur sa boutique. */
+  lockedStoreId?: string | null;
 }
 
 type Scope = 'total' | 'category' | 'supplier';
 
-export default function InventoryNewForm({ stores, categories, suppliers }: Props) {
+export default function InventoryNewForm({ stores, categories, suppliers, lockedStoreId }: Props) {
   const router = useRouter();
-  const [storeId, setStoreId] = useState(stores[0]?.id ?? '');
+  const [storeId, setStoreId] = useState(lockedStoreId ?? stores[0]?.id ?? '');
   const [label, setLabel] = useState(
     `Inventaire ${new Date().toLocaleDateString('fr-FR')}`,
   );
@@ -82,18 +84,20 @@ export default function InventoryNewForm({ stores, categories, suppliers }: Prop
               maxLength={200}
             />
           </div>
-          <div>
-            <label className="text-xs font-medium text-ink-soft">Boutique</label>
-            <select
-              className="input mt-1 h-12 text-base"
-              value={storeId}
-              onChange={(e) => setStoreId(e.target.value)}
-            >
-              {stores.map((s) => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
-            </select>
-          </div>
+          {!lockedStoreId && (
+            <div>
+              <label className="text-xs font-medium text-ink-soft">Boutique</label>
+              <select
+                className="input mt-1 h-12 text-base"
+                value={storeId}
+                onChange={(e) => setStoreId(e.target.value)}
+              >
+                {stores.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         <div>

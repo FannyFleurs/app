@@ -3,6 +3,7 @@ import { readSessionFromCookie } from '@/lib/auth/session';
 import { userCan } from '@/lib/auth/permissions';
 import { query } from '@/lib/db/client';
 import { SCREEN_DELIVERY_KEY } from '@/lib/settings/screen-delivery';
+import { resolveSettingsLockStoreId } from '@/lib/pos/current-store';
 import AtelierScreen from './AtelierScreen';
 
 export const dynamic = 'force-dynamic';
@@ -47,6 +48,7 @@ export default async function AtelierPage() {
       WHERE organization_id = $1 AND is_active = TRUE ORDER BY name`,
     [user.organizationId],
   );
+  const lockedStoreId = await resolveSettingsLockStoreId(user.organizationId);
 
-  return <AtelierScreen stores={stores.rows} />;
+  return <AtelierScreen stores={stores.rows} lockedStoreId={lockedStoreId} />;
 }

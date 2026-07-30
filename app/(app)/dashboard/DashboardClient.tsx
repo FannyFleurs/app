@@ -30,13 +30,14 @@ function periodRange(p: Period, cf: string, ct: string): { from: string; to: str
   return { from: cf, to: ct };
 }
 
-export default function DashboardClient({ firstName, stores }: { firstName: string; stores: Store[] }) {
+export default function DashboardClient({ firstName, stores, lockedStoreId }: { firstName: string; stores: Store[]; lockedStoreId?: string | null }) {
   const [mode, setMode] = useState<Mode>('ttc');
   const [period, setPeriod] = useState<Period>('month');
   const today = iso(new Date());
   const [cf, setCf] = useState(today);
   const [ct, setCt] = useState(today);
-  const [storeId, setStoreId] = useState('');
+  // Poste de caisse appairé : tableau de bord verrouillé sur sa boutique.
+  const [storeId, setStoreId] = useState(lockedStoreId ?? '');
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -98,7 +99,7 @@ export default function DashboardClient({ firstName, stores }: { firstName: stri
           {pill('year', 'Cette année')}
           {pill('custom', 'Perso')}
         </div>
-        {stores.length > 1 && (
+        {!lockedStoreId && stores.length > 1 && (
           <select
             value={storeId}
             onChange={(e) => setStoreId(e.target.value)}
