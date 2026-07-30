@@ -1,5 +1,6 @@
 import PDFDocument from 'pdfkit';
 import { formatEUR } from './money';
+import type { InvoiceSaleGroup } from './invoice-lines';
 
 /** Formate une date (string 'YYYY-MM-DD', ISO ou Date) en jj/mm/aaaa. '—' si vide. */
 function fmtDate(d: string | null | undefined): string {
@@ -35,6 +36,14 @@ export interface InvoicePdfData {
     line_tva: number;
     line_ttc: number;
   }>;
+  /**
+   * Lignes regroupées par vente d'origine. Quand il y a plus d'un groupe
+   * (facture de période), chaque vente est affichée sur un fond gris clair
+   * alterné avec l'en-tête de son ticket. Le commentaire éventuel de chaque
+   * vente est imprimé au sein de ses lignes. Optionnel : à défaut on retombe
+   * sur `lines` (un seul groupe).
+   */
+  groups?: InvoiceSaleGroup[];
   fiscal_hash: string | null;
 }
 
@@ -110,18 +119,78 @@ export async function renderInvoicePdf(
 
     drawHr(doc, tableTop + 14);
 
+    // Groupes = lignes par vente d'origine. À défaut (ancienne facture), un
+    // seul groupe reprenant `invoice.lines` et le commentaire de la facture.
+    const groups: InvoiceSaleGroup[] =
+      invoice.groups && invoice.groups.length > 0
+        ? invoice.groups
+        : [{ saleId: null, receipt: null, notes: invoice.notes ?? null, lines: invoice.lines }];
+    // Fond gris alterné + en-têtes de ticket seulement s'il y a plusieurs
+    // ventes (facture de période).
+    const grouped = groups.length > 1;
+
     doc.fillColor('#000').font('Helvetica').fontSize(9);
     let y = tableTop + 22;
-    for (const l of invoice.lines) {
-      const startY = y;
-      doc.text(l.label, 48, y, { width: 280 });
-      const h = Math.max(doc.y - startY, 12);
-      doc.text(String(l.quantity), 340, startY, { width: 30, align: 'right' });
-      doc.text(formatEUR(l.unit_price_ht), 375, startY, { width: 50, align: 'right' });
-      doc.text(`${l.tax_rate}%`, 430, startY, { width: 25, align: 'right' });
-      doc.text(formatEUR(l.line_ht), 460, startY, { width: 80, align: 'right' });
-      y = startY + h + 4;
-      if (y > 700) { doc.addPage(); y = 50; }
+    let gi = 0;
+    for (const g of groups) {
+      // Mesure la hauteur du groupe (en-tête + lignes + commentaire) pour
+      // tracer le fond d'un seul tenant et gérer un saut de page propre.
+      const headerH = grouped && g.receipt ? 15 : 0;
+      doc.font('Helvetica').fontSize(9);
+      const lineHeights = g.lines.map(
+        (l) => Math.max(doc.heightOfString(l.label, { width: 280 }), 12) + 4,
+      );
+      const bodyH = lineHeights.reduce((a, b) => a + b, 0);
+      let commentH = 0;
+      if (g.notes) {
+        doc.font('Helvetica-Oblique').fontSize(8.5);
+        commentH = doc.heightOfString(`Commentaire : ${g.notes}`, { width: 470 }) + 4;
+      }
+      const groupH = headerH + bodyH + commentH + (grouped ? 6 : 0);
+
+      // Saut de page si le groupe ne tient pas (sauf s'il est déjà en tête).
+      if (y + groupH > 720 && y > tableTop + 22) {
+        doc.addPage();
+        y = 50;
+      }
+
+      // Fond gris clair alterné (2ᵉ, 4ᵉ… vente) pour distinguer chaque vente.
+      if (grouped && gi % 2 === 1) {
+        doc.rect(44, y - 3, 508, groupH).fill('#F4F4F5');
+        doc.fillColor('#000');
+      }
+
+      // En-tête de groupe : numéro de ticket de la vente.
+      if (grouped && g.receipt) {
+        doc.font('Helvetica-Bold').fontSize(8).fillColor('#555')
+          .text(`Ticket ${g.receipt}`, 48, y, { width: 490 });
+        doc.fillColor('#000');
+        y += headerH;
+      }
+
+      // Lignes de la vente.
+      for (let i = 0; i < g.lines.length; i++) {
+        const l = g.lines[i]!;
+        const startY = y;
+        doc.font('Helvetica').fontSize(9).fillColor('#000');
+        doc.text(l.label, 48, startY, { width: 280 });
+        doc.text(String(l.quantity), 340, startY, { width: 30, align: 'right' });
+        doc.text(formatEUR(l.unit_price_ht), 375, startY, { width: 50, align: 'right' });
+        doc.text(`${l.tax_rate}%`, 430, startY, { width: 25, align: 'right' });
+        doc.text(formatEUR(l.line_ht), 460, startY, { width: 80, align: 'right' });
+        y = startY + lineHeights[i]!;
+      }
+
+      // Commentaire de la vente, imprimé au sein de ses lignes.
+      if (g.notes) {
+        doc.font('Helvetica-Oblique').fontSize(8.5).fillColor('#444')
+          .text(`Commentaire : ${g.notes}`, 56, y, { width: 470 });
+        doc.fillColor('#000').font('Helvetica');
+        y += commentH;
+      }
+
+      if (grouped) y += 6;
+      gi++;
     }
 
     drawHr(doc, y);
@@ -156,12 +225,8 @@ export async function renderInvoicePdf(
     doc.text(formatEUR(invoice.total_ttc), valueX, y, { width: valueW, align: 'right' });
     y += 28;
 
-    // Commentaire (repris de la vente)
-    if (invoice.notes) {
-      doc.font('Helvetica-Bold').fontSize(9).fillColor('#666').text('COMMENTAIRE', 48, y);
-      doc.fillColor('#000').font('Helvetica').fontSize(9).text(invoice.notes, 48, y + 12, { width: 480 });
-      y = doc.y + 10;
-    }
+    // (Le commentaire de chaque vente est désormais imprimé au sein de ses
+    // lignes, plus haut dans le tableau.)
 
     // Conditions
     if (invoice.payment_terms) {
