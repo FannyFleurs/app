@@ -4,10 +4,11 @@ import { useEffect, useState } from 'react';
 import { SCREEN_DELIVERY_DEFAULTS, type ScreenDeliverySettings } from '@/lib/settings/screen-delivery';
 import StoreScopeSelect from '@/components/StoreScopeSelect';
 
-export default function ScreenDeliveryForm({ canEdit, stores }: {
+export default function ScreenDeliveryForm({ canEdit, stores, lockedStoreId }: {
   canEdit: boolean; stores: { id: string; name: string }[];
+  lockedStoreId?: string | null;
 }) {
-  const [storeId, setStoreId] = useState<string>(stores[0]?.id ?? '');
+  const [storeId, setStoreId] = useState<string>(lockedStoreId ?? stores[0]?.id ?? '');
   const [s, setS] = useState<ScreenDeliverySettings>(SCREEN_DELIVERY_DEFAULTS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -59,7 +60,7 @@ export default function ScreenDeliveryForm({ canEdit, stores }: {
             configurables par boutique.
           </p>
         </div>
-        <StoreScopeSelect stores={stores} value={storeId} onChange={setStoreId} />
+        <StoreScopeSelect stores={stores} value={storeId} onChange={setStoreId} lockedStoreId={lockedStoreId} />
       </div>
 
       <div className="card p-5 space-y-4">

@@ -1,4 +1,4 @@
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { query } from '@/lib/db/client';
 
 /**
@@ -25,4 +25,19 @@ export async function resolveDeviceStoreId(organizationId: string): Promise<stri
   } catch {
     return null;
   }
+}
+
+/**
+ * Boutique à laquelle VERROUILLER un réglage « par boutique » selon le
+ * contexte :
+ *  - En back-office (header x-webpos-bo=1) : renvoie null → chaque page garde
+ *    son sélecteur de boutique (gestion multi-boutiques centralisée).
+ *  - Sur un poste de caisse appairé : renvoie la boutique du poste → la page
+ *    masque le sélecteur et n'édite QUE cette boutique (chaque boutique est
+ *    autonome). Null si le poste n'est pas appairé (repli : sélecteur visible).
+ */
+export async function resolveSettingsLockStoreId(organizationId: string): Promise<string | null> {
+  const backOffice = headers().get('x-webpos-bo') === '1';
+  if (backOffice) return null;
+  return resolveDeviceStoreId(organizationId);
 }
