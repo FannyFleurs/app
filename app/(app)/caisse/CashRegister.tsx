@@ -1467,18 +1467,19 @@ export default function CashRegister({
             Ligne 1 : Retour (mobile) · En attente · Annuler.
             Ligne 2 : Remise · Commentaire (sous « En attente »). */}
         <div className="px-3 py-2 shrink-0 border-b border-border space-y-1.5">
-          <div className="flex items-center justify-end gap-1.5">
+          <div className="flex items-center gap-1.5">
             <button
               onClick={() => setMobileCartOpen(false)}
-              className="md:hidden mr-auto -ml-1 px-2 py-1 text-ink-soft hover:text-ink text-xl"
+              className="md:hidden -ml-1 px-2 py-1 text-ink-soft hover:text-ink text-xl"
               aria-label="Retour aux articles (glissez à droite)"
             >
               ←
             </button>
+            {/* « En attente » aligné à gauche ; « Annuler » poussé à droite. */}
             <button
               disabled={lines.length === 0 || !saleId}
               onClick={() => void holdSale()}
-              className="btn-soft text-sm min-h-[44px] px-4 whitespace-nowrap"
+              className="btn-soft text-sm min-h-[44px] px-4 whitespace-nowrap mr-auto"
               title="Mettre ce ticket en attente"
             >
               En attente
