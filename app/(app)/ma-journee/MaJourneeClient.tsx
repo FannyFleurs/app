@@ -317,12 +317,22 @@ export default function MaJourneeClient() {
               <Icon name="print" size={16} /> Imprimer le X
             </a>
           )}
-          <a
-            href="/closures"
-            className="btn-primary w-full text-sm h-11"
-          >
-            Clôturer la journée
-          </a>
+          {sealedAt ? (
+            <a
+              href="/closures"
+              className="btn-soft w-full text-sm h-11 flex items-center justify-center gap-2"
+              title="La journée est déjà clôturée — réimprimer le Z ou réouvrir la journée"
+            >
+              Journée clôturée — réouvrir / réimprimer le Z
+            </a>
+          ) : (
+            <a
+              href="/closures"
+              className="btn-primary w-full text-sm h-11 flex items-center justify-center"
+            >
+              Clôturer la journée
+            </a>
+          )}
         </div>
       </aside>
 
