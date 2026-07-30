@@ -778,15 +778,15 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
           ) : (
             <button
               onClick={() => setShowCancel(true)}
-              disabled={hasReturns || !!detail.invoice}
+              disabled={hasReturns}
               title={
-                detail.invoice ? 'Vente facturée : annulation impossible (passer par un avoir de facture).'
+                detail.invoice ? 'Annule la vente et émet une facture d’avoir contre-passant la facture.'
                 : hasReturns ? 'Un retour a déjà eu lieu sur cette vente.'
                 : undefined
               }
               className="btn-soft text-sm text-danger disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              ✕ Annuler la vente
+              ✕ {detail.invoice ? 'Annuler (avoir de facture)' : 'Annuler la vente'}
             </button>
           )}
         </div>
@@ -978,11 +978,14 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
           saleId={s.id}
           receiptNumber={s.receipt_number}
           amount={Number(s.total_ttc)}
+          isInvoiced={!!detail.invoice}
           onClose={() => setShowCancel(false)}
           onSuccess={(number) => {
             setShowCancel(false);
-            setInfo(`Vente annulée · avoir ${number} émis.`);
-            setTimeout(() => setInfo(null), 5000);
+            setInfo(detail.invoice
+              ? `Vente annulée · facture d’avoir ${number} émise (voir Factures).`
+              : `Vente annulée · avoir ${number} émis.`);
+            setTimeout(() => setInfo(null), 6000);
             onInvoiceGenerated();
           }}
         />
@@ -1027,8 +1030,8 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
   );
 }
 
-function CancelSaleModal({ saleId, receiptNumber, amount, onClose, onSuccess }: {
-  saleId: string; receiptNumber: string; amount: number;
+function CancelSaleModal({ saleId, receiptNumber, amount, isInvoiced, onClose, onSuccess }: {
+  saleId: string; receiptNumber: string; amount: number; isInvoiced?: boolean;
   onClose: () => void; onSuccess: (creditNoteNumber: string) => void;
 }) {
   const [reason, setReason] = useState('');
@@ -1037,7 +1040,7 @@ function CancelSaleModal({ saleId, receiptNumber, amount, onClose, onSuccess }: 
 
   const ERR: Record<string, string> = {
     SALE_NOT_CANCELABLE: 'Cette vente ne peut plus être annulée.',
-    SALE_INVOICED: 'Vente facturée : annulation impossible (passer par un avoir de facture).',
+    SALE_INVOICED: 'Vente rattachée à une facture de période (« en compte ») : annulation impossible ici.',
     SALE_HAS_RETURNS: 'Un retour a déjà eu lieu sur cette vente.',
     REASON_REQUIRED: 'Indiquez un motif.',
   };
@@ -1068,6 +1071,13 @@ function CancelSaleModal({ saleId, receiptNumber, amount, onClose, onSuccess }: 
           tous les modes de règlement et la fidélité. Un avoir est émis et la vente est marquée
           « annulée ». Opération irréversible.
         </p>
+        {isInvoiced && (
+          <p className="rounded-xl bg-warning/10 px-3 py-2 text-sm text-warning">
+            Cette vente est <strong>facturée</strong> : une <strong>facture d’avoir</strong>
+            {' '}sera automatiquement émise pour contre-passer la facture, et la facture
+            d’origine sera marquée « annulée ». Retrouvez-la dans <strong>Factures</strong>.
+          </p>
+        )}
         <label className="block text-sm">
           <span className="text-ink-soft">Motif de l’annulation</span>
           <textarea
