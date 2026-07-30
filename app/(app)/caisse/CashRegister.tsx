@@ -163,7 +163,8 @@ export default function CashRegister({
     | null
   >(null);
   const [cartComment, setCartComment] = useState('');
-  const [showCartActions, setShowCartActions] = useState(false);
+  // Panneau « Remise » / « Commentaire » (ex-« Actions »), ou fermé.
+  const [cartActions, setCartActions] = useState<'discount' | 'comment' | null>(null);
   const [showOrderModal, setShowOrderModal] = useState(false);
   const [heldCount, setHeldCount] = useState(0);
   const [showScanner, setShowScanner] = useState(false);
@@ -465,6 +466,20 @@ export default function CashRegister({
     } finally { setSavingLines(false); }
   }
 
+  // Persiste le commentaire du ticket (sales.notes) : il figure ainsi sur le
+  // ticket imprimé et sur la facture, pas seulement à l'écran.
+  async function persistComment(text: string) {
+    if (schoolMode) return;
+    const id = saleId ?? await ensureSale();
+    if (!id) return;
+    try {
+      await fetch(`/api/sales/${id}/comment`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ comment: text || null }),
+      });
+    } catch { /* réseau coupé : le commentaire reste au moins affiché en caisse */ }
+  }
+
   // Top produits épinglés (max 4) affichés sur la première ligne de la grille catégories
   const topProducts = useMemo(
     () => products.filter((p) => p.is_top_product).slice(0, 4),
@@ -604,11 +619,16 @@ export default function CashRegister({
 
   function addFreeBouquet(amount: number, taxCode: string, label: string) {
     const tax = taxRates.find((t) => t.code === taxCode) ?? taxRates[0]!;
+    // Remise systématique du client appliquée AUSSI aux articles à prix libre
+    // (bouquets, gerbes…), comme pour les produits catalogue.
+    const autoPct = customer?.default_discount_pct ?? 0;
+    const discount = autoPct > 0 ? round2((amount * autoPct) / 100) : 0;
     setLines((cur) => [...cur, {
       key: cryptoKey(),
       product_id: null, variant_id: null,
-      label, unit_price_ttc: amount, quantity: 1, discount_amount: 0,
-      tax_rate: tax.rate, tax_rate_code: tax.code, metadata: { freeform: true },
+      label, unit_price_ttc: amount, quantity: 1, discount_amount: discount,
+      tax_rate: tax.rate, tax_rate_code: tax.code,
+      metadata: autoPct > 0 ? { freeform: true, auto_discount_pct: autoPct } : { freeform: true },
     }]);
     setShowFreePrice(null);
     void ensureSale();
@@ -804,6 +824,8 @@ export default function CashRegister({
       tax_rate_code: l.tax_rate_code as string,
       metadata: (l.metadata as Record<string, unknown>) ?? {},
     })));
+    // Restaure le commentaire du ticket (sales.notes).
+    setCartComment((j.sale?.notes as string) ?? '');
     // Restaure le client attaché (sinon perdu lors d'un recall cross-device).
     await restoreCustomerForSale(j.sale?.customer_id ?? null);
     setShowHeld(false);
@@ -1093,7 +1115,7 @@ export default function CashRegister({
     modalOpenRef.current =
       showPayment || showOpenSession || showHeld || showFreePrice !== null ||
       showPicker || discountLineKey !== null || justifyAction !== null ||
-      showCartActions || showOrderModal || showScanner || receipt !== null;
+      cartActions !== null || showOrderModal || showScanner || receipt !== null;
   });
 
   // Scanner USB / douchette global : capture les caractères tapés
@@ -1441,54 +1463,68 @@ export default function CashRegister({
           ${mobileCartOpen ? 'translate-x-0' : 'translate-x-full md:translate-x-0'}
         `}
       >
-        <div className="px-3 h-14 shrink-0 border-b border-border flex items-center justify-end gap-1.5">
-          <button
-            onClick={() => setMobileCartOpen(false)}
-            className="md:hidden mr-auto -ml-1 px-2 py-1 text-ink-soft hover:text-ink text-xl"
-            aria-label="Retour aux articles (glissez à droite)"
-          >
-            ←
-          </button>
-          {cartComment && (
-            <span className="text-ink-soft mr-auto" title={cartComment} aria-label="Ticket avec commentaire">
-              <Icon name="comment" size={14} />
-            </span>
-          )}
-          <button
-            disabled={lines.length === 0}
-            onClick={() => setShowCartActions(true)}
-            className="btn-soft text-sm min-h-[44px] px-4 whitespace-nowrap"
-            title="Remise globale / commentaire"
-          >
-            Actions
-          </button>
-          <button
-            disabled={lines.length === 0 || !saleId}
-            onClick={() => void holdSale()}
-            className="btn-soft text-sm min-h-[44px] px-4 whitespace-nowrap"
-            title="Mettre ce ticket en attente"
-          >
-            En attente
-          </button>
-          <button
-            disabled={lines.length === 0}
-            onClick={async () => { setMobileCartOpen(true); if (await confirmThemed({ title: 'Vider le ticket', message: 'Les articles en cours seront retirés.', confirmLabel: 'Vider', danger: true })) { setLines([]); setSaleId(null); setCartComment(''); void detachCustomer(); } }}
-            className="btn-soft text-sm min-h-[44px] px-4 whitespace-nowrap"
-            title="Retirer tous les articles du ticket"
-          >
-            Vider
-          </button>
-          {/* Action destructive, nettement séparée + style danger + confirmation. */}
-          <button
-            disabled={lines.length === 0 && !saleId}
-            onClick={async () => { setMobileCartOpen(true); if (await confirmThemed({ title: 'Annuler ce ticket', message: 'La vente en cours sera définitivement abandonnée.', confirmLabel: 'Annuler le ticket', cancelLabel: 'Retour', danger: true })) void cancelTicket(); }}
-            className="ml-2 md:ml-3 text-sm min-h-[44px] px-4 rounded-xl font-medium whitespace-nowrap border border-danger/40 text-danger hover:bg-danger/10 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
-            title="Annuler ce ticket"
-          >
-            <span aria-hidden className="text-base leading-none">✕</span>
-            Annuler
-          </button>
+        {/* En-tête ticket : 2 lignes de boutons (max 3 par ligne).
+            Ligne 1 : Retour (mobile) · En attente · Annuler.
+            Ligne 2 : Remise · Commentaire (sous « En attente »). */}
+        <div className="px-3 py-2 shrink-0 border-b border-border space-y-1.5">
+          <div className="flex items-center justify-end gap-1.5">
+            <button
+              onClick={() => setMobileCartOpen(false)}
+              className="md:hidden mr-auto -ml-1 px-2 py-1 text-ink-soft hover:text-ink text-xl"
+              aria-label="Retour aux articles (glissez à droite)"
+            >
+              ←
+            </button>
+            <button
+              disabled={lines.length === 0 || !saleId}
+              onClick={() => void holdSale()}
+              className="btn-soft text-sm min-h-[44px] px-4 whitespace-nowrap"
+              title="Mettre ce ticket en attente"
+            >
+              En attente
+            </button>
+            {/* Action destructive (remplace aussi « Vider » : même effet). */}
+            <button
+              disabled={lines.length === 0 && !saleId}
+              onClick={async () => { setMobileCartOpen(true); if (await confirmThemed({ title: 'Annuler ce ticket', message: 'La vente en cours sera définitivement abandonnée.', confirmLabel: 'Annuler le ticket', cancelLabel: 'Retour', danger: true })) void cancelTicket(); }}
+              className="text-sm min-h-[44px] px-4 rounded-xl font-medium whitespace-nowrap border border-danger/40 text-danger hover:bg-danger/10 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
+              title="Annuler ce ticket"
+            >
+              <span aria-hidden className="text-base leading-none">✕</span>
+              Annuler
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-1.5">
+            <button
+              disabled={lines.length === 0}
+              onClick={() => setCartActions('discount')}
+              className="btn-soft text-sm min-h-[44px] px-4 whitespace-nowrap"
+              title="Remise globale sur le ticket"
+            >
+              Remise
+            </button>
+            <button
+              disabled={lines.length === 0 && !saleId}
+              onClick={() => setCartActions('comment')}
+              className="btn-soft text-sm min-h-[44px] px-4 whitespace-nowrap"
+              title="Ajouter un commentaire au ticket"
+            >
+              Commentaire
+            </button>
+          </div>
         </div>
+
+        {/* Commentaire du ticket (visible en caisse, imprimé, et sur la facture) */}
+        {cartComment && (
+          <button
+            onClick={() => setCartActions('comment')}
+            className="w-full text-left px-3 py-2 border-b border-border bg-warning/5 flex items-start gap-2"
+            title="Modifier le commentaire"
+          >
+            <span className="text-ink-soft mt-0.5 shrink-0"><Icon name="comment" size={14} /></span>
+            <span className="text-sm text-ink whitespace-pre-wrap break-words">{cartComment}</span>
+          </button>
+        )}
 
         {/* Zone client */}
         <div className="px-3 py-2 border-b border-border space-y-2">
@@ -1785,20 +1821,21 @@ export default function CashRegister({
         />
       )}
 
-      {showCartActions && (
+      {cartActions && (
         <CartActionsModal
+          only={cartActions}
           cartTotal={totals.ttc}
           currentComment={cartComment}
-          onClose={() => setShowCartActions(false)}
+          onClose={() => setCartActions(null)}
           onCartDiscount={(mode, value) => {
             const computed = mode === 'percent'
               ? round2((totals.ttc * value) / 100)
               : Math.min(round2(value), round2(totals.ttc));
             if (computed <= 0) return;
-            setShowCartActions(false);
+            setCartActions(null);
             setJustifyAction({ kind: 'cartDiscount', amount: computed, mode });
           }}
-          onCommentSave={(c) => { setCartComment(c); setShowCartActions(false); }}
+          onCommentSave={(c) => { setCartComment(c); void persistComment(c); setCartActions(null); }}
         />
       )}
       {justifyAction && (() => {

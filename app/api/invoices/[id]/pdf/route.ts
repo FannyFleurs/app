@@ -13,7 +13,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     issue_date: string | null; service_date: string | null; due_date: string | null;
     total_ht: string; total_tva: string; total_ttc: string;
     tva_breakdown: { rate: number; base_ht: number; tva: number; ttc: number }[];
-    payment_terms: string | null; legal_mentions: string | null;
+    payment_terms: string | null; legal_mentions: string | null; notes: string | null;
     fiscal_hash: string | null;
     org_name: string; org_legal: string; org_siret: string | null;
     org_vat: string | null;
@@ -29,7 +29,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     `SELECT i.number, i.invoice_type, i.status,
             i.issue_date::text, i.service_date::text, i.due_date::text,
             i.total_ht::text, i.total_tva::text, i.total_ttc::text,
-            i.tva_breakdown, i.payment_terms, i.legal_mentions, i.fiscal_hash,
+            i.tva_breakdown, i.payment_terms, i.legal_mentions, i.notes, i.fiscal_hash,
             o.name AS org_name, o.legal_name AS org_legal, o.siret AS org_siret,
             o.vat_number AS org_vat, o.address AS org_address, o.contact AS org_contact,
             COALESCE(c.company_name, NULLIF(TRIM(CONCAT(c.first_name,' ',c.last_name)), '')) AS customer_display,
@@ -68,6 +68,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     tva_breakdown: r.tva_breakdown ?? [],
     payment_terms: r.payment_terms,
     legal_mentions: r.legal_mentions,
+    notes: r.notes,
     fiscal_hash: r.fiscal_hash,
     lines: lines.rows.map((l) => ({
       label: l.label,

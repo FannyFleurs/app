@@ -21,6 +21,8 @@ export interface ReceiptSnapshot {
     line_ttc: number;
   }>;
   payments: { method: string; amount: number; given_amount?: number | null; reference?: string | null }[];
+  /** Commentaire libre du ticket (imprimé sous l'en-tête). */
+  comment?: string | null;
 }
 
 export interface OrgInfo {
@@ -162,6 +164,13 @@ export async function renderReceiptPdf(
     if (options.cashier) { setFont(); doc.text(`Servis par: ${options.cashier}`); }
 
     rule();
+
+    // ---- Commentaire libre du ticket ----
+    if (snapshot.comment && snapshot.comment.trim()) {
+      setFont(true); doc.text('Commentaire :');
+      setFont(); doc.text(snapshot.comment.trim());
+      rule();
+    }
 
     // ---- Codes TVA : A = taux le plus élevé, puis B, C… ----
     const rates = [...new Set(snapshot.tva_breakdown.map((t) => t.rate))].sort((a, b) => b - a);

@@ -32,9 +32,10 @@ export class InvoiceService {
         total_ht: string; total_tva: string; total_ttc: string;
         tva_breakdown: { rate: number; base_ht: number; tva: number; ttc: number }[];
         validated_at: string;
+        notes: string | null;
       }>(
         `SELECT id, store_id, customer_id, status,
-                total_ht, total_tva, total_ttc, tva_breakdown, validated_at
+                total_ht, total_tva, total_ttc, tva_breakdown, validated_at, notes
            FROM sales WHERE id = $1 AND organization_id = $2 FOR UPDATE`,
         [args.saleId, args.organizationId],
       );
@@ -87,19 +88,19 @@ export class InvoiceService {
             number, sequence_value, status,
             issue_date, service_date, due_date,
             total_ht, total_tva, total_ttc, tva_breakdown,
-            payment_terms, validated_at)
+            payment_terms, notes, validated_at)
          VALUES ($1,$2,$3,$4,'standard',
                  $5,$6,'paid',
                  $7,$8,$7,
                  $9,$10,$11,$12,
-                 $13, now())
+                 $13,$14, now())
          RETURNING id`,
         [
           args.organizationId, s.store_id, customerId, s.id,
           number, seq.toString(),
           issueDate, serviceDate,
           s.total_ht, s.total_tva, s.total_ttc, JSON.stringify(s.tva_breakdown),
-          args.paymentTerms ?? null,
+          args.paymentTerms ?? null, s.notes ?? null,
         ],
       );
 
