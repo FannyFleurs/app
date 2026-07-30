@@ -577,6 +577,8 @@ export class SaleService {
           given_amount: p.given_amount ?? null,
           reference: p.reference ?? null,
         })),
+        // Commentaire du ticket (sales.notes) : imprimé sur le ticket.
+        comment: (sale as { notes?: string | null }).notes ?? null,
       };
 
       const event = await fiscal.recordEvent({

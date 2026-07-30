@@ -6,15 +6,18 @@ import { formatEUR } from '@/lib/services/money';
 interface Props {
   cartTotal: number;
   currentComment: string;
+  /** Restreint le panneau à une seule action (« Remise » ou « Commentaire ») :
+   *  les onglets sont masqués. */
+  only?: 'discount' | 'comment';
   onClose: () => void;
   onCartDiscount: (mode: 'percent' | 'amount', value: number) => void;
   onCommentSave: (comment: string) => void;
 }
 
 export default function CartActionsModal({
-  cartTotal, currentComment, onClose, onCartDiscount, onCommentSave,
+  cartTotal, currentComment, only, onClose, onCartDiscount, onCommentSave,
 }: Props) {
-  const [tab, setTab] = useState<'discount' | 'comment'>('discount');
+  const [tab, setTab] = useState<'discount' | 'comment'>(only ?? 'discount');
   const [mode, setMode] = useState<'percent' | 'amount'>('percent');
   const [percent, setPercent] = useState<number>(0);
   const [amount, setAmount] = useState<number>(0);
@@ -28,7 +31,9 @@ export default function CartActionsModal({
     <div className="fixed inset-0 z-50 grid place-items-center bg-ink/30 backdrop-blur-sm p-4" onClick={onClose}>
       <div className="card max-w-md w-full p-5" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-lg font-semibold">Actions panier</h2>
+          <h2 className="text-lg font-semibold">
+            {only === 'comment' ? 'Commentaire' : only === 'discount' ? 'Remise' : 'Actions panier'}
+          </h2>
           <button
             onClick={onClose}
             aria-label="Fermer"
@@ -36,7 +41,7 @@ export default function CartActionsModal({
           >✕</button>
         </div>
 
-        <div className="flex gap-1 border-b border-border mb-3">
+        <div className={`flex gap-1 border-b border-border mb-3 ${only ? 'hidden' : ''}`}>
           <button onClick={() => setTab('discount')}
                   className={`px-4 h-12 text-base font-medium border-b-2 -mb-px ${
                     tab === 'discount' ? 'border-sage text-accent-deep' : 'border-transparent text-ink-soft'

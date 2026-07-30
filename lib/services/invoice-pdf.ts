@@ -24,6 +24,7 @@ export interface InvoicePdfData {
   tva_breakdown: { rate: number; base_ht: number; tva: number; ttc: number }[];
   payment_terms: string | null;
   legal_mentions: string | null;
+  notes?: string | null;
   lines: Array<{
     label: string;
     quantity: number;
@@ -154,6 +155,13 @@ export async function renderInvoicePdf(
     doc.text('TOTAL TTC', totalsX, y, { width: labelW });
     doc.text(formatEUR(invoice.total_ttc), valueX, y, { width: valueW, align: 'right' });
     y += 28;
+
+    // Commentaire (repris de la vente)
+    if (invoice.notes) {
+      doc.font('Helvetica-Bold').fontSize(9).fillColor('#666').text('COMMENTAIRE', 48, y);
+      doc.fillColor('#000').font('Helvetica').fontSize(9).text(invoice.notes, 48, y + 12, { width: 480 });
+      y = doc.y + 10;
+    }
 
     // Conditions
     if (invoice.payment_terms) {
