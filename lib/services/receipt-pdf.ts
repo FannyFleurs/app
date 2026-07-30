@@ -1,5 +1,5 @@
 import PDFDocument from 'pdfkit';
-import { formatEUR, round2 } from './money';
+import { round2 } from './money';
 import type { ReceiptSettings } from '@/lib/settings/receipt';
 
 export interface ReceiptSnapshot {
@@ -33,18 +33,33 @@ export interface OrgInfo {
 }
 
 const PAYMENT_LABELS: Record<string, string> = {
-  cash: 'Espèces',
-  card: 'Carte bancaire',
-  check: 'Chèque',
+  cash: 'Especes',
+  card: 'Carte Bancaire',
+  check: 'Cheque',
   transfer: 'Virement',
   gift_card: 'Carte cadeau',
   credit_note: 'Avoir',
-  deferred: 'Différé client',
+  deferred: 'En compte',
   other: 'Autre',
 };
 
+// Police thermique = monospace (Courier). Largeur utile ~40 caractères à 8.5pt
+// sur 80 mm (226pt - marges) : rendu « ticket de caisse » fidèle aux exemples.
+const MONO = 'Courier';
+const MONO_B = 'Courier-Bold';
+const W = 40;
+
+/** Montant « 8,30 » / « -10,74 » (virgule décimale, 2 décimales). */
+function n2(x: number): string {
+  return x.toFixed(2).replace('.', ',');
+}
+/** Montant suffixé « 8,30 EUR ». */
+function eur(x: number): string {
+  return `${n2(x)} EUR`;
+}
+
 /**
- * Génère un PDF ticket 80 mm (largeur ~226pt). Renvoie un Buffer.
+ * Génère un PDF ticket 80 mm (largeur ~226pt), rendu monospace « thermique ».
  * Aucune logique fiscale ici : on lit uniquement le snapshot figé.
  */
 export async function renderReceiptPdf(
@@ -82,7 +97,26 @@ export async function renderReceiptPdf(
     const rs = options.receipt;
     const gift = options.giftReceipt === true;
 
-    // Logo si configuré
+    // Helpers de mise en page monospace.
+    const setFont = (bold = false, size = 8.5) => doc.font(bold ? MONO_B : MONO).fontSize(size);
+    const rule = () => { setFont(); doc.text('-'.repeat(W), { align: 'center' }); };
+    const center = (t: string, bold = false, size = 8.5) => { setFont(bold, size); doc.text(t, { align: 'center' }); };
+    // Ligne « libellé ......... valeur » occupant toute la largeur.
+    const row = (left: string, right: string, bold = false) => {
+      setFont(bold);
+      const gap = Math.max(1, W - left.length - right.length);
+      doc.text(left + ' '.repeat(gap) + right);
+      setFont();
+    };
+    // Ligne article : désignation à gauche, prix aligné à droite (gère le
+    // retour à la ligne des libellés longs).
+    const itemRow = (left: string, right: string) => {
+      setFont();
+      doc.text(left, doc.page.margins.left, doc.y, { continued: true });
+      doc.text(right, { align: 'right' });
+    };
+
+    // ---- Logo éventuel ----
     if (rs?.logo_data_url?.startsWith('data:image')) {
       try {
         const base64 = rs.logo_data_url.split(',')[1] ?? '';
@@ -93,186 +127,158 @@ export async function renderReceiptPdf(
       } catch { /* ignore image errors */ }
     }
 
-    // En-tête : uniquement le NOM DE LA BOUTIQUE (nom de la société / raison
-    // sociale retiré à la demande du commerçant).
-    const shopName = rs?.shop_name?.trim() || org.name;
-    doc.font('Helvetica-Bold').fontSize(11).text(shopName, { align: 'center' });
-    doc.font('Helvetica').fontSize(8);
-
+    // ---- En-tête : NOM DE LA BOUTIQUE + coordonnées ----
+    center(rs?.shop_name?.trim() || org.name, true, 11);
     const address1 = rs?.address_line1?.trim() || org.address?.line1;
-    if (address1) doc.text(address1, { align: 'center' });
-
+    if (address1) center(address1);
     const zipCity = rs?.address_zip_city?.trim()
       || [org.address?.zip, org.address?.city].filter(Boolean).join(' ');
-    if (zipCity) doc.text(zipCity, { align: 'center' });
-
-    // Ordre demandé : téléphone AVANT le SIRET.
-    const phone = rs?.phone?.trim() || org.phone;
-    if (phone) doc.text(phone, { align: 'center' });
-
+    if (zipCity) center(zipCity);
+    const phone = rs?.phone?.trim() || org.phone;            // téléphone AVANT le SIRET
+    if (phone) center(phone);
     const siret = rs?.siret?.trim() || org.siret;
-    if (siret) doc.text(`SIRET ${siret}`, { align: 'center' });
-
+    if (siret) center(`Siret : ${siret}`);
     const vat = rs?.vat_number?.trim() || org.vat_number;
-    if (vat) doc.text(`TVA ${vat}`, { align: 'center' });
+    if (vat) center(`TVA : ${vat}`);
+    const website = rs?.website?.trim();                     // site web propre à la boutique
+    if (website) center(website);
 
-    // Site web propre à la boutique (réglages ticket, spécifiques boutique).
-    const website = rs?.website?.trim();
-    if (website) doc.text(website, { align: 'center' });
+    rule();
 
-    // NB : le message de remerciement (ex-« message de bienvenue ») est
-    // désormais imprimé TOUT EN BAS du ticket (cf. fin de fonction).
-
-    doc.moveDown(0.5);
-    doc.font('Helvetica-Bold').fontSize(9)
-       .text(`Ticket ${snapshot.receipt_number}`, { align: 'center' });
-    doc.font('Helvetica').fontSize(8);
+    // ---- Bloc ticket : n° + type + date ----
+    center(`Ticket ${snapshot.receipt_number}${gift ? '' : ' - VENTE'}`);
+    if (gift) center('TICKET SANS PRIX', true, 10);
     const date = new Date(snapshot.validated_at);
-    doc.text(date.toLocaleString('fr-FR', { timeZone: 'Europe/Paris' }), { align: 'center' });
-    // Vendeur conservé ; nom de boutique + n° de caisse retirés du sous-ticket
-    // (la boutique figure déjà en en-tête).
-    if (options.cashier) doc.text(`Vendeur : ${options.cashier}`, { align: 'center' });
+    center(date.toLocaleString('fr-FR', {
+      timeZone: 'Europe/Paris',
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+    }));
 
-    // Ticket sans prix : bandeau bien visible.
+    rule();
+
+    // ---- Vendeur (nom de boutique + n° de caisse volontairement absents :
+    //      la boutique figure déjà en en-tête) ----
+    if (options.cashier) { setFont(); doc.text(`Servis par: ${options.cashier}`); }
+
+    rule();
+
+    // ---- Codes TVA : A = taux le plus élevé, puis B, C… ----
+    const rates = [...new Set(snapshot.tva_breakdown.map((t) => t.rate))].sort((a, b) => b - a);
+    const codeOf = new Map(rates.map((r, i) => [r, String.fromCharCode(65 + i)]));
+
+    // ---- Lignes ----
     if (gift) {
-      doc.moveDown(0.3);
-      doc.font('Helvetica-Bold').fontSize(11).text('TICKET SANS PRIX', { align: 'center' });
-      doc.font('Helvetica').fontSize(8);
-    }
-
-    doc.moveDown(0.5);
-    doc.text('-'.repeat(40), { align: 'center' });
-    doc.moveDown(0.3);
-
-    // Lignes
-    doc.font('Helvetica').fontSize(8);
-    if (gift) {
-      // Sans prix : uniquement quantité + désignation. Sélection éventuelle
-      // d'un sous-ensemble de lignes (positions 0-based).
       const sel = options.giftLineIndices;
       const giftLines = sel && sel.length
         ? snapshot.lines.filter((_, i) => sel.includes(i))
         : snapshot.lines;
-      doc.font('Helvetica-Bold').text('QTE  DÉSIGNATION');
-      doc.font('Helvetica');
-      doc.moveDown(0.2);
-      for (const l of giftLines) {
-        doc.text(`${formatQty(l.quantity)}  ${l.label}`);
-      }
+      setFont(true); doc.text('QTE DESC');
+      setFont();
+      for (const l of giftLines) doc.text(`${formatQty(l.quantity)} ${l.label}`);
     } else {
-      // Ligne : « qté  désignation » ........ montant brut (avant remise).
-      // Si remise : sous-ligne « Remise x % » ........ -montant.
+      row('QTE DESC', 'PU   EUR', true);
       for (const l of snapshot.lines) {
-        const grossTtc = round2(l.unit_price_ttc * l.quantity);
-        const left = doc.x;
-        doc.text(`${formatQty(l.quantity)}  ${l.label}`, left, doc.y, { continued: true });
-        doc.text(formatEUR(grossTtc), { align: 'right' });
+        const gross = round2(l.unit_price_ttc * l.quantity);
+        const code = codeOf.get(l.tax_rate) ?? '';
+        itemRow(`${formatQty(l.quantity)} ${l.label}`, `${n2(l.unit_price_ttc)} ${n2(gross)} ${code}`);
         if (l.discount_amount > 0) {
-          const pct = grossTtc > 0 ? (l.discount_amount / grossTtc) * 100 : 0;
-          doc.text(`   Remise ${formatPct(pct)}`, left, doc.y, { continued: true });
-          doc.text(`-${formatEUR(l.discount_amount)}`, { align: 'right' });
+          const pct = gross > 0 ? (l.discount_amount / gross) * 100 : 0;
+          row(`  Remise ${formatPct(pct)}`, `-${n2(l.discount_amount)}`);
         }
       }
     }
 
-    doc.moveDown(0.2);
-    doc.text('-'.repeat(40), { align: 'center' });
+    rule();
 
-    // Totaux / TVA / paiements : uniquement sur le ticket avec prix.
+    // ---- Totaux / paiements / TVA / fidélité : ticket avec prix uniquement ----
     if (!gift) {
-      // Si des remises existent, on montre le sous-total et la remise avant le
-      // total (remise bien lisible, comme demandé).
       if (snapshot.totals.total_discount > 0) {
-        doc.font('Helvetica').fontSize(8);
-        rowLine(doc, 'Sous-total', formatEUR(round2(snapshot.totals.total_ttc + snapshot.totals.total_discount)));
-        rowLine(doc, 'Remise totale', `-${formatEUR(snapshot.totals.total_discount)}`);
+        const gross = round2(snapshot.totals.total_ttc + snapshot.totals.total_discount);
+        row('Sous total :', eur(gross));
+        row('Reduction lignes :', `-${eur(snapshot.totals.total_discount)}`);
       }
-      doc.font('Helvetica-Bold').fontSize(10);
-      rowLine(doc, 'TOTAL TTC', formatEUR(snapshot.totals.total_ttc));
-      doc.font('Helvetica').fontSize(8);
-      rowLine(doc, 'Dont HT', formatEUR(snapshot.totals.total_ht));
-      rowLine(doc, 'Dont TVA', formatEUR(snapshot.totals.total_tva));
+      row('Total:', eur(snapshot.totals.total_ttc), true);
 
-      if (rs?.show_tax_breakdown ?? true) {
-        doc.moveDown(0.3);
-        for (const t of snapshot.tva_breakdown) {
-          rowLine(
-            doc,
-            `TVA ${t.rate}% (HT ${formatEUR(t.base_ht)})`,
-            formatEUR(t.tva),
-          );
-        }
-      }
+      rule();
 
-      doc.moveDown(0.3);
-      doc.text('-'.repeat(40), { align: 'center' });
-      // Règlements. Pour les espèces avec sur-paiement (rendu monnaie saisi en
-      // caisse), on affiche le montant DONNÉ puis le « Rendu ».
+      // Règlements. Espèces avec sur-paiement → montant DONNÉ puis « Rendu ».
       let change = 0;
       for (const p of snapshot.payments) {
         const label = PAYMENT_LABELS[p.method] ?? p.method;
         if (p.method === 'cash' && p.given_amount != null && p.given_amount > p.amount) {
           change = round2(change + (p.given_amount - p.amount));
-          rowLine(doc, label, formatEUR(p.given_amount));
+          row(label, eur(p.given_amount));
         } else {
-          rowLine(doc, label, formatEUR(p.amount));
+          row(label, eur(p.amount));
         }
       }
-      if (change > 0) rowLine(doc, 'Rendu', formatEUR(change));
+      if (change > 0) row('Rendu', eur(change));
 
-      // Client + fidélité : nom du client rattaché et, s'il y a une activité
-      // fidélité, points gagnés sur ce ticket + solde du compte.
+      rule();
+
+      // ---- Détail TVA (tableau colonnes) ----
+      if ((rs?.show_tax_breakdown ?? true) && snapshot.tva_breakdown.length > 0) {
+        const padL = (s: string, n: number) => s.padStart(n);
+        setFont();
+        doc.text('  ' + padL('TVA %', 7) + padL('Taxe', 9) + padL('HTVA', 9) + padL('TVAC', 9));
+        for (const t of snapshot.tva_breakdown) {
+          const code = codeOf.get(t.rate) ?? ' ';
+          doc.text(code.padEnd(2) + padL(n2(t.rate), 7) + padL(n2(t.tva), 9) + padL(n2(t.base_ht), 9) + padL(n2(t.ttc), 9));
+        }
+        doc.text('  ' + padL('Total', 7)
+          + padL(n2(snapshot.totals.total_tva), 9)
+          + padL(n2(snapshot.totals.total_ht), 9)
+          + padL(n2(snapshot.totals.total_ttc), 9));
+        rule();
+      }
+
+      // ---- Client + fidélité ----
       const loy = options.loyalty;
       const hasLoyalty = !!loy && (loy.earned > 0 || loy.redeemed > 0 || loy.balance > 0);
       if (options.customerName || hasLoyalty) {
-        doc.moveDown(0.3);
-        doc.text('-'.repeat(40), { align: 'center' });
-        if (options.customerName) {
-          doc.font('Helvetica-Bold').fontSize(9).text(options.customerName, { align: 'center' });
-          doc.font('Helvetica').fontSize(8);
-        }
+        if (options.customerName) center(options.customerName, true);
         if (hasLoyalty && loy) {
-          doc.text('Points de fidélité', { align: 'center' });
-          if (loy.redeemed > 0) doc.text(`Utilisés ce ticket : ${loy.redeemed}`, { align: 'center' });
-          doc.text(`Gagnés ce ticket : ${loy.earned} | Solde : ${loy.balance}`, { align: 'center' });
+          center('Points de fidelite:');
+          const parts = [`Total: ${loy.balance}`, `Ticket: ${loy.earned}`];
+          if (loy.redeemed > 0) parts.push(`Utilises: ${loy.redeemed}`);
+          center(parts.join(' | '));
         }
+        rule();
       }
+
+      // ---- Compteurs ----
+      const totalQty = snapshot.lines.reduce((s, l) => s + l.quantity, 0);
+      row('Nombre de produit :', formatQty(totalQty));
+      row('Nombre de ligne :', String(snapshot.lines.length));
+
+      rule();
     }
 
-    // Code-barres du numéro de ticket
+    // ---- Code-barres du numéro de ticket ----
     if (rs?.show_barcode ?? true) {
-      doc.moveDown(0.6);
+      doc.moveDown(0.4);
       drawCode128(doc, snapshot.receipt_number);
     }
 
-    // Mentions fiscales : uniquement sur le vrai ticket (le ticket sans prix
-    // n'est pas le document fiscal — il ne porte ni prix ni empreinte). Elles
-    // sont placées AVANT les messages personnalisés pour que le remerciement
-    // reste tout en bas.
+    // ---- Mentions fiscales (ticket avec prix uniquement) ----
     if (!gift) {
-      doc.moveDown(0.5);
-      doc.font('Helvetica').fontSize(7);
-      doc.text('Mention : ticket disponible par email sur demande.', { align: 'center' });
-      doc.moveDown(0.3);
-      doc.font('Helvetica-Oblique').fontSize(6);
-      doc.text(`Empreinte fiscale : ${options.fiscalHash.slice(0, 16)}…`, { align: 'center' });
-      doc.text('Système conforme aux exigences d\'inaltérabilité (art. 286, I, 3°bis CGI)', {
-        align: 'center',
-      });
+      doc.moveDown(0.4);
+      setFont(false, 7);
+      doc.text('Ticket disponible par email sur demande.', { align: 'center' });
+      doc.text(`Empreinte fiscale : ${options.fiscalHash.slice(0, 16)}...`, { align: 'center' });
+      doc.text('Systeme conforme (art. 286, I, 3 bis CGI)', { align: 'center' });
     }
 
-    // Messages personnalisés TOUT EN BAS : pied de page puis remerciement
-    // (« Merci de votre visite » par défaut). Les deux restent éditables dans
-    // les réglages ticket, par boutique.
+    // ---- Messages personnalisés TOUT EN BAS (pied de page puis remerciement) ----
     if (rs?.footer_message?.trim()) {
-      doc.moveDown(0.5);
-      doc.font('Helvetica').fontSize(8)
-         .text(rs.footer_message.trim(), { align: 'center' });
+      doc.moveDown(0.4);
+      setFont();
+      doc.text(rs.footer_message.trim(), { align: 'center' });
     }
     if (rs?.welcome_message?.trim()) {
-      doc.moveDown(0.4);
-      doc.font('Helvetica-Oblique').fontSize(9)
-         .text(rs.welcome_message.trim(), { align: 'center' });
+      doc.moveDown(0.3);
+      center(rs.welcome_message.trim());
     }
 
     doc.end();
@@ -280,10 +286,9 @@ export async function renderReceiptPdf(
 }
 
 /**
- * Dessine un code-barres Code-128 minimaliste (style "barres aléatoires
- * déterministes" basé sur le hash du texte) + le numéro lisible dessous.
- * Pas une implémentation Code-128 normée, mais imprime le numéro lisible
- * sous forme barrée — pour scan rapide en interne uniquement.
+ * Dessine un code-barres Code-128 minimaliste (barres déterministes basées sur
+ * le hash du texte) + le numéro lisible dessous. Pas une implémentation
+ * Code-128 normée — pour repérage rapide interne uniquement.
  */
 function drawCode128(doc: PDFKit.PDFDocument, text: string) {
   const w = doc.page.width - doc.page.margins.left - doc.page.margins.right;
@@ -291,27 +296,19 @@ function drawCode128(doc: PDFKit.PDFDocument, text: string) {
   const totalBars = Math.floor(w / barWidth);
   const y = doc.y;
   const h = 26;
-  // Hash déterministe pour répartition de barres pleines/vides
   let seed = 0;
   for (let i = 0; i < text.length; i++) seed = (seed * 31 + text.charCodeAt(i)) >>> 0;
   let x = doc.page.margins.left;
   for (let i = 0; i < totalBars; i++) {
-    // 60% de barres pleines
     seed = (seed * 1103515245 + 12345) >>> 0;
     const isBar = (seed % 100) < 60;
     if (isBar) doc.rect(x, y, barWidth, h).fill('black');
     x += barWidth;
   }
   doc.fillColor('black');
-  doc.font('Helvetica').fontSize(8);
+  doc.font(MONO).fontSize(8);
   doc.y = y + h + 2;
   doc.text(text, { align: 'center' });
-}
-
-function rowLine(doc: PDFKit.PDFDocument, label: string, value: string) {
-  const y = doc.y;
-  doc.text(label, doc.page.margins.left, y, { continued: true });
-  doc.text(value, { align: 'right' });
 }
 
 function formatQty(q: number): string {
