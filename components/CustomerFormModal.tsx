@@ -21,6 +21,7 @@ export interface CustomerLike {
   internal_notes?: string | null;
   loyalty_code?: string | null;
   default_discount_pct?: number | null;
+  loyalty_enabled?: boolean;
 }
 
 interface Props {
@@ -55,6 +56,8 @@ export default function CustomerFormModal({ customer, onClose, onSaved }: Props)
   const [consentSms, setConsentSms] = useState(customer?.consent_sms ?? false);
   const [notes, setNotes] = useState(customer?.internal_notes ?? '');
   const [loyaltyCode, setLoyaltyCode] = useState(customer?.loyalty_code ?? '');
+  // Fidélité active par défaut ; décochable pour exclure ce client du calcul.
+  const [loyaltyEnabled, setLoyaltyEnabled] = useState(customer?.loyalty_enabled ?? true);
   const [discountPct, setDiscountPct] = useState<string>(
     customer?.default_discount_pct != null ? String(customer.default_discount_pct) : '',
   );
@@ -111,6 +114,7 @@ export default function CustomerFormModal({ customer, onClose, onSaved }: Props)
       internal_notes: notes.trim() || null,
       loyalty_code: loyaltyCode.trim() || null,
       default_discount_pct: discountPct.trim() ? Number(discountPct) : null,
+      loyalty_enabled: loyaltyEnabled,
     };
     const url = customer ? `/api/customers/${customer.id}` : '/api/customers';
     const method = customer ? 'PATCH' : 'POST';
@@ -247,6 +251,20 @@ export default function CustomerFormModal({ customer, onClose, onSaved }: Props)
             <p className="mt-1 text-xs text-ink-soft">
               Numéro de carte physique ou code scannable. Reconnu en caisse pour
               identifier rapidement le client.
+            </p>
+          </Field>
+          <Field label="Fidélité" full>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={loyaltyEnabled}
+                onChange={(e) => setLoyaltyEnabled(e.target.checked)}
+              />
+              Participe au programme de fidélité
+            </label>
+            <p className="mt-1 text-xs text-ink-soft">
+              Coché par défaut. Décoché : les achats de ce client ne génèrent
+              aucun point et aucun point n&apos;est utilisable pour lui.
             </p>
           </Field>
           <Field label="Remise systématique (%)" full>

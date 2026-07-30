@@ -631,6 +631,17 @@ export class SaleService {
       // 7. Fidélité (auto-earn + redemption éventuelle)
       let loyaltyResult: { earned: number; redeemed: number; new_balance: number } | null = null;
       if (sale.customer_id) {
+        // Le client peut être exclu de la fidélité (case décochée sur sa
+        // fiche) : aucun point gagné ni utilisé. Défensif si la migration 0055
+        // n'est pas encore appliquée (colonne absente => considéré opté-in).
+        let customerOptedIn = true;
+        try {
+          const custLoy = await client.query<{ loyalty_enabled: boolean }>(
+            `SELECT loyalty_enabled FROM customers WHERE id = $1`,
+            [sale.customer_id],
+          );
+          customerOptedIn = custLoy.rows[0]?.loyalty_enabled !== false;
+        } catch { /* colonne 0055 absente : opté-in par défaut */ }
         const cfgRes = await client.query<{ value: { loyalty?: LoyaltySettings } & Partial<LoyaltySettings> }>(
           `SELECT value FROM settings WHERE organization_id = $1 AND key = 'pos_ui'`,
           [args.organizationId],
@@ -648,7 +659,7 @@ export class SaleService {
         const grouped = await loyaltyGroupReady(client);
         const groupKey = loyaltyGroupKey(loyaltyCfg, sale.store_id);
 
-        if (enabled || redeemed > 0) {
+        if (customerOptedIn && (enabled || redeemed > 0)) {
           // S'assure que le compte fidélité (du bon groupe) existe.
           let accId: string | null = null;
           const accSel = grouped
