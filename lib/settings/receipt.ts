@@ -30,7 +30,9 @@ export interface ReceiptSettings {
   siret: string;
   /** N° TVA intra-communautaire. */
   vat_number: string;
-  /** Message de bienvenue affiché juste sous l'entête (1 ligne). */
+  /** Site web de la boutique (propre à chaque boutique). Affiché en en-tête. */
+  website: string;
+  /** Message de remerciement affiché TOUT EN BAS du ticket (1 ligne). */
   welcome_message: string;
   /** Message de pied de page (plusieurs lignes possibles). */
   footer_message: string;
@@ -52,6 +54,7 @@ export const RECEIPT_DEFAULTS: ReceiptSettings = {
   phone: '',
   siret: '',
   vat_number: '',
+  website: '',
   welcome_message: 'Merci de votre visite',
   footer_message: 'À bientôt !',
   show_barcode: true,
