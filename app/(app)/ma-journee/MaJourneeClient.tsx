@@ -235,7 +235,7 @@ export default function MaJourneeClient() {
             {sealedAt && (
               <div className="mb-3 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold text-white"
                    style={{ backgroundColor: 'var(--primary)' }}>
-                🔒 Journée fermée — {new Date(sealedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                Journée fermée — {new Date(sealedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
               </div>
             )}
             {loadingReport || !dayReport
@@ -260,7 +260,7 @@ export default function MaJourneeClient() {
                   className="mt-3 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold text-white"
                   style={{ backgroundColor: 'var(--primary)' }}
                 >
-                  🔒 Journée fermée — {new Date(sealedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                  Journée fermée — {new Date(sealedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
                 </div>
               )}
             </div>
@@ -502,7 +502,7 @@ function ReceiptActions({ saleId, receiptNumber, onSent, onError }: {
   return (
     <>
       <button onClick={reprint} className="btn-soft text-xs whitespace-nowrap" title="Réimprimer le ticket">
-        🖨 Réimprimer
+        Réimprimer
       </button>
       <button onClick={() => void resend()} disabled={busy}
               className="btn-soft text-xs whitespace-nowrap disabled:opacity-40" title="Renvoyer le ticket par email">
@@ -720,7 +720,7 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
               <div className="flex flex-col items-end gap-1.5">
                 <a href={`/api/invoices/${detail.invoice.id}/pdf`} target="_blank" rel="noreferrer"
                    className="btn-soft text-xs whitespace-nowrap">
-                  🖨 Imprimer facture {detail.invoice.number}
+                  Imprimer facture {detail.invoice.number}
                 </a>
                 <SendInvoiceButton
                   invoiceId={detail.invoice.id}
