@@ -1482,7 +1482,7 @@ export default function CashRegister({
               className="btn-soft text-sm min-h-[44px] px-4 whitespace-nowrap mr-auto"
               title="Mettre ce ticket en attente"
             >
-              En attente
+              Mettre en attente
             </button>
             {/* Action destructive (remplace aussi « Vider » : même effet). */}
             <button
