@@ -11,6 +11,7 @@ import ReturnModal from './ReturnModal';
 import PaymentCorrectionModal from './PaymentCorrectionModal';
 import AttachCustomerAfterSaleModal from './AttachCustomerAfterSaleModal';
 import DayReportView from './DayReportView';
+import GiftReceiptPickerModal from '@/components/GiftReceiptPickerModal';
 import type { DayReport } from '@/lib/services/day-report';
 import { promptThemed } from '@/lib/ui/dialog';
 
@@ -624,6 +625,14 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
   const [showCancel, setShowCancel] = useState(false);
   const [showAttach, setShowAttach] = useState(false);
   const [info, setInfo] = useState<string | null>(null);
+  const [showGiftPicker, setShowGiftPicker] = useState(false);
+
+  // Ticket sans prix : un seul article → impression directe ; sinon sélecteur.
+  function onGiftClick() {
+    const base = `/api/receipts/by-sale/${s.id}/pdf`;
+    if (detail.lines.length <= 1) { window.open(`${base}?gift=1`, '_blank'); return; }
+    setShowGiftPicker(true);
+  }
 
   const paymentsByMethod = useMemo(() => {
     const map = new Map<string, number>();
@@ -696,6 +705,10 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
                  className="btn-soft text-xs whitespace-nowrap">
                 Voir le ticket
               </a>
+              <button onClick={onGiftClick} className="btn-soft text-xs whitespace-nowrap"
+                      title="Imprimer un ticket sans prix (choix des articles si plusieurs)">
+                Ticket sans prix
+              </button>
               <ReceiptActions
                 saleId={s.id}
                 receiptNumber={s.receipt_number}
@@ -991,6 +1004,13 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
             setTimeout(() => setInfo(null), 4000);
             onInvoiceGenerated();
           }}
+        />
+      )}
+      {showGiftPicker && (
+        <GiftReceiptPickerModal
+          lines={detail.lines.map((l) => ({ label: l.label, quantity: l.quantity }))}
+          pdfBaseUrl={`/api/receipts/by-sale/${s.id}/pdf`}
+          onClose={() => setShowGiftPicker(false)}
         />
       )}
     </div>

@@ -19,15 +19,9 @@ export default function StoreScopeSelect({
   lockedStoreId?: string | null;
 }) {
   if (stores.length === 0) return null;
-  if (lockedStoreId) {
-    const name = stores.find((s) => s.id === lockedStoreId)?.name ?? 'Cette boutique';
-    return (
-      <div className="text-sm">
-        <span className="block text-xs font-medium text-ink-soft mb-1">Boutique</span>
-        <div className="input h-10 min-w-[12rem] inline-flex items-center bg-gray-50 text-ink">{name}</div>
-      </div>
-    );
-  }
+  // Poste de caisse appairé : boutique verrouillée → aucun sélecteur affiché
+  // (chaque boutique édite la sienne ; le multi reste au back-office).
+  if (lockedStoreId) return null;
   if (hideWhenSingle && stores.length === 1) return null;
   return (
     <label className="text-sm">

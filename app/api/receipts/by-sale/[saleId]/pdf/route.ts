@@ -11,5 +11,8 @@ export async function GET(_req: Request, { params }: { params: { saleId: string 
     [params.saleId, g.user.organizationId],
   );
   if (rows.length === 0) return jsonError('NOT_FOUND', 404);
-  return NextResponse.redirect(new URL(`/api/receipts/${rows[0]!.id}/pdf`, _req.url));
+  // On transmet les paramètres (?gift=1&lines=…) au PDF cible.
+  const target = new URL(`/api/receipts/${rows[0]!.id}/pdf`, _req.url);
+  target.search = new URL(_req.url).search;
+  return NextResponse.redirect(target);
 }

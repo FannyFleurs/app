@@ -65,14 +65,9 @@ export default function ReceiptSettingsForm({ stores, canEdit, lockedStoreId }: 
             En-tête, pied de page, options d&apos;impression — <strong>propre à chaque boutique</strong>.
           </p>
         </div>
-        {lockedStoreId ? (
-          <div className="text-sm">
-            <span className="block text-xs font-medium text-ink-soft mb-1">Boutique</span>
-            <div className="input h-10 min-w-[12rem] inline-flex items-center bg-gray-50 text-ink">
-              {stores.find((s) => s.id === lockedStoreId)?.name ?? 'Cette boutique'}
-            </div>
-          </div>
-        ) : stores.length > 0 && (
+        {/* Poste appairé (lockedStoreId) : aucun sélecteur — on édite la
+            boutique du poste. Le multi-boutiques reste au back-office. */}
+        {!lockedStoreId && stores.length > 0 && (
           <label className="text-sm">
             <span className="block text-xs font-medium text-ink-soft mb-1">Boutique</span>
             <select
