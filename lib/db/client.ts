@@ -1,5 +1,14 @@
-import { Pool, PoolClient } from 'pg';
+import { Pool, PoolClient, types } from 'pg';
 import { AsyncLocalStorage } from 'node:async_hooks';
+
+// Colonnes `date` (OID 1082) : node-pg les convertit par défaut en objets Date
+// JS. Or tout le code (et les types TS) les traite comme des chaînes
+// « YYYY-MM-DD » — et certaines pages les rendent DIRECTEMENT en JSX (ex. la
+// liste des factures : {i.issue_date}). Un objet Date rendu en enfant React
+// lève « Objects are not valid as a React child » → écran d'erreur.
+// On garde donc les dates SEULES sous forme de chaîne brute (les timestamps,
+// eux, restent des Date, toujours enveloppés dans new Date(...) côté app).
+types.setTypeParser(1082, (v) => v);
 
 /**
  * Contexte tenant de la requête en cours (Row-Level Security).
