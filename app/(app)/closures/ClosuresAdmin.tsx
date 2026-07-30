@@ -563,9 +563,6 @@ export default function ClosuresAdmin({ stores, registers }: { stores: Store[]; 
                 <span className="text-2xl font-bold tabular-nums">{formatEUR(countedCash)}</span>
               </div>
               {expectedCash > 0 && countedCash < expectedCash && (
-                <div className="mt-1 text-sm text-right text-ink-soft">
-                  Reste <span className="font-semibold text-ink">{formatEUR(expectedCash - countedCash)}</span> à compter avant le montant attendu ({formatEUR(expectedCash)}).
-                </div>
               )}
 
               {/* Avancement vers le montant attendu */}
