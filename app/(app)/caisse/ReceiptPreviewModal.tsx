@@ -26,7 +26,14 @@ export default function ReceiptPreviewModal({ receipt, storeId, onClose }: Props
     delivery_address?: { line1: string; zip: string; city: string } | null;
   } | null>(null);
 
-  // Charge l'éventuel delivery_info attaché à la vente
+  // Lignes de la vente (pour la sélection d'articles du ticket sans prix).
+  // L'ordre correspond à celui du snapshot du ticket (tri par line_index),
+  // donc la position i ici = la position i côté PDF.
+  const [saleLines, setSaleLines] = useState<Array<{ label: string; quantity: string }>>([]);
+  const [showGiftPicker, setShowGiftPicker] = useState(false);
+  const [giftSel, setGiftSel] = useState<Set<number>>(new Set());
+
+  // Charge l'éventuel delivery_info + les lignes de la vente.
   useEffect(() => {
     if (isSchool || !receipt.saleId) return;
     void (async () => {
@@ -35,10 +42,33 @@ export default function ReceiptPreviewModal({ receipt, storeId, onClose }: Props
         if (!r.ok) return;
         const j = await r.json();
         if (j.sale?.delivery_info) setDelivery(j.sale.delivery_info);
+        if (Array.isArray(j.lines)) {
+          setSaleLines(j.lines.map((l: { label: string; quantity: string }) => ({
+            label: l.label, quantity: l.quantity,
+          })));
+        }
       } catch { /* ignore */ }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Ticket sans prix : si un seul article, impression directe ; sinon on
+  // ouvre le sélecteur d'articles.
+  function onGiftClick() {
+    if (saleLines.length <= 1) {
+      window.open(`${pdfUrl}?gift=1`, '_blank');
+      return;
+    }
+    setGiftSel(new Set(saleLines.map((_, i) => i))); // tout coché par défaut
+    setShowGiftPicker(true);
+  }
+  function printGift() {
+    const idx = [...giftSel].sort((a, b) => a - b);
+    if (idx.length === 0) return;
+    const all = idx.length === saleLines.length;
+    window.open(`${pdfUrl}?gift=1${all ? '' : `&lines=${idx.join(',')}`}`, '_blank');
+    setShowGiftPicker(false);
+  }
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showEmailModal, setShowEmailModal] = useState(false);
@@ -200,15 +230,13 @@ export default function ReceiptPreviewModal({ receipt, storeId, onClose }: Props
             >
               Imprimer / PDF
             </a>
-            <a
-              href={`${pdfUrl}?gift=1`}
-              target="_blank"
-              rel="noreferrer"
+            <button
+              onClick={onGiftClick}
               className="btn-soft h-12 sm:h-14 text-base font-semibold grid place-items-center text-center leading-tight"
-              title="Imprimer un bon d'échange (mêmes articles, sans les prix)"
+              title="Imprimer un ticket sans prix (choix des articles si plusieurs)"
             >
               Ticket sans prix
-            </a>
+            </button>
             <button
               onClick={() => setShowEmailModal(true)}
               className="btn-soft h-12 sm:h-14 text-base font-semibold grid place-items-center text-center leading-tight"
@@ -336,6 +364,60 @@ export default function ReceiptPreviewModal({ receipt, storeId, onClose }: Props
             setTimeout(() => setEmailToast(null), 3000);
           }}
         />
+      )}
+
+      {showGiftPicker && (
+        <div className="fixed inset-0 z-[70] grid place-items-center bg-ink/40 p-4" onClick={() => setShowGiftPicker(false)}>
+          <div className="card w-full max-w-md p-5" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold">Ticket sans prix</h3>
+            <p className="text-xs text-ink-soft mt-1">
+              Choisissez les articles à faire figurer sur le ticket sans prix.
+            </p>
+            <div className="mt-3 flex items-center justify-between text-xs">
+              <button className="text-accent-deep font-medium" onClick={() => setGiftSel(new Set(saleLines.map((_, i) => i)))}>
+                Tout sélectionner
+              </button>
+              <button className="text-ink-soft" onClick={() => setGiftSel(new Set())}>
+                Tout décocher
+              </button>
+            </div>
+            <ul className="mt-2 max-h-[50vh] overflow-auto divide-y divide-border rounded-xl border border-border">
+              {saleLines.map((l, i) => {
+                const checked = giftSel.has(i);
+                return (
+                  <li key={i}>
+                    <label className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-gray-50">
+                      <input
+                        type="checkbox"
+                        className="h-5 w-5"
+                        checked={checked}
+                        onChange={() => setGiftSel((cur) => {
+                          const next = new Set(cur);
+                          if (next.has(i)) next.delete(i); else next.add(i);
+                          return next;
+                        })}
+                      />
+                      <span className="flex-1 min-w-0">
+                        <span className="text-sm font-medium">{l.label}</span>
+                        <span className="ml-1.5 text-xs text-ink-soft">× {l.quantity}</span>
+                      </span>
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+            <div className="mt-4 flex justify-end gap-2">
+              <button onClick={() => setShowGiftPicker(false)} className="btn-ghost min-h-[44px] px-4">Annuler</button>
+              <button
+                onClick={printGift}
+                disabled={giftSel.size === 0}
+                className="btn-primary min-h-[44px] px-4 disabled:opacity-40"
+              >
+                Imprimer ({giftSel.size})
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

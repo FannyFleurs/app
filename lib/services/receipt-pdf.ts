@@ -59,6 +59,9 @@ export async function renderReceiptPdf(
     /** Ticket « sans prix » (bon d'échange) : liste quantité + désignation,
      *  sans aucun montant, sans totaux/TVA/paiements. */
     giftReceipt?: boolean;
+    /** Ticket sans prix : positions (0-based) des lignes à imprimer. Si absent
+     *  ou vide, toutes les lignes sont imprimées. */
+    giftLineIndices?: number[] | null;
     /** Nom du client rattaché (affiché avec les points de fidélité). */
     customerName?: string | null;
     /** Fidélité au moment de la vente : points gagnés sur ce ticket +
@@ -144,11 +147,16 @@ export async function renderReceiptPdf(
     // Lignes
     doc.font('Helvetica').fontSize(8);
     if (gift) {
-      // Sans prix : uniquement quantité + désignation.
+      // Sans prix : uniquement quantité + désignation. Sélection éventuelle
+      // d'un sous-ensemble de lignes (positions 0-based).
+      const sel = options.giftLineIndices;
+      const giftLines = sel && sel.length
+        ? snapshot.lines.filter((_, i) => sel.includes(i))
+        : snapshot.lines;
       doc.font('Helvetica-Bold').text('QTE  DÉSIGNATION');
       doc.font('Helvetica');
       doc.moveDown(0.2);
-      for (const l of snapshot.lines) {
+      for (const l of giftLines) {
         doc.text(`${formatQty(l.quantity)}  ${l.label}`);
       }
     } else {
