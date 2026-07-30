@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatEUR } from '@/lib/services/money';
 import { PAYMENT_LABELS } from '@/components/labels';
 import Badge from '@/components/Badge';
@@ -60,6 +60,7 @@ export default function ClosuresAdmin({ stores, registers }: { stores: Store[]; 
   const [showDeposit, setShowDeposit] = useState(false);
   const [drawerToast, setDrawerToast] = useState<string | null>(null);
   const [restored, setRestored] = useState<boolean>(false);
+  const [loadingPreview, setLoadingPreview] = useState(true);
 
   // ---------------------------------------------------------------------------
   // PERSISTANCE LOCALE DU COMPTAGE
@@ -142,13 +143,23 @@ export default function ClosuresAdmin({ stores, registers }: { stores: Store[]; 
   const [registerId, setRegisterId] = useState<string>('');
   useEffect(() => { setRegisterId(registersForStore[0]?.id ?? ''); }, [registersForStore]);
 
-  async function loadPreview() {
-    setError(null);
-    if (!storeId || !date) return;
-    const r = await fetch(`/api/closures/daily/preview?store_id=${storeId}&date=${date}`);
-    if (r.ok) setPreview(await r.json());
-  }
-  useEffect(() => { setSealedResult(null); void loadPreview(); /* eslint-disable-next-line */ }, [storeId, date]);
+  // Chargement robuste : état de chargement explicite + gestion d'erreur avec
+  // ré-essai (évite de rester bloqué sur « Chargement… » si le 1er appel
+  // échoue/traîne — d'où le « il faut recliquer pour que ça s'affiche »).
+  const loadPreview = useCallback(async () => {
+    if (!storeId || !date) { setLoadingPreview(false); return; }
+    setLoadingPreview(true); setError(null);
+    try {
+      const r = await fetch(`/api/closures/daily/preview?store_id=${storeId}&date=${date}`, { cache: 'no-store' });
+      if (r.ok) setPreview(await r.json());
+      else setError('Impossible de charger la clôture. Réessaie.');
+    } catch {
+      setError('Impossible de charger la clôture (réseau). Réessaie.');
+    } finally {
+      setLoadingPreview(false);
+    }
+  }, [storeId, date]);
+  useEffect(() => { setSealedResult(null); void loadPreview(); }, [loadPreview]);
 
   const countedCash = useMemo(() => {
     let total = 0;
@@ -355,7 +366,17 @@ export default function ClosuresAdmin({ stores, registers }: { stores: Store[]; 
       )}
 
       {!preview ? (
-        <div className="text-ink-soft text-sm">Chargement…</div>
+        loadingPreview ? (
+          <div className="flex items-center gap-2 text-ink-soft text-sm py-6">
+            <svg className="animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M21 12a9 9 0 1 1-6.2-8.6" strokeLinecap="round" /></svg>
+            Chargement de la clôture…
+          </div>
+        ) : (
+          <div className="rounded-xl bg-danger/10 px-4 py-3 text-sm text-danger flex items-center justify-between gap-3">
+            <span>{error ?? 'La clôture n\'a pas pu être chargée.'}</span>
+            <button onClick={() => void loadPreview()} className="btn-primary text-sm">Réessayer</button>
+          </div>
+        )
       ) : (
         <>
           {/* KPI strip compact */}
@@ -519,18 +540,33 @@ export default function ClosuresAdmin({ stores, registers }: { stores: Store[]; 
                       {qty > 0 && !alreadySealed && (
                         <span
                           role="button"
-                          aria-label="Retirer un"
+                          aria-label="Supprimer ce comptage"
+                          title="Supprimer ce comptage"
                           onPointerDown={(e) => { e.stopPropagation(); }}
-                          onClick={(e) => { e.stopPropagation(); bump(d.value, -1); }}
-                          className="absolute top-1 right-1 grid h-6 w-6 place-items-center rounded-full bg-white border border-border text-ink-soft text-sm leading-none hover:bg-gray-100"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDenomCount((c) => { const n = { ...c }; delete n[String(d.value)]; return n; });
+                          }}
+                          className="absolute -top-1.5 -right-1.5 grid h-6 w-6 place-items-center rounded-full bg-danger text-white text-xs font-bold leading-none shadow-sm hover:opacity-90"
                         >
-                          −
+                          ✕
                         </span>
                       )}
                     </button>
                   );
                 })}
               </div>
+
+              {/* Total compté (toujours visible) */}
+              <div className="mt-4 rounded-xl bg-primary-soft/40 px-4 py-3 flex items-baseline justify-between">
+                <span className="text-sm font-medium">Total compté</span>
+                <span className="text-2xl font-bold tabular-nums">{formatEUR(countedCash)}</span>
+              </div>
+              {expectedCash > 0 && countedCash < expectedCash && (
+                <div className="mt-1 text-sm text-right text-ink-soft">
+                  Reste <span className="font-semibold text-ink">{formatEUR(expectedCash - countedCash)}</span> à compter avant le montant attendu ({formatEUR(expectedCash)}).
+                </div>
+              )}
 
               {/* Avancement vers le montant attendu */}
               {expectedCash > 0 && (
