@@ -113,12 +113,12 @@ export class InvoiceService {
           `INSERT INTO invoice_lines
              (organization_id, invoice_id, line_index, label, quantity,
               unit_price_ht, discount_pct, tax_rate, tax_rate_code,
-              line_ht, line_tva, line_ttc)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+              line_ht, line_tva, line_ttc, sale_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
           [
             args.organizationId, inv.rows[0]!.id, l.line_index, l.label, l.quantity,
             unitHt, 0, rate, l.tax_rate_code,
-            l.line_ht, l.line_tva, l.line_ttc,
+            l.line_ht, l.line_tva, l.line_ttc, s.id,
           ],
         );
       }
@@ -245,18 +245,19 @@ export class InvoiceService {
            FROM sale_lines WHERE sale_id = ANY($1::uuid[]) ORDER BY sale_id, line_index`,
         [args.saleIds],
       );
-      const receiptBySale = new Map(sales.map((s) => [s.id, s.receipt_number]));
+      // Le numéro de ticket de chaque vente est désormais porté par l'en-tête
+      // de groupe sur la facture (regroupement par vente) : on garde le libellé
+      // d'article « propre », sans suffixe « · ticket ».
       let idx = 0;
       for (const l of linesRes.rows) {
         const rate = Number(l.tax_rate);
         const unitHt = round4(Number(l.unit_price_ttc) / (1 + rate / 100));
-        const label = `${l.label} · ${receiptBySale.get(l.sale_id) ?? 'ticket'}`;
         await client.query(
           `INSERT INTO invoice_lines
              (organization_id, invoice_id, line_index, label, quantity,
-              unit_price_ht, discount_pct, tax_rate, tax_rate_code, line_ht, line_tva, line_ttc)
-           VALUES ($1,$2,$3,$4,$5,$6,0,$7,$8,$9,$10,$11)`,
-          [args.organizationId, invoiceId, idx++, label, l.quantity, unitHt, rate, l.tax_rate_code, l.line_ht, l.line_tva, l.line_ttc],
+              unit_price_ht, discount_pct, tax_rate, tax_rate_code, line_ht, line_tva, line_ttc, sale_id)
+           VALUES ($1,$2,$3,$4,$5,$6,0,$7,$8,$9,$10,$11,$12)`,
+          [args.organizationId, invoiceId, idx++, l.label, l.quantity, unitHt, rate, l.tax_rate_code, l.line_ht, l.line_tva, l.line_ttc, l.sale_id],
         );
       }
 

@@ -34,36 +34,51 @@ export class SaleCancelService {
       const saleRes = await client.query<{
         id: string; status: string; store_id: string; register_id: string;
         cash_session_id: string | null; receipt_number: string;
-        customer_id: string | null; total_ttc: string; account_invoice_id: string | null;
+        customer_id: string | null;
+        total_ht: string; total_tva: string; total_ttc: string;
+        tva_breakdown: { rate: number; base_ht: number; tva: number; ttc: number }[] | null;
+        account_invoice_id: string | null;
       }>(
         `SELECT id, status, store_id, register_id, cash_session_id, receipt_number,
-                customer_id, total_ttc, account_invoice_id
+                customer_id, total_ht::text, total_tva::text, total_ttc::text,
+                tva_breakdown, account_invoice_id
            FROM sales WHERE id = $1 AND organization_id = $2 FOR UPDATE`,
         [args.saleId, args.organizationId],
       );
       if (saleRes.rowCount === 0) throw new Error('SALE_NOT_FOUND');
       const sale = saleRes.rows[0]!;
       if (sale.status !== 'validated') throw new Error('SALE_NOT_CANCELABLE');
-      // Facture de PÉRIODE « en compte » (regroupe plusieurs ventes) : hors
-      // périmètre de l'annulation mono-vente.
-      if (sale.account_invoice_id) throw new Error('SALE_INVOICED');
 
-      // Facture MONO-VENTE déjà émise : on ne bloque plus. Une facture est
-      // immuable, donc on émet une FACTURE D'AVOIR (credit-note invoice) qui la
-      // contre-passe (montants négatifs) et on marque l'originale « annulée ».
-      const invRes = await client.query<{
+      // La vente est-elle facturée ? Deux cas, tous deux gérés par l'émission
+      // d'une FACTURE D'AVOIR (une facture étant immuable) :
+      //   1. Facture MONO-VENTE (invoices.sale_id = cette vente) → on émet
+      //      l'avoir puis on marque la facture d'origine « annulée ».
+      //   2. Facture de PÉRIODE « en compte » (sales.account_invoice_id, qui
+      //      regroupe PLUSIEURS ventes) → on émet un avoir pour la seule
+      //      part de CETTE vente, en RÉFÉRENÇANT la facture de période mais
+      //      SANS l'annuler (elle couvre d'autres ventes).
+      const monoInvRes = await client.query<{
         id: string; number: string | null; customer_id: string | null; store_id: string;
-        total_ht: string; total_tva: string; total_ttc: string;
-        tva_breakdown: { rate: number; base_ht: number; tva: number; ttc: number }[] | null;
       }>(
-        `SELECT id, number, customer_id, store_id,
-                total_ht::text, total_tva::text, total_ttc::text, tva_breakdown
+        `SELECT id, number, customer_id, store_id
            FROM invoices
           WHERE sale_id = $1 AND organization_id = $2 AND status <> 'cancelled'
           ORDER BY created_at DESC LIMIT 1`,
         [sale.id, args.organizationId],
       );
-      const invoiceToReverse = invRes.rows[0] ?? null;
+      let invoiceToReverse:
+        | { id: string; number: string | null; customer_id: string | null; store_id: string; isPeriod: boolean }
+        | null = monoInvRes.rows[0] ? { ...monoInvRes.rows[0], isPeriod: false } : null;
+      if (!invoiceToReverse && sale.account_invoice_id) {
+        const perRes = await client.query<{
+          id: string; number: string | null; customer_id: string | null; store_id: string;
+        }>(
+          `SELECT id, number, customer_id, store_id
+             FROM invoices WHERE id = $1 AND organization_id = $2 AND status <> 'cancelled'`,
+          [sale.account_invoice_id, args.organizationId],
+        );
+        if (perRes.rows[0]) invoiceToReverse = { ...perRes.rows[0], isPeriod: true };
+      }
 
       // Refuse si des avoirs (reprises partielles) existent déjà : le montant a
       // déjà été partiellement contre-passé, l'annulation totale n'a plus de sens.
@@ -80,9 +95,12 @@ export class SaleCancelService {
       // 2. Lignes + paiements d'origine
       const linesRes = await client.query<{
         line_index: number; label: string; quantity: string; tax_rate: string;
-        line_ttc: string; product_id: string | null; variant_id: string | null;
+        tax_rate_code: string | null; unit_price_ttc: string;
+        line_ht: string; line_tva: string; line_ttc: string;
+        product_id: string | null; variant_id: string | null;
       }>(
-        `SELECT line_index, label, quantity, tax_rate, line_ttc, product_id, variant_id
+        `SELECT line_index, label, quantity, tax_rate, tax_rate_code, unit_price_ttc,
+                line_ht, line_tva, line_ttc, product_id, variant_id
            FROM sale_lines WHERE sale_id = $1 ORDER BY line_index`,
         [sale.id],
       );
@@ -305,16 +323,21 @@ export class SaleCancelService {
         }
       }
 
-      // 8bis. FACTURE D'AVOIR : si la vente était facturée (facture mono-vente),
-      // on émet une facture d'avoir (invoice_type='credit_note') qui contre-passe
-      // la facture d'origine (montants négatifs), puis on annule l'originale.
+      // 8bis. FACTURE D'AVOIR : si la vente était facturée, on émet une facture
+      // d'avoir (invoice_type='credit_note') pour la part de CETTE vente
+      // (montants négatifs pris sur la vente elle-même — identiques à la
+      // facture mono ; corrects aussi pour la part d'une facture de période).
       // On réutilise le NUMÉRO de l'avoir (A-…) : un seul document d'avoir.
       let creditInvoiceId: string | null = null;
       if (invoiceToReverse) {
         const issueDate = new Date().toISOString().slice(0, 10);
-        const negBreakdown = (invoiceToReverse.tva_breakdown ?? []).map((t) => ({
-          rate: t.rate, base_ht: -t.base_ht, tva: -t.tva, ttc: -t.ttc,
+        const negBreakdown = (sale.tva_breakdown ?? []).map((t) => ({
+          rate: t.rate, base_ht: -Number(t.base_ht), tva: -Number(t.tva),
+          ttc: -Number((t as { ttc?: number }).ttc ?? Number(t.base_ht) + Number(t.tva)),
         }));
+        const refLabel = invoiceToReverse.isPeriod
+          ? `Avoir sur facture de période ${invoiceToReverse.number ?? ''}`
+          : `Avoir sur facture ${invoiceToReverse.number ?? ''}`;
         const cnInv = await client.query<{ id: string }>(
           `INSERT INTO invoices
              (organization_id, store_id, customer_id, sale_id, invoice_type,
@@ -325,36 +348,32 @@ export class SaleCancelService {
           [
             args.organizationId, invoiceToReverse.store_id, invoiceToReverse.customer_id, sale.id,
             number, seqValue.toString(), issueDate,
-            -Number(invoiceToReverse.total_ht), -Number(invoiceToReverse.total_tva), -Number(invoiceToReverse.total_ttc),
+            -Number(sale.total_ht), -Number(sale.total_tva), -Number(sale.total_ttc),
             JSON.stringify(negBreakdown),
-            `Avoir sur facture ${invoiceToReverse.number ?? ''} — annulation vente ${sale.receipt_number} (${args.reason.trim()})`,
-            JSON.stringify({ credited_invoice_id: invoiceToReverse.id, credited_invoice_number: invoiceToReverse.number }),
+            `${refLabel} — annulation vente ${sale.receipt_number} (${args.reason.trim()})`,
+            JSON.stringify({
+              credited_invoice_id: invoiceToReverse.id,
+              credited_invoice_number: invoiceToReverse.number,
+              period_invoice: invoiceToReverse.isPeriod,
+            }),
           ],
         );
         creditInvoiceId = cnInv.rows[0]!.id;
 
-        // Lignes = celles de la facture d'origine, en négatif.
-        const invLines = await client.query<{
-          line_index: number; label: string; quantity: string; unit_price_ht: string;
-          discount_pct: string; tax_rate: string; tax_rate_code: string;
-          line_ht: string; line_tva: string; line_ttc: string;
-        }>(
-          `SELECT line_index, label, quantity, unit_price_ht, discount_pct, tax_rate, tax_rate_code,
-                  line_ht, line_tva, line_ttc
-             FROM invoice_lines WHERE invoice_id = $1 ORDER BY line_index`,
-          [invoiceToReverse.id],
-        );
-        for (const l of invLines.rows) {
+        // Lignes = celles de la VENTE, en négatif (PU HT dérivé du PU TTC).
+        for (const l of linesRes.rows) {
+          const rate = Number(l.tax_rate);
+          const unitHt = Number((Number(l.unit_price_ttc) / (1 + rate / 100)).toFixed(4));
           await client.query(
             `INSERT INTO invoice_lines
                (organization_id, invoice_id, line_index, label, quantity,
                 unit_price_ht, discount_pct, tax_rate, tax_rate_code,
-                line_ht, line_tva, line_ttc)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+                line_ht, line_tva, line_ttc, sale_id)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
             [
               args.organizationId, creditInvoiceId, l.line_index, l.label, l.quantity,
-              l.unit_price_ht, l.discount_pct, l.tax_rate, l.tax_rate_code,
-              -Number(l.line_ht), -Number(l.line_tva), -Number(l.line_ttc),
+              unitHt, 0, rate, l.tax_rate_code,
+              -Number(l.line_ht), -Number(l.line_tva), -Number(l.line_ttc), sale.id,
             ],
           );
         }
@@ -371,7 +390,8 @@ export class SaleCancelService {
           payload: {
             invoice_id: creditInvoiceId, invoice_number: number, invoice_type: 'credit_note',
             credited_invoice_id: invoiceToReverse.id, credited_invoice_number: invoiceToReverse.number,
-            sale_id: sale.id, total_ttc: -Number(invoiceToReverse.total_ttc),
+            period_invoice: invoiceToReverse.isPeriod,
+            sale_id: sale.id, total_ttc: -Number(sale.total_ttc),
           },
           amountTtcDelta: 0,
         });
@@ -380,11 +400,15 @@ export class SaleCancelService {
           [invEvent.currentHash, invEvent.id, creditInvoiceId],
         );
 
-        // Annule la facture d'origine.
-        await client.query(
-          `UPDATE invoices SET status = 'cancelled', updated_at = now() WHERE id = $1`,
-          [invoiceToReverse.id],
-        );
+        // Facture MONO-VENTE → annulée (1 vente = 1 facture). Facture de
+        // PÉRIODE → conservée (elle couvre d'autres ventes) ; seul l'avoir la
+        // contre-passe partiellement.
+        if (!invoiceToReverse.isPeriod) {
+          await client.query(
+            `UPDATE invoices SET status = 'cancelled', updated_at = now() WHERE id = $1`,
+            [invoiceToReverse.id],
+          );
+        }
       }
 
       // 9. Marque la vente comme annulée (seule transition tolérée par le trigger)

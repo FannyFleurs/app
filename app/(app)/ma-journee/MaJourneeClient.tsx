@@ -39,7 +39,7 @@ interface SaleDetail {
     product_purchase_price_ht?: string | null;
   }[];
   payments: { method: string; amount: string; reference: string | null }[];
-  invoice: { id: string; number: string } | null;
+  invoice: { id: string; number: string; period?: boolean } | null;
   returns?: Array<{
     id: string; number: string; amount: string; used_amount: string;
     status: string; reason: string; created_at: string;
@@ -780,7 +780,8 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
               onClick={() => setShowCancel(true)}
               disabled={hasReturns}
               title={
-                detail.invoice ? 'Annule la vente et émet une facture d’avoir contre-passant la facture.'
+                detail.invoice?.period ? 'Émet une facture d’avoir pour cette vente et référence la facture de période (celle-ci reste valable pour les autres ventes).'
+                : detail.invoice ? 'Annule la vente et émet une facture d’avoir contre-passant la facture.'
                 : hasReturns ? 'Un retour a déjà eu lieu sur cette vente.'
                 : undefined
               }
@@ -979,6 +980,7 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
           receiptNumber={s.receipt_number}
           amount={Number(s.total_ttc)}
           isInvoiced={!!detail.invoice}
+          isPeriodInvoice={!!detail.invoice?.period}
           onClose={() => setShowCancel(false)}
           onSuccess={(number) => {
             setShowCancel(false);
@@ -1030,8 +1032,8 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
   );
 }
 
-function CancelSaleModal({ saleId, receiptNumber, amount, isInvoiced, onClose, onSuccess }: {
-  saleId: string; receiptNumber: string; amount: number; isInvoiced?: boolean;
+function CancelSaleModal({ saleId, receiptNumber, amount, isInvoiced, isPeriodInvoice, onClose, onSuccess }: {
+  saleId: string; receiptNumber: string; amount: number; isInvoiced?: boolean; isPeriodInvoice?: boolean;
   onClose: () => void; onSuccess: (creditNoteNumber: string) => void;
 }) {
   const [reason, setReason] = useState('');
@@ -1071,11 +1073,20 @@ function CancelSaleModal({ saleId, receiptNumber, amount, isInvoiced, onClose, o
           tous les modes de règlement et la fidélité. Un avoir est émis et la vente est marquée
           « annulée ». Opération irréversible.
         </p>
-        {isInvoiced && (
+        {isInvoiced && !isPeriodInvoice && (
           <p className="rounded-xl bg-warning/10 px-3 py-2 text-sm text-warning">
             Cette vente est <strong>facturée</strong> : une <strong>facture d’avoir</strong>
             {' '}sera automatiquement émise pour contre-passer la facture, et la facture
             d’origine sera marquée « annulée ». Retrouvez-la dans <strong>Factures</strong>.
+          </p>
+        )}
+        {isPeriodInvoice && (
+          <p className="rounded-xl bg-warning/10 px-3 py-2 text-sm text-warning">
+            Cette vente fait partie d’une <strong>facture de période</strong> («&nbsp;en compte&nbsp;»)
+            {' '}qui regroupe plusieurs ventes. Une <strong>facture d’avoir</strong> sera émise pour
+            {' '}la part de cette vente et référencera la facture de période ; celle-ci
+            {' '}<strong>reste valable</strong> pour les autres ventes. Retrouvez l’avoir dans
+            {' '}<strong>Factures</strong>.
           </p>
         )}
         <label className="block text-sm">

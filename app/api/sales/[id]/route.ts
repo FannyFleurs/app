@@ -26,12 +26,26 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
        FROM payments WHERE sale_id = $1 ORDER BY created_at`,
     [params.id],
   );
-  const invoice = await query<{ id: string; number: string }>(
+  // Facture rattachée : mono-vente (invoices.sale_id) OU, à défaut, facture
+  // de PÉRIODE « en compte » (sales.account_invoice_id, qui regroupe plusieurs
+  // ventes). On expose `period` pour nuancer l'UI.
+  const monoInvoice = await query<{ id: string; number: string }>(
     `SELECT id, number FROM invoices
       WHERE sale_id = $1 AND organization_id = $2 AND status <> 'cancelled'
       ORDER BY created_at DESC LIMIT 1`,
     [params.id, g.user.organizationId],
   );
+  let invoiceRow: { id: string; number: string; period: boolean } | null =
+    monoInvoice.rows[0] ? { ...monoInvoice.rows[0], period: false } : null;
+  const saleRow = sale.rows[0] as { account_invoice_id?: string | null };
+  if (!invoiceRow && saleRow.account_invoice_id) {
+    const periodInvoice = await query<{ id: string; number: string }>(
+      `SELECT id, number FROM invoices
+        WHERE id = $1 AND organization_id = $2 AND status <> 'cancelled'`,
+      [saleRow.account_invoice_id, g.user.organizationId],
+    );
+    if (periodInvoice.rows[0]) invoiceRow = { ...periodInvoice.rows[0], period: true };
+  }
   // Retours / avoirs liés à cette vente
   const returns = await query(
     `SELECT id, number, amount::text, used_amount::text, status, reason, created_at
@@ -60,7 +74,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     sale: sale.rows[0],
     lines: lines.rows,
     payments: payments.rows,
-    invoice: invoice.rows[0] ?? null,
+    invoice: invoiceRow,
     returns: returns.rows,
     returned_by_line,
   });

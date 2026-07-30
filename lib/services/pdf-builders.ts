@@ -1,6 +1,7 @@
 import 'server-only';
 import { query } from '@/lib/db/client';
 import { renderInvoicePdf, type InvoicePdfData } from './invoice-pdf';
+import { loadInvoiceGroups } from './invoice-lines';
 import { renderReceiptPdf, type ReceiptSnapshot, type OrgInfo } from './receipt-pdf';
 import { loadReceiptSettings } from '@/lib/settings/receipt-server';
 
@@ -13,7 +14,8 @@ export async function buildInvoicePdf(invoiceId: string, organizationId: string)
     issue_date: string | null; service_date: string | null; due_date: string | null;
     total_ht: string; total_tva: string; total_ttc: string;
     tva_breakdown: { rate: number; base_ht: number; tva: number; ttc: number }[];
-    payment_terms: string | null; legal_mentions: string | null; fiscal_hash: string | null;
+    payment_terms: string | null; legal_mentions: string | null; notes: string | null;
+    sale_id: string | null; fiscal_hash: string | null;
     org_name: string; org_legal: string; org_siret: string | null; org_vat: string | null;
     org_address: { line1?: string; zip?: string; city?: string } | null;
     org_contact: { email?: string; phone?: string } | null;
@@ -24,7 +26,7 @@ export async function buildInvoicePdf(invoiceId: string, organizationId: string)
     `SELECT i.number, i.invoice_type, i.status,
             i.issue_date::text, i.service_date::text, i.due_date::text,
             i.total_ht::text, i.total_tva::text, i.total_ttc::text,
-            i.tva_breakdown, i.payment_terms, i.legal_mentions, i.fiscal_hash,
+            i.tva_breakdown, i.payment_terms, i.legal_mentions, i.notes, i.sale_id::text, i.fiscal_hash,
             o.name AS org_name, o.legal_name AS org_legal, o.siret AS org_siret,
             o.vat_number AS org_vat, o.address AS org_address, o.contact AS org_contact,
             COALESCE(c.company_name, NULLIF(TRIM(CONCAT(c.first_name,' ',c.last_name)), '')) AS customer_display,
@@ -39,27 +41,15 @@ export async function buildInvoicePdf(invoiceId: string, organizationId: string)
   if (inv.rowCount === 0) return null;
   const r = inv.rows[0]!;
 
-  const lines = await query<{
-    label: string; quantity: string; unit_price_ht: string; discount_pct: string;
-    tax_rate: string; line_ht: string; line_tva: string; line_ttc: string;
-  }>(
-    `SELECT label, quantity::text, unit_price_ht::text, discount_pct::text,
-            tax_rate::text, line_ht::text, line_tva::text, line_ttc::text
-       FROM invoice_lines WHERE invoice_id = $1 ORDER BY line_index`,
-    [invoiceId],
-  );
+  const { lines, groups } = await loadInvoiceGroups(invoiceId, r.sale_id, r.notes);
 
   const data: InvoicePdfData = {
     number: r.number, invoice_type: r.invoice_type, status: r.status,
     issue_date: r.issue_date ?? '', service_date: r.service_date, due_date: r.due_date,
     total_ht: Number(r.total_ht), total_tva: Number(r.total_tva), total_ttc: Number(r.total_ttc),
     tva_breakdown: r.tva_breakdown ?? [], payment_terms: r.payment_terms,
-    legal_mentions: r.legal_mentions, fiscal_hash: r.fiscal_hash,
-    lines: lines.rows.map((l) => ({
-      label: l.label, quantity: Number(l.quantity), unit_price_ht: Number(l.unit_price_ht),
-      discount_pct: Number(l.discount_pct), tax_rate: Number(l.tax_rate),
-      line_ht: Number(l.line_ht), line_tva: Number(l.line_tva), line_ttc: Number(l.line_ttc),
-    })),
+    legal_mentions: r.legal_mentions, notes: r.notes, fiscal_hash: r.fiscal_hash,
+    lines, groups,
   };
 
   const buffer = await renderInvoicePdf(
