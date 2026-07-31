@@ -11,10 +11,12 @@ import { useState } from 'react';
  *   /api/receipts/<id>/pdf  ou  /api/receipts/by-sale/<saleId>/pdf
  */
 export default function GiftReceiptPickerModal({
-  lines, pdfBaseUrl, onClose,
+  lines, pdfBaseUrl, onPrint, onClose,
 }: {
   lines: Array<{ label: string; quantity: string | number }>;
   pdfBaseUrl: string;
+  /** Si fourni, imprime le sous-ensemble (null = tous) au lieu d'ouvrir le PDF. */
+  onPrint?: (indices: number[] | null) => void;
   onClose: () => void;
 }) {
   const [sel, setSel] = useState<Set<number>>(new Set(lines.map((_, i) => i)));
@@ -23,6 +25,7 @@ export default function GiftReceiptPickerModal({
     const idx = [...sel].sort((a, b) => a - b);
     if (idx.length === 0) return;
     const all = idx.length === lines.length;
+    if (onPrint) { onPrint(all ? null : idx); onClose(); return; }
     window.open(`${pdfBaseUrl}?gift=1${all ? '' : `&lines=${idx.join(',')}`}`, '_blank');
     onClose();
   }

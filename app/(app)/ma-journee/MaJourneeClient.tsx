@@ -14,6 +14,7 @@ import DayReportView from './DayReportView';
 import GiftReceiptPickerModal from '@/components/GiftReceiptPickerModal';
 import type { DayReport } from '@/lib/services/day-report';
 import { promptThemed } from '@/lib/ui/dialog';
+import { printReceipt } from '@/lib/pos/receipt-print';
 
 interface Sale {
   id: string; receipt_number: string;
@@ -637,10 +638,18 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
   const [info, setInfo] = useState<string | null>(null);
   const [showGiftPicker, setShowGiftPicker] = useState(false);
 
+  const receiptApiBase = `/api/receipts/by-sale/${s.id}`;
+  const receiptPdfUrl = `/api/receipts/by-sale/${s.id}/pdf`;
+
+  async function printTicket(gift: boolean, lines: number[] | null = null) {
+    const res = await printReceipt({ base: receiptApiBase, pdfUrl: receiptPdfUrl, gift, lines });
+    setInfo(res.message);
+    setTimeout(() => setInfo(null), 3000);
+  }
+
   // Ticket sans prix : un seul article → impression directe ; sinon sélecteur.
   function onGiftClick() {
-    const base = `/api/receipts/by-sale/${s.id}/pdf`;
-    if (detail.lines.length <= 1) { window.open(`${base}?gift=1`, '_blank'); return; }
+    if (detail.lines.length <= 1) { void printTicket(true); return; }
     setShowGiftPicker(true);
   }
 
@@ -711,10 +720,11 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
           </div>
           <div className="flex flex-col items-end gap-2">
             <div className="flex flex-wrap items-center justify-end gap-1.5">
-              <a href={`/api/receipts/by-sale/${s.id}/pdf`} target="_blank" rel="noreferrer"
-                 className="btn-soft text-xs whitespace-nowrap">
-                Voir le ticket
-              </a>
+              <button onClick={() => void printTicket(false)}
+                 className="btn-soft text-xs whitespace-nowrap"
+                 title="Imprimer le ticket (repli PDF si aucune imprimante configurée)">
+                Imprimer le ticket
+              </button>
               <button onClick={onGiftClick} className="btn-soft text-xs whitespace-nowrap"
                       title="Imprimer un ticket sans prix (choix des articles si plusieurs)">
                 Ticket sans prix
@@ -1024,7 +1034,8 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
       {showGiftPicker && (
         <GiftReceiptPickerModal
           lines={detail.lines.map((l) => ({ label: l.label, quantity: l.quantity }))}
-          pdfBaseUrl={`/api/receipts/by-sale/${s.id}/pdf`}
+          pdfBaseUrl={receiptPdfUrl}
+          onPrint={(indices) => void printTicket(true, indices)}
           onClose={() => setShowGiftPicker(false)}
         />
       )}
