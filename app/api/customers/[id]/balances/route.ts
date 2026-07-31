@@ -52,8 +52,12 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     loyaltyBalance = Number(r.rows[0]?.points_balance ?? 0);
   }
 
-  const giftCards = await query<{ id: string; code: string; balance: string }>(
-    `SELECT id, code, balance::text
+  const giftCards = await query<{
+    id: string; code: string; balance: string; initial_amount: string;
+    status: string; kind: string; expires_at: string | null;
+  }>(
+    `SELECT id, code, balance::text, initial_amount::text, status,
+            COALESCE(kind, 'gift_card') AS kind, expires_at
        FROM gift_cards
       WHERE organization_id = $1
         AND beneficiary_id = $2
@@ -64,7 +68,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   ).catch((err) => {
     // eslint-disable-next-line no-console
     console.error('[customers.balances] gift_cards échoué :', err);
-    return { rows: [] as { id: string; code: string; balance: string }[] };
+    return { rows: [] as { id: string; code: string; balance: string; initial_amount: string; status: string; kind: string; expires_at: string | null }[] };
   });
 
   const creditNotes = await query<{ id: string; number: string; remaining: string }>(

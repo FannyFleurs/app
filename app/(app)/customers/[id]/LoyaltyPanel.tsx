@@ -1,7 +1,6 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
 import { formatEUR } from '@/lib/services/money';
 
 type GiftCard = {
@@ -15,16 +14,33 @@ type GiftCard = {
  *   - ajout manuel d'une carte cadeau ou d'un bon d'achat rattaché au client
  *     (reprise de l'existant : code libre possible).
  *
+ * Autonome : charge lui-même le solde et les cartes via /balances, et se
+ * rafraîchit après chaque opération. Utilisable aussi bien dans la fiche
+ * complète (/customers/[id]) que dans le panneau latéral de la liste clients.
+ *
  * Le solde fidélité est exprimé en euros (1 « point » applicatif = 1 €).
  */
 export default function LoyaltyPanel({
-  customerId, balance, giftCards,
+  customerId, onChanged,
 }: {
   customerId: string;
-  balance: number;
-  giftCards: GiftCard[];
+  /** Appelé après une modification (pour rafraîchir la vue parente). */
+  onChanged?: () => void;
 }) {
-  const router = useRouter();
+  const [balance, setBalance] = useState<number | null>(null);
+  const [giftCards, setGiftCards] = useState<GiftCard[]>([]);
+
+  const reload = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/customers/${customerId}/balances`);
+      if (!res.ok) return;
+      const j = await res.json();
+      setBalance(Number(j.loyalty_balance) || 0);
+      setGiftCards(Array.isArray(j.gift_cards) ? j.gift_cards : []);
+    } catch { /* ignore */ }
+  }, [customerId]);
+
+  useEffect(() => { void reload(); }, [reload]);
 
   // — Régularisation —
   const [amount, setAmount] = useState('');
@@ -47,7 +63,8 @@ export default function LoyaltyPanel({
         throw new Error(j.message || 'Échec de la régularisation.');
       }
       setAmount(''); setReason('');
-      router.refresh();
+      await reload();
+      onChanged?.();
     } catch (e) {
       setAdjErr((e as Error).message);
     } finally {
@@ -86,7 +103,8 @@ export default function LoyaltyPanel({
         throw new Error(j.message || 'Échec de la création.');
       }
       setGcOpen(false); setGcCode(''); setGcAmount('5'); setGcExpiry('');
-      router.refresh();
+      await reload();
+      onChanged?.();
     } catch (e) {
       setGcErr((e as Error).message);
     } finally {
@@ -98,10 +116,10 @@ export default function LoyaltyPanel({
     <div className="space-y-3">
       {/* Solde + régularisation */}
       <div className="card p-5 space-y-4">
-        <div className="flex items-end justify-between">
-          <div>
-            <div className="text-xs uppercase tracking-wider text-ink-soft">Solde fidélité</div>
-            <div className="text-3xl font-semibold tracking-tight">{formatEUR(balance)}</div>
+        <div>
+          <div className="text-xs uppercase tracking-wider text-ink-soft">Solde fidélité</div>
+          <div className="text-3xl font-semibold tracking-tight">
+            {balance != null ? formatEUR(balance) : '—'}
           </div>
         </div>
 

@@ -10,6 +10,7 @@ import CustomerImportModal from './CustomerImportModal';
 import PageHeader from '@/components/PageHeader';
 import { formatEUR } from '@/lib/services/money';
 import WalletActions from './[id]/WalletActions';
+import LoyaltyPanel from './[id]/LoyaltyPanel';
 
 interface Customer {
   id: string;
@@ -289,6 +290,7 @@ export default function CustomersList({ customers: initialCustomers, total, canW
               detail={detail}
               canWrite={canWrite}
               onEdit={() => setEditing(detail.customer as unknown as CustomerLike)}
+              onReload={() => void selectCustomer(detail.customer.id)}
             />
           )}
         </main>
@@ -317,8 +319,8 @@ export default function CustomersList({ customers: initialCustomers, total, canW
   );
 }
 
-function CustomerDetailContent({ tab, detail, canWrite, onEdit }: {
-  tab: Tab; detail: CustomerDetail; canWrite: boolean; onEdit: () => void;
+function CustomerDetailContent({ tab, detail, canWrite, onEdit, onReload }: {
+  tab: Tab; detail: CustomerDetail; canWrite: boolean; onEdit: () => void; onReload: () => void;
 }) {
   const c = detail.customer;
   const display = c.company_name || [c.first_name, c.last_name].filter(Boolean).join(' ') || 'Client';
@@ -467,15 +469,7 @@ function CustomerDetailContent({ tab, detail, canWrite, onEdit }: {
 
       {tab === 'fidelite' && (
         <div className="space-y-3">
-          <div className="card p-5">
-            <h3 className="font-semibold mb-2">Solde fidélité</h3>
-            <div className="text-3xl font-semibold">
-              {detail.loyalty_points != null ? formatEUR(detail.loyalty_points) : '—'}
-            </div>
-            <p className="text-xs text-ink-soft mt-2">
-              Le solde est crédité automatiquement à chaque vente validée, selon le programme actif.
-            </p>
-          </div>
+          <LoyaltyPanel customerId={c.id} onChanged={onReload} />
           <WalletActions
             customerId={c.id}
             customerEmail={c.email}
@@ -486,7 +480,8 @@ function CustomerDetailContent({ tab, detail, canWrite, onEdit }: {
 
       {tab === 'bons-achats' && (
         <div className="card p-5 text-sm text-ink-soft">
-          Aucun bon d&apos;achat enregistré pour ce client.
+          Les cartes cadeaux et bons d&apos;achat de ce client se gèrent dans
+          l&apos;onglet <span className="font-medium text-ink">Fidélité</span>.
         </div>
       )}
     </div>
