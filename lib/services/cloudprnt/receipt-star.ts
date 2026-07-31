@@ -74,9 +74,16 @@ async function renderShopNameBitmap(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const PImage: any = await import('pureimage');
     await ensureReceiptFont(PImage);
-    const pt = widthDots <= 384 ? 26 : 32;
-    // La hauteur DOIT être un multiple de 8 (contrainte StarPRNT image).
-    const h = Math.ceil((pt * 1.7) / 8) * 8;
+    // Grande taille par défaut, réduite si le nom est trop long pour la largeur.
+    let pt = widthDots <= 384 ? 32 : 46;
+    const probe = PImage.make(2, 2).getContext('2d');
+    probe.font = `${pt}pt ReceiptBold`;
+    while (pt > 14 && probe.measureText(text).width > widthDots - 8) {
+      pt -= 2;
+      probe.font = `${pt}pt ReceiptBold`;
+    }
+    // Marges haut/bas resserrées ; hauteur multiple de 8 (contrainte StarPRNT).
+    const h = Math.ceil((pt * 1.08) / 8) * 8;
     const canvas = PImage.make(widthDots, h);
     const ctx = canvas.getContext('2d');
     ctx.fillStyle = '#ffffff';
@@ -84,7 +91,7 @@ async function renderShopNameBitmap(
     ctx.fillStyle = '#000000';
     ctx.font = `${pt}pt ReceiptBold`;
     const tw = ctx.measureText(text).width;
-    ctx.fillText(text, Math.max(0, (widthDots - tw) / 2), Math.round(pt * 1.15));
+    ctx.fillText(text, Math.max(0, (widthDots - tw) / 2), Math.round(pt * 0.86));
     return { data: canvas.data as Uint8Array, width: widthDots, height: h };
   } catch {
     return null;
