@@ -41,9 +41,48 @@ interface StarEnc {
   line(s: string): StarEnc;
   newline(): StarEnc;
   barcode(value: string, symbology: string, height: number): StarEnc;
+  image(img: { data: Uint8Array; width: number; height: number }, width: number, height: number, dither: string): StarEnc;
   cut(): StarEnc;
   pulse(): StarEnc;
   encode(): Uint8Array;
+}
+
+/** Dots imprimables selon la largeur papier (têtes Star 203 dpi). */
+function headDots(paperWidthMm?: number): number {
+  return paperWidthMm === 58 ? 384 : 576;
+}
+
+/**
+ * Décode un logo (data URL PNG/JPEG) et le centre sur un bandeau blanc à la
+ * largeur de la tête, pour insertion via `encoder.image(...)`. Renvoie null si
+ * le format n'est pas décodable (l'appelant ignore alors le logo).
+ */
+async function renderLogoBitmap(
+  dataUrl: string, widthDots: number,
+): Promise<{ data: Uint8Array; width: number; height: number } | null> {
+  const m = dataUrl.match(/^data:(image\/[\w.+-]+);base64,(.+)$/);
+  if (!m || !m[1] || !m[2]) return null;
+  const mime = m[1].toLowerCase();
+  const buf = Buffer.from(m[2], 'base64');
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const PImage: any = await import('pureimage');
+  const { Readable } = await import('node:stream');
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let src: any;
+  if (mime.includes('png')) src = await PImage.decodePNGFromStream(Readable.from(buf));
+  else if (mime.includes('jpeg') || mime.includes('jpg')) src = await PImage.decodeJPEGFromStream(Readable.from(buf));
+  else return null;
+  const maxW = Math.round(widthDots * 0.7);
+  const maxH = 160;
+  const scale = Math.min(maxW / src.width, maxH / src.height, 1);
+  const w = Math.max(1, Math.round(src.width * scale));
+  const h = Math.max(1, Math.round(src.height * scale));
+  const canvas = PImage.make(widthDots, h);
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, widthDots, h);
+  ctx.drawImage(src, Math.round((widthDots - w) / 2), 0, w, h);
+  return { data: canvas.data as Uint8Array, width: widthDots, height: h };
 }
 
 async function newEncoder(cols?: number): Promise<StarEnc> {
@@ -140,9 +179,27 @@ export async function buildReceiptStarPrnt(
   };
 
   // ---- En-tête boutique (centré) ----
-  enc.align('center').bold(true).width(2).height(2);
-  enc.line(ascii(rs?.shop_name?.trim() || org.name));
-  enc.width(1).height(1).bold(false).align('left');
+  // Logo (si présent) imprimé en tête.
+  const hasLogo = !!(rs?.logo_data_url && rs.logo_data_url.startsWith('data:image'));
+  if (hasLogo && rs) {
+    try {
+      const logo = await renderLogoBitmap(rs.logo_data_url, headDots(options.paperWidthMm));
+      if (logo) {
+        enc.align('center');
+        enc.image(logo, logo.width, logo.height, 'threshold');
+        enc.newline();
+      }
+    } catch { /* logo non décodable : on l'ignore */ }
+  }
+  // Nom commercial : affiché seulement s'il est renseigné ; sinon repli sur la
+  // raison sociale UNIQUEMENT en l'absence de logo (le logo peut le remplacer).
+  const shopName = rs?.shop_name?.trim() || (hasLogo ? '' : org.name);
+  if (shopName) {
+    enc.align('center').bold(true).width(2).height(2);
+    enc.line(ascii(shopName));
+    enc.width(1).height(1).bold(false);
+  }
+  enc.align('left');
   const address1 = rs?.address_line1?.trim() || org.address?.line1;
   if (address1) center(address1);
   const zipCity = rs?.address_zip_city?.trim()

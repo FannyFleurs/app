@@ -130,7 +130,11 @@ export async function renderReceiptPdf(
     }
 
     // ---- En-tête : NOM DE LA BOUTIQUE + coordonnées ----
-    center(rs?.shop_name?.trim() || org.name, true, 11);
+    // Nom affiché seulement s'il est renseigné ; sinon repli sur la raison
+    // sociale UNIQUEMENT s'il n'y a pas de logo (le logo peut le remplacer).
+    const hasLogo = !!(rs?.logo_data_url && rs.logo_data_url.startsWith('data:image'));
+    const shopName = rs?.shop_name?.trim() || (hasLogo ? '' : org.name);
+    if (shopName) center(shopName, true, 11);
     const address1 = rs?.address_line1?.trim() || org.address?.line1;
     if (address1) center(address1);
     const zipCity = rs?.address_zip_city?.trim()
