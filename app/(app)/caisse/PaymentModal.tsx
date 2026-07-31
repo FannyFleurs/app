@@ -46,9 +46,13 @@ interface Props {
   ) => Promise<void>;
   onClose: () => void;
   onValidated: (receiptId: string, receiptNumber: string, loyalty?: { earned: number; redeemed: number; new_balance: number } | null) => void;
+  /** Mode « règlement de solde en compte » : encaisse via l'écran classique
+   *  mais valide un règlement de compte (pas une vente). */
+  settlement?: { customerId: string };
+  onSettled?: (result: { new_balance: number; total: number; settled_invoice_ids: string[] }) => void;
 }
 
-export default function PaymentModal({ saleId, totalTtc, lines = [], storeId, hasCustomer = false, loyaltyRedemption, schoolMode, offlineEnabled, onOfflineFinalize, onClose, onValidated }: Props) {
+export default function PaymentModal({ saleId, totalTtc, lines = [], storeId, hasCustomer = false, loyaltyRedemption, schoolMode, offlineEnabled, onOfflineFinalize, onClose, onValidated, settlement, onSettled }: Props) {
   const [methods, setMethods] = useState<Array<{ kind: Method; label: string }>>(FALLBACK_METHODS);
   const [amountStr, setAmountStr] = useState<string>('');
   const [payments, setPayments] = useState<RegisteredPayment[]>([]);
@@ -78,7 +82,10 @@ export default function PaymentModal({ saleId, totalTtc, lines = [], storeId, ha
       if (r.ok) {
         const j = await r.json();
         const active = (j.methods as Array<{ kind: Method; label: string; is_active: boolean }>)
-          .filter((m) => m.is_active);
+          .filter((m) => m.is_active)
+          // Règlement d'un compte : on ne peut pas régler « en compte » avec
+          // « en compte », ni via lien de paiement (asynchrone).
+          .filter((m) => !settlement || (m.kind !== 'deferred' && m.kind !== 'payment_link'));
         if (active.length > 0) setMethods(active.map((m) => ({ kind: m.kind, label: m.label })));
       }
     })();
@@ -195,6 +202,29 @@ export default function PaymentModal({ saleId, totalTtc, lines = [], storeId, ha
       setError('Le total payé doit être égal au total dû.');
       return;
     }
+    // Règlement d'un solde « en compte » : on encaisse via l'écran classique
+    // mais on valide un règlement de compte (pas une vente).
+    if (settlement) {
+      setLoading(true); setError(null);
+      try {
+        const res = await fetch(`/api/customers/${settlement.customerId}/settle-payment`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            payments: payments.map((p) => ({
+              method: p.method, amount: p.amount, given_amount: p.given_amount, reference: p.reference,
+            })),
+            store_id: storeId,
+          }),
+        });
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}));
+          setError(j.message ?? j.error ?? 'Échec du règlement.');
+          return;
+        }
+        onSettled?.(await res.json());
+      } finally { setLoading(false); }
+      return;
+    }
     // Mode école : on génère un faux ticket localement, pas d'appel
     // serveur, pas de hash chain fiscal, pas de débit de stock.
     if (schoolMode) {
@@ -298,7 +328,7 @@ export default function PaymentModal({ saleId, totalTtc, lines = [], storeId, ha
             <span className="text-lg leading-none">←</span>
             Caisse
           </button>
-          <h2 className="text-base lg:text-lg font-semibold">Encaissement</h2>
+          <h2 className="text-base lg:text-lg font-semibold">{settlement ? 'Règlement du compte' : 'Encaissement'}</h2>
         </div>
 
         {/* Contenu en 3 colonnes (comme la caisse), pleine largeur :

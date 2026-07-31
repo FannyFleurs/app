@@ -511,6 +511,15 @@ export async function buildZReportStarPrnt(
     row(`${label} [${p.count}]`, eur2(p.amount));
   }
 
+  if (report.settlements.length > 0) {
+    rule();
+    center('Reglements compte (hors CA)', true);
+    for (const p of report.settlements) {
+      const label = PAYMENT_LABELS[p.method] ?? p.method;
+      row(`${label} [${p.count}]`, eur2(p.amount));
+    }
+  }
+
   rule();
   center("Entrees d'argent / especes", true);
   if (report.cash.entrees_argent > 0) row("Entrees d'argent", eur2(report.cash.entrees_argent));

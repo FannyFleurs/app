@@ -511,4 +511,167 @@ export class InvoiceService {
       return { new_balance: newBalance, settled_invoice_ids: settled };
     });
   }
+
+  /**
+   * Règlement d'un solde « en compte » via l'écran de paiement classique de la
+   * caisse : plusieurs modes possibles (espèces, carte, chèque, carte cadeau,
+   * avoir…). Traite chaque mode (débit carte cadeau / avoir, entrée tiroir pour
+   * les espèces), crédite le solde du client, solde les factures de période, et
+   * enregistre chaque paiement dans account_settlement_payments pour le Z
+   * (« Règlements en compte » — SANS gonfler le CA, la vente ayant déjà cumulé).
+   */
+  static async settleAccountWithPayments(args: {
+    organizationId: string;
+    userId: string;
+    customerId: string;
+    payments: { method: string; amount: number; given_amount?: number; reference?: string }[];
+    storeId?: string | null;
+  }): Promise<{ new_balance: number; settled_invoice_ids: string[]; total: number }> {
+    return withTransaction(async (client) => {
+      const cust = await client.query(
+        `SELECT id FROM customers WHERE id = $1 AND organization_id = $2 FOR UPDATE`,
+        [args.customerId, args.organizationId],
+      );
+      if (cust.rowCount === 0) throw new Error('CUSTOMER_NOT_FOUND');
+
+      const pays = args.payments.filter((p) => round2(p.amount) > 0);
+      const total = round2(pays.reduce((a, p) => a + p.amount, 0));
+      if (!(total > 0)) throw new Error('INVALID_AMOUNT');
+      for (const p of pays) {
+        if (p.method === 'deferred') throw new Error('DEFERRED_NOT_ALLOWED');
+        if (p.method === 'payment_link') throw new Error('PAYMENT_LINK_NOT_ALLOWED');
+      }
+
+      // Session de caisse ouverte (pour l'entrée espèces au tiroir).
+      let cashSessionId: string | null = null;
+      const cashTotal = round2(pays.filter((p) => p.method === 'cash').reduce((a, p) => a + p.amount, 0));
+      if (cashTotal > 0) {
+        if (args.storeId) {
+          const sess = await client.query<{ id: string }>(
+            `SELECT id FROM cash_sessions
+              WHERE store_id = $1 AND organization_id = $2 AND status = 'open'
+              ORDER BY opened_at DESC LIMIT 1`,
+            [args.storeId, args.organizationId],
+          );
+          cashSessionId = sess.rows[0]?.id ?? null;
+        }
+        if (!cashSessionId) throw new Error('NO_OPEN_SESSION');
+      }
+
+      for (const p of pays) {
+        const amt = round2(p.amount);
+        // Débit carte cadeau / avoir (mêmes règles qu'une vente).
+        if (p.method === 'credit_note') {
+          if (!p.reference) throw new Error('CREDIT_NOTE_REFERENCE_REQUIRED');
+          const cnRes = await client.query<{ id: string; amount: string; used_amount: string; status: string }>(
+            `SELECT id, amount::text, used_amount::text, status FROM credit_notes
+              WHERE organization_id = $1 AND number = $2 FOR UPDATE`,
+            [args.organizationId, p.reference],
+          );
+          if (cnRes.rowCount === 0) throw new Error('CREDIT_NOTE_NOT_FOUND');
+          const cn = cnRes.rows[0]!;
+          if (cn.status === 'used' || cn.status === 'cancelled') throw new Error('CREDIT_NOTE_NOT_USABLE');
+          const remaining = Number(cn.amount) - Number(cn.used_amount);
+          if (amt > remaining + 0.005) throw new Error('CREDIT_NOTE_INSUFFICIENT');
+          const newUsed = round2(Number(cn.used_amount) + amt);
+          const newStatus = newUsed >= Number(cn.amount) - 0.005 ? 'used' : 'partially_used';
+          await client.query(`UPDATE credit_notes SET used_amount = $1, status = $2 WHERE id = $3`, [newUsed, newStatus, cn.id]);
+        } else if (p.method === 'gift_card') {
+          if (!p.reference) throw new Error('GIFT_CARD_REFERENCE_REQUIRED');
+          const gcRes = await client.query<{ id: string; balance: string; status: string; expires_at: string | null }>(
+            `SELECT id, balance::text, status, expires_at FROM gift_cards
+              WHERE organization_id = $1 AND code = $2 FOR UPDATE`,
+            [args.organizationId, p.reference],
+          );
+          if (gcRes.rowCount === 0) throw new Error('GIFT_CARD_NOT_FOUND');
+          const gc = gcRes.rows[0]!;
+          if (gc.status !== 'active' && gc.status !== 'partially_used') throw new Error('GIFT_CARD_NOT_USABLE');
+          if (gc.expires_at && new Date(gc.expires_at).getTime() < Date.now()) throw new Error('GIFT_CARD_EXPIRED');
+          const balance = Number(gc.balance);
+          if (amt > balance + 0.005) throw new Error('GIFT_CARD_INSUFFICIENT');
+          const newBalance = round2(balance - amt);
+          const newStatus = newBalance <= 0.005 ? 'used' : 'partially_used';
+          await client.query(`UPDATE gift_cards SET balance = $1, status = $2 WHERE id = $3`, [newBalance, newStatus, gc.id]);
+          await client.query(
+            `INSERT INTO gift_card_movements
+               (organization_id, gift_card_id, movement_type, amount_delta, balance_after, sale_id, user_id)
+             VALUES ($1,$2,'use',$3,$4,NULL,$5)`,
+            [args.organizationId, gc.id, -amt, newBalance, args.userId],
+          );
+        }
+
+        // Enregistre le paiement de règlement (pour le Z).
+        await client.query(
+          `INSERT INTO account_settlement_payments
+             (organization_id, customer_id, store_id, cash_session_id, user_id, method, amount, reference)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [
+            args.organizationId, args.customerId, args.storeId ?? null,
+            p.method === 'cash' ? cashSessionId : null,
+            args.userId, p.method, amt, p.reference ?? null,
+          ],
+        );
+      }
+
+      // Espèces → entrée tiroir (comptée à la clôture / au X).
+      if (cashSessionId && cashTotal > 0) {
+        await client.query(
+          `INSERT INTO cash_movements
+             (organization_id, cash_session_id, movement_type, amount, reason, user_id)
+           VALUES ($1,$2,'in',$3,$4,$5)`,
+          [args.organizationId, cashSessionId, cashTotal, 'Règlement compte client', args.userId],
+        );
+      }
+
+      // Crédite le solde en compte (réduit la dette du client).
+      const balRes = await client.query<{ account_balance: string }>(
+        `UPDATE customers SET account_balance = COALESCE(account_balance, 0) + $2, updated_at = now()
+          WHERE id = $1 RETURNING account_balance::text`,
+        [args.customerId, total],
+      );
+      const newBalance = Number(balRes.rows[0]?.account_balance ?? 0);
+
+      // Solde les factures de période en attente (plus anciennes d'abord).
+      const invs = await client.query<{ id: string; total_ttc: string }>(
+        `SELECT id, total_ttc::text FROM invoices
+          WHERE customer_id = $1 AND organization_id = $2
+            AND status IN ('validated','sent','partially_paid','overdue')
+          ORDER BY COALESCE(issue_date, created_at::date) ASC, created_at ASC FOR UPDATE`,
+        [args.customerId, args.organizationId],
+      );
+      let remaining = total;
+      const settled: string[] = [];
+      for (const inv of invs.rows) {
+        const ttc = Number(inv.total_ttc);
+        if (remaining + 0.0001 >= ttc) {
+          await client.query(
+            `UPDATE invoices SET status = 'paid', paid_at = now(), updated_at = now(),
+                    metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('settled_via', 'account')
+              WHERE id = $1`,
+            [inv.id],
+          );
+          remaining = round2(remaining - ttc);
+          settled.push(inv.id);
+        }
+      }
+
+      const fiscal = new FiscalCore(client);
+      await fiscal.recordEvent({
+        organizationId: args.organizationId,
+        storeId: args.storeId ?? null,
+        userId: args.userId,
+        eventType: 'PAYMENT_REGISTERED',
+        entityType: 'payment',
+        entityId: null,
+        payload: {
+          customer_id: args.customerId, amount: total,
+          methods: pays.map((p) => ({ method: p.method, amount: round2(p.amount) })),
+          settled_invoice_ids: settled, new_account_balance: newBalance,
+        },
+        amountTtcDelta: 0,
+      });
+
+      return { new_balance: newBalance, settled_invoice_ids: settled, total };
+    });
+  }
 }

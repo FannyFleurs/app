@@ -93,6 +93,16 @@ export async function renderReportPdf(r: DayReport): Promise<Buffer> {
       kv(doc, `${label} [${p.count}]`, eur(p.amount));
     }
 
+    // --- Règlements de soldes « en compte » (hors CA) ---
+    if (r.settlements.length > 0) {
+      doc.moveDown(0.5); hr(doc); doc.moveDown(0.3);
+      section(doc, 'Règlements en compte (hors CA)');
+      for (const p of r.settlements) {
+        const label = PAYMENT_LABELS[p.method] ?? p.method;
+        kv(doc, `${label} [${p.count}]`, eur(p.amount));
+      }
+    }
+
     // --- Entrées d'argent / espèces ---
     doc.moveDown(0.5); hr(doc); doc.moveDown(0.3);
     section(doc, "Entrées d'argent");
