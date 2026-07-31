@@ -1,6 +1,7 @@
 import './layout.css';
 import type { Metadata } from 'next';
 import FaviconSetter from '@/components/FaviconSetter';
+import SessionKeepAlive from '@/components/SessionKeepAlive';
 
 export const metadata: Metadata = {
   title: 'Chiffre d\'affaires — HelloPos',
@@ -31,6 +32,7 @@ export default function CALayout({ children }: { children: React.ReactNode }) {
   return (
     <>
       <FaviconSetter />
+      <SessionKeepAlive />
       {children}
     </>
   );

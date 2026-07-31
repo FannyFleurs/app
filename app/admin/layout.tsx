@@ -4,6 +4,7 @@ import { readSessionFromCookie } from '@/lib/auth/session';
 import { query } from '@/lib/db/client';
 import { mergePlatformDefaults, type PlatformSettings } from '@/lib/settings/platform';
 import AdminShell from './AdminShell';
+import SessionKeepAlive from '@/components/SessionKeepAlive';
 import type { Metadata } from 'next';
 
 export const dynamic = 'force-dynamic';
@@ -51,6 +52,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <AdminShell brandName={brandName} logoUrl={brand.admin_logo_url || brand.logo_url || null} fullName={user.fullName}>
+      <SessionKeepAlive />
       {children}
     </AdminShell>
   );

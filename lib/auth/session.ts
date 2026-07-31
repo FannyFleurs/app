@@ -15,9 +15,20 @@ function secretKey(): Uint8Array {
   return Buffer.from(k, 'hex');
 }
 
-function ttlMinutes(): number {
-  const v = Number(process.env.SESSION_TTL_MINUTES ?? '480');
-  return Number.isFinite(v) && v > 0 ? v : 480;
+// Durée de session par défaut : 30 jours. Combinée au renouvellement glissant
+// (voir renewSessionFromToken + /api/auth/refresh), un appareil réellement
+// utilisé reste connecté en continu ; c'est le délai d'inactivité avant qu'un
+// appareil laissé fermé finisse par se déconnecter.
+const DEFAULT_TTL_MIN = 60 * 24 * 30; // 30 jours
+
+function ttlMinutes(kind: 'pos' | 'management' = 'pos'): number {
+  // Les sessions de gestion (back-office / CA) peuvent avoir leur propre durée
+  // via SESSION_TTL_MANAGEMENT_MINUTES ; sinon on retombe sur SESSION_TTL_MINUTES.
+  const raw = kind === 'management'
+    ? (process.env.SESSION_TTL_MANAGEMENT_MINUTES ?? process.env.SESSION_TTL_MINUTES)
+    : process.env.SESSION_TTL_MINUTES;
+  const v = Number(raw ?? String(DEFAULT_TTL_MIN));
+  return Number.isFinite(v) && v > 0 ? v : DEFAULT_TTL_MIN;
 }
 
 export interface AuthUser {
@@ -145,15 +156,72 @@ export async function createSession(args: {
   return jwt;
 }
 
-export function sessionCookieOptions() {
+export function sessionCookieOptions(kind: 'pos' | 'management' = 'pos') {
   return {
     name: COOKIE_NAME,
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax' as const,
     path: '/',
-    maxAge: ttlMinutes() * 60,
+    maxAge: ttlMinutes(kind) * 60,
   };
+}
+
+/**
+ * Renouvellement glissant : prolonge une session valide (étend l'expiration en
+ * base + renvoie un nouveau JWT et les options de cookie associées). Appelé par
+ * /api/auth/refresh à intervalle régulier tant que l'appareil est utilisé, ce
+ * qui maintient un appareil déjà connecté connecté en continu. Renvoie null si
+ * la session n'est plus valide (révoquée / expirée / utilisateur désactivé).
+ */
+export async function renewSessionFromToken(
+  token: string,
+): Promise<{ token: string; cookie: ReturnType<typeof sessionCookieOptions> & { value: string } } | null> {
+  try {
+    const { payload } = await jwtVerify(token, secretKey(), { algorithms: ['HS256'] });
+    const claims = payload as unknown as SessionClaims;
+
+    const res = await query<{
+      revoked_at: string | null;
+      expires_at: string;
+      kind: string | null;
+      is_active: boolean;
+    }>(
+      `SELECT s.revoked_at, s.expires_at, s.kind, u.is_active
+         FROM sessions s
+         JOIN users u ON u.id = s.user_id
+        WHERE s.id = $1 AND s.token_hash = $2`,
+      [claims.jti, claims.tkh],
+    );
+    if (res.rowCount === 0) return null;
+    const row = res.rows[0]!;
+    if (row.revoked_at) return null;
+    if (new Date(row.expires_at).getTime() < Date.now()) return null;
+    if (!row.is_active) return null;
+
+    const kind = (row.kind ?? 'pos') === 'management' ? 'management' : 'pos';
+    const expiresAt = new Date(Date.now() + ttlMinutes(kind) * 60 * 1000);
+    await query(
+      `UPDATE sessions SET expires_at = $2 WHERE id = $1`,
+      [claims.jti, expiresAt.toISOString()],
+    );
+
+    const jwt = await new SignJWT({
+      org: claims.org,
+      jti: claims.jti,
+      tkh: claims.tkh,
+      role: claims.role,
+    } satisfies Omit<SessionClaims, 'sub'>)
+      .setProtectedHeader({ alg: 'HS256' })
+      .setSubject(claims.sub)
+      .setIssuedAt()
+      .setExpirationTime(Math.floor(expiresAt.getTime() / 1000))
+      .sign(secretKey());
+
+    return { token: jwt, cookie: { ...sessionCookieOptions(kind), value: jwt } };
+  } catch {
+    return null;
+  }
 }
 
 // Mémoïsé par requête (React cache) : le layout, la page et les guards qui
