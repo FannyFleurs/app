@@ -80,6 +80,7 @@ export async function enqueueReceiptPrint(args: {
     customerName: extras.customerName,
     loyalty: extras.loyalty,
     openDrawer: hasCash,
+    paperWidthMm: printer.paper_width,
   });
 
   await enqueueJob({

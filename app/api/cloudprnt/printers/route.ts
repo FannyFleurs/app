@@ -14,6 +14,7 @@ const createSchema = z.object({
   role: z.enum(['label', 'receipt']).optional(),
   poll_token: z.string().max(120).nullable().optional(),
   poll_interval: z.number().int().min(1).max(60).optional(),
+  paper_width: z.union([z.literal(58), z.literal(80)]).optional(),
 });
 
 export async function GET(req: Request) {
@@ -24,7 +25,7 @@ export async function GET(req: Request) {
   const role = roleParam === 'label' || roleParam === 'receipt' ? roleParam : null;
   const { rows } = await query(
     `SELECT p.id, p.mac, p.label, p.store_id, p.role, p.poll_token, p.poll_interval,
-            p.enabled, p.last_seen_at, p.last_status,
+            p.paper_width, p.enabled, p.last_seen_at, p.last_status,
             s.name AS store_name,
             (SELECT COUNT(*) FROM cloudprnt_jobs j
               WHERE j.printer_id = p.id AND j.status = 'queued')::int AS queued
@@ -50,10 +51,10 @@ export async function POST(req: Request) {
   try {
     const { rows } = await query<{ id: string }>(
       `INSERT INTO cloudprnt_printers
-         (organization_id, store_id, mac, label, role, poll_token, poll_interval)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+         (organization_id, store_id, mac, label, role, poll_token, poll_interval, paper_width)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
       [g.user.organizationId, d.store_id ?? null, d.mac.trim(), d.label.trim(),
-       d.role ?? 'label', d.poll_token?.trim() || null, d.poll_interval ?? 5],
+       d.role ?? 'label', d.poll_token?.trim() || null, d.poll_interval ?? 5, d.paper_width ?? 80],
     );
     return NextResponse.json({ id: rows[0]!.id }, { status: 201 });
   } catch (e) {

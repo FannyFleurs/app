@@ -10,6 +10,8 @@ export interface CloudPrntPrinter {
   role: string;
   poll_token: string | null;
   enabled: boolean;
+  /** Largeur papier en mm (imprimante ticket) : 58 ou 80. */
+  paper_width?: number;
 }
 
 /** Normalise une adresse MAC : minuscules, séparateurs retirés. */
@@ -52,7 +54,7 @@ export async function resolveReceiptPrinter(
   storeId?: string | null,
 ): Promise<CloudPrntPrinter | null> {
   const { rows } = await query<CloudPrntPrinter>(
-    `SELECT id, organization_id, store_id, mac, label, role, poll_token, enabled
+    `SELECT id, organization_id, store_id, mac, label, role, poll_token, enabled, paper_width
        FROM cloudprnt_printers
       WHERE organization_id = $1 AND role = 'receipt' AND enabled = TRUE`,
     [organizationId],

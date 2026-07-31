@@ -13,8 +13,10 @@ import { round2 } from '@/lib/services/money';
 
 export const STARPRNT_CONTENT_TYPE = 'application/vnd.star.starprnt';
 
-/** Largeur utile en caractères (80 mm, police A). */
-const W = 42;
+/** Colonnes selon la largeur papier (police A) : 80 mm ≈ 48, 58 mm ≈ 32. */
+function columns(paperWidthMm?: number): number {
+  return paperWidthMm === 58 ? 32 : 48;
+}
 
 const PAYMENT_LABELS: Record<string, string> = {
   cash: 'Especes', card: 'Carte Bancaire', check: 'Cheque', transfer: 'Virement',
@@ -26,19 +28,8 @@ const eur = (x: number) => `${n2(x)} EUR`;
 const qty = (q: number) => (Number.isInteger(q) ? String(q) : String(q).replace('.', ','));
 /** Translittère en ASCII (les imprimantes thermiques gèrent mal les accents). */
 const ascii = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\x20-\x7e]/g, '');
-/** « libellé .... valeur » sur toute la largeur (tronque le libellé si besoin). */
-function rowStr(left: string, right: string): string {
-  const l = ascii(left); const r = ascii(right);
-  const maxLeft = Math.max(0, W - r.length - 1);
-  const lt = l.length > maxLeft ? l.slice(0, maxLeft) : l;
-  const gap = Math.max(1, W - lt.length - r.length);
-  return lt + ' '.repeat(gap) + r;
-}
-const padStart = (s: string, n: number) => ascii(s).padStart(n);
 
-// Interface minimale de l'encodeur StarPRNT (les typings du paquet sont
-// incomplets — pulse/bold/width/height/align/barcode manquent ou ne chaînent
-// pas). On la déclare pour un typage + chaînage fiables.
+// Interface minimale de l'encodeur StarPRNT (typings du paquet incomplets).
 interface StarEnc {
   initialize(): StarEnc;
   align(a: 'left' | 'center' | 'right'): StarEnc;
@@ -55,12 +46,21 @@ interface StarEnc {
   encode(): Uint8Array;
 }
 
-async function newEncoder(): Promise<StarEnc> {
+async function newEncoder(cols?: number): Promise<StarEnc> {
   const mod = await import('star-prnt-encoder');
   const StarPrntEncoder = mod.default as unknown as new (opts: Record<string, unknown>) => StarEnc;
-  const enc = new StarPrntEncoder({});
+  // On aligne la largeur de l'encodeur sur celle du papier (retour à la ligne
+  // et alignements cohérents avec l'imprimante physique).
+  const enc = new StarPrntEncoder(cols ? { columns: cols, width: cols } : {});
   enc.initialize();
   return enc;
+}
+
+/** Avance le papier puis coupe (évite que la fin du ticket soit coupée). */
+function feedAndCut(enc: StarEnc): void {
+  enc.align('left');
+  for (let i = 0; i < 5; i++) enc.newline();
+  enc.cut();
 }
 
 /** Impulsion d'ouverture du tiroir-caisse (aucune impression). */
@@ -81,9 +81,8 @@ export async function buildTestReceiptStarPrnt(shopName?: string | null): Promis
   enc.line(ascii(new Date().toLocaleString('fr-FR')));
   enc.line('Imprimante ticket CloudPRNT : OK');
   enc.line('Ouverture du tiroir-caisse...');
-  enc.newline();
   enc.pulse(); // ouvre le tiroir en même temps que le ticket sort
-  enc.cut();
+  feedAndCut(enc);
   return Buffer.from(enc.encode());
 }
 
@@ -97,27 +96,40 @@ export interface ReceiptStarOptions {
   loyalty?: { earned: number; balance: number; redeemed: number } | null;
   /** Ouvre le tiroir en même temps (ventes réglées en espèces). */
   openDrawer?: boolean;
+  /** Largeur papier en mm (58 ou 80). Par défaut 80. */
+  paperWidthMm?: number;
 }
 
 /**
  * Ticket de vente complet en StarPRNT texte, calqué sur le PDF thermique :
- * en-tête boutique, lignes (QTE/DESC/PU), totaux, règlements + rendu, TVA,
- * fidélité, code-barres, mentions fiscales, messages de pied. Variante
- * « sans prix » (gift) : uniquement quantités + désignations.
+ * en-tête boutique centré, lignes (QTE/DESC/PU), totaux, règlements + rendu,
+ * TVA (montants alignés à droite), fidélité, code-barres, messages de pied.
+ * Variante « sans prix » (gift) : uniquement quantités + désignations.
  */
 export async function buildReceiptStarPrnt(
   snapshot: ReceiptSnapshot,
   org: OrgInfo,
   options: ReceiptStarOptions,
 ): Promise<Buffer> {
-  const enc = await newEncoder();
   const rs = options.receipt ?? null;
   const gift = options.giftReceipt === true;
+  const W = columns(options.paperWidthMm);
+  const wide = W >= 48;
+  const enc = await newEncoder(W);
+
+  // « libellé ........ valeur » sur toute la largeur (valeur alignée à droite).
+  const rowStr = (l: string, r: string): string => {
+    const ls = ascii(l); const rr = ascii(r);
+    const maxLeft = Math.max(0, W - rr.length - 1);
+    const lt = ls.length > maxLeft ? ls.slice(0, maxLeft) : ls;
+    return lt + ' '.repeat(Math.max(1, W - lt.length - rr.length)) + rr;
+  };
 
   const center = (t: string, bold = false) => {
     enc.align('center'); if (bold) enc.bold(true);
     enc.line(ascii(t));
-    if (bold) enc.bold(false); enc.align('left');
+    if (bold) enc.bold(false);
+    enc.align('left');
   };
   const left = (t = '') => { enc.align('left').line(ascii(t)); };
   const rule = () => { enc.align('left').line('-'.repeat(W)); };
@@ -127,10 +139,10 @@ export async function buildReceiptStarPrnt(
     if (bold) enc.bold(false);
   };
 
-  // En-tête boutique.
+  // ---- En-tête boutique (centré) ----
   enc.align('center').bold(true).width(2).height(2);
   enc.line(ascii(rs?.shop_name?.trim() || org.name));
-  enc.width(1).height(1).bold(false);
+  enc.width(1).height(1).bold(false).align('left');
   const address1 = rs?.address_line1?.trim() || org.address?.line1;
   if (address1) center(address1);
   const zipCity = rs?.address_zip_city?.trim()
@@ -158,7 +170,7 @@ export async function buildReceiptStarPrnt(
 
   if (snapshot.comment && snapshot.comment.trim()) {
     rule();
-    enc.bold(true).line('Commentaire :').bold(false);
+    enc.align('left').bold(true).line('Commentaire :').bold(false);
     left(snapshot.comment.trim());
   }
   rule();
@@ -167,19 +179,23 @@ export async function buildReceiptStarPrnt(
   const rates = [...new Set(snapshot.tva_breakdown.map((t) => t.rate))].sort((a, b) => b - a);
   const codeOf = new Map(rates.map((r, i) => [r, String.fromCharCode(65 + i)]));
 
+  // ---- Lignes ----
   if (gift) {
     const sel = options.giftLineIndices;
     const giftLines = sel && sel.length
       ? snapshot.lines.filter((_, i) => sel.includes(i))
       : snapshot.lines;
-    enc.bold(true).line('QTE DESC').bold(false);
+    enc.align('left').bold(true).line('QTE DESC').bold(false);
     for (const l of giftLines) left(`${qty(l.quantity)} ${l.label}`);
   } else {
-    row('QTE DESC', 'PU   EUR', true);
+    row('QTE DESC', wide ? 'PU   MONTANT' : 'MONTANT', true);
     for (const l of snapshot.lines) {
       const gross = round2(l.unit_price_ttc * l.quantity);
       const code = codeOf.get(l.tax_rate) ?? '';
-      row(`${qty(l.quantity)} ${l.label}`, `${n2(l.unit_price_ttc)} ${n2(gross)} ${code}`);
+      const rightPart = wide
+        ? `${n2(l.unit_price_ttc)} ${n2(gross)} ${code}`
+        : `${n2(gross)} ${code}`;
+      row(`${qty(l.quantity)} ${l.label}`, rightPart);
       if (l.discount_amount > 0) {
         const pct = gross > 0 ? (l.discount_amount / gross) * 100 : 0;
         row(`  Remise ${pct.toFixed(0)}%`, `-${n2(l.discount_amount)}`);
@@ -194,13 +210,13 @@ export async function buildReceiptStarPrnt(
       row('Sous total :', eur(gross));
       row('Reduction lignes :', `-${eur(snapshot.totals.total_discount)}`);
     }
-    // Total en gros caractères (double largeur ⇒ ~21 col : pas de remplissage
-    // pleine largeur, qui déborderait).
+    // Total en gros caractères (double largeur).
     enc.align('left').bold(true).width(2).height(2);
     enc.line(ascii(`TOTAL: ${eur(snapshot.totals.total_ttc)}`));
     enc.width(1).height(1).bold(false);
     rule();
 
+    // Règlements (+ rendu monnaie).
     let change = 0;
     for (const p of snapshot.payments) {
       const label = PAYMENT_LABELS[p.method] ?? p.method;
@@ -214,15 +230,15 @@ export async function buildReceiptStarPrnt(
     if (change > 0) row('Rendu', eur(change), true);
     rule();
 
+    // ---- Détail TVA : lignes « libellé → montant » (alignées à droite). ----
     if ((rs?.show_tax_breakdown ?? true) && snapshot.tva_breakdown.length > 0) {
-      left('  ' + padStart('TVA %', 7) + padStart('Taxe', 9) + padStart('HTVA', 9) + padStart('TVAC', 9));
-      for (const t of snapshot.tva_breakdown) {
-        const code = codeOf.get(t.rate) ?? ' ';
-        left(code.padEnd(2) + padStart(n2(t.rate), 7) + padStart(n2(t.tva), 9)
-          + padStart(n2(t.base_ht), 9) + padStart(n2(t.ttc), 9));
+      left('Detail TVA');
+      const ordered = [...snapshot.tva_breakdown].sort((a, b) => b.rate - a.rate);
+      for (const t of ordered) {
+        row(`  TVA ${n2(t.rate)}% (HT ${n2(t.base_ht)})`, n2(t.tva));
       }
-      left('  ' + padStart('Total', 7) + padStart(n2(snapshot.totals.total_tva), 9)
-        + padStart(n2(snapshot.totals.total_ht), 9) + padStart(n2(snapshot.totals.total_ttc), 9));
+      row('Total HT', n2(snapshot.totals.total_ht));
+      row('Total TVA', n2(snapshot.totals.total_tva), true);
       rule();
     }
 
@@ -254,16 +270,13 @@ export async function buildReceiptStarPrnt(
   if (!gift) {
     enc.newline().align('center');
     enc.line('Ticket disponible par email sur demande.');
-    enc.line(`Empreinte fiscale : ${ascii(options.fiscalHash.slice(0, 16))}...`);
-    enc.line('Systeme conforme (art. 286, I, 3 bis CGI)');
     enc.align('left');
   }
 
   if (rs?.footer_message?.trim()) { enc.newline(); center(rs.footer_message.trim()); }
   if (rs?.welcome_message?.trim()) center(rs.welcome_message.trim());
 
-  enc.newline();
   if (options.openDrawer) enc.pulse();
-  enc.cut();
+  feedAndCut(enc);
   return Buffer.from(enc.encode());
 }

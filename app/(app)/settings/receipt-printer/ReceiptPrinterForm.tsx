@@ -13,6 +13,7 @@ interface Printer {
   role: string;
   poll_token: string | null;
   poll_interval: number;
+  paper_width: number;
   enabled: boolean;
   last_seen_at: string | null;
   last_status: string | null;
@@ -33,6 +34,7 @@ export default function ReceiptPrinterForm({ stores, canWrite }: {
   const [label, setLabel] = useState('Ticket / tiroir');
   const [storeId, setStoreId] = useState('');
   const [token, setToken] = useState('');
+  const [paperWidth, setPaperWidth] = useState<58 | 80>(80);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => { setOrigin(window.location.origin); }, []);
@@ -53,7 +55,7 @@ export default function ReceiptPrinterForm({ stores, canWrite }: {
     setSaving(true); setErr(null); setMsg(null);
     const r = await fetch('/api/cloudprnt/printers', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mac: mac.trim(), label: label.trim(), store_id: storeId || null, poll_token: token.trim() || null, role: 'receipt' }),
+      body: JSON.stringify({ mac: mac.trim(), label: label.trim(), store_id: storeId || null, poll_token: token.trim() || null, role: 'receipt', paper_width: paperWidth }),
     });
     setSaving(false);
     if (r.ok) {
@@ -69,6 +71,14 @@ export default function ReceiptPrinterForm({ stores, canWrite }: {
     await fetch(`/api/cloudprnt/printers/${p.id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ enabled: !p.enabled }),
+    });
+    await load();
+  }
+
+  async function setWidth(p: Printer, width: 58 | 80) {
+    await fetch(`/api/cloudprnt/printers/${p.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paper_width: width }),
     });
     await load();
   }
@@ -150,7 +160,18 @@ export default function ReceiptPrinterForm({ stores, canWrite }: {
                   </div>
                 </div>
                 {canWrite && (
-                  <div className="flex flex-wrap justify-end gap-2">
+                  <div className="flex flex-wrap justify-end items-center gap-2">
+                    <label className="text-xs text-ink-soft inline-flex items-center gap-1">
+                      Papier
+                      <select
+                        className="input h-8 text-xs py-0"
+                        value={p.paper_width}
+                        onChange={(e) => void setWidth(p, Number(e.target.value) as 58 | 80)}
+                      >
+                        <option value={80}>80 mm</option>
+                        <option value={58}>58 mm</option>
+                      </select>
+                    </label>
                     <button className="btn-soft text-xs" onClick={() => void testPrint(p)}>Test ticket + tiroir</button>
                     <button className="btn-soft text-xs" onClick={() => void toggle(p)}>
                       {p.enabled ? 'Désactiver' : 'Activer'}
@@ -191,6 +212,14 @@ export default function ReceiptPrinterForm({ stores, canWrite }: {
             <label className="block text-sm">
               <span className="text-ink-soft">Jeton (optionnel, sécurise l'URL)</span>
               <input className="input h-10 w-full mt-1" value={token} onChange={(e) => setToken(e.target.value)} placeholder="laisser vide si non utilisé" />
+            </label>
+            <label className="block text-sm">
+              <span className="text-ink-soft">Largeur papier</span>
+              <select className="input h-10 w-full mt-1" value={paperWidth}
+                      onChange={(e) => setPaperWidth(Number(e.target.value) as 58 | 80)}>
+                <option value={80}>80 mm (standard)</option>
+                <option value={58}>58 mm</option>
+              </select>
             </label>
           </div>
           <button className="btn-primary h-10 px-4" disabled={saving} onClick={() => void add()}>

@@ -275,8 +275,6 @@ export async function renderReceiptPdf(
       doc.moveDown(0.4);
       setFont(false, 7);
       doc.text('Ticket disponible par email sur demande.', { align: 'center' });
-      doc.text(`Empreinte fiscale : ${options.fiscalHash.slice(0, 16)}...`, { align: 'center' });
-      doc.text('Systeme conforme (art. 286, I, 3 bis CGI)', { align: 'center' });
     }
 
     // ---- Messages personnalisés TOUT EN BAS (pied de page puis remerciement) ----

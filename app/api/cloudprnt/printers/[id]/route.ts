@@ -13,6 +13,7 @@ const patchSchema = z.object({
   enabled: z.boolean().optional(),
   poll_token: z.string().max(120).nullable().optional(),
   poll_interval: z.number().int().min(1).max(60).optional(),
+  paper_width: z.union([z.literal(58), z.literal(80)]).optional(),
 });
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
@@ -32,6 +33,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   if (d.enabled !== undefined) add('enabled', d.enabled);
   if (d.poll_token !== undefined) add('poll_token', d.poll_token?.trim() || null);
   if (d.poll_interval !== undefined) add('poll_interval', d.poll_interval);
+  if (d.paper_width !== undefined) add('paper_width', d.paper_width);
   if (sets.length === 0) return NextResponse.json({ ok: true });
   const { rowCount } = await query(
     `UPDATE cloudprnt_printers SET ${sets.join(', ')}, updated_at = now()
