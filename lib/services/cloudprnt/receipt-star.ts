@@ -52,6 +52,45 @@ function headDots(paperWidthMm?: number): number {
   return paperWidthMm === 58 ? 384 : 576;
 }
 
+let _receiptFontReady = false;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function ensureReceiptFont(PImage: any): Promise<void> {
+  if (_receiptFontReady) return;
+  const path = await import('node:path');
+  const dir = path.join(process.cwd(), 'assets', 'fonts');
+  PImage.registerFont(path.join(dir, 'BricolageGrotesque-Bold.ttf'), 'ReceiptBold').loadSync();
+  _receiptFontReady = true;
+}
+
+/**
+ * Rend le NOM de la boutique en image bitmap, centré sur toute la largeur de la
+ * tête. On passe par une image (et non du texte StarPRNT) car l'imprimante ne
+ * centre pas correctement la première ligne texte. Renvoie null en cas d'échec.
+ */
+async function renderShopNameBitmap(
+  text: string, widthDots: number,
+): Promise<{ data: Uint8Array; width: number; height: number } | null> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const PImage: any = await import('pureimage');
+    await ensureReceiptFont(PImage);
+    const pt = widthDots <= 384 ? 26 : 32;
+    // La hauteur DOIT être un multiple de 8 (contrainte StarPRNT image).
+    const h = Math.ceil((pt * 1.7) / 8) * 8;
+    const canvas = PImage.make(widthDots, h);
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, widthDots, h);
+    ctx.fillStyle = '#000000';
+    ctx.font = `${pt}pt ReceiptBold`;
+    const tw = ctx.measureText(text).width;
+    ctx.fillText(text, Math.max(0, (widthDots - tw) / 2), Math.round(pt * 1.15));
+    return { data: canvas.data as Uint8Array, width: widthDots, height: h };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Décode un logo (data URL PNG/JPEG) et le centre sur un bandeau blanc à la
  * largeur de la tête, pour insertion via `encoder.image(...)`. Renvoie null si
@@ -77,12 +116,15 @@ async function renderLogoBitmap(
   const scale = Math.min(maxW / src.width, maxH / src.height, 1);
   const w = Math.max(1, Math.round(src.width * scale));
   const h = Math.max(1, Math.round(src.height * scale));
-  const canvas = PImage.make(widthDots, h);
+  // Hauteur de la toile arrondie au multiple de 8 supérieur (contrainte
+  // StarPRNT image) ; le logo est dessiné en haut, le reste reste blanc.
+  const ch = Math.ceil(h / 8) * 8;
+  const canvas = PImage.make(widthDots, ch);
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, widthDots, h);
+  ctx.fillRect(0, 0, widthDots, ch);
   ctx.drawImage(src, Math.round((widthDots - w) / 2), 0, w, h);
-  return { data: canvas.data as Uint8Array, width: widthDots, height: h };
+  return { data: canvas.data as Uint8Array, width: widthDots, height: ch };
 }
 
 async function newEncoder(cols?: number): Promise<StarEnc> {
@@ -192,10 +234,22 @@ export async function buildReceiptStarPrnt(
   // Nom commercial : affiché seulement s'il est renseigné ; sinon repli sur la
   // raison sociale UNIQUEMENT en l'absence de logo (le logo peut le remplacer).
   const shopName = rs?.shop_name?.trim() || (hasLogo ? '' : org.name);
-  // Nom centré en gras, taille normale : toute magnification (largeur OU
-  // hauteur) fait perdre le centrage à l'imprimante (le texte colle à gauche).
-  // On garde donc la taille standard, comme les autres lignes centrées.
-  if (shopName) center(shopName, true);
+  if (shopName) {
+    // Nom rendu en IMAGE centrée (l'imprimante ne centre pas la 1re ligne
+    // texte, et le centrage se perd à la moindre magnification). Repli texte
+    // si le rendu image échoue.
+    let done = false;
+    try {
+      const bmp = await renderShopNameBitmap(ascii(shopName), headDots(options.paperWidthMm));
+      if (bmp) {
+        enc.align('center');
+        enc.image(bmp, bmp.width, bmp.height, 'threshold');
+        enc.newline();
+        done = true;
+      }
+    } catch { /* repli texte ci-dessous */ }
+    if (!done) center(shopName, true);
+  }
   enc.align('left');
   const address1 = rs?.address_line1?.trim() || org.address?.line1;
   if (address1) center(address1);
