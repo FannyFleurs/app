@@ -65,7 +65,25 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
   const [sealedResult, setSealedResult] = useState<{ id: string; fiscal_hash: string } | null>(null);
   const [showDeposit, setShowDeposit] = useState(false);
   const [drawerToast, setDrawerToast] = useState<string | null>(null);
+  const [zToast, setZToast] = useState<string | null>(null);
   const [restored, setRestored] = useState<boolean>(false);
+
+  // Impression du Z sur l'imprimante ticket ; repli PDF si aucune imprimante.
+  async function printZ(closureId: string) {
+    setZToast(null); setError(null);
+    try {
+      const r = await fetch(`/api/closures/${closureId}/z-print`, { method: 'POST' });
+      if (r.ok) {
+        setZToast('Rapport Z envoyé à l’imprimante.');
+        setTimeout(() => setZToast(null), 4000);
+        return;
+      }
+      if (r.status === 409) { window.open(`/api/closures/${closureId}/z-pdf`, '_blank'); return; }
+      setError('Impression du Z impossible.');
+    } catch {
+      setError('Impression du Z impossible.');
+    }
+  }
   const [loadingPreview, setLoadingPreview] = useState(!initialPreview);
 
   // ---------------------------------------------------------------------------
@@ -666,28 +684,27 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
             </label>
 
             {error && <div className="rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
+            {zToast && <div className="rounded-xl bg-success/10 px-3 py-2 text-sm text-success">{zToast}</div>}
 
             {sealedResult ? (
               <div className="rounded-xl bg-success/10 px-4 py-3 text-sm text-success flex items-center justify-between gap-3">
                 <span>
                   ✓ Clôture scellée. Empreinte fiscale <code className="font-mono">{sealedResult.fiscal_hash.slice(0,16)}…</code>
                 </span>
-                <a
-                  href={`/api/closures/${sealedResult.id}/z-pdf`}
-                  target="_blank" rel="noreferrer"
+                <button
+                  onClick={() => void printZ(sealedResult.id)}
                   className="btn-primary text-sm"
                 >
                   Imprimer le Z
-                </a>
+                </button>
               </div>
             ) : alreadySealed ? (
-              <a
-                href={`/api/closures/${preview.sealed!.id}/z-pdf`}
-                target="_blank" rel="noreferrer"
+              <button
+                onClick={() => void printZ(preview.sealed!.id)}
                 className="btn-primary w-full justify-center"
               >
                 Imprimer le Z de cette journée
-              </a>
+              </button>
             ) : (
               <>
                 {(preview.held_count ?? 0) > 0 && (

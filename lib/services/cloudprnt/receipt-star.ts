@@ -1,5 +1,6 @@
 import type { ReceiptSnapshot, OrgInfo } from '@/lib/services/receipt-pdf';
 import type { ReceiptSettings } from '@/lib/settings/receipt';
+import type { DayReport } from '@/lib/services/day-report';
 import { round2 } from '@/lib/services/money';
 
 /**
@@ -398,6 +399,210 @@ export async function buildReceiptStarPrnt(
 
   // L'impression n'ouvre JAMAIS le tiroir : celui-ci s'ouvre à l'encaissement
   // selon les modes de règlement (cf. payment_methods.opens_drawer).
+  feedAndCut(enc);
+  return Buffer.from(enc.encode());
+}
+
+// ---------------------------------------------------------------------------
+// Rapport Z / X et reçu de remise en banque (StarPRNT)
+// ---------------------------------------------------------------------------
+
+const eur2 = (n: number) => `${n.toFixed(2).replace('.', ',')} EUR`;
+const pct2 = (r: number) => `${r.toFixed(2).replace('.', ',')} %`;
+const dtFr = (iso: string | null | undefined) =>
+  iso ? new Date(iso).toLocaleString('fr-FR', { timeZone: 'Europe/Paris' }) : '—';
+
+/** Fabrique des helpers de mise en page partagés (largeur W en colonnes). */
+function layout(enc: StarEnc, W: number) {
+  const center = (t: string, bold = false) => {
+    enc.align('center'); if (bold) enc.bold(true);
+    enc.line(ascii(t));
+    if (bold) enc.bold(false);
+    enc.align('left');
+  };
+  const left = (t = '') => { enc.align('left').line(ascii(t)); };
+  const rule = () => { enc.align('left').line('-'.repeat(W)); };
+  const rowStr = (l: string, r: string): string => {
+    const ls = ascii(l), rr = ascii(r);
+    const maxLeft = Math.max(0, W - rr.length - 1);
+    const lt = ls.length > maxLeft ? ls.slice(0, maxLeft) : ls;
+    return lt + ' '.repeat(Math.max(1, W - lt.length - rr.length)) + rr;
+  };
+  const row = (l: string, r: string, bold = false) => {
+    enc.align('left'); if (bold) enc.bold(true);
+    enc.line(rowStr(l, r));
+    if (bold) enc.bold(false);
+  };
+  return { center, left, rule, row };
+}
+
+/** Imprime le nom de la boutique (image centrée ; repli texte centré). */
+async function printShopName(enc: StarEnc, shopName: string | null | undefined, paperWidthMm?: number) {
+  const name = shopName?.trim();
+  if (!name) return;
+  try {
+    const bmp = await renderShopNameBitmap(ascii(name), headDots(paperWidthMm));
+    if (bmp) {
+      enc.align('center');
+      enc.image(bmp, bmp.width, bmp.height, 'threshold');
+      enc.newline();
+      enc.align('left');
+      return;
+    }
+  } catch { /* repli texte */ }
+  enc.newline();
+  layout(enc, columns(paperWidthMm)).center(name, true);
+}
+
+/**
+ * Rapport Z (ou X) en StarPRNT — mêmes données que le PDF, format ticket.
+ */
+export async function buildZReportStarPrnt(
+  report: DayReport,
+  settings: ReceiptSettings | null,
+  paperWidthMm?: number,
+): Promise<Buffer> {
+  const W = columns(paperWidthMm);
+  const enc = await newEncoder(W);
+  const { center, left, rule, row } = layout(enc, W);
+  const id = report.identity;
+
+  await printShopName(enc, settings?.shop_name?.trim() || id.name || report.store_name, paperWidthMm);
+  if (id.line1) center(id.line1);
+  if (id.line2) center(id.line2);
+  const zc = [id.zip, id.city, id.country].filter(Boolean).join(' ');
+  if (zc) center(zc);
+  if (id.phone) center(id.phone);
+  if (id.siret) center(`Siret : ${id.siret}`);
+  if (id.vat_number) center(`TVA : ${id.vat_number}`);
+  if (id.website) center(id.website);
+
+  rule();
+  center('FINANCIER');
+  center(report.kind, true);
+  rule();
+  row('Numero de journee', report.journee_number != null ? String(report.journee_number) : '—');
+  row('Ouverture', dtFr(report.opened_at));
+  row('Fermeture', report.kind === 'X' ? 'En cours' : dtFr(report.closed_at));
+  row('Date impression', dtFr(report.printed_at));
+
+  rule();
+  row('CA TOTAL', eur2(report.totals.ca_ttc), true);
+  row('CA HT', eur2(report.totals.ca_ht));
+  row('Ticket moyen TTC', eur2(report.totals.ticket_moyen_ttc));
+  if (report.totals.marge_brute_ht != null) row('Marge brute HT', eur2(report.totals.marge_brute_ht));
+
+  if (report.tva_by_rate.length > 0) {
+    rule();
+    for (const t of report.tva_by_rate) row(`TVA ${pct2(t.rate)} collectee`, eur2(t.tva));
+    for (const t of report.tva_by_rate) row(`CA TTC ${pct2(t.rate)}`, eur2(t.ttc));
+    for (const t of report.tva_by_rate) row(`CA HT ${pct2(t.rate)}`, eur2(t.ht));
+  }
+
+  rule();
+  row('Total reduction', `-${eur2(report.totals.discounts_total)}`);
+  row('Total offerts', eur2(report.totals.offerts_total));
+  row("Nombre d'offerts", String(report.totals.offerts_count));
+
+  rule();
+  center('Modes de reglement', true);
+  for (const p of report.payments) {
+    const label = PAYMENT_LABELS[p.method] ?? p.method;
+    row(`${label} [${p.count}]`, eur2(p.amount));
+  }
+
+  rule();
+  center("Entrees d'argent / especes", true);
+  if (report.cash.entrees_argent > 0) row("Entrees d'argent", eur2(report.cash.entrees_argent));
+  row('Fonds de caisse', eur2(report.cash.fonds_de_caisse));
+  row('Total espece a la fermeture', eur2(report.cash.total_espece_fermeture));
+  if (report.cash.counted != null) {
+    row('Especes comptees', eur2(report.cash.counted));
+    const v = report.cash.variance ?? 0;
+    row(v === 0 ? 'Ecart' : v > 0 ? 'Surplus' : 'Manquant', `${v >= 0 ? '+' : ''}${eur2(v)}`);
+  }
+  row('Ouverture tiroir sans ticket', String(report.cash.tiroir_sans_ticket));
+
+  if (report.by_vendor.length > 0) {
+    rule();
+    center('Donnees par vendeur', true);
+    for (const v of report.by_vendor) row(v.name, eur2(v.ca_ttc));
+  }
+  if (report.by_category.length > 0) {
+    rule();
+    center('CA TTC Familles', true);
+    for (const c of report.by_category) row(c.name, eur2(c.ca_ttc));
+  }
+  if (report.by_mode.length > 0) {
+    rule();
+    center('CA TTC Modes de ventes', true);
+    for (const m of report.by_mode) row(m.mode, eur2(m.ca_ttc));
+  }
+
+  rule();
+  center('Nombre de tickets', true);
+  row('Tickets normal', String(report.tickets.normal_count));
+  row('Total ticket NORMAL', eur2(report.tickets.normal_total));
+
+  if (report.kind === 'Z' && report.fiscal_hash) {
+    rule();
+    if (report.closed_by) row('Cloturee par', report.closed_by);
+    left('Empreinte fiscale :');
+    left(report.fiscal_hash);
+  }
+
+  feedAndCut(enc);
+  return Buffer.from(enc.encode());
+}
+
+export interface BankDepositData {
+  id?: string;
+  movement_type: 'in' | 'out';
+  amount: number;
+  reason: string;
+  created_at: string;
+  user_name: string;
+  store_name: string;
+  register_code: string;
+  org_name: string;
+}
+
+/** Reçu de remise en banque / mouvement de caisse (StarPRNT). */
+export async function buildBankDepositStarPrnt(
+  m: BankDepositData,
+  settings: ReceiptSettings | null,
+  paperWidthMm?: number,
+): Promise<Buffer> {
+  const W = columns(paperWidthMm);
+  const enc = await newEncoder(W);
+  const { center, left, rule, row } = layout(enc, W);
+  const isBankDeposit = m.movement_type === 'out' && /banque/i.test(m.reason);
+
+  await printShopName(enc, settings?.shop_name?.trim() || m.org_name, paperWidthMm);
+  if (settings?.address_line1) center(settings.address_line1);
+  if (settings?.address_zip_city) center(settings.address_zip_city);
+  if (settings?.siret) center(`SIRET ${settings.siret}`);
+
+  rule();
+  center(isBankDeposit ? 'REMISE EN BANQUE' : (m.movement_type === 'out' ? 'SORTIE CAISSE' : 'ENTREE CAISSE'), true);
+  rule();
+  const d = new Date(m.created_at);
+  row('Date', d.toLocaleDateString('fr-FR', { timeZone: 'Europe/Paris' }));
+  row('Heure', d.toLocaleTimeString('fr-FR', { timeZone: 'Europe/Paris' }));
+  row('Boutique', m.store_name);
+  row('Caisse', m.register_code);
+  row('Vendeur', m.user_name);
+  row('Motif', m.reason);
+  rule();
+  row('MONTANT', `${m.movement_type === 'out' ? '-' : '+'} ${eur2(m.amount)}`, true);
+
+  if (isBankDeposit) {
+    enc.newline();
+    center('Conserver ce recu avec le bordereau de remise.');
+    left('Signature : ______________________');
+  }
+  enc.newline();
+  center(m.id ? `Reference ${m.id.slice(0, 8)}` : 'Recu de caisse');
   feedAndCut(enc);
   return Buffer.from(enc.encode());
 }
