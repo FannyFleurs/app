@@ -231,7 +231,7 @@ export async function GET(req: Request) {
        ${supplierJoin}
       WHERE ${where}
       ORDER BY ${url.searchParams.get('order') === 'recent' ? 'p.created_at DESC' : 'p.name ASC'}
-      LIMIT ${inPos ? 20000 : 500}`,
+      LIMIT 20000`,
     params,
   );
   return NextResponse.json({ products: rows });
