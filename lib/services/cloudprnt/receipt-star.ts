@@ -133,8 +133,6 @@ export interface ReceiptStarOptions {
   giftLineIndices?: number[] | null;
   customerName?: string | null;
   loyalty?: { earned: number; balance: number; redeemed: number } | null;
-  /** Ouvre le tiroir en même temps (ventes réglées en espèces). */
-  openDrawer?: boolean;
   /** Largeur papier en mm (58 ou 80). Par défaut 80. */
   paperWidthMm?: number;
 }
@@ -194,15 +192,10 @@ export async function buildReceiptStarPrnt(
   // Nom commercial : affiché seulement s'il est renseigné ; sinon repli sur la
   // raison sociale UNIQUEMENT en l'absence de logo (le logo peut le remplacer).
   const shopName = rs?.shop_name?.trim() || (hasLogo ? '' : org.name);
-  if (shopName) {
-    // Double HAUTEUR uniquement (pas double largeur) : le centrage de
-    // l'imprimante ne tient pas compte de la double largeur et colle le texte à
-    // gauche. En hauteur seule, la largeur reste normale et le centrage est
-    // correct — le nom reste bien mis en avant.
-    enc.align('center').bold(true).height(2);
-    enc.line(ascii(shopName));
-    enc.height(1).bold(false);
-  }
+  // Nom centré en gras, taille normale : toute magnification (largeur OU
+  // hauteur) fait perdre le centrage à l'imprimante (le texte colle à gauche).
+  // On garde donc la taille standard, comme les autres lignes centrées.
+  if (shopName) center(shopName, true);
   enc.align('left');
   const address1 = rs?.address_line1?.trim() || org.address?.line1;
   if (address1) center(address1);
@@ -337,7 +330,8 @@ export async function buildReceiptStarPrnt(
   if (rs?.footer_message?.trim()) { enc.newline(); center(rs.footer_message.trim()); }
   if (rs?.welcome_message?.trim()) center(rs.welcome_message.trim());
 
-  if (options.openDrawer) enc.pulse();
+  // L'impression n'ouvre JAMAIS le tiroir : celui-ci s'ouvre à l'encaissement
+  // selon les modes de règlement (cf. payment_methods.opens_drawer).
   feedAndCut(enc);
   return Buffer.from(enc.encode());
 }

@@ -57,13 +57,13 @@ export async function GET(req: Request) {
     params.push(storeId);
     where += ` AND (COALESCE(array_length(store_ids, 1), 0) = 0 OR store_ids @> ARRAY[$${params.length}]::uuid[])`;
   }
-  const sql = `SELECT id, code, kind, label, is_active, position, ${storeIdsCol}
+  const sql = `SELECT id, code, kind, label, is_active, position, opens_drawer, ${storeIdsCol}
                  FROM payment_methods WHERE ${where}
                 ORDER BY position, label`;
 
   // Auto-seed : si l'organisation n'a aucun mode de reglement, on cree
   // les modes par defaut (portee "toutes boutiques").
-  let { rows } = await query<{ id: string; code: string; kind: string; label: string; is_active: boolean; position: number; store_ids: string[] }>(sql, params);
+  let { rows } = await query<{ id: string; code: string; kind: string; label: string; is_active: boolean; position: number; opens_drawer: boolean; store_ids: string[] }>(sql, params);
   if (rows.length === 0) {
     for (const m of DEFAULT_METHODS) {
       const code = `${m.kind}_default`;
@@ -76,7 +76,7 @@ export async function GET(req: Request) {
         );
       } catch { /* on n'echoue jamais la lecture pour un probleme de seed */ }
     }
-    rows = (await query<{ id: string; code: string; kind: string; label: string; is_active: boolean; position: number; store_ids: string[] }>(sql, params)).rows;
+    rows = (await query<{ id: string; code: string; kind: string; label: string; is_active: boolean; position: number; opens_drawer: boolean; store_ids: string[] }>(sql, params)).rows;
   } else if (!rows.some((r) => r.kind === 'deferred')) {
     // Rattrapage : les organisations créées avant l'ajout du mode « En compte »
     // ne l'avaient pas. On l'insère si absent (portée toutes boutiques).
@@ -87,7 +87,7 @@ export async function GET(req: Request) {
          ON CONFLICT DO NOTHING`,
         [g.user.organizationId],
       );
-      rows = (await query<{ id: string; code: string; kind: string; label: string; is_active: boolean; position: number; store_ids: string[] }>(sql, params)).rows;
+      rows = (await query<{ id: string; code: string; kind: string; label: string; is_active: boolean; position: number; opens_drawer: boolean; store_ids: string[] }>(sql, params)).rows;
     } catch { /* fail-open */ }
   }
   return NextResponse.json({ methods: rows });

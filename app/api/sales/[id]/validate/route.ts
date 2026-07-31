@@ -7,6 +7,8 @@ import { audit } from '@/lib/audit/log';
 import { query } from '@/lib/db/client';
 import { pushWalletUpdateForCustomer } from '@/lib/wallet/notify';
 import { autoSendReceiptIfEnabled } from '@/lib/email/auto-send';
+import { resolveReceiptPrinter, enqueueJob } from '@/lib/services/cloudprnt/queue';
+import { buildDrawerKickStarPrnt, STARPRNT_CONTENT_TYPE } from '@/lib/services/cloudprnt/receipt-star';
 
 const paymentSchema = z.object({
   method: z.enum(['cash','card','check','transfer','gift_card','credit_note','deferred','other','payment_link']),
@@ -67,6 +69,33 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     // Envoi automatique du ticket par email si activé et si le client a une
     // adresse. Fire-and-forget : la vente est déjà validée.
     if (out.receiptId) void autoSendReceiptIfEnabled(out.receiptId, g.user.organizationId);
+
+    // Ouverture du tiroir selon les modes de règlement (ex. espèces oui,
+    // chèque non). Fire-and-forget, indépendant de l'impression du ticket.
+    void (async () => {
+      try {
+        const kinds = Array.from(new Set(parsed.data.payments.map((p) => p.method)));
+        if (kinds.length === 0) return;
+        const dm = await query<{ n: number }>(
+          `SELECT COUNT(*)::int AS n FROM payment_methods
+            WHERE organization_id = $1 AND opens_drawer = TRUE AND kind = ANY($2::text[])`,
+          [g.user.organizationId, kinds],
+        );
+        if (!dm.rows[0]?.n) return;
+        const st = await query<{ store_id: string }>(`SELECT store_id FROM sales WHERE id = $1`, [params.id]);
+        const printer = await resolveReceiptPrinter(g.user.organizationId, st.rows[0]?.store_id ?? null);
+        if (!printer) return;
+        const payload = await buildDrawerKickStarPrnt();
+        await enqueueJob({
+          organizationId: g.user.organizationId, printerId: printer.id,
+          contentType: STARPRNT_CONTENT_TYPE, payload,
+          title: 'Ouverture tiroir (encaissement)', userId: g.user.id,
+        });
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error('[drawer.after_sale]', err);
+      }
+    })();
 
     return NextResponse.json({
       sale_id: out.saleId,
