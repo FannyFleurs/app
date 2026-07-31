@@ -533,10 +533,14 @@ export default function CashRegister({
   const searchQ = deferredSearch.trim().toLowerCase();
   const visibleProducts = useMemo(() => {
     if (searchQ) {
+      // Recherche « contient » sur nom, SKU et code-barres : les 3 premières
+      // lettres filtrent, chaque lettre supplémentaire affine. Le code-barres
+      // est cherché en « contient » : taper les 5 derniers chiffres de l'EAN
+      // suffit à retrouver l'article (pas besoin du code complet).
       return products.filter((p) =>
         p.name.toLowerCase().includes(searchQ) ||
         p.sku?.toLowerCase().includes(searchQ) ||
-        p.barcode === searchQ.toUpperCase() || p.barcode === searchQ
+        (p.barcode ? p.barcode.toLowerCase().includes(searchQ) : false)
       );
     }
     if (view.kind === 'products') {
@@ -1348,7 +1352,7 @@ export default function CashRegister({
               <input
                 ref={searchRef}
                 autoFocus
-                className="input h-11 w-full pl-10"
+                className="input h-11 w-full pl-10 pr-10"
                 placeholder="Rechercher / scanner…"
                 aria-label="Rechercher un article"
                 value={search}
@@ -1369,6 +1373,17 @@ export default function CashRegister({
                   }
                 }}
               />
+              {search && (
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => { setSearch(''); searchRef.current?.focus(); }}
+                  aria-label="Effacer la recherche"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 grid place-items-center h-7 w-7 rounded-full text-ink-soft hover:bg-gray-100 hover:text-ink"
+                >
+                  <span aria-hidden className="text-lg leading-none">×</span>
+                </button>
+              )}
             </div>
           ) : (
             <button
