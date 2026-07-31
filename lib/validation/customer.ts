@@ -31,6 +31,8 @@ export const customerInputSchema = z.object({
   internal_notes: z.string().max(2000).nullable().optional(),
   loyalty_code: z.string().max(60).nullable().optional(),
   default_discount_pct: z.number().min(0).max(100).nullable().optional(),
+  // Conditions de règlement par défaut (code : on_receipt, net_30…).
+  payment_terms: z.string().max(40).nullable().optional(),
   // Participation au programme de fidélité (par défaut : oui). Décochée =>
   // aucun point gagné ni utilisable pour ce client.
   loyalty_enabled: z.boolean().optional(),

@@ -57,9 +57,9 @@ export async function POST(req: Request) {
         email, phone, siret, siren, vat_number,
         public_service_code, commitment_number, address,
         consent_email, consent_sms, internal_notes, loyalty_code,
-        default_discount_pct, loyalty_enabled,
+        default_discount_pct, loyalty_enabled, payment_terms,
         created_by, updated_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$20)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$21)
      RETURNING id`,
     [
       g.user.organizationId, c.type,
@@ -70,6 +70,7 @@ export async function POST(req: Request) {
       c.consent_email ?? false, c.consent_sms ?? false,
       c.internal_notes ?? null, c.loyalty_code ?? null,
       c.default_discount_pct ?? null, c.loyalty_enabled ?? true,
+      c.payment_terms ?? null,
       g.user.id,
     ],
   );

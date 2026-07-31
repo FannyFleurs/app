@@ -41,6 +41,7 @@ export default async function SettingsLayout({ children }: { children: React.Rea
     { href: '/settings/loyalty',          label: 'Fidélité',              icon: 'loyalty' as const,      perm: 'settings.write' as const,   boOnly: false, proOnly: false },
     { href: '/settings/cash',             label: 'Gestion argent',        icon: 'closures' as const,     perm: 'pos.use' as const,          boOnly: false, proOnly: false },
     { href: '/settings/receipt',          label: 'Paramétrage ticket',    icon: 'print' as const,        perm: 'settings.write' as const,   boOnly: false, proOnly: false },
+    { href: '/settings/invoicing',        label: 'Factures (RIB, règlement)', icon: 'invoices' as const,  perm: 'settings.read' as const,    boOnly: false, proOnly: false },
     { href: '/settings/e-invoicing',      label: 'Facturation électronique', icon: 'invoices' as const,  perm: 'settings.read' as const,    boOnly: false, proOnly: false },
     { href: '/settings/email',            label: 'Envoi d\'emails (Brevo)', icon: 'invoices' as const,     perm: 'settings.read' as const,    boOnly: true,  proOnly: false },
     { href: '/settings/printer',          label: 'Imprimante ticket (IP)', icon: 'print' as const,       perm: 'settings.write' as const,   boOnly: false, proOnly: false },

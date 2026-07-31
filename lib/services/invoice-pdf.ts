@@ -44,6 +44,10 @@ export interface InvoicePdfData {
    * sur `lines` (un seul groupe).
    */
   groups?: InvoiceSaleGroup[];
+  /** Mode de règlement (libellé) — ex. « Espèces + Carte bancaire », « En compte ». */
+  payment_method?: string | null;
+  /** Date de règlement (facture acquittée), YYYY-MM-DD/ISO. */
+  paid_at?: string | null;
   fiscal_hash: string | null;
 }
 
@@ -55,6 +59,17 @@ export interface InvoicePartyInfo {
   address?: { line1?: string; zip?: string; city?: string } | null;
   email?: string | null;
   phone?: string | null;
+  // Émetteur uniquement : mentions légales de pied de facture.
+  capital_social?: string | null;
+  ape_code?: string | null;
+  // Émetteur uniquement : coordonnées bancaires (RIB) à afficher.
+  bank?: {
+    show: boolean;
+    holder?: string;
+    name?: string;
+    iban?: string;
+    bic?: string;
+  } | null;
 }
 
 export async function renderInvoicePdf(
@@ -92,6 +107,7 @@ export async function renderInvoicePdf(
     doc.font('Helvetica-Bold').fontSize(9).fillColor('#666').text('FACTURÉ À', 340, blockY);
     doc.fillColor('#000').font('Helvetica-Bold').fontSize(11).text(customer.name, 340, blockY + 14);
     doc.font('Helvetica').fontSize(9);
+    if (customer.email) doc.text(customer.email, 340, doc.y);
     if (customer.address?.line1) doc.text(customer.address.line1, 340, doc.y);
     if (customer.address?.zip || customer.address?.city) doc.text(`${customer.address?.zip ?? ''} ${customer.address?.city ?? ''}`.trim(), 340, doc.y);
     if (customer.siret) doc.text(`SIRET ${customer.siret}`, 340, doc.y);
@@ -108,8 +124,20 @@ export async function renderInvoicePdf(
     doc.text(fmtDate(invoice.service_date), 200, metaY + 12, { width: 140 });
     if (invoice.due_date) doc.text(fmtDate(invoice.due_date), 350, metaY + 12, { width: 140 });
 
-    // Table des lignes
-    const tableTop = 270;
+    // 2ᵉ ligne méta : mode de règlement + date de règlement (si acquittée).
+    const meta2Y = metaY + 30;
+    const paid = invoice.status === 'paid';
+    if (invoice.payment_method || (paid && invoice.paid_at)) {
+      doc.font('Helvetica').fontSize(9).fillColor('#666');
+      if (invoice.payment_method) doc.text('Mode de règlement', 48, meta2Y, { width: 140 });
+      if (paid && invoice.paid_at) doc.text('Date de règlement', 200, meta2Y, { width: 140 });
+      doc.fillColor('#000').font('Helvetica-Bold');
+      if (invoice.payment_method) doc.text(invoice.payment_method, 48, meta2Y + 12, { width: 140 });
+      if (paid && invoice.paid_at) doc.text(fmtDate(invoice.paid_at), 200, meta2Y + 12, { width: 140 });
+    }
+
+    // Table des lignes (décalée pour laisser la place à la 2ᵉ ligne méta).
+    const tableTop = 300;
     doc.font('Helvetica-Bold').fontSize(9).fillColor('#666');
     doc.text('DÉSIGNATION', 48, tableTop);
     doc.text('QTÉ', 340, tableTop, { width: 30, align: 'right' });
@@ -235,11 +263,29 @@ export async function renderInvoicePdf(
       y = doc.y + 10;
     }
 
-    if (invoice.status === 'paid') {
+    if (paid) {
       doc.font('Helvetica-Bold').fontSize(10).fillColor('#2F6B3F')
-         .text('FACTURE ACQUITTÉE', 48, y);
+         .text(
+           invoice.paid_at ? `FACTURE ACQUITTÉE le ${fmtDate(invoice.paid_at)}` : 'FACTURE ACQUITTÉE',
+           48, y,
+         );
       doc.fillColor('#000');
       y += 16;
+    }
+
+    // Coordonnées bancaires (RIB) — si activé pour la boutique.
+    const bank = emitter.bank;
+    if (bank?.show && (bank.iban || bank.holder || bank.name)) {
+      doc.font('Helvetica-Bold').fontSize(9).fillColor('#666').text('COORDONNÉES BANCAIRES', 48, y);
+      doc.fillColor('#000').font('Helvetica').fontSize(9);
+      y += 12;
+      const parts: string[] = [];
+      if (bank.holder) parts.push(`Titulaire : ${bank.holder}`);
+      if (bank.name) parts.push(`Banque : ${bank.name}`);
+      for (const p of parts) { doc.text(p, 48, y, { width: 480 }); y = doc.y; }
+      if (bank.iban) { doc.font('Helvetica-Bold').text(`IBAN : ${bank.iban}`, 48, y, { width: 480 }); y = doc.y; doc.font('Helvetica'); }
+      if (bank.bic) { doc.text(`BIC : ${bank.bic}`, 48, y, { width: 480 }); y = doc.y; }
+      y += 10;
     }
 
     // Mentions légales
@@ -249,10 +295,17 @@ export async function renderInvoicePdf(
       doc.fillColor('#000');
     }
 
-    // Pied : empreinte fiscale
-    if (invoice.fiscal_hash) {
-      doc.font('Helvetica-Oblique').fontSize(7).fillColor('#888').text(
-        `Empreinte fiscale : ${invoice.fiscal_hash} · Système conforme aux exigences d'inaltérabilité (art. 286, I, 3°bis du CGI).`,
+    // Pied : identité légale de l'entreprise (mentions obligatoires).
+    const legalBits: string[] = [];
+    const legalName = emitter.legal_name || emitter.name;
+    if (legalName) legalBits.push(legalName);
+    if (emitter.capital_social) legalBits.push(`Capital social ${emitter.capital_social}`);
+    if (emitter.siret) legalBits.push(`SIRET ${emitter.siret}`);
+    if (emitter.ape_code) legalBits.push(`APE ${emitter.ape_code}`);
+    if (emitter.vat_number) legalBits.push(`TVA intra. ${emitter.vat_number}`);
+    if (legalBits.length > 0) {
+      doc.font('Helvetica').fontSize(7.5).fillColor('#888').text(
+        legalBits.join(' · '),
         48, 780, { width: 500, align: 'center' },
       );
       doc.fillColor('#000');

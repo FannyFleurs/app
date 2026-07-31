@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { PAYMENT_TERMS } from '@/lib/settings/payment-terms';
 
 export interface CustomerLike {
   id: string;
@@ -22,6 +23,7 @@ export interface CustomerLike {
   loyalty_code?: string | null;
   default_discount_pct?: number | null;
   loyalty_enabled?: boolean;
+  payment_terms?: string | null;
 }
 
 interface Props {
@@ -61,6 +63,7 @@ export default function CustomerFormModal({ customer, onClose, onSaved }: Props)
   const [discountPct, setDiscountPct] = useState<string>(
     customer?.default_discount_pct != null ? String(customer.default_discount_pct) : '',
   );
+  const [paymentTerms, setPaymentTerms] = useState<string>(customer?.payment_terms ?? '');
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -115,6 +118,7 @@ export default function CustomerFormModal({ customer, onClose, onSaved }: Props)
       loyalty_code: loyaltyCode.trim() || null,
       default_discount_pct: discountPct.trim() ? Number(discountPct) : null,
       loyalty_enabled: loyaltyEnabled,
+      payment_terms: paymentTerms || null,
     };
     const url = customer ? `/api/customers/${customer.id}` : '/api/customers';
     const method = customer ? 'PATCH' : 'POST';
@@ -278,6 +282,20 @@ export default function CustomerFormModal({ customer, onClose, onSaved }: Props)
             <p className="mt-1 text-xs text-ink-soft">
               Si renseigné, cette remise s&apos;applique automatiquement à chaque ligne
               quand ce client est attaché à un ticket.
+            </p>
+          </Field>
+          <Field label="Conditions de règlement (factures)" full>
+            <select
+              className="input max-w-[280px]"
+              value={paymentTerms}
+              onChange={(e) => setPaymentTerms(e.target.value)}
+            >
+              <option value="">Par défaut (réglage boutique)</option>
+              {PAYMENT_TERMS.map((t) => <option key={t.code} value={t.code}>{t.label}</option>)}
+            </select>
+            <p className="mt-1 text-xs text-ink-soft">
+              Condition appliquée aux factures de ce client (échéance calculée
+              automatiquement). Sinon, la condition par défaut de la boutique s&apos;applique.
             </p>
           </Field>
           <Field label="Notes internes" full>
