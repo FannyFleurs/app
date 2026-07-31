@@ -7,11 +7,5 @@
     "app/api/**/*.ts": {
       "maxDuration": 30
     }
-  },
-  "crons": [
-    {
-      "path": "/api/cron/monthly-billing",
-      "schedule": "0 6 1 * *"
-    }
-  ]
+  }
 }
