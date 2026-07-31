@@ -78,20 +78,6 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
     [params.id],
   );
 
-  // Cartes cadeaux & bons d'achat rattachés au client (bénéficiaire).
-  const giftCards = await query<{
-    id: string; code: string; balance: string; initial_amount: string;
-    status: string; kind: string; expires_at: string | null;
-  }>(
-    `SELECT id, code, balance::text, initial_amount::text, status,
-            COALESCE(kind, 'gift_card') AS kind, expires_at
-       FROM gift_cards
-      WHERE organization_id = $1 AND beneficiary_id = $2
-        AND status <> 'cancelled'
-      ORDER BY issued_at DESC`,
-    [user.organizationId, params.id],
-  ).catch(() => ({ rows: [] as { id: string; code: string; balance: string; initial_amount: string; status: string; kind: string; expires_at: string | null }[] }));
-
   const addresses = await query<{ label: string; line1: string; zip: string; city: string; is_default: boolean }>(
     `SELECT label, line1, zip, city, is_default
        FROM customer_addresses WHERE customer_id = $1 ORDER BY is_default DESC, created_at`,
@@ -229,11 +215,7 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
                 customerEmail={c.email}
                 customerPhone={c.phone}
               />
-              <LoyaltyPanel
-                customerId={params.id}
-                balance={loyBalance ?? 0}
-                giftCards={giftCards.rows}
-              />
+              <LoyaltyPanel customerId={params.id} />
               <div className="card overflow-hidden">
                 <div className="px-4 py-3 text-sm font-medium border-b border-border">Mouvements de fidélité</div>
                 <table className="w-full text-sm">
