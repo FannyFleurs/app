@@ -5,7 +5,7 @@
   "start_url": "/pda",
   "scope": "/pda",
   "display": "standalone",
-  "orientation": "any",
+  "orientation": "portrait",
   "background_color": "#FFFFFF",
   "theme_color": "#556B3E",
   "lang": "fr",
