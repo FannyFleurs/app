@@ -69,9 +69,10 @@ export async function POST(req: Request) {
   const skusInDb = new Set(existingSkus.rows.map((r) => r.sku));
 
   const rows = parseCsv(csv);
-  // Garde-fous mémoires : limite à 1000 lignes par import
-  const truncated = rows.length > 1000;
-  const limited = truncated ? rows.slice(0, 1000) : rows;
+  // Garde-fou mémoire : plafond large par import (catalogues volumineux).
+  const MAX_IMPORT = 20000;
+  const truncated = rows.length > MAX_IMPORT;
+  const limited = truncated ? rows.slice(0, MAX_IMPORT) : rows;
 
   // Dedup intra-fichier : on signale les doublons sku/barcode dans LE CSV
   const seenBarcodes = new Map<string, number[]>();

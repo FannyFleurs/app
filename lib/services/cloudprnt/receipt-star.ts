@@ -195,9 +195,13 @@ export async function buildReceiptStarPrnt(
   // raison sociale UNIQUEMENT en l'absence de logo (le logo peut le remplacer).
   const shopName = rs?.shop_name?.trim() || (hasLogo ? '' : org.name);
   if (shopName) {
-    enc.align('center').bold(true).width(2).height(2);
+    // Double HAUTEUR uniquement (pas double largeur) : le centrage de
+    // l'imprimante ne tient pas compte de la double largeur et colle le texte à
+    // gauche. En hauteur seule, la largeur reste normale et le centrage est
+    // correct — le nom reste bien mis en avant.
+    enc.align('center').bold(true).height(2);
     enc.line(ascii(shopName));
-    enc.width(1).height(1).bold(false);
+    enc.height(1).bold(false);
   }
   enc.align('left');
   const address1 = rs?.address_line1?.trim() || org.address?.line1;

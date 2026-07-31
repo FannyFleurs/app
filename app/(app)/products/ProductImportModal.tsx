@@ -288,7 +288,7 @@ function PreviewStep({ preview, error }: { preview: PreviewResp; error: string |
 
       {preview.truncated && (
         <div className="rounded-xl bg-warning/10 px-3 py-2 text-sm text-warning">
-          ⚠ Le fichier dépasse 1 000 lignes. Seules les 1 000 premières sont prises en compte ici.
+          ⚠ Le fichier dépasse 20 000 lignes. Seules les 20 000 premières sont prises en compte ici.
         </div>
       )}
 

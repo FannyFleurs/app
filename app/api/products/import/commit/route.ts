@@ -21,7 +21,7 @@ const rowSchema = z.object({
   is_active: z.boolean().optional(),
 });
 const bodySchema = z.object({
-  rows: z.array(rowSchema).min(1).max(1000),
+  rows: z.array(rowSchema).min(1).max(20000),
   // Boutique(s) cible de l'import. Vide/absent = toutes les boutiques.
   store_ids: z.array(z.string().uuid()).optional(),
 });
