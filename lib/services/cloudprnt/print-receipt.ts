@@ -34,8 +34,7 @@ export async function enqueueReceiptPrint(args: {
       ? `SELECT id, number, snapshot, fiscal_hash, sale_id
            FROM receipts WHERE id = $1 AND organization_id = $2`
       : `SELECT id, number, snapshot, fiscal_hash, sale_id
-           FROM receipts WHERE sale_id = $1 AND organization_id = $2
-           ORDER BY created_at DESC LIMIT 1`,
+           FROM receipts WHERE sale_id = $1 AND organization_id = $2 LIMIT 1`,
     [args.receiptId ?? args.saleId, args.organizationId],
   );
   if (rec.rowCount === 0) throw new ReceiptNotFoundError();

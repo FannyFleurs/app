@@ -47,25 +47,53 @@ export default function ReceiptSettingsForm({ stores, canEdit, lockedStoreId }: 
     setTimeout(() => setSaved(false), 2500);
   }
 
-  const [previewing, setPreviewing] = useState(false);
-  // Aperçu : rend un ticket d'exemple avec les réglages EN COURS (même non
-  // enregistrés) et l'ouvre dans un nouvel onglet (imprimable).
-  async function preview() {
-    setPreviewing(true); setError(null);
+  const [printing, setPrinting] = useState(false);
+  const [printMsg, setPrintMsg] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  // Aperçu PDF EN TEMPS RÉEL : régénère un ticket d'exemple (avec les réglages
+  // en cours, même non enregistrés) à chaque changement, avec un léger délai.
+  useEffect(() => {
+    if (loading || !storeId) return;
+    const handle = setTimeout(() => {
+      void (async () => {
+        try {
+          const r = await fetch('/api/settings/receipt/preview', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...form, store_id: storeId || undefined }),
+          });
+          if (!r.ok) return;
+          const blob = await r.blob();
+          const url = URL.createObjectURL(blob);
+          setPreviewUrl((old) => { if (old) URL.revokeObjectURL(old); return url; });
+        } catch { /* ignore */ }
+      })();
+    }, 500);
+    return () => clearTimeout(handle);
+  }, [form, storeId, loading]);
+
+  // Test impression : imprime un ticket d'exemple sur l'imprimante ticket
+  // installée. Repli sur l'aperçu PDF si aucune imprimante n'est configurée.
+  async function testPrint() {
+    setPrinting(true); setError(null); setPrintMsg(null);
     try {
-      const r = await fetch('/api/settings/receipt/preview', {
+      const r = await fetch('/api/settings/receipt/test-print', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...form, store_id: storeId || undefined }),
       });
-      if (!r.ok) { setError('Aperçu impossible.'); return; }
-      const blob = await r.blob();
-      const url = URL.createObjectURL(blob);
-      window.open(url, '_blank');
-      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      if (r.ok) {
+        setPrintMsg('Ticket de test envoyé à l’imprimante.');
+        setTimeout(() => setPrintMsg(null), 4000);
+      } else if (r.status === 409) {
+        if (previewUrl) window.open(previewUrl, '_blank');
+        setError('Aucune imprimante ticket configurée — aperçu PDF ouvert. Configurez-la dans « Imprimante ticket (CloudPRNT) ».');
+      } else {
+        setError('Impression impossible.');
+      }
     } catch {
-      setError('Aperçu impossible.');
+      setError('Impression impossible.');
     } finally {
-      setPreviewing(false);
+      setPrinting(false);
     }
   }
 
@@ -216,49 +244,27 @@ export default function ReceiptSettingsForm({ stores, canEdit, lockedStoreId }: 
           </div>
         </div>
 
-        {/* Prévisualisation */}
+        {/* Prévisualisation PDF en temps réel (rendu réel du ticket). */}
         <div className="lg:sticky lg:top-4 self-start">
-          <div className="text-xs uppercase tracking-widest text-ink-soft font-semibold mb-2">Aperçu</div>
-          <div className="rounded-2xl border border-border bg-white p-4 text-[11px] leading-tight" style={{ fontFamily: 'ui-monospace, monospace' }}>
-            {form.logo_data_url && (
-              <img src={form.logo_data_url} alt="" className="h-10 mx-auto mb-2" />
-            )}
-            <div className="text-center font-semibold text-sm">{form.shop_name || 'Nom commercial'}</div>
-            {form.address_line1 && <div className="text-center">{form.address_line1}</div>}
-            {form.address_zip_city && <div className="text-center">{form.address_zip_city}</div>}
-            {form.phone && <div className="text-center">Tél : {form.phone}</div>}
-            {form.siret && <div className="text-center">SIRET : {form.siret}</div>}
-            {form.vat_number && <div className="text-center">TVA : {form.vat_number}</div>}
-            {form.website && <div className="text-center">{form.website}</div>}
-            <div className="border-t border-dashed border-ink my-2" />
-            <div className="flex justify-between"><span>Bouquet rose</span><span>24,90 €</span></div>
-            <div className="flex justify-between"><span>Carte cadeau</span><span>50,00 €</span></div>
-            <div className="border-t border-dashed border-ink my-2" />
-            <div className="flex justify-between font-semibold"><span>TOTAL TTC</span><span>74,90 €</span></div>
-            {form.show_tax_breakdown && (
-              <div className="mt-1 text-[10px]">
-                <div className="flex justify-between"><span>TVA 20%</span><span>4,15 €</span></div>
+          <div className="text-xs uppercase tracking-widest text-ink-soft font-semibold mb-2">Aperçu en temps réel</div>
+          <div className="rounded-2xl border border-border bg-gray-50 overflow-hidden" style={{ height: 620 }}>
+            {previewUrl ? (
+              <iframe src={previewUrl} className="w-full h-full" title="Aperçu du ticket" />
+            ) : (
+              <div className="grid place-items-center h-full p-4 text-xs text-ink-soft text-center">
+                {loading ? 'Chargement…' : 'Génération de l’aperçu…'}
               </div>
-            )}
-            {form.show_barcode && (
-              <div className="mt-3 text-center">
-                <div className="inline-block px-2 py-1 bg-ink/5">
-                  <div className="font-mono text-[10px]">||||| ||||| | ||||</div>
-                  <div className="text-[9px] mt-0.5">T-2026-000123</div>
-                </div>
-              </div>
-            )}
-            <div className="border-t border-dashed border-ink my-2" />
-            <div className="text-center whitespace-pre-wrap">{form.footer_message}</div>
-            {form.welcome_message && (
-              <div className="text-center italic mt-1">{form.welcome_message}</div>
             )}
           </div>
+          <p className="mt-1 text-[11px] text-ink-soft">
+            Se met à jour automatiquement quand vous modifiez les réglages.
+          </p>
         </div>
       </div>
 
       {error && <div className="rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
       {saved && <div className="rounded-xl bg-success/10 px-3 py-2 text-sm text-success">✓ Paramètres enregistrés</div>}
+      {printMsg && <div className="rounded-xl bg-success/10 px-3 py-2 text-sm text-success">{printMsg}</div>}
 
       {canEdit && (
         <div className="flex flex-wrap gap-2">
@@ -266,12 +272,12 @@ export default function ReceiptSettingsForm({ stores, canEdit, lockedStoreId }: 
             {loading ? 'Chargement…' : saving ? 'Enregistrement…' : 'Enregistrer cette boutique'}
           </button>
           <button
-            onClick={() => void preview()}
-            disabled={previewing || loading || !storeId}
+            onClick={() => void testPrint()}
+            disabled={printing || loading || !storeId}
             className="btn-soft"
-            title="Ouvre un ticket d'exemple avec les réglages en cours (imprimable)"
+            title="Imprime un ticket d'exemple sur l'imprimante ticket installée"
           >
-            {previewing ? 'Génération…' : 'Test impression ticket'}
+            {printing ? 'Impression…' : 'Test impression ticket'}
           </button>
         </div>
       )}
