@@ -396,7 +396,7 @@ function CustomerDetailContent({ tab, detail, canWrite, onEdit }: {
             <Tile value={formatEUR(avg)}                            label="Ticket moyen TTC" />
             <Tile value={formatEUR(balances.credit_notes_balance)}  label="Crédits à dépenser" />
             <Tile value={formatEUR(balances.gift_card_balance)}     label="Bons cadeaux à dépenser" />
-            <Tile value={(detail.loyalty_points ?? 0).toString()}   label="Points de fidélité" />
+            <Tile value={formatEUR(detail.loyalty_points ?? 0)}     label="Solde fidélité" />
           </div>
         </div>
       )}
@@ -470,7 +470,7 @@ function CustomerDetailContent({ tab, detail, canWrite, onEdit }: {
           <div className="card p-5">
             <h3 className="font-semibold mb-2">Solde fidélité</h3>
             <div className="text-3xl font-semibold">
-              {detail.loyalty_points != null ? `${detail.loyalty_points} pts` : '—'}
+              {detail.loyalty_points != null ? formatEUR(detail.loyalty_points) : '—'}
             </div>
             <p className="text-xs text-ink-soft mt-2">
               Le solde est crédité automatiquement à chaque vente validée, selon le programme actif.

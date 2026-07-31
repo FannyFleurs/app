@@ -113,7 +113,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
           const totalTtc = Number(sale.total_ttc);
           const earnedInt = Math.floor((totalTtc / perSpent) * earnedPer);
           if (earnedInt > 0) {
-            const newBalance = balance + earnedInt;
+            const newBalance = Math.round((balance + earnedInt) * 100) / 100;
             await client.query(
               `INSERT INTO loyalty_movements
                  (organization_id, account_id, movement_type, points_delta,

@@ -694,21 +694,22 @@ export class SaleService {
             currentBalance = Number(accSel.rows[0]!.points_balance);
           }
 
-          // Débit (redeem) en premier — on stocke en € entiers dans points_balance (1 point = 1 €)
+          // Débit (redeem) en premier — solde stocké en € (1 point = 1 €),
+          // avec centimes (ex. 3,40 €) depuis la migration 0062.
           let balanceAfter = currentBalance;
           if (redeemed > 0) {
-            const redeemedInt = Math.round(redeemed);
-            if (redeemedInt > currentBalance) {
+            const redeemedAmt = round2(redeemed);
+            if (redeemedAmt > currentBalance) {
               throw new Error('LOYALTY_INSUFFICIENT_BALANCE');
             }
-            balanceAfter = currentBalance - redeemedInt;
+            balanceAfter = round2(currentBalance - redeemedAmt);
             await client.query(
               `INSERT INTO loyalty_movements
                  (organization_id, account_id, movement_type, points_delta,
                   balance_after, reason, source_type, source_id, user_id)
                VALUES ($1,$2,'redeem',$3,$4,$5,'sale',$6,$7)`,
               [
-                args.organizationId, accId, -redeemedInt, balanceAfter,
+                args.organizationId, accId, -redeemedAmt, balanceAfter,
                 `Utilisation fidélité sur ticket ${receiptNumber}`,
                 sale.id, args.userId,
               ],
@@ -744,7 +745,7 @@ export class SaleService {
             }, 0);
             earnedInt = Math.floor((eligibleTtc / perSpent) * earnedPer);
             if (earnedInt > 0) {
-              balanceAfter = balanceAfter + earnedInt;
+              balanceAfter = round2(balanceAfter + earnedInt);
               await client.query(
                 `INSERT INTO loyalty_movements
                    (organization_id, account_id, movement_type, points_delta,
@@ -767,7 +768,7 @@ export class SaleService {
             );
             loyaltyResult = {
               earned: earnedInt,
-              redeemed: Math.round(redeemed),
+              redeemed: round2(redeemed),
               new_balance: balanceAfter,
             };
           }
