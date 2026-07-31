@@ -7,6 +7,13 @@ const nextConfig = {
   experimental: {
     serverActions: { bodySizeLimit: '2mb' },
     serverComponentsExternalPackages: ['pdfkit', 'fontkit', 'bwip-js', 'star-prnt-encoder', 'pureimage', 'exceljs'],
+    // Les polices (rendu image du nom de boutique / des étiquettes via
+    // pureimage) sont lues via process.cwd() à l'exécution : Next ne les trace
+    // pas seul. On force leur inclusion dans les fonctions API (Next 14.2 :
+    // sous experimental).
+    outputFileTracingIncludes: {
+      '/api/**/*': ['./assets/fonts/**'],
+    },
   },
   async headers() {
     return [

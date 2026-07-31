@@ -255,7 +255,12 @@ export async function buildReceiptStarPrnt(
         done = true;
       }
     } catch { /* repli texte ci-dessous */ }
-    if (!done) center(shopName, true);
+    if (!done) {
+      // Repli texte (si le rendu image échoue) : une ligne vide d'abord, car
+      // l'imprimante ne centre pas la TOUTE PREMIÈRE ligne imprimée.
+      enc.newline();
+      center(shopName, true);
+    }
   }
   enc.align('left');
   const address1 = rs?.address_line1?.trim() || org.address?.line1;
