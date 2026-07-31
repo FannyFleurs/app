@@ -24,6 +24,7 @@ export interface CustomerLike {
   default_discount_pct?: number | null;
   loyalty_enabled?: boolean;
   payment_terms?: string | null;
+  billing_frequency?: 'manual' | 'monthly' | null;
 }
 
 interface Props {
@@ -64,6 +65,7 @@ export default function CustomerFormModal({ customer, onClose, onSaved }: Props)
     customer?.default_discount_pct != null ? String(customer.default_discount_pct) : '',
   );
   const [paymentTerms, setPaymentTerms] = useState<string>(customer?.payment_terms ?? '');
+  const [billingFrequency, setBillingFrequency] = useState<'manual' | 'monthly'>(customer?.billing_frequency ?? 'manual');
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -119,6 +121,7 @@ export default function CustomerFormModal({ customer, onClose, onSaved }: Props)
       default_discount_pct: discountPct.trim() ? Number(discountPct) : null,
       loyalty_enabled: loyaltyEnabled,
       payment_terms: paymentTerms || null,
+      billing_frequency: billingFrequency,
     };
     const url = customer ? `/api/customers/${customer.id}` : '/api/customers';
     const method = customer ? 'PATCH' : 'POST';
@@ -296,6 +299,21 @@ export default function CustomerFormModal({ customer, onClose, onSaved }: Props)
             <p className="mt-1 text-xs text-ink-soft">
               Condition appliquée aux factures de ce client (échéance calculée
               automatiquement). Sinon, la condition par défaut de la boutique s&apos;applique.
+            </p>
+          </Field>
+          <Field label="Fréquence de facturation (en compte)" full>
+            <select
+              className="input max-w-[280px]"
+              value={billingFrequency}
+              onChange={(e) => setBillingFrequency(e.target.value as 'manual' | 'monthly')}
+            >
+              <option value="manual">À la demande (manuelle)</option>
+              <option value="monthly">Mensuelle (automatique)</option>
+            </select>
+            <p className="mt-1 text-xs text-ink-soft">
+              « Mensuelle » : le 1ᵉʳ de chaque mois, une facture regroupant tous
+              les tickets « en compte » non facturés de ce client est générée
+              automatiquement (avec ses conditions de règlement).
             </p>
           </Field>
           <Field label="Notes internes" full>

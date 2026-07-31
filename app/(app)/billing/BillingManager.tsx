@@ -76,6 +76,10 @@ export default function BillingManager({ canInvoice }: { canInvoice: boolean }) 
   const [settling, setSettling] = useState<InvoiceRow | null>(null);
   const [settleAmount, setSettleAmount] = useState('');
 
+  // Génération manuelle des factures mensuelles.
+  const [monthlyBusy, setMonthlyBusy] = useState(false);
+  const [monthlyInfo, setMonthlyInfo] = useState<string | null>(null);
+
   const loadCustomers = useCallback(async () => {
     const r = await fetch('/api/billing/customers');
     if (r.ok) setCustomers((await r.json()).customers as CustomerRow[]);
@@ -83,6 +87,23 @@ export default function BillingManager({ canInvoice }: { canInvoice: boolean }) 
   }, []);
 
   useEffect(() => { void loadCustomers(); }, [loadCustomers]);
+
+  async function runMonthly() {
+    setMonthlyBusy(true); setMonthlyInfo(null); setError(null);
+    const r = await fetch('/api/billing/monthly-run', { method: 'POST' });
+    setMonthlyBusy(false);
+    if (!r.ok) { setError('Échec de la génération mensuelle.'); return; }
+    const j = await r.json() as { generated: unknown[]; skipped: unknown[] };
+    const n = j.generated.length;
+    setMonthlyInfo(
+      n === 0
+        ? 'Aucune facture à générer (rien à facturer pour les clients mensuels).'
+        : `${n} facture${n > 1 ? 's' : ''} mensuelle${n > 1 ? 's' : ''} générée${n > 1 ? 's' : ''}.`,
+    );
+    await loadCustomers();
+    if (selectedId) await loadDetail(selectedId);
+    setTimeout(() => setMonthlyInfo(null), 6000);
+  }
 
   const loadDetail = useCallback(async (id: string) => {
     setDetailLoading(true);
@@ -178,8 +199,20 @@ export default function BillingManager({ canInvoice }: { canInvoice: boolean }) 
         <PageHeader
           title="Facturation"
           subtitle="Clients « en compte » : facturez les tickets par période et soldez les règlements."
-          actions={null}
+          actions={canInvoice ? (
+            <button
+              onClick={() => void runMonthly()}
+              disabled={monthlyBusy}
+              className="btn-soft text-sm whitespace-nowrap"
+              title="Génère maintenant les factures de tous les clients en « facturation mensuelle » (fait aussi automatiquement le 1er du mois)."
+            >
+              {monthlyBusy ? 'Génération…' : 'Générer les factures mensuelles'}
+            </button>
+          ) : null}
         />
+        {monthlyInfo && (
+          <div className="mt-3 rounded-xl bg-success/10 px-3 py-2 text-sm text-success">{monthlyInfo}</div>
+        )}
       </div>
 
       <div className="flex-1 md:overflow-hidden grid md:grid-cols-[22rem_1fr]">

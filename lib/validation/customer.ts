@@ -33,6 +33,8 @@ export const customerInputSchema = z.object({
   default_discount_pct: z.number().min(0).max(100).nullable().optional(),
   // Conditions de règlement par défaut (code : on_receipt, net_30…).
   payment_terms: z.string().max(40).nullable().optional(),
+  // Fréquence de facturation « en compte » : à la demande ou mensuelle auto.
+  billing_frequency: z.enum(['manual', 'monthly']).optional(),
   // Participation au programme de fidélité (par défaut : oui). Décochée =>
   // aucun point gagné ni utilisable pour ce client.
   loyalty_enabled: z.boolean().optional(),

@@ -14,7 +14,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
             siret, siren, vat_number, public_service_code, commitment_number,
             address, consent_email, consent_sms,
             internal_notes, loyalty_code, default_discount_pct, loyalty_enabled,
-            payment_terms, created_at
+            payment_terms, billing_frequency, created_at
        FROM customers WHERE id = $1 AND organization_id = $2`,
     [params.id, g.user.organizationId],
   );
@@ -57,8 +57,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
        address = $14, consent_email = $15, consent_sms = $16,
        internal_notes = $17, loyalty_code = $18,
        default_discount_pct = $19, loyalty_enabled = $20,
-       payment_terms = $21,
-       updated_by = $22, updated_at = now()
+       payment_terms = $21, billing_frequency = $22,
+       updated_by = $23, updated_at = now()
      WHERE id = $1 AND organization_id = $2`,
     [
       params.id, g.user.organizationId, c.type,
@@ -69,7 +69,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       c.consent_email ?? false, c.consent_sms ?? false,
       c.internal_notes ?? null, c.loyalty_code ?? null,
       c.default_discount_pct ?? null, c.loyalty_enabled ?? true,
-      c.payment_terms ?? null,
+      c.payment_terms ?? null, c.billing_frequency ?? 'manual',
       g.user.id,
     ],
   );
