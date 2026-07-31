@@ -8,6 +8,7 @@ import AllPagesOverlay from './AllPagesOverlay';
 import WakeLockKeeper from './WakeLockKeeper';
 import PaidOrderNotifier from './PaidOrderNotifier';
 import SchoolModeBanner from './SchoolModeBanner';
+import SessionKeepAlive from './SessionKeepAlive';
 import type { Role, Permission } from '@/lib/auth/rbac';
 import { POS_THEME_COLOR_VALUES, getDeviceThemeColor, type PosThemeColor, type ColorScheme, type AutoLogoutMode } from '@/lib/settings/pos-ui';
 
@@ -142,6 +143,7 @@ export default function AppShell({
 
   return (
     <div className="h-screen overflow-hidden flex flex-col bg-bg pt-safe pl-safe pr-safe pb-safe">
+      <SessionKeepAlive />
       <SchoolModeBanner />
       <div className="flex-1 flex flex-row overflow-hidden min-h-0">
         {/* Sidebar verticale (desktop / tablette) */}

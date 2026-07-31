@@ -167,7 +167,7 @@ async function handleLogin(req: Request) {
   }
 
   cookies().set({
-    ...sessionCookieOptions(),
+    ...sessionCookieOptions(kind),
     value: token,
   });
   // Cookie tenant : permet à l'écran PIN-login de pré-sélectionner ce
