@@ -7,6 +7,7 @@ import Badge from '@/components/Badge';
 
 interface Org {
   name: string; legal_name: string; siret: string | null; siren: string | null; vat_number: string | null;
+  capital_social: string | null; ape_code: string | null;
   address: { line1?: string; line2?: string; zip?: string; city?: string; country?: string } | null;
   contact: { phone?: string; email?: string; website?: string } | null;
 }
@@ -127,6 +128,8 @@ function IdentityForm({ org, canWrite, onSaved }: {
         siret: form.siret || null,
         siren: form.siren || null,
         vat_number: form.vat_number || null,
+        capital_social: form.capital_social || null,
+        ape_code: form.ape_code || null,
         address: form.address ?? {},
         contact: form.contact ?? {},
       }),
@@ -178,6 +181,21 @@ function IdentityForm({ org, canWrite, onSaved }: {
             <input className="input" value={form.vat_number ?? ''} disabled={!canWrite}
                    onChange={(e) => setForm({ ...form, vat_number: e.target.value })} />
           </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Capital social">
+              <input className="input" value={form.capital_social ?? ''} disabled={!canWrite}
+                     placeholder="ex : 5 000 €"
+                     onChange={(e) => setForm({ ...form, capital_social: e.target.value })} />
+            </Field>
+            <Field label="Code APE / NAF">
+              <input className="input" value={form.ape_code ?? ''} disabled={!canWrite}
+                     placeholder="ex : 4776Z"
+                     onChange={(e) => setForm({ ...form, ape_code: e.target.value })} />
+            </Field>
+          </div>
+          <p className="text-xs text-ink-soft">
+            Ces informations figurent en pied de facture (mentions légales).
+          </p>
         </div>
       </div>
 

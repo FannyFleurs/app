@@ -11,6 +11,8 @@ const schema = z.object({
   siret: z.string().max(40).nullable().optional(),
   siren: z.string().max(15).nullable().optional(),
   vat_number: z.string().max(40).nullable().optional(),
+  capital_social: z.string().max(60).nullable().optional(),
+  ape_code: z.string().max(20).nullable().optional(),
   address: z.object({
     line1: z.string().max(160).optional(),
     line2: z.string().max(160).optional(),
@@ -29,7 +31,8 @@ export async function GET() {
   const g = await requirePermission('settings.read');
   if ('response' in g) return g.response;
   const { rows } = await query(
-    `SELECT name, legal_name, siret, siren, vat_number, address, contact
+    `SELECT name, legal_name, siret, siren, vat_number,
+            capital_social, ape_code, address, contact
        FROM organizations WHERE id = $1`,
     [g.user.organizationId],
   );
@@ -51,6 +54,8 @@ export async function PATCH(req: Request) {
   if (d.siret !== undefined)      { sets.push(`siret = $${i++}`);      vals.push(d.siret); }
   if (d.siren !== undefined)      { sets.push(`siren = $${i++}`);      vals.push(d.siren); }
   if (d.vat_number !== undefined) { sets.push(`vat_number = $${i++}`); vals.push(d.vat_number); }
+  if (d.capital_social !== undefined) { sets.push(`capital_social = $${i++}`); vals.push(d.capital_social); }
+  if (d.ape_code !== undefined)   { sets.push(`ape_code = $${i++}`);   vals.push(d.ape_code); }
   if (d.address !== undefined)    { sets.push(`address = $${i++}`);    vals.push(JSON.stringify(d.address)); }
   if (d.contact !== undefined)    { sets.push(`contact = $${i++}`);    vals.push(JSON.stringify(d.contact)); }
   if (sets.length === 0) return NextResponse.json({ ok: true });

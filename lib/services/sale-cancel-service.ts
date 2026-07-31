@@ -2,6 +2,7 @@ import { withTransaction } from '@/lib/db/client';
 import { FiscalCore } from '@/lib/fiscal/core';
 import { round2 } from './money';
 import { STOCK_TRACKED_SQL } from './stock-tracking';
+import { joinPaymentMethods } from './payment-labels';
 
 /**
  * Annulation totale d'une vente validée (contre-passation complète).
@@ -338,18 +339,22 @@ export class SaleCancelService {
         const refLabel = invoiceToReverse.isPeriod
           ? `Avoir sur facture de période ${invoiceToReverse.number ?? ''}`
           : `Avoir sur facture ${invoiceToReverse.number ?? ''}`;
+        // Mode de remboursement = mode(s) de règlement d'origine.
+        const refundMethod = paymentsRes.rows.length
+          ? joinPaymentMethods(paymentsRes.rows.filter((p) => Number(p.amount) > 0).map((p) => p.method))
+          : null;
         const cnInv = await client.query<{ id: string }>(
           `INSERT INTO invoices
              (organization_id, store_id, customer_id, sale_id, invoice_type,
               number, sequence_value, status, issue_date, service_date, due_date,
-              total_ht, total_tva, total_ttc, tva_breakdown, notes, metadata, validated_at)
-           VALUES ($1,$2,$3,$4,'credit_note',$5,$6,'validated',$7,$7,$7,$8,$9,$10,$11,$12,$13, now())
+              total_ht, total_tva, total_ttc, tva_breakdown, payment_method, notes, metadata, validated_at)
+           VALUES ($1,$2,$3,$4,'credit_note',$5,$6,'validated',$7,$7,$7,$8,$9,$10,$11,$12,$13,$14, now())
            RETURNING id`,
           [
             args.organizationId, invoiceToReverse.store_id, invoiceToReverse.customer_id, sale.id,
             number, seqValue.toString(), issueDate,
             -Number(sale.total_ht), -Number(sale.total_tva), -Number(sale.total_ttc),
-            JSON.stringify(negBreakdown),
+            JSON.stringify(negBreakdown), refundMethod,
             `${refLabel} — annulation vente ${sale.receipt_number} (${args.reason.trim()})`,
             JSON.stringify({
               credited_invoice_id: invoiceToReverse.id,

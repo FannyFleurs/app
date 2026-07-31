@@ -1,5 +1,8 @@
 import { withTransaction } from '@/lib/db/client';
 import { FiscalCore } from '@/lib/fiscal/core';
+import { loadInvoiceSettings } from '@/lib/settings/invoice-server';
+import { paymentTermLabel, computeDueDate } from '@/lib/settings/payment-terms';
+import { joinPaymentMethods } from './payment-labels';
 
 const round4 = (n: number) => Math.round(n * 10000) / 10000;
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -80,6 +83,27 @@ export class InvoiceService {
       // validated_at est renvoyé par node-postgres comme un Date (TIMESTAMPTZ),
       // pas une string — d'où le passage par new Date(...).toISOString().
       const serviceDate = new Date(s.validated_at).toISOString().slice(0, 10);
+      const paidAt = new Date(s.validated_at).toISOString();
+
+      // Conditions de règlement : code du client, sinon défaut boutique.
+      const cust = await client.query<{ payment_terms: string | null }>(
+        `SELECT payment_terms FROM customers WHERE id = $1`,
+        [customerId],
+      );
+      const invSettings = await loadInvoiceSettings(args.organizationId, s.store_id);
+      const termCode = cust.rows[0]?.payment_terms || invSettings.default_payment_terms;
+      // Libellé explicite fourni par l'appelant sinon dérivé du code.
+      const paymentTermsText = args.paymentTerms ?? paymentTermLabel(termCode);
+      const dueDate = computeDueDate(issueDate, termCode);
+
+      // Mode de règlement : dérivé des paiements de la vente (déjà encaissée).
+      const payMethods = await client.query<{ method: string }>(
+        `SELECT method FROM payments WHERE sale_id = $1 AND amount > 0`,
+        [s.id],
+      );
+      const paymentMethod = payMethods.rows.length
+        ? joinPaymentMethods(payMethods.rows.map((p) => p.method))
+        : null;
 
       // Insertion de la facture (status=paid car la vente est encaissée)
       const inv = await client.query<{ id: string }>(
@@ -88,19 +112,19 @@ export class InvoiceService {
             number, sequence_value, status,
             issue_date, service_date, due_date,
             total_ht, total_tva, total_ttc, tva_breakdown,
-            payment_terms, notes, validated_at)
+            payment_terms, payment_method, paid_at, notes, validated_at)
          VALUES ($1,$2,$3,$4,'standard',
                  $5,$6,'paid',
-                 $7,$8,$7,
-                 $9,$10,$11,$12,
-                 $13,$14, now())
+                 $7,$8,$9,
+                 $10,$11,$12,$13,
+                 $14,$15,$16,$17, now())
          RETURNING id`,
         [
           args.organizationId, s.store_id, customerId, s.id,
           number, seq.toString(),
-          issueDate, serviceDate,
+          issueDate, serviceDate, dueDate,
           s.total_ht, s.total_tva, s.total_ttc, JSON.stringify(s.tva_breakdown),
-          args.paymentTerms ?? null, s.notes ?? null,
+          paymentTermsText, paymentMethod, paidAt, s.notes ?? null,
         ],
       );
 
@@ -218,19 +242,32 @@ export class InvoiceService {
         organizationId: args.organizationId, kind: 'invoice', year, prefix: 'F',
       });
       const issueDate = new Date().toISOString().slice(0, 10);
-      const dueDate = new Date(Date.now() + (args.dueDays ?? 30) * 86400000).toISOString().slice(0, 10);
+      // Conditions de règlement : code du client, sinon défaut boutique. Si
+      // l'appelant impose un délai (dueDays), il prime sur le calcul par code.
+      const cust = await client.query<{ payment_terms: string | null }>(
+        `SELECT payment_terms FROM customers WHERE id = $1`,
+        [args.customerId],
+      );
+      const invSettings = await loadInvoiceSettings(args.organizationId, storeId);
+      const termCode = cust.rows[0]?.payment_terms || invSettings.default_payment_terms;
+      const paymentTermsText = paymentTermLabel(termCode);
+      const dueDate = args.dueDays != null
+        ? new Date(Date.now() + args.dueDays * 86400000).toISOString().slice(0, 10)
+        : computeDueDate(issueDate, termCode);
 
       const inv = await client.query<{ id: string }>(
         `INSERT INTO invoices
            (organization_id, store_id, customer_id, sale_id, invoice_type,
             number, sequence_value, status, issue_date, service_date, due_date,
-            total_ht, total_tva, total_ttc, tva_breakdown, metadata, validated_at)
-         VALUES ($1,$2,$3,NULL,'standard',$4,$5,'sent',$6,$6,$7,$8,$9,$10,$11,$12,now())
+            total_ht, total_tva, total_ttc, tva_breakdown,
+            payment_terms, payment_method, metadata, validated_at)
+         VALUES ($1,$2,$3,NULL,'standard',$4,$5,'sent',$6,$6,$7,$8,$9,$10,$11,$12,$13,$14,now())
          RETURNING id`,
         [
           args.organizationId, storeId, args.customerId, number, seq.toString(),
           issueDate, dueDate, totalHt.toFixed(4), totalTva.toFixed(4), totalTtc.toFixed(4),
           JSON.stringify(tvaBreakdown),
+          paymentTermsText, 'En compte',
           JSON.stringify({ period_invoice: true, sale_ids: sales.map((s) => s.id) }),
         ],
       );
@@ -313,7 +350,7 @@ export class InvoiceService {
       if (!(amount > 0)) throw new Error('INVALID_AMOUNT');
 
       await client.query(
-        `UPDATE invoices SET status = 'paid', updated_at = now() WHERE id = $1`,
+        `UPDATE invoices SET status = 'paid', paid_at = now(), updated_at = now() WHERE id = $1`,
         [inv.id],
       );
 
@@ -430,7 +467,7 @@ export class InvoiceService {
         if (remaining + 0.0001 >= ttc) {
           await client.query(
             `UPDATE invoices
-                SET status = 'paid', updated_at = now(),
+                SET status = 'paid', paid_at = now(), updated_at = now(),
                     metadata = COALESCE(metadata, '{}'::jsonb)
                       || jsonb_build_object('settled_via', 'account')
               WHERE id = $1`,
