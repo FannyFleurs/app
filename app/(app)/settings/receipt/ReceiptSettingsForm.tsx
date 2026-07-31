@@ -47,6 +47,28 @@ export default function ReceiptSettingsForm({ stores, canEdit, lockedStoreId }: 
     setTimeout(() => setSaved(false), 2500);
   }
 
+  const [previewing, setPreviewing] = useState(false);
+  // Aperçu : rend un ticket d'exemple avec les réglages EN COURS (même non
+  // enregistrés) et l'ouvre dans un nouvel onglet (imprimable).
+  async function preview() {
+    setPreviewing(true); setError(null);
+    try {
+      const r = await fetch('/api/settings/receipt/preview', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...form, store_id: storeId || undefined }),
+      });
+      if (!r.ok) { setError('Aperçu impossible.'); return; }
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch {
+      setError('Aperçu impossible.');
+    } finally {
+      setPreviewing(false);
+    }
+  }
+
   function onLogoFile(file: File) {
     if (file.size > 200_000) {
       setError('Logo trop volumineux (max ~200 kB).'); return;
@@ -239,9 +261,19 @@ export default function ReceiptSettingsForm({ stores, canEdit, lockedStoreId }: 
       {saved && <div className="rounded-xl bg-success/10 px-3 py-2 text-sm text-success">✓ Paramètres enregistrés</div>}
 
       {canEdit && (
-        <button onClick={() => void submit()} disabled={saving || loading || !storeId} className="btn-primary">
-          {loading ? 'Chargement…' : saving ? 'Enregistrement…' : 'Enregistrer cette boutique'}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button onClick={() => void submit()} disabled={saving || loading || !storeId} className="btn-primary">
+            {loading ? 'Chargement…' : saving ? 'Enregistrement…' : 'Enregistrer cette boutique'}
+          </button>
+          <button
+            onClick={() => void preview()}
+            disabled={previewing || loading || !storeId}
+            className="btn-soft"
+            title="Ouvre un ticket d'exemple avec les réglages en cours (imprimable)"
+          >
+            {previewing ? 'Génération…' : 'Test impression ticket'}
+          </button>
+        </div>
       )}
     </div>
   );
