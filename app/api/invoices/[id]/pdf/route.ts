@@ -2,9 +2,10 @@ import { NextResponse } from 'next/server';
 import { query } from '@/lib/db/client';
 import { requirePermission } from '@/lib/auth/guards';
 import { jsonError } from '@/lib/validation/api';
-import { renderInvoicePdf, type InvoicePdfData } from '@/lib/services/invoice-pdf';
+import { renderInvoicePdf, buildInvoiceEmitter, type InvoicePdfData } from '@/lib/services/invoice-pdf';
 import { loadInvoiceGroups } from '@/lib/services/invoice-lines';
 import { loadInvoiceSettings } from '@/lib/settings/invoice-server';
+import { loadReceiptSettings } from '@/lib/settings/receipt-server';
 
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
   const g = await requirePermission('customers.read');
@@ -52,6 +53,13 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 
   const { lines, groups } = await loadInvoiceGroups(params.id, r.sale_id, r.notes);
   const invSettings = await loadInvoiceSettings(g.user.organizationId, r.store_id);
+  // En-tête émetteur : nom / adresse / téléphone de la BOUTIQUE (paramétrage
+  // ticket de la boutique), pas de l'organisation. Le pied légal (raison
+  // sociale, SIRET…) reste celui de l'organisation.
+  const emitter = buildInvoiceEmitter(
+    await loadReceiptSettings(g.user.organizationId, r.store_id), r,
+    { show: invSettings.show_bank_details, holder: invSettings.bank_holder, name: invSettings.bank_name, iban: invSettings.bank_iban, bic: invSettings.bank_bic },
+  );
 
   const data: InvoicePdfData = {
     number: r.number,
@@ -76,24 +84,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 
   const pdf = await renderInvoicePdf(
     data,
-    {
-      name: r.org_name,
-      legal_name: r.org_legal,
-      siret: r.org_siret,
-      vat_number: r.org_vat,
-      capital_social: r.org_capital,
-      ape_code: r.org_ape,
-      address: r.org_address,
-      email: r.org_contact?.email ?? null,
-      phone: r.org_contact?.phone ?? null,
-      bank: {
-        show: invSettings.show_bank_details,
-        holder: invSettings.bank_holder,
-        name: invSettings.bank_name,
-        iban: invSettings.bank_iban,
-        bic: invSettings.bank_bic,
-      },
-    },
+    emitter,
     {
       name: r.customer_display ?? 'Client',
       siret: r.customer_siret,
