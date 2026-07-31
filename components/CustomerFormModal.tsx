@@ -307,13 +307,14 @@ export default function CustomerFormModal({ customer, onClose, onSaved }: Props)
               value={billingFrequency}
               onChange={(e) => setBillingFrequency(e.target.value as 'manual' | 'monthly')}
             >
-              <option value="manual">À la demande (manuelle)</option>
-              <option value="monthly">Mensuelle (automatique)</option>
+              <option value="manual">À la demande</option>
+              <option value="monthly">Mensuelle</option>
             </select>
             <p className="mt-1 text-xs text-ink-soft">
-              « Mensuelle » : le 1ᵉʳ de chaque mois, une facture regroupant tous
-              les tickets « en compte » non facturés de ce client est générée
-              automatiquement (avec ses conditions de règlement).
+              « Mensuelle » : ce client est inclus quand tu cliques sur
+              « Générer les factures mensuelles » (page Facturation). Une facture
+              regroupe alors tous ses tickets « en compte » non facturés, avec
+              ses conditions de règlement. Aucune génération automatique.
             </p>
           </Field>
           <Field label="Notes internes" full>

@@ -204,7 +204,7 @@ export default function BillingManager({ canInvoice }: { canInvoice: boolean }) 
               onClick={() => void runMonthly()}
               disabled={monthlyBusy}
               className="btn-soft text-sm whitespace-nowrap"
-              title="Génère maintenant les factures de tous les clients en « facturation mensuelle » (fait aussi automatiquement le 1er du mois)."
+              title="Génère les factures de tous les clients en « facturation mensuelle » (regroupe leurs tickets « en compte » non facturés)."
             >
               {monthlyBusy ? 'Génération…' : 'Générer les factures mensuelles'}
             </button>

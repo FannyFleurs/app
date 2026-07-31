@@ -68,20 +68,3 @@ export async function runMonthlyBillingForOrg(
 
   return result;
 }
-
-/**
- * Résout un utilisateur « acteur » pour tracer les événements fiscaux d'une
- * organisation lors d'un traitement automatique (cron) : privilégie un
- * propriétaire / super-admin actif.
- */
-export async function resolveBillingActor(organizationId: string): Promise<string | null> {
-  const { rows } = await query<{ id: string }>(
-    `SELECT id FROM users
-      WHERE organization_id = $1 AND is_active = TRUE
-      ORDER BY CASE role WHEN 'owner' THEN 0 WHEN 'super_admin' THEN 1 WHEN 'manager' THEN 2 ELSE 3 END,
-               created_at ASC
-      LIMIT 1`,
-    [organizationId],
-  );
-  return rows[0]?.id ?? null;
-}
