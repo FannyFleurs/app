@@ -19,7 +19,7 @@ interface Printer {
   queued: number;
 }
 
-export default function LabelPrinterForm({ stores, canWrite }: {
+export default function ReceiptPrinterForm({ stores, canWrite }: {
   stores: { id: string; name: string }[]; canWrite: boolean;
 }) {
   const [printers, setPrinters] = useState<Printer[]>([]);
@@ -30,7 +30,7 @@ export default function LabelPrinterForm({ stores, canWrite }: {
 
   // Formulaire d'ajout
   const [mac, setMac] = useState('');
-  const [label, setLabel] = useState('Étiquettes');
+  const [label, setLabel] = useState('Ticket / tiroir');
   const [storeId, setStoreId] = useState('');
   const [token, setToken] = useState('');
   const [saving, setSaving] = useState(false);
@@ -38,13 +38,11 @@ export default function LabelPrinterForm({ stores, canWrite }: {
   useEffect(() => { setOrigin(window.location.origin); }, []);
 
   const load = useCallback(async () => {
-    const r = await fetch('/api/cloudprnt/printers?role=label');
+    const r = await fetch('/api/cloudprnt/printers?role=receipt');
     if (r.ok) setPrinters((await r.json()).printers as Printer[]);
     setLoading(false);
   }, []);
   useEffect(() => { void load(); }, [load]);
-  // Rafraîchit la liste toutes les 4 s : on voit « vue à » avancer en direct
-  // (l'imprimante sonde-t-elle bien ?) et la file se vider quand un job part.
   useEffect(() => {
     const t = setInterval(() => { void load(); }, 4000);
     return () => clearInterval(t);
@@ -55,7 +53,7 @@ export default function LabelPrinterForm({ stores, canWrite }: {
     setSaving(true); setErr(null); setMsg(null);
     const r = await fetch('/api/cloudprnt/printers', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mac: mac.trim(), label: label.trim(), store_id: storeId || null, poll_token: token.trim() || null, role: 'label' }),
+      body: JSON.stringify({ mac: mac.trim(), label: label.trim(), store_id: storeId || null, poll_token: token.trim() || null, role: 'receipt' }),
     });
     setSaving(false);
     if (r.ok) {
@@ -83,14 +81,11 @@ export default function LabelPrinterForm({ stores, canWrite }: {
 
   async function testPrint(p: Printer) {
     setMsg(null); setErr(null);
-    const r = await fetch('/api/cloudprnt/print-labels', {
+    const r = await fetch('/api/cloudprnt/print-receipt-test', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        store_id: p.store_id,
-        entries: [{ product: { name: 'TEST HelloPos', barcode: '3401234567890', sale_price_ttc: 9.99 }, qty: 1 }],
-      }),
+      body: JSON.stringify({ printer_id: p.id }),
     });
-    if (r.ok) setMsg(`Étiquette de test envoyée à « ${p.label} ». Elle sortira au prochain sondage de l'imprimante.`);
+    if (r.ok) setMsg(`Ticket de test + ouverture tiroir envoyés à « ${p.label} ». Ça sortira au prochain sondage de l'imprimante.`);
     else {
       const j = await r.json().catch(() => null);
       setErr(j?.error === 'NO_PRINTER' ? 'Aucune imprimante active trouvée.' : (j?.error ?? 'Échec du test.'));
@@ -102,16 +97,16 @@ export default function LabelPrinterForm({ stores, canWrite }: {
   return (
     <div className="p-6 md:p-8 space-y-5 max-w-3xl">
       <PageHeader
-        title="Imprimante étiquettes (CloudPRNT)"
-        subtitle="Impression directe des étiquettes sur une imprimante Star (mC-Label3) en Ethernet, sans boîte de dialogue."
+        title="Imprimante ticket (CloudPRNT)"
+        subtitle="Impression des tickets sur une imprimante Star (TSP143 / mC-Print) en Ethernet, avec ouverture du tiroir-caisse branché dessus."
         actions={null}
       />
 
       <div className="card p-4 text-sm text-ink-soft space-y-1">
         <p className="font-medium text-ink">Comment ça marche</p>
         <p>1. Enregistre ci-dessous l'imprimante (son adresse MAC, au dos de l'appareil).</p>
-        <p>2. Sur l'imprimante (page de config Star CloudPRNT), colle l'<strong>URL de sondage</strong> affichée, active CloudPRNT et règle l'intervalle (5 s conseillé).</p>
-        <p>3. Depuis Étiquettes ou une fiche produit, l'impression part directement sur l'imprimante.</p>
+        <p>2. Sur l'imprimante (page de config Star CloudPRNT), colle l'<strong>URL de sondage</strong> affichée, active CloudPRNT et règle l'intervalle (2–5 s conseillé).</p>
+        <p>3. Le tiroir-caisse se branche sur le port RJ11/DK de l'imprimante : il s'ouvre alors depuis le bouton discret de la caisse et à chaque ticket encaissé en espèces.</p>
       </div>
 
       {msg && <div className="rounded-xl bg-success/10 px-4 py-3 text-sm text-success">{msg}</div>}
@@ -120,7 +115,7 @@ export default function LabelPrinterForm({ stores, canWrite }: {
       {loading ? (
         <p className="text-sm text-ink-soft">Chargement…</p>
       ) : printers.length === 0 ? (
-        <p className="text-sm text-ink-soft">Aucune imprimante enregistrée.</p>
+        <p className="text-sm text-ink-soft">Aucune imprimante ticket enregistrée.</p>
       ) : (
         <div className="space-y-3">
           {printers.map((p) => (
@@ -156,7 +151,7 @@ export default function LabelPrinterForm({ stores, canWrite }: {
                 </div>
                 {canWrite && (
                   <div className="flex flex-wrap justify-end gap-2">
-                    <button className="btn-soft text-xs" onClick={() => void testPrint(p)}>Test</button>
+                    <button className="btn-soft text-xs" onClick={() => void testPrint(p)}>Test ticket + tiroir</button>
                     <button className="btn-soft text-xs" onClick={() => void toggle(p)}>
                       {p.enabled ? 'Désactiver' : 'Activer'}
                     </button>
@@ -176,7 +171,7 @@ export default function LabelPrinterForm({ stores, canWrite }: {
 
       {canWrite && (
         <div className="card p-5 space-y-3">
-          <h3 className="font-semibold">Ajouter une imprimante</h3>
+          <h3 className="font-semibold">Ajouter une imprimante ticket</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <label className="block text-sm">
               <span className="text-ink-soft">Adresse MAC</span>

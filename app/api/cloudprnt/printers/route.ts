@@ -16,9 +16,12 @@ const createSchema = z.object({
   poll_interval: z.number().int().min(1).max(60).optional(),
 });
 
-export async function GET() {
+export async function GET(req: Request) {
   const g = await requirePermission('settings.read');
   if ('response' in g) return g.response;
+  // Filtre optionnel par rôle : ?role=label (étiquettes) ou ?role=receipt (ticket).
+  const roleParam = new URL(req.url).searchParams.get('role');
+  const role = roleParam === 'label' || roleParam === 'receipt' ? roleParam : null;
   const { rows } = await query(
     `SELECT p.id, p.mac, p.label, p.store_id, p.role, p.poll_token, p.poll_interval,
             p.enabled, p.last_seen_at, p.last_status,
@@ -28,8 +31,9 @@ export async function GET() {
        FROM cloudprnt_printers p
        LEFT JOIN stores s ON s.id = p.store_id
       WHERE p.organization_id = $1
+        AND ($2::text IS NULL OR p.role = $2)
       ORDER BY p.created_at`,
-    [g.user.organizationId],
+    [g.user.organizationId, role],
   );
   return NextResponse.json({ printers: rows });
 }

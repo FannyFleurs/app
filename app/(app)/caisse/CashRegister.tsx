@@ -751,7 +751,7 @@ export default function CashRegister({
     try {
       await fetch('/api/cash-sessions/open-drawer', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ register_id: registerId || undefined, reason: 'no_sale' }),
+        body: JSON.stringify({ register_id: registerId || undefined, store_id: storeId || undefined, reason: 'no_sale' }),
       });
       setDrawerFlash(true);
       setTimeout(() => setDrawerFlash(false), 1400);

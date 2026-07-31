@@ -46,6 +46,7 @@ export default async function SettingsLayout({ children }: { children: React.Rea
     { href: '/settings/email',            label: 'Envoi d\'emails (Brevo)', icon: 'invoices' as const,     perm: 'settings.read' as const,    boOnly: true,  proOnly: false },
     { href: '/settings/printer',          label: 'Imprimante ticket (IP)', icon: 'print' as const,       perm: 'settings.write' as const,   boOnly: false, proOnly: false },
     { href: '/settings/labels',           label: 'Paramètres étiquettes', icon: 'products' as const,     perm: 'settings.write' as const,   boOnly: false, proOnly: false },
+    { href: '/settings/receipt-printer',   label: 'Imprimante ticket (CloudPRNT)', icon: 'print' as const, perm: 'settings.read' as const,    boOnly: false, proOnly: false },
     { href: '/settings/label-printer',     label: 'Imprimante étiquettes', icon: 'print' as const,        perm: 'settings.read' as const,    boOnly: false, proOnly: false },
     { href: '/settings/label-stations',    label: 'PDA (étiquettes)',      icon: 'products' as const,     perm: 'settings.read' as const,    boOnly: true,  proOnly: false },
     { href: '/settings/transport',        label: 'Coûts de transport',    icon: 'truck' as const,        perm: 'settings.write' as const,   boOnly: false, proOnly: false },
