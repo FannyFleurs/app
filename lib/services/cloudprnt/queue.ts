@@ -43,6 +43,30 @@ export async function resolveLabelPrinter(
   return rows[0]!;
 }
 
+/**
+ * Résout l'imprimante TICKET (role='receipt') à utiliser : boutique du poste,
+ * sinon imprimante « organisation » (store_id NULL), sinon la première active.
+ */
+export async function resolveReceiptPrinter(
+  organizationId: string,
+  storeId?: string | null,
+): Promise<CloudPrntPrinter | null> {
+  const { rows } = await query<CloudPrntPrinter>(
+    `SELECT id, organization_id, store_id, mac, label, role, poll_token, enabled
+       FROM cloudprnt_printers
+      WHERE organization_id = $1 AND role = 'receipt' AND enabled = TRUE`,
+    [organizationId],
+  );
+  if (rows.length === 0) return null;
+  if (storeId) {
+    const forStore = rows.find((p) => p.store_id === storeId);
+    if (forStore) return forStore;
+  }
+  const orgWide = rows.find((p) => p.store_id === null);
+  if (orgWide) return orgWide;
+  return rows[0]!;
+}
+
 /** Ajoute un job dans la file. Renvoie le jeton du job. */
 export async function enqueueJob(args: {
   organizationId: string;
