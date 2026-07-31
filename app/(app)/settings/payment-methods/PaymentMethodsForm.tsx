@@ -9,6 +9,7 @@ interface PaymentMethod {
   label: string;
   is_active: boolean;
   position: number;
+  opens_drawer?: boolean;
   store_ids: string[];
 }
 
@@ -63,6 +64,14 @@ export default function PaymentMethodsForm({ canWrite, stores }: {
     });
     void load();
   }
+  async function toggleDrawer(id: string, opens_drawer: boolean) {
+    setItems((cur) => cur.map((x) => (x.id === id ? { ...x, opens_drawer } : x)));
+    await fetch(`/api/payment-methods/${id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ opens_drawer }),
+    });
+  }
+
   async function rename(id: string, label: string) {
     await fetch(`/api/payment-methods/${id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
@@ -122,6 +131,8 @@ export default function PaymentMethodsForm({ canWrite, stores }: {
         <h1 className="text-2xl font-semibold tracking-tight">Modes de règlement</h1>
         <p className="mt-1 text-sm text-ink-soft">
           Activer / désactiver et renommer les moyens de paiement disponibles en caisse.
+          {' '}Cochez <strong>Tiroir</strong> pour ouvrir automatiquement le tiroir-caisse à l&apos;encaissement
+          avec ce mode de règlement (ex. espèces oui, chèque non).
           {multiStore && ' Limitez un mode à certaines boutiques si besoin (ex. TPE).'}
         </p>
       </div>
@@ -141,6 +152,15 @@ export default function PaymentMethodsForm({ canWrite, stores }: {
                     disabled={!canWrite}
                     onBlur={(e) => e.target.value !== m.label && void rename(m.id, e.target.value)}
                   />
+                  <label className="flex items-center gap-1 text-xs whitespace-nowrap"
+                         title="Ouvre le tiroir-caisse à l'encaissement avec ce mode de règlement">
+                    <input
+                      type="checkbox" checked={!!m.opens_drawer}
+                      disabled={!canWrite}
+                      onChange={(e) => void toggleDrawer(m.id, e.target.checked)}
+                    />
+                    Tiroir
+                  </label>
                   <label className="flex items-center gap-1 text-xs">
                     <input
                       type="checkbox" checked={m.is_active}

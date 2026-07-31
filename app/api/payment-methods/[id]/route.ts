@@ -8,6 +8,7 @@ const patch = z.object({
   label: z.string().min(1).max(80).optional(),
   is_active: z.boolean().optional(),
   position: z.number().int().min(0).optional(),
+  opens_drawer: z.boolean().optional(),
   store_ids: z.array(z.string().uuid()).optional(),
 });
 

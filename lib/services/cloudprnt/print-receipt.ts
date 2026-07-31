@@ -68,7 +68,6 @@ export async function enqueueReceiptPrint(args: {
   const extras = gift
     ? { customerName: null, loyalty: null }
     : await loadReceiptExtras(args.organizationId, r.sale_id);
-  const hasCash = !gift && (r.snapshot.payments ?? []).some((p) => p.method === 'cash');
 
   const payload = await buildReceiptStarPrnt(r.snapshot, org, {
     fiscalHash: r.fiscal_hash,
@@ -78,7 +77,6 @@ export async function enqueueReceiptPrint(args: {
     giftLineIndices: args.giftLineIndices ?? null,
     customerName: extras.customerName,
     loyalty: extras.loyalty,
-    openDrawer: hasCash,
     paperWidthMm: printer.paper_width,
   });
 
