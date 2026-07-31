@@ -566,7 +566,7 @@ function TicketsTable({ sales, link }: { sales: CustomerDetail['sales']; link?: 
             <tr key={s.id} className="border-t border-border">
               <td className="px-4 py-2 font-mono text-xs">
                 {link
-                  ? <Link href={`/ma-journee?focus=${s.id}`} className="text-accent-deep hover:underline">{s.receipt_number}</Link>
+                  ? <Link href={`/ma-journee?date=${s.validated_at.slice(0, 10)}&sale=${s.id}`} className="text-accent-deep hover:underline">{s.receipt_number}</Link>
                   : s.receipt_number}
               </td>
               <td className="px-4 py-2 text-ink-soft">

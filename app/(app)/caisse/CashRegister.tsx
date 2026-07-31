@@ -47,6 +47,9 @@ export interface PosProduct {
   is_top_product: boolean;
   /** Si true, AUCUNE remise (client ou globale) n'est appliquée. Cartes cadeaux. */
   no_discount?: boolean;
+  /** Remise propre à l'article (fiche produit) — appliquée au scan/à l'ajout. */
+  discount_type?: 'percent' | 'amount' | null;
+  discount_value?: number | null;
   /** Couleur de fond #RRGGBB pour la tuile caisse (migration 0018). */
   color?: string | null;
   tags: string[];
@@ -281,6 +284,7 @@ export default function CashRegister({
             ...p,
             sale_price_ttc: Number(p.sale_price_ttc),
             tax_rate: Number(p.tax_rate),
+            discount_value: p.discount_value != null ? Number(p.discount_value) : null,
           })),
         );
       }
@@ -584,32 +588,40 @@ export default function CashRegister({
     // SAUF si le produit est marqué "prix fort" (no_discount = true) — typiquement
     // les cartes cadeaux, qui sont toujours vendues au prix affiché.
     const autoPct = p.no_discount ? 0 : (customer?.default_discount_pct ?? 0);
+    // Remise propre à l'article (fiche produit) : réduction par unité, appliquée
+    // au scan/à l'ajout (comme sur l'étiquette). Cumulable avec la remise client.
+    let prodDiscUnit = 0;
+    if (p.discount_type && p.discount_value && p.discount_value > 0) {
+      const reduced = p.discount_type === 'percent'
+        ? p.sale_price_ttc * (1 - p.discount_value / 100)
+        : p.sale_price_ttc - p.discount_value;
+      prodDiscUnit = round2(Math.max(0, p.sale_price_ttc - Math.max(0, reduced)));
+    }
+    const lineDiscount = (qty: number) =>
+      round2(round2((p.sale_price_ttc * qty * autoPct) / 100) + round2(prodDiscUnit * qty));
     setLines((cur) => {
       const existing = cur.find(
         (l) => l.product_id === p.id
             && l.unit_price_ttc === p.sale_price_ttc
             && !l.metadata?.cart_discount
-            && (autoPct > 0 ? l.metadata?.auto_discount_pct === autoPct : l.discount_amount === 0),
+            && (l.metadata?.auto_discount_pct ?? 0) === autoPct
+            && (l.metadata?.product_disc_unit ?? 0) === prodDiscUnit,
       );
       if (existing) {
-        return cur.map((l) => {
-          if (l !== existing) return l;
-          const newQty = l.quantity + 1;
-          // Recalcule la remise auto proportionnellement
-          const newDiscount = autoPct > 0
-            ? round2((p.sale_price_ttc * newQty * autoPct) / 100)
-            : l.discount_amount;
-          return { ...l, quantity: newQty, discount_amount: newDiscount };
-        });
+        return cur.map((l) => (l === existing
+          ? { ...l, quantity: l.quantity + 1, discount_amount: lineDiscount(l.quantity + 1) }
+          : l));
       }
-      const discount = autoPct > 0 ? round2((p.sale_price_ttc * autoPct) / 100) : 0;
       return [...cur, {
         key: cryptoKey(),
         product_id: p.id, variant_id: null,
         label: p.name, unit_price_ttc: p.sale_price_ttc,
-        quantity: 1, discount_amount: discount,
+        quantity: 1, discount_amount: lineDiscount(1),
         tax_rate: p.tax_rate, tax_rate_code: p.tax_rate_code,
-        metadata: autoPct > 0 ? { auto_discount_pct: autoPct } : {},
+        metadata: {
+          ...(autoPct > 0 ? { auto_discount_pct: autoPct } : {}),
+          ...(prodDiscUnit > 0 ? { product_disc_unit: prodDiscUnit } : {}),
+        },
       }];
     });
   }, [ensureSale, customer]);

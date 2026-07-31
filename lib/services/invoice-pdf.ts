@@ -72,6 +72,45 @@ export interface InvoicePartyInfo {
   } | null;
 }
 
+/**
+ * Construit l'émetteur d'une facture : nom / adresse / téléphone repris du
+ * paramétrage ticket de la BOUTIQUE (ex. « Plante Verte »), avec repli sur
+ * l'organisation. Le pied légal (raison sociale, SIRET, capital, APE, TVA)
+ * reste toujours celui de l'organisation.
+ */
+export function buildInvoiceEmitter(
+  rs: {
+    shop_name?: string | null; address_line1?: string | null;
+    address_zip_city?: string | null; phone?: string | null;
+  } | null,
+  org: {
+    org_name: string; org_legal: string; org_siret: string | null; org_vat: string | null;
+    org_capital: string | null; org_ape: string | null;
+    org_address: { line1?: string; zip?: string; city?: string } | null;
+    org_contact: { email?: string; phone?: string } | null;
+  },
+  bank: { show: boolean; holder: string; name: string; iban: string; bic: string },
+): InvoicePartyInfo {
+  const shopName = rs?.shop_name?.trim();
+  const line1 = rs?.address_line1?.trim();
+  const zipCity = rs?.address_zip_city?.trim();
+  const address = (line1 || zipCity)
+    ? { line1: line1 || undefined, zip: '', city: zipCity || undefined }
+    : org.org_address;
+  return {
+    name: shopName || org.org_name,
+    legal_name: org.org_legal,
+    siret: org.org_siret,
+    vat_number: org.org_vat,
+    capital_social: org.org_capital,
+    ape_code: org.org_ape,
+    address,
+    email: org.org_contact?.email ?? null,
+    phone: rs?.phone?.trim() || org.org_contact?.phone || null,
+    bank,
+  };
+}
+
 export async function renderInvoicePdf(
   invoice: InvoicePdfData,
   emitter: InvoicePartyInfo,

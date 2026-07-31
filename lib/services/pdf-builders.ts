@@ -1,10 +1,10 @@
 import 'server-only';
 import { query } from '@/lib/db/client';
-import { renderInvoicePdf, type InvoicePdfData } from './invoice-pdf';
+import { renderInvoicePdf, buildInvoiceEmitter, type InvoicePdfData } from './invoice-pdf';
 import { loadInvoiceGroups } from './invoice-lines';
 import { loadInvoiceSettings } from '@/lib/settings/invoice-server';
-import { renderReceiptPdf, type ReceiptSnapshot, type OrgInfo } from './receipt-pdf';
 import { loadReceiptSettings } from '@/lib/settings/receipt-server';
+import { renderReceiptPdf, type ReceiptSnapshot, type OrgInfo } from './receipt-pdf';
 
 /** Génère le PDF d'une facture (mêmes données que la route /pdf). */
 export async function buildInvoicePdf(invoiceId: string, organizationId: string): Promise<{
@@ -59,15 +59,13 @@ export async function buildInvoicePdf(invoiceId: string, organizationId: string)
     lines, groups,
   };
 
+  const emitter = buildInvoiceEmitter(
+    await loadReceiptSettings(organizationId, r.store_id), r,
+    { show: invSettings.show_bank_details, holder: invSettings.bank_holder, name: invSettings.bank_name, iban: invSettings.bank_iban, bic: invSettings.bank_bic },
+  );
   const buffer = await renderInvoicePdf(
     data,
-    { name: r.org_name, legal_name: r.org_legal, siret: r.org_siret, vat_number: r.org_vat,
-      capital_social: r.org_capital, ape_code: r.org_ape,
-      address: r.org_address, email: r.org_contact?.email ?? null, phone: r.org_contact?.phone ?? null,
-      bank: {
-        show: invSettings.show_bank_details, holder: invSettings.bank_holder,
-        name: invSettings.bank_name, iban: invSettings.bank_iban, bic: invSettings.bank_bic,
-      } },
+    emitter,
     { name: r.customer_display ?? 'Client', siret: r.customer_siret, vat_number: r.customer_vat,
       address: r.customer_address, email: r.customer_email, phone: r.customer_phone },
   );
