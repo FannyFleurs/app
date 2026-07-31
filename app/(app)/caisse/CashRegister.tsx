@@ -172,6 +172,9 @@ export default function CashRegister({
   const [cartComment, setCartComment] = useState('');
   // Panneau « Remise » / « Commentaire » (ex-« Actions »), ou fermé.
   const [cartActions, setCartActions] = useState<'discount' | 'comment' | null>(null);
+  // Ouverture tiroir : état d'envoi + éclair de confirmation discret.
+  const [drawerBusy, setDrawerBusy] = useState(false);
+  const [drawerFlash, setDrawerFlash] = useState(false);
   const [showOrderModal, setShowOrderModal] = useState(false);
   const [heldCount, setHeldCount] = useState(0);
   const [showScanner, setShowScanner] = useState(false);
@@ -737,6 +740,26 @@ export default function CashRegister({
     setView({ kind: 'categories' });
     setSearch('');
     void refreshHeldCount();
+  }
+
+  // Ouverture manuelle du tiroir-caisse (sans vente). Le tiroir physique est
+  // piloté par l'imprimante ticket (drawer kick) ; on trace l'ouverture côté
+  // serveur (audit / Z). Bouton volontairement discret (voir en-tête ticket).
+  async function openDrawer() {
+    if (drawerBusy) return;
+    setDrawerBusy(true);
+    try {
+      await fetch('/api/cash-sessions/open-drawer', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ register_id: registerId || undefined, reason: 'no_sale' }),
+      });
+      setDrawerFlash(true);
+      setTimeout(() => setDrawerFlash(false), 1400);
+    } catch {
+      /* silencieux : ne rien révéler à l'écran */
+    } finally {
+      setDrawerBusy(false);
+    }
   }
 
   async function holdSale() {
@@ -1525,7 +1548,7 @@ export default function CashRegister({
               Annuler
             </button>
           </div>
-          <div className="grid grid-cols-2 gap-1.5">
+          <div className="grid grid-cols-[1fr_1fr_auto] gap-1.5">
             <button
               disabled={lines.length === 0}
               onClick={() => setCartActions('discount')}
@@ -1541,6 +1564,27 @@ export default function CashRegister({
               title="Ajouter un commentaire au ticket"
             >
               Commentaire
+            </button>
+            {/* Ouverture tiroir — VOLONTAIREMENT DISCRÈTE : icône neutre, aucun
+                libellé texte ni infobulle explicite, pour ne pas signaler la
+                fonction à une personne non autorisée passant derrière la caisse.
+                L'éclair de confirmation (drawerFlash) est lui aussi neutre. */}
+            <button
+              onClick={() => void openDrawer()}
+              disabled={drawerBusy}
+              aria-label="Ouvrir le tiroir-caisse"
+              className="btn-soft min-h-[44px] px-3 inline-flex items-center justify-center text-ink-soft disabled:opacity-60"
+            >
+              {drawerFlash ? (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M20 6 9 17l-5-5" />
+                </svg>
+              ) : (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <rect x="3" y="5" width="18" height="14" rx="2" />
+                  <line x1="9" y1="12" x2="15" y2="12" />
+                </svg>
+              )}
             </button>
           </div>
         </div>
