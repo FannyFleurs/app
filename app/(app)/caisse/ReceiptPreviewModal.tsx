@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { promptThemed } from '@/lib/ui/dialog';
 import GiftReceiptPickerModal from '@/components/GiftReceiptPickerModal';
+import { printReceipt } from '@/lib/pos/receipt-print';
 
 interface Props {
   receipt: {
@@ -52,11 +53,24 @@ export default function ReceiptPreviewModal({ receipt, storeId, onClose }: Props
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const apiBase = isSchool ? '' : `/api/receipts/${receipt.id}`;
+
+  // Impression directe du ticket (imprimante CloudPRNT), repli PDF si aucune.
+  async function printTicket() {
+    if (isSchool) return;
+    const res = await printReceipt({ base: apiBase, pdfUrl });
+    setEmailToast(res.message);
+    setTimeout(() => setEmailToast(null), 3000);
+  }
+
   // Ticket sans prix : si un seul article, impression directe ; sinon on
   // ouvre le sélecteur d'articles.
-  function onGiftClick() {
+  async function onGiftClick() {
+    if (isSchool) return;
     if (saleLines.length <= 1) {
-      window.open(`${pdfUrl}?gift=1`, '_blank');
+      const res = await printReceipt({ base: apiBase, pdfUrl, gift: true });
+      setEmailToast(res.message);
+      setTimeout(() => setEmailToast(null), 3000);
       return;
     }
     setShowGiftPicker(true);
@@ -214,14 +228,12 @@ export default function ReceiptPreviewModal({ receipt, storeId, onClose }: Props
           </div>
         ) : (
           <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            <a
-              href={pdfUrl}
-              target="_blank"
-              rel="noreferrer"
+            <button
+              onClick={() => void printTicket()}
               className="btn-primary h-12 sm:h-14 text-base font-semibold grid place-items-center text-center leading-tight"
             >
-              Imprimer / PDF
-            </a>
+              Imprimer le ticket
+            </button>
             <button
               onClick={onGiftClick}
               className="btn-soft h-12 sm:h-14 text-base font-semibold grid place-items-center text-center leading-tight"
@@ -362,6 +374,8 @@ export default function ReceiptPreviewModal({ receipt, storeId, onClose }: Props
         <GiftReceiptPickerModal
           lines={saleLines}
           pdfBaseUrl={pdfUrl}
+          onPrint={(indices) => void printReceipt({ base: apiBase, pdfUrl, gift: true, lines: indices })
+            .then((res) => { setEmailToast(res.message); setTimeout(() => setEmailToast(null), 3000); })}
           onClose={() => setShowGiftPicker(false)}
         />
       )}
