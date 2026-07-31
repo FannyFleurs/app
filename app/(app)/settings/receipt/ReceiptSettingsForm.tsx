@@ -165,7 +165,7 @@ export default function ReceiptSettingsForm({ stores, canEdit, lockedStoreId }: 
               </div>
             </Field>
 
-            <Field label="Nom commercial">
+            <Field label="Nom commercial" help="Laissez vide pour n'afficher que le logo (aucun nom ne sera ajouté automatiquement si un logo est présent).">
               <input className="input" value={form.shop_name} disabled={!canEdit}
                      onChange={(e) => setForm({ ...form, shop_name: e.target.value })} />
             </Field>
