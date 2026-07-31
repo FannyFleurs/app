@@ -5,6 +5,7 @@ import { parseJson, jsonError } from '@/lib/validation/api';
 import { ClosingService } from '@/lib/services/closing-service';
 import { audit } from '@/lib/audit/log';
 import { query } from '@/lib/db/client';
+import { enqueueZReportPrint } from '@/lib/services/cloudprnt/print-report';
 
 const schema = z.object({
   store_id: z.string().uuid(),
@@ -38,7 +39,23 @@ export async function POST(req: Request) {
       entityType: 'closure_daily', entityId: out.daily_closure_id,
       payload: { business_date: parsed.data.business_date, totals: out.totals },
     });
-    return NextResponse.json(out, { status: 201 });
+
+    // Impression auto du Z sur l'imprimante ticket (si activé + imprimante
+    // configurée). AWAIT + try/catch : ne bloque jamais la clôture déjà scellée.
+    let zPrinted = false;
+    try {
+      const r = await enqueueZReportPrint({
+        organizationId: g.user.organizationId,
+        userId: g.user.id,
+        closureId: out.daily_closure_id,
+      });
+      zPrinted = r.printed;
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[closure.z_print]', err);
+    }
+
+    return NextResponse.json({ ...out, z_printed: zPrinted }, { status: 201 });
   } catch (e) {
     const msg = (e as Error).message;
     const status =
