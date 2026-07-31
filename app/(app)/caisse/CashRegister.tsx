@@ -1342,7 +1342,7 @@ export default function CashRegister({
         onTouchEnd={(e) => onTouchEnd(e, 'open')}
       >
         <OfflineBanner />
-        <div className="flex items-center gap-2 px-3 md:px-5 h-16 shrink-0 border-b border-border bg-white">
+        <div className="flex items-center gap-2 px-3 md:px-5 h-[68px] shrink-0 border-b border-border bg-white">
           {/* Barre de recherche VISIBLE : champ dès qu'ouverte, sinon une barre
               cliquable claire (pas une simple loupe). */}
           {searchOpen ? (
@@ -1353,7 +1353,7 @@ export default function CashRegister({
               <input
                 ref={searchRef}
                 autoFocus
-                className="input h-11 w-full pl-10 pr-10"
+                className="input h-12 w-full pl-10 pr-10 text-base"
                 placeholder="Rechercher / scanner…"
                 aria-label="Rechercher un article"
                 value={search}
@@ -1391,24 +1391,24 @@ export default function CashRegister({
               onClick={() => setSearchOpen(true)}
               title="Rechercher / scanner ( / )"
               aria-label="Rechercher un article"
-              className="flex-1 md:flex-none md:w-80 md:ml-auto min-h-[44px] h-11 rounded-xl border border-border bg-white hover:bg-gray-50 flex items-center gap-2 px-3 text-ink-soft text-sm text-left transition-colors"
+              className="flex-1 md:flex-none md:w-80 md:ml-auto min-h-[52px] h-12 rounded-xl border border-border bg-white hover:bg-gray-50 flex items-center gap-2 px-3.5 text-ink-soft text-base text-left transition-colors"
             >
-              <Icon name="search" size={18} />
+              <Icon name="search" size={20} />
               <span>Rechercher / scanner…</span>
             </button>
           )}
           {/* Scanner caméra : uniquement sur mobile/tablette. */}
           <button
-            className="btn-ghost min-h-[44px] px-3 md:hidden"
+            className="btn-ghost min-h-[52px] px-3.5 md:hidden"
             onClick={() => setShowScanner(true)}
             title="Scanner code-barres / QR"
             aria-label="Scanner"
           >
-            <Icon name="camera" size={20} />
+            <Icon name="camera" size={24} />
           </button>
-          <button className="btn-soft min-h-[44px] px-4 inline-flex items-center gap-1.5 whitespace-nowrap" onClick={() => setShowHeld(true)} title="F4" aria-label="Paniers en attente">
+          <button className="btn-soft min-h-[52px] px-5 text-base inline-flex items-center gap-1.5 whitespace-nowrap" onClick={() => setShowHeld(true)} title="F4" aria-label="Paniers en attente">
             <span className="hidden md:inline">En attente</span>
-            <span className="md:hidden"><Icon name="pause" size={18} /></span>
+            <span className="md:hidden"><Icon name="pause" size={22} /></span>
             {heldCount > 0 && (
               <span className="inline-flex items-center justify-center h-5 min-w-[1.25rem] px-1.5 rounded-full text-[11px] font-semibold accent-bar text-white">
                 {heldCount}
@@ -1535,11 +1535,11 @@ export default function CashRegister({
         {/* En-tête ticket : 2 lignes de boutons (max 3 par ligne).
             Ligne 1 : Retour (mobile) · En attente · Annuler.
             Ligne 2 : Remise · Commentaire (sous « En attente »). */}
-        <div className="px-3 py-2 shrink-0 border-b border-border space-y-1.5">
-          <div className="flex items-center gap-1.5">
+        <div className="px-3 py-2.5 shrink-0 border-b border-border space-y-2">
+          <div className="flex items-center gap-2">
             <button
               onClick={() => setMobileCartOpen(false)}
-              className="md:hidden -ml-1 px-2 py-1 text-ink-soft hover:text-ink text-xl"
+              className="md:hidden -ml-1 h-[56px] w-10 grid place-items-center text-ink-soft hover:text-ink text-2xl"
               aria-label="Retour aux articles (glissez à droite)"
             >
               ←
@@ -1548,7 +1548,7 @@ export default function CashRegister({
             <button
               disabled={lines.length === 0 || !saleId}
               onClick={() => void holdSale()}
-              className="btn-soft text-sm min-h-[44px] px-4 whitespace-nowrap mr-auto"
+              className="btn-soft text-base font-medium min-h-[56px] px-5 whitespace-nowrap mr-auto"
               title="Mettre ce ticket en attente"
             >
               Mettre en attente
@@ -1557,18 +1557,18 @@ export default function CashRegister({
             <button
               disabled={lines.length === 0 && !saleId}
               onClick={async () => { setMobileCartOpen(true); if (await confirmThemed({ title: 'Annuler ce ticket', message: 'La vente en cours sera définitivement abandonnée.', confirmLabel: 'Annuler le ticket', cancelLabel: 'Retour', danger: true })) void cancelTicket(); }}
-              className="text-sm min-h-[44px] px-4 rounded-xl font-medium whitespace-nowrap border border-danger/40 text-danger hover:bg-danger/10 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
+              className="text-base min-h-[56px] px-5 rounded-xl font-medium whitespace-nowrap border border-danger/40 text-danger hover:bg-danger/10 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
               title="Annuler ce ticket"
             >
-              <span aria-hidden className="text-base leading-none">✕</span>
+              <span aria-hidden className="text-lg leading-none">✕</span>
               Annuler
             </button>
           </div>
-          <div className="grid grid-cols-[1fr_1fr_auto] gap-1.5">
+          <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
             <button
               disabled={lines.length === 0}
               onClick={() => setCartActions('discount')}
-              className="btn-soft text-sm min-h-[44px] px-4 whitespace-nowrap"
+              className="btn-soft text-base font-medium min-h-[56px] px-5 whitespace-nowrap"
               title="Remise globale sur le ticket"
             >
               Remise
@@ -1576,7 +1576,7 @@ export default function CashRegister({
             <button
               disabled={lines.length === 0 && !saleId}
               onClick={() => setCartActions('comment')}
-              className="btn-soft text-sm min-h-[44px] px-4 whitespace-nowrap"
+              className="btn-soft text-base font-medium min-h-[56px] px-5 whitespace-nowrap"
               title="Ajouter un commentaire au ticket"
             >
               Commentaire
@@ -1589,14 +1589,14 @@ export default function CashRegister({
               onClick={() => void openDrawer()}
               disabled={drawerBusy}
               aria-label="Ouvrir le tiroir-caisse"
-              className="btn-soft min-h-[44px] px-3 inline-flex items-center justify-center text-ink-soft disabled:opacity-60"
+              className="btn-soft min-h-[56px] px-4 inline-flex items-center justify-center text-ink-soft disabled:opacity-60"
             >
               {drawerFlash ? (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                   <path d="M20 6 9 17l-5-5" />
                 </svg>
               ) : (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                   <rect x="3" y="5" width="18" height="14" rx="2" />
                   <line x1="9" y1="12" x2="15" y2="12" />
                 </svg>
