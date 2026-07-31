@@ -466,20 +466,14 @@ export default function MaJourneeClient() {
  * déclenche l'impression) et renvoi par email (à l'email du client, ou saisi
  * à la volée si absent).
  */
-function ReceiptActions({ saleId, receiptNumber, onSent, onError }: {
+function ReceiptActions({ saleId, receiptNumber, onReprint, onSent, onError }: {
   saleId: string;
   receiptNumber: string;
+  onReprint: () => void;
   onSent: (email: string) => void;
   onError: (message: string) => void;
 }) {
   const [busy, setBusy] = useState(false);
-
-  function reprint() {
-    const w = window.open(`/api/receipts/by-sale/${saleId}/pdf`, '_blank');
-    if (w) {
-      w.addEventListener('load', () => { try { w.print(); } catch { /* iOS bloque parfois */ } });
-    }
-  }
 
   async function resend(email?: string) {
     setBusy(true);
@@ -512,7 +506,7 @@ function ReceiptActions({ saleId, receiptNumber, onSent, onError }: {
 
   return (
     <>
-      <button onClick={reprint} className="btn-soft text-xs whitespace-nowrap" title="Réimprimer le ticket">
+      <button onClick={onReprint} className="btn-soft text-xs whitespace-nowrap" title="Réimprimer le ticket sur l'imprimante">
         Réimprimer
       </button>
       <button onClick={() => void resend()} disabled={busy}
@@ -732,6 +726,7 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
               <ReceiptActions
                 saleId={s.id}
                 receiptNumber={s.receipt_number}
+                onReprint={() => void printTicket(false)}
                 onSent={(email) => setInfo(`Ticket renvoyé à ${email}`)}
                 onError={(m) => setError(m)}
               />
