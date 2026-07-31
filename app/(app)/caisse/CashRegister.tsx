@@ -161,6 +161,7 @@ export default function CashRegister({
   const [showHeld, setShowHeld] = useState(false);
   const [showFreePrice, setShowFreePrice] = useState<{ label?: string } | null>(null);
   const [showPicker, setShowPicker] = useState(false);
+  const [showSettle, setShowSettle] = useState(false);
   const [customer, setCustomer] = useState<PickedCustomer | null>(null);
   const [discountLineKey, setDiscountLineKey] = useState<string | null>(null);
   const [justifyAction, setJustifyAction] = useState<
@@ -1662,10 +1663,18 @@ export default function CashRegister({
                 </div>
               )}
               {customerBalances.account_balance < 0 && (
-                <div className="flex items-center justify-between rounded-xl bg-danger/10 px-3 py-2 text-sm">
-                  <span className="text-danger font-medium">💳 En compte (dû)</span>
-                  <span className="font-semibold text-danger">{formatEUR(customerBalances.account_balance)}</span>
-                </div>
+                <>
+                  <div className="flex items-center justify-between rounded-xl bg-danger/10 px-3 py-2 text-sm">
+                    <span className="text-danger font-medium">💳 En compte (dû)</span>
+                    <span className="font-semibold text-danger">{formatEUR(customerBalances.account_balance)}</span>
+                  </div>
+                  <button
+                    onClick={() => setShowSettle(true)}
+                    className="w-full rounded-xl bg-danger/10 text-danger px-3 py-2 text-sm font-semibold hover:bg-danger/20"
+                  >
+                    Régler le solde ({formatEUR(-customerBalances.account_balance)})
+                  </button>
+                </>
               )}
               {customerBalances.account_balance > 0 && (
                 <div className="flex items-center justify-between rounded-xl bg-success/10 px-3 py-2 text-sm">
@@ -1821,6 +1830,21 @@ export default function CashRegister({
           onOfflineFinalize={(payments, loyaltyUsed) => finalizeOffline(payments, loyaltyUsed)}
           onClose={() => setShowPayment(false)}
           onValidated={onValidated}
+        />
+      )}
+      {showSettle && customer && customerBalances.account_balance < 0 && (
+        <PaymentModal
+          saleId={saleId ?? ''}
+          totalTtc={round2(-customerBalances.account_balance)}
+          storeId={storeId}
+          settlement={{ customerId: customer.id }}
+          onClose={() => setShowSettle(false)}
+          onValidated={() => {}}
+          onSettled={(res) => {
+            setShowSettle(false);
+            setCustomerBalances((b) => ({ ...b, account_balance: res.new_balance }));
+            setError(null);
+          }}
         />
       )}
       {receipt && (

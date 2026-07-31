@@ -45,6 +45,8 @@ export interface DayReport {
   };
   tva_by_rate: { rate: number; tva: number; ttc: number; ht: number }[];
   payments: { method: string; count: number; amount: number }[];
+  /** Règlements de soldes « en compte » encaissés en caisse (hors CA). */
+  settlements: { method: string; count: number; amount: number }[];
   cash: {
     fonds_de_caisse: number;
     entrees_argent: number;
@@ -84,7 +86,7 @@ export async function computeDayReport(opts: {
   const { organizationId: org, storeId: store, businessDate: date } = opts;
   const P = [org, store, date] as const;
 
-  const [ident, totalsR, tvaR, payR, vendorR, catR, modeR, marginR, floatsR, sessR, jnR] =
+  const [ident, totalsR, tvaR, payR, vendorR, catR, modeR, marginR, floatsR, sessR, jnR, settleR] =
     await Promise.all([
       query<{ name: string; legal_name: string | null; siret: string | null; siren: string | null; vat_number: string | null; address: Record<string, string> | null; contact: Record<string, string> | null; store_name: string }>(
         `SELECT o.name, o.legal_name, o.siret, o.siren, o.vat_number, o.address, o.contact,
@@ -145,6 +147,13 @@ export async function computeDayReport(opts: {
            FROM cash_sessions WHERE organization_id=$1 AND store_id=$2 AND opened_at::date=$3::date`, [...P]),
       query<{ n: string }>(
         `SELECT COUNT(*)::text n FROM daily_closures WHERE organization_id=$1 AND store_id=$2 AND business_date < $3::date`, [...P]),
+      // Règlements de soldes « en compte » encaissés en caisse (par mode).
+      query<{ method: string; cnt: string; total: string }>(
+        `SELECT method, COUNT(*)::text cnt, SUM(amount)::text total
+           FROM account_settlement_payments
+          WHERE store_id=$2 AND organization_id=$1 AND created_at::date=$3::date
+          GROUP BY method ORDER BY SUM(amount) DESC`, [...P],
+      ).catch(() => ({ rows: [] as { method: string; cnt: string; total: string }[] })),
     ]);
 
   const idRow = ident.rows[0];
@@ -212,6 +221,7 @@ export async function computeDayReport(opts: {
       rate: Number(r.tax_rate), ht: Number(r.ht), tva: Number(r.tva), ttc: Number(r.ttc),
     })),
     payments: payR.rows.map((r) => ({ method: r.method, count: Number(r.cnt), amount: Number(r.total) })),
+    settlements: settleR.rows.map((r) => ({ method: r.method, count: Number(r.cnt), amount: Number(r.total) })),
     cash: {
       fonds_de_caisse: openingFloats,
       entrees_argent: cashIns,
