@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import OrientationLock from './OrientationLock';
 
 /**
  * L'app PDA (étiquettes) est une PWA distincte de la caisse : son propre
@@ -29,6 +30,7 @@ export default function PdaLayout({ children }: { children: React.ReactNode }) {
       <meta name="apple-mobile-web-app-title" content="Étiquettes" />
       <link rel="manifest" href="/manifest-pda.json" />
       <link rel="apple-touch-icon" href="/api/brand/icon?scope=pda" />
+      <OrientationLock />
       {children}
     </>
   );
