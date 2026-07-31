@@ -8,6 +8,7 @@ import PageHeader from '@/components/PageHeader';
 import Badge from '@/components/Badge';
 import Tabs from '@/components/Tabs';
 import WalletActions from './WalletActions';
+import LoyaltyPanel from './LoyaltyPanel';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,6 +17,14 @@ const TYPE_LABEL: Record<string, string> = {
   professionnel: 'Pro',
   collectivite: 'Collectivité',
   association: 'Association',
+};
+
+const LOYALTY_TYPE_LABEL: Record<string, string> = {
+  earn: 'Gain',
+  redeem: 'Utilisation',
+  adjust: 'Régularisation',
+  expire: 'Expiration',
+  cancel: 'Annulation',
 };
 
 export default async function CustomerDetailPage({ params }: { params: { id: string } }) {
@@ -52,10 +61,10 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
   );
 
   const loyalty = await query<{
-    points_balance: number;
+    points_balance: string;
     movements: { movement_type: string; points_delta: number; balance_after: number; reason: string | null; created_at: string }[];
   }>(
-    `SELECT la.points_balance,
+    `SELECT SUM(la.points_balance)::text AS points_balance,
             COALESCE(json_agg(json_build_object(
               'movement_type', lm.movement_type,
               'points_delta', lm.points_delta,
@@ -65,10 +74,23 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
             ) ORDER BY lm.created_at DESC) FILTER (WHERE lm.id IS NOT NULL), '[]'::json) AS movements
        FROM loyalty_accounts la
        LEFT JOIN loyalty_movements lm ON lm.account_id = la.id
-      WHERE la.customer_id = $1
-      GROUP BY la.points_balance`,
+      WHERE la.customer_id = $1`,
     [params.id],
   );
+
+  // Cartes cadeaux & bons d'achat rattachés au client (bénéficiaire).
+  const giftCards = await query<{
+    id: string; code: string; balance: string; initial_amount: string;
+    status: string; kind: string; expires_at: string | null;
+  }>(
+    `SELECT id, code, balance::text, initial_amount::text, status,
+            COALESCE(kind, 'gift_card') AS kind, expires_at
+       FROM gift_cards
+      WHERE organization_id = $1 AND beneficiary_id = $2
+        AND status <> 'cancelled'
+      ORDER BY issued_at DESC`,
+    [user.organizationId, params.id],
+  ).catch(() => ({ rows: [] as { id: string; code: string; balance: string; initial_amount: string; status: string; kind: string; expires_at: string | null }[] }));
 
   const addresses = await query<{ label: string; line1: string; zip: string; city: string; is_default: boolean }>(
     `SELECT label, line1, zip, city, is_default
@@ -78,6 +100,10 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
 
   const totalTtc = sales.rows.reduce((s, x) => s + Number(x.total_ttc), 0);
   const display = c.company_name || [c.first_name, c.last_name].filter(Boolean).join(' ') || 'Client';
+  // Solde fidélité en euros (1 « point » applicatif = 1 €). NULL = aucun compte.
+  const loyBalanceRaw = loyalty.rows[0]?.points_balance ?? null;
+  const loyBalance = loyBalanceRaw != null ? Number(loyBalanceRaw) : null;
+  const loyMovements = loyalty.rows[0]?.movements ?? [];
 
   return (
     <div className="p-6 md:p-8 space-y-5">
@@ -101,7 +127,7 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
         <Kpi label="Total dépensé" value={formatEUR(totalTtc)} />
         <Kpi label="Achats" value={sales.rowCount.toString()} />
         <Kpi label="Panier moyen" value={formatEUR(sales.rowCount ? totalTtc / sales.rowCount : 0)} />
-        <Kpi label="Solde fidélité" value={loyalty.rows[0] ? formatEUR(loyalty.rows[0].points_balance) : '—'} />
+        <Kpi label="Solde fidélité" value={loyBalance != null ? formatEUR(loyBalance) : '—'} />
       </section>
 
       {c.default_discount_pct && Number(c.default_discount_pct) > 0 && (
@@ -203,15 +229,13 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
                 customerEmail={c.email}
                 customerPhone={c.phone}
               />
-              {!loyalty.rows[0] ? (
-                <p className="text-sm text-ink-soft">Aucun compte fidélité actif — la carte Wallet démarrera à 0 €.</p>
-              ) : (
-                <>
-              <div className="card p-5">
-                <div className="text-xs uppercase tracking-wider text-ink-soft">Solde</div>
-                <div className="text-3xl font-semibold tracking-tight">{loyalty.rows[0].points_balance} pts</div>
-              </div>
+              <LoyaltyPanel
+                customerId={params.id}
+                balance={loyBalance ?? 0}
+                giftCards={giftCards.rows}
+              />
               <div className="card overflow-hidden">
+                <div className="px-4 py-3 text-sm font-medium border-b border-border">Mouvements de fidélité</div>
                 <table className="w-full text-sm">
                   <thead className="bg-bg text-ink-soft text-xs uppercase">
                     <tr>
@@ -223,24 +247,22 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
                     </tr>
                   </thead>
                   <tbody>
-                    {loyalty.rows[0].movements.length === 0 ? (
+                    {loyMovements.length === 0 ? (
                       <tr><td colSpan={5} className="px-4 py-8 text-center text-ink-soft">Aucun mouvement.</td></tr>
-                    ) : loyalty.rows[0].movements.map((m, i) => (
+                    ) : loyMovements.map((m, i) => (
                       <tr key={i} className="border-t border-border">
                         <td className="px-4 py-3 text-ink-soft text-xs">{new Date(m.created_at).toLocaleString('fr-FR')}</td>
-                        <td className="px-4 py-3">{m.movement_type}</td>
-                        <td className={`px-4 py-3 text-right ${m.points_delta >= 0 ? 'text-success' : 'text-danger'}`}>
-                          {m.points_delta > 0 ? '+' : ''}{m.points_delta}
+                        <td className="px-4 py-3">{LOYALTY_TYPE_LABEL[m.movement_type] ?? m.movement_type}</td>
+                        <td className={`px-4 py-3 text-right tabular-nums ${Number(m.points_delta) >= 0 ? 'text-success' : 'text-danger'}`}>
+                          {Number(m.points_delta) > 0 ? '+' : ''}{formatEUR(Number(m.points_delta))}
                         </td>
-                        <td className="px-4 py-3 text-right">{m.balance_after}</td>
+                        <td className="px-4 py-3 text-right tabular-nums">{formatEUR(Number(m.balance_after))}</td>
                         <td className="px-4 py-3 text-ink-soft">{m.reason ?? '—'}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-                </>
-              )}
             </div>
           ),
         },

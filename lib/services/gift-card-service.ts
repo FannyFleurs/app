@@ -14,25 +14,52 @@ export class GiftCardService {
     expiresAt?: string | null;
     buyer?: { id?: string | null; name?: string; phone?: string; email?: string };
     beneficiaryId?: string | null;
+    /** 'gift_card' = carte cadeau (défaut) | 'voucher' = bon d'achat. */
+    kind?: 'gift_card' | 'voucher';
+    /**
+     * Code existant à reprendre (ex. carte/bon déjà en circulation issu de
+     * l'ancien logiciel). Si absent, un EAN-13 interne est généré.
+     */
+    code?: string | null;
   }): Promise<{ id: string; code: string }> {
     if (args.amount <= 0) throw new Error('AMOUNT_REQUIRED');
+    const kind = args.kind === 'voucher' ? 'voucher' : 'gift_card';
     // Validité par défaut : 1 an à compter de l'émission si aucune date n'est
     // fournie (une carte cadeau sans date d'expiration est l'exception, pas la
     // règle).
     const expiresAt = args.expiresAt
       ?? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
     return withTransaction(async (client) => {
-      // Génère un code unique
+      // Code : soit celui fourni (reprise d'un existant, doit être unique),
+      // soit un EAN-13 généré avec le préfixe interne 29.
       let code = '';
-      for (let i = 0; i < 5; i++) {
-        const candidate = generateEan13('29');
+      const wanted = args.code?.trim();
+      if (wanted) {
         const exists = await client.query(
           `SELECT 1 FROM gift_cards WHERE code = $1`,
-          [candidate],
+          [wanted],
         );
-        if (exists.rowCount === 0) { code = candidate; break; }
+        if ((exists.rowCount ?? 0) > 0) throw new Error('CODE_ALREADY_EXISTS');
+        code = wanted;
+      } else {
+        for (let i = 0; i < 5; i++) {
+          const candidate = generateEan13('29');
+          const exists = await client.query(
+            `SELECT 1 FROM gift_cards WHERE code = $1`,
+            [candidate],
+          );
+          if (exists.rowCount === 0) { code = candidate; break; }
+        }
       }
       if (!code) throw new Error('CODE_GENERATION_FAILED');
+
+      // La colonne `kind` (migration 0054) peut être absente sur un schéma
+      // ancien : détection runtime pour ne pas casser la création.
+      const kindColRes = await client.query(
+        `SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'gift_cards' AND column_name = 'kind'`,
+      );
+      const hasKindCol = (kindColRes.rowCount ?? 0) > 0;
 
       // Détection runtime : colonnes acheteur présentes ? (la migration 0006 a-t-elle été appliquée ?)
       const colsRes = await client.query<{ column_name: string }>(
@@ -41,14 +68,18 @@ export class GiftCardService {
       );
       const hasBuyerCols = colsRes.rowCount === 3;
 
+      // Colonne `kind` insérée seulement si elle existe (sinon défaut BDD).
+      const kindCol = hasKindCol ? ', kind' : '';
+      const kindVal = hasKindCol ? `, '${kind}'` : '';
+
       let ins;
       if (hasBuyerCols) {
         ins = await client.query<{ id: string }>(
           `INSERT INTO gift_cards
              (organization_id, code, initial_amount, balance,
               expires_at, buyer_id, beneficiary_id,
-              buyer_name, buyer_phone, buyer_email, status)
-           VALUES ($1,$2,$3,$3,$4,$5,$6,$7,$8,$9,'active')
+              buyer_name, buyer_phone, buyer_email, status${kindCol})
+           VALUES ($1,$2,$3,$3,$4,$5,$6,$7,$8,$9,'active'${kindVal})
            RETURNING id`,
           [
             args.organizationId, code, args.amount,
@@ -65,8 +96,8 @@ export class GiftCardService {
         ins = await client.query<{ id: string }>(
           `INSERT INTO gift_cards
              (organization_id, code, initial_amount, balance,
-              expires_at, buyer_id, beneficiary_id, status)
-           VALUES ($1,$2,$3,$3,$4,$5,$6,'active')
+              expires_at, buyer_id, beneficiary_id, status${kindCol})
+           VALUES ($1,$2,$3,$3,$4,$5,$6,'active'${kindVal})
            RETURNING id`,
           [
             args.organizationId, code, args.amount,

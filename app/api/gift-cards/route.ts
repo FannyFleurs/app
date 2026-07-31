@@ -14,6 +14,9 @@ const createSchema = z.object({
   buyer_phone: z.string().max(40).optional(),
   buyer_email: z.string().max(160).optional(),
   beneficiary_id: z.string().uuid().optional().nullable(),
+  kind: z.enum(['gift_card', 'voucher']).optional(),
+  // Code d'une carte/bon déjà existant à reprendre (sinon généré).
+  code: z.string().trim().min(4).max(40).optional().nullable(),
 });
 
 export async function GET(req: Request) {
@@ -116,17 +119,25 @@ export async function POST(req: Request) {
         email: d.buyer_email,
       },
       beneficiaryId: d.beneficiary_id,
+      kind: d.kind,
+      code: d.code,
     });
     await audit({
       organizationId: g.user.organizationId, userId: g.user.id,
       action: 'gift_cards.create', entityType: 'gift_card', entityId: out.id,
-      payload: { amount: d.amount, code: out.code },
+      payload: { amount: d.amount, code: out.code, kind: d.kind ?? 'gift_card' },
     });
     return NextResponse.json(out, { status: 201 });
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error('[gift_cards.create]', err);
     const m = (err as Error).message ?? '';
+    if (m === 'CODE_ALREADY_EXISTS') {
+      return NextResponse.json(
+        { error: 'CODE_ALREADY_EXISTS', message: 'Ce code existe déjà : reprenez un autre numéro.' },
+        { status: 409 },
+      );
+    }
     const hint = m.includes('buyer_name') || m.includes('column')
       ? 'Migration manquante : exécutez `npm run db:migrate` (0006_gift_card_buyer.sql).'
       : m;

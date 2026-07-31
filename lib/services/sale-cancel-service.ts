@@ -306,8 +306,8 @@ export class SaleCancelService {
             [row.account_id],
           );
           const current = Number(accSel.rows[0]?.points_balance ?? 0);
-          const target = Math.max(0, current - net); // retire les points gagnés, rend ceux dépensés
-          const delta = target - current;
+          const target = round2(Math.max(0, current - net)); // retire les points gagnés, rend ceux dépensés
+          const delta = round2(target - current);
           if (delta === 0) continue;
           await client.query(
             `INSERT INTO loyalty_movements

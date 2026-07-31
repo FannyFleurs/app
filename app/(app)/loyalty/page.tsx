@@ -4,6 +4,7 @@ import { query } from '@/lib/db/client';
 import PageHeader from '@/components/PageHeader';
 import Badge from '@/components/Badge';
 import EmptyState from '@/components/EmptyState';
+import { formatEUR } from '@/lib/services/money';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,10 +21,10 @@ export default async function LoyaltyPage() {
   const accounts = await query<{
     customer_id: string;
     display_name: string;
-    points_balance: number;
+    points_balance: string;
     last_movement_at: string | null;
   }>(
-    `SELECT la.customer_id, la.points_balance,
+    `SELECT la.customer_id, la.points_balance::text,
             COALESCE(c.company_name, NULLIF(TRIM(CONCAT(c.first_name,' ',c.last_name)), '')) AS display_name,
             (SELECT MAX(created_at) FROM loyalty_movements WHERE account_id = la.id) AS last_movement_at
        FROM loyalty_accounts la
@@ -33,7 +34,7 @@ export default async function LoyaltyPage() {
     [user.organizationId],
   );
 
-  const totalPoints = accounts.rows.reduce((s, a) => s + a.points_balance, 0);
+  const totalPoints = accounts.rows.reduce((s, a) => s + Number(a.points_balance), 0);
 
   return (
     <div className="p-6 md:p-8 space-y-5">
@@ -45,7 +46,7 @@ export default async function LoyaltyPage() {
 
       <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Kpi label="Adhérents" value={accounts.rowCount.toString()} />
-        <Kpi label="Points en circulation" value={totalPoints.toLocaleString('fr-FR')} />
+        <Kpi label="Fidélité en circulation" value={formatEUR(totalPoints)} />
         <Kpi label="État du programme" value={s.enabled ? 'Actif' : 'Désactivé'} tone={s.enabled ? 'success' : undefined} />
         <Kpi label="Validité points" value={s.validity_months ? `${s.validity_months} mois` : '—'} />
       </section>
@@ -107,7 +108,7 @@ export default async function LoyaltyPage() {
                       </Link>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <Badge tone="soft">{a.points_balance} pts</Badge>
+                      <Badge tone="soft">{formatEUR(Number(a.points_balance))}</Badge>
                     </td>
                     <td className="px-4 py-3 text-ink-soft text-xs">
                       {a.last_movement_at ? new Date(a.last_movement_at).toLocaleDateString('fr-FR') : '—'}

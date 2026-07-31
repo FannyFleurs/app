@@ -63,6 +63,13 @@ export async function POST(req: Request) {
   );
   const ui = mergeWithDefaults(uiRes.rows[0]?.value ?? null);
   const groupKeys = [...new Set(validStoreIds.map((sid) => loyaltyGroupKey(ui.loyalty, sid)))];
+  // Conversion points (ancien logiciel) → euros de fidélité. L'app stocke le
+  // solde fidélité en euros (1 « point » applicatif = 1 €), alors que le fichier
+  // repris compte en POINTS (barème ex. 100 pts = 5 €). On applique le taux
+  // euros_earned / per_euros_spent (défaut 0,05 €/point).
+  const loyRate = ui.loyalty.per_euros_spent > 0
+    ? ui.loyalty.euros_earned / ui.loyalty.per_euros_spent
+    : 0.05;
 
   // Lecture du classeur.
   const wb = new ExcelJS.Workbook();
@@ -108,11 +115,13 @@ export async function POST(req: Request) {
     const address = { line1: val('line1'), zip: val('zip'), city: val('city') };
     const pointsRaw = val('loyalty_points');
     const hasPoints = pointsRaw !== '';
-    const points = hasPoints ? Math.round(Number(pointsRaw.replace(',', '.'))) : 0;
-    if (hasPoints && !Number.isFinite(points)) {
+    const rawPoints = hasPoints ? Number(pointsRaw.replace(',', '.')) : 0;
+    if (hasPoints && !Number.isFinite(rawPoints)) {
       result.errors.push({ row: r, message: `Points fidélité invalides (« ${pointsRaw} »).` });
       continue;
     }
+    // Solde fidélité converti en euros (voir loyRate).
+    const points = hasPoints ? Math.round(rawPoints * loyRate * 100) / 100 : 0;
 
     try {
       await withTransaction(async (client) => {
@@ -167,14 +176,14 @@ export async function POST(req: Request) {
         // Points de fidélité : crédités sur la (les) boutique(s) choisie(s).
         if (hasPoints && customerId) {
           for (const gk of groupKeys) {
-            const acc = await client.query<{ id: string; points_balance: number }>(
-              `SELECT id, points_balance FROM loyalty_accounts
+            const acc = await client.query<{ id: string; points_balance: string }>(
+              `SELECT id, points_balance::text FROM loyalty_accounts
                 WHERE customer_id = $1 AND group_key = $2 FOR UPDATE`,
               [customerId, gk],
             );
             let accId: string; let prev = 0;
             if (acc.rows[0]) {
-              accId = acc.rows[0].id; prev = acc.rows[0].points_balance;
+              accId = acc.rows[0].id; prev = Number(acc.rows[0].points_balance);
               await client.query(`UPDATE loyalty_accounts SET points_balance = $2, updated_at = now() WHERE id = $1`, [accId, points]);
             } else {
               const insAcc = await client.query<{ id: string }>(
