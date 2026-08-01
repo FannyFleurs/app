@@ -46,8 +46,8 @@ export async function GET(req: Request) {
         AND s.status = 'validated'
         AND s.validated_at::date BETWEEN $2::date AND $3::date
         ${storeFilter}
-      GROUP BY hour
-      ORDER BY hour`,
+      GROUP BY EXTRACT(HOUR FROM s.validated_at AT TIME ZONE 'Europe/Paris')::int
+      ORDER BY 1`,
     args,
   );
 
