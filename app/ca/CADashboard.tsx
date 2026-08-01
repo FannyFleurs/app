@@ -630,6 +630,14 @@ function HourlyChart({ hours }: { hours: HourBucket[] }) {
           ))}
         </div>
       </div>
+      {/* Détail par heure (lisible) : montre exactement les tranches non nulles. */}
+      <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-ink-soft tabular-nums">
+        {buckets.filter((b) => b.value > 0).sort((a, b) => a.hour - b.hour).map((b) => (
+          <span key={b.hour}>
+            <span className="font-medium text-ink">{b.hour}h</span> : {formatEUR(b.value)}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
