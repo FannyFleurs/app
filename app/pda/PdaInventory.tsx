@@ -1,7 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useScanField } from './useScanField';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 /**
  * Module inventaire du PDA — phase de COMPTAGE.
@@ -41,10 +40,27 @@ export default function PdaInventory({
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [filter, setFilter] = useState('');
+  // Champ unique : scan (douchette → Entrée) OU recherche (nom / EAN → la liste
+  // ci-dessous se filtre, on touche pour saisir la quantité).
+  const [scanQuery, setScanQuery] = useState('');
+  const scanRef = useRef<HTMLInputElement>(null);
+  const refocus = () => scanRef.current?.focus();
+  // Ne re-focus la douchette que si le focus est retombé « dans le vide ».
+  const guardedRefocus = () => {
+    const a = document.activeElement as HTMLElement | null;
+    if (!a || a.tagName === 'BODY') refocus();
+  };
+  function submitScan(raw: string) {
+    const code = raw.trim();
+    if (!code) return;
+    const lc = code.toLowerCase();
+    const line = lines.find((l) => l.barcode?.toLowerCase() === lc || l.sku?.toLowerCase() === lc);
+    // Code connu / scan → +1. Sinon un seul résultat de recherche → clavier.
+    if (line || visible.length !== 1) { setScanQuery(''); void doScan(code); }
+    else { openEdit(visible[0]!); }
+  }
   const [editLine, setEditLine] = useState<Line | null>(null);
   const [editStr, setEditStr] = useState('');
-  const { scanRef, onKeyDown: onScanKeyDown, onInput: onScanInput, refocus } = useScanField((code) => void doScan(code));
 
   // ---- Liste des inventaires à compter (in_progress, boutique du PDA) ----
   const loadList = useCallback(async () => {
@@ -62,7 +78,7 @@ export default function PdaInventory({
   useEffect(() => { void loadList(); }, [loadList]);
 
   async function openInv(inv: Inv) {
-    setCurrent(inv); setView('count'); setLoading(true); setMsg(null); setFilter('');
+    setCurrent(inv); setView('count'); setLoading(true); setMsg(null); setScanQuery('');
     try {
       const r = await fetch(`/api/inventories/${inv.id}`);
       if (r.ok) {
@@ -75,7 +91,7 @@ export default function PdaInventory({
   }
 
   function backToList() {
-    setView('list'); setCurrent(null); setLines([]); setMsg(null); setFilter('');
+    setView('list'); setCurrent(null); setLines([]); setMsg(null); setScanQuery('');
     void loadList();
   }
 
@@ -160,7 +176,7 @@ export default function PdaInventory({
 
   const countedTotal = useMemo(() => lines.filter((l) => Number(l.counted_qty) > 0).length, [lines]);
   const visible = useMemo(() => {
-    const q = filter.trim().toLowerCase();
+    const q = scanQuery.trim().toLowerCase();
     const src = q
       ? lines.filter((l) => l.product_name.toLowerCase().includes(q)
           || (l.sku?.toLowerCase().includes(q) ?? false)
@@ -168,7 +184,7 @@ export default function PdaInventory({
       // Sans recherche : on montre les articles déjà comptés (progression).
       : lines.filter((l) => Number(l.counted_qty) > 0);
     return src.slice(0, 300);
-  }, [lines, filter]);
+  }, [lines, scanQuery]);
 
   const header = (title: string, onBack: () => void) => (
     <header className="shrink-0 border-b border-border bg-surface flex items-center gap-3 px-4"
@@ -226,18 +242,32 @@ export default function PdaInventory({
     <div className="h-screen flex flex-col bg-bg text-ink overflow-hidden" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
       {header(current?.label ?? 'Comptage', backToList)}
 
-      {/* Zone scan */}
+      {/* Zone scan / recherche */}
       <div className="shrink-0 p-3 border-b border-border bg-surface">
-        <div className="text-xs text-ink-soft mb-1">Scanner un article (douchette) ou saisir un code</div>
-        <input
-          ref={scanRef}
-          className="input h-12 w-full text-base font-mono"
-          placeholder="Code-barres / SKU…"
-          autoComplete="off" autoFocus
-          onBlur={() => setTimeout(() => { if (view === 'count' && !editLine) refocus(); }, 60)}
-          onKeyDown={onScanKeyDown}
-          onInput={onScanInput}
-        />
+        <div className="text-xs text-ink-soft mb-1">Scanner (douchette) ou rechercher par nom / EAN — touchez un article pour saisir la quantité</div>
+        <div className="relative">
+          <input
+            ref={scanRef}
+            className="input h-12 w-full pr-10 text-base"
+            placeholder="Scanner ou rechercher (nom, EAN, SKU)…"
+            autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} autoFocus
+            value={scanQuery}
+            onChange={(e) => {
+              const v = e.target.value;
+              const nl = v.search(/[\r\n\t]/);
+              if (nl >= 0) { setScanQuery(''); void doScan(v.slice(0, nl)); return; } // douchette « paste »
+              setScanQuery(v);
+            }}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submitScan(e.currentTarget.value); } }}
+            onBlur={() => setTimeout(() => { if (view === 'count' && !editLine) guardedRefocus(); }, 80)}
+          />
+          {scanQuery && (
+            <button type="button" onClick={() => { setScanQuery(''); refocus(); }} aria-label="Effacer"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 grid place-items-center h-7 w-7 rounded-full text-ink-soft hover:bg-gray-100 hover:text-ink">
+              <span aria-hidden className="text-lg leading-none">×</span>
+            </button>
+          )}
+        </div>
         <div className="mt-2 flex items-center justify-between text-xs">
           <span className="text-ink-soft">{countedTotal} article(s) compté(s)</span>
           {busy && <span className="text-ink-soft">…</span>}
@@ -245,17 +275,12 @@ export default function PdaInventory({
         {msg && <div className="mt-1 text-sm">{msg}</div>}
       </div>
 
-      {/* Recherche + liste */}
-      <div className="shrink-0 px-3 py-2 border-b border-border">
-        <input className="input h-10 w-full" placeholder="Rechercher un article à corriger…"
-          value={filter} onChange={(e) => setFilter(e.target.value)} />
-      </div>
       <div className="flex-1 min-h-0 overflow-y-auto">
         {loading ? (
           <div className="p-6 text-sm text-ink-soft text-center">Chargement…</div>
         ) : visible.length === 0 ? (
           <div className="p-6 text-sm text-ink-soft text-center">
-            {filter.trim() ? 'Aucun article trouvé.' : 'Scannez un article pour démarrer le comptage.'}
+            {scanQuery.trim() ? 'Aucun article trouvé.' : 'Scannez ou recherchez un article pour démarrer le comptage.'}
           </div>
         ) : (
           <ul className="divide-y divide-border">
