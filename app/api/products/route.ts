@@ -45,6 +45,28 @@ const productSchema = z.object({
 });
 
 /**
+ * Nombre de boutiques actives par organisation, mis en cache (TTL 5 min).
+ * Sert à décider le filtrage strict par boutique en caisse — cette valeur est
+ * quasi statique, inutile de faire un COUNT à CHAQUE requête POS (chemin
+ * critique du chargement de la caisse).
+ */
+const _storeCountCache = new Map<string, { n: number; at: number }>();
+const STORE_COUNT_TTL_MS = 5 * 60 * 1000;
+async function activeStoreCount(organizationId: string): Promise<number> {
+  const now = Date.now();
+  const hit = _storeCountCache.get(organizationId);
+  if (hit && now - hit.at < STORE_COUNT_TTL_MS) return hit.n;
+  const c = await query<{ n: string }>(
+    `SELECT COUNT(*)::text AS n FROM stores
+      WHERE organization_id = $1 AND is_active = TRUE`,
+    [organizationId],
+  );
+  const n = Number(c.rows[0]?.n ?? '1');
+  _storeCountCache.set(organizationId, { n, at: now });
+  return n;
+}
+
+/**
  * Nettoie la liste des codes-barres supplémentaires : trim, retrait des vides,
  * dédoublonnage, et exclusion du code principal (pour ne pas le stocker deux
  * fois). Renvoie un tableau prêt pour la colonne text[].
@@ -185,12 +207,7 @@ export async function GET(req: Request) {
     // l'organisation compte plusieurs boutiques.
     let strict = false;
     if (inPos || !backOffice) {
-      const c = await query<{ n: string }>(
-        `SELECT COUNT(*)::text AS n FROM stores
-          WHERE organization_id = $1 AND is_active = TRUE`,
-        [g.user.organizationId],
-      );
-      strict = Number(c.rows[0]?.n ?? '1') > 1;
+      strict = (await activeStoreCount(g.user.organizationId)) > 1;
     }
     where += strict
       ? ` AND p.store_ids @> ARRAY[$${storeParamIdx}]::uuid[]`
