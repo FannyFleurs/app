@@ -6,6 +6,7 @@ import { formatEUR } from '@/lib/services/money';
 import { useBrand } from '@/components/BrandMark';
 import ProductFormModal from '@/app/(app)/products/ProductFormModal';
 import PdaInventory from './PdaInventory';
+import PdaBatchStock from './PdaBatchStock';
 import {
   buildLabelsDocument, openPrintWindow, discountedPrice, type LabelProduct,
 } from '@/lib/services/label-print';
@@ -86,6 +87,7 @@ export default function PdaLabelApp({ userName, canWrite, canInventory }: { user
   const [homeTab, setHomeTab] = useState<'home' | 'articles' | 'history' | 'settings'>('home');
   const [scanPrompt, setScanPrompt] = useState<null | 'choice' | 'label' | 'stock'>(null);
   const [invOpen, setInvOpen] = useState(false); // module inventaire (plein écran)
+  const [batchOpen, setBatchOpen] = useState(false); // entrée multiple (plein écran)
   const promptRef = useRef<HTMLInputElement>(null);
   // Timer pour le mode « coller » (donnée injectée d'un bloc sans Entrée).
   const scanTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -184,7 +186,7 @@ export default function PdaLabelApp({ userName, canWrite, canInventory }: { user
       // On ignore uniquement si on est dans un plein écran (éditeur, stock,
       // création, édition) ou une modale de choix. Un scan fonctionne donc sur
       // l'ACCUEIL comme sur l'invite de scan (Imprimer étiquette / Entrer stock).
-      if (selected || createFor !== null || editing || stockFor || pending || invOpen) return;
+      if (selected || createFor !== null || editing || stockFor || pending || invOpen || batchOpen) return;
       const mode = scanPrompt ?? 'choice';
       // Sur l'accueil (aucune invite ouverte), un scan ouvre la page
       // « Scanner un article » puis traite le code.
@@ -572,6 +574,18 @@ export default function PdaLabelApp({ userName, canWrite, canInventory }: { user
     );
   }
 
+  // ---- Entrée multiple : PLEINE PAGE ----
+  if (batchOpen) {
+    return (
+      <PdaBatchStock
+        storeId={station.store_id}
+        products={products.map((p) => ({ id: p.id, name: p.name, barcode: p.barcode ?? null, sku: p.sku ?? null }))}
+        onClose={() => setBatchOpen(false)}
+        onDone={(count) => addRecent('stock', 'Entrée multiple validée', `${count} article(s)`)}
+      />
+    );
+  }
+
   return (
     <div
       className="h-screen flex flex-col bg-bg text-ink overflow-hidden"
@@ -665,6 +679,11 @@ export default function PdaLabelApp({ userName, canWrite, canInventory }: { user
                     <ActionCard tone="green" title="Entrer en stock"
                       desc="Scannez un code-barres pour entrer la marchandise en stock."
                       icon={<IconBoxDown />} onClick={() => setScanPrompt('stock')} />
+                  )}
+                  {canWrite && (
+                    <ActionCard tone="green" title="Entrée multiple"
+                      desc="Scannez plusieurs articles en série, puis validez la saisie en une fois."
+                      icon={<IconBoxes />} onClick={() => setBatchOpen(true)} />
                   )}
                   {canWrite && (
                     <ActionCard tone="blue" title="Créer un nouvel article"
@@ -936,4 +955,5 @@ function IconHome() { return sv(<><path d="M3 11l9-8 9 8" /><path d="M5 10v10h14
 function IconClock() { return sv(<><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>); }
 function IconBox() { return sv(<><path d="M21 8l-9-5-9 5 9 5 9-5z" /><path d="M3 8v8l9 5 9-5V8" /><path d="M12 13v8" /></>); }
 function IconClipboard() { return sv(<><rect x="8" y="3" width="8" height="4" rx="1" /><path d="M9 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3" /><path d="M8 12h6M8 16h4" /></>); }
+function IconBoxes() { return sv(<><rect x="3" y="13" width="8" height="8" rx="1" /><rect x="13" y="13" width="8" height="8" rx="1" /><rect x="8" y="3" width="8" height="8" rx="1" /></>); }
 function IconGear() { return sv(<><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 7 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0-1.1-2.7H1a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 2.6 7a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H7a1.6 1.6 0 0 0 1-1.5V1a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V7a1.6 1.6 0 0 0 1.5 1H23a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z" /></>); }
