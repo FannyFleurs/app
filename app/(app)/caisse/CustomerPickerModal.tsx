@@ -23,12 +23,18 @@ export default function CustomerPickerModal({ onClose, onPick }: Props) {
   const [results, setResults] = useState<PickedCustomer[]>([]);
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
+  // Liste masquée par défaut : on ne charge/affiche les clients que lors d'une
+  // recherche OU si l'on demande explicitement « Afficher la liste ».
+  const [showList, setShowList] = useState(false);
 
   useEffect(() => {
+    const query = q.trim();
+    // Rien à afficher tant qu'on ne recherche pas et qu'on n'a pas demandé la liste.
+    if (!query && !showList) { setResults([]); return; }
     const t = setTimeout(async () => {
       setLoading(true);
       const params = new URLSearchParams();
-      if (q.trim()) params.set('q', q.trim());
+      if (query) params.set('q', query);
       const res = await fetch(`/api/customers?${params.toString()}`);
       if (res.ok) {
         const j = await res.json();
@@ -37,7 +43,7 @@ export default function CustomerPickerModal({ onClose, onPick }: Props) {
       setLoading(false);
     }, 200);
     return () => clearTimeout(t);
-  }, [q]);
+  }, [q, showList]);
 
   return (
     <>
@@ -63,7 +69,7 @@ export default function CustomerPickerModal({ onClose, onPick }: Props) {
               spellCheck={false}
               name="customer-search"
               className="input flex-1 h-12 text-base"
-              placeholder="Nom, email, téléphone, SIRET…"
+              placeholder="Nom ou téléphone…"
               value={q}
               onChange={(e) => setQ(e.target.value)}
             />
@@ -73,7 +79,16 @@ export default function CustomerPickerModal({ onClose, onPick }: Props) {
           </div>
 
           <div className="mt-3 max-h-[55vh] overflow-auto -mx-1 px-1">
-            {loading ? (
+            {!q.trim() && !showList ? (
+              <div className="py-8 text-center">
+                <p className="text-sm text-ink-soft mb-3">
+                  Recherchez un client par nom ou numéro de téléphone.
+                </p>
+                <button className="btn-soft h-11 px-4 text-base" onClick={() => setShowList(true)}>
+                  Afficher la liste
+                </button>
+              </div>
+            ) : loading ? (
               <div className="py-8 text-center text-ink-soft text-sm">Recherche…</div>
             ) : results.length === 0 ? (
               <div className="py-8 text-center text-ink-soft text-sm">
