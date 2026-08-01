@@ -1,7 +1,7 @@
 'use client';
 import { confirmThemed } from '@/lib/ui/dialog';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { getOrCreateDeviceId } from '@/lib/device';
 import { formatEUR } from '@/lib/services/money';
 import ProductFormModal from './ProductFormModal';
@@ -12,7 +12,7 @@ import EmptyState from '@/components/EmptyState';
 
 interface Product {
   id: string; name: string; short_description: string | null;
-  sku: string | null; barcode: string | null;
+  sku: string | null; barcode: string | null; extra_barcodes?: string[] | null;
   sale_price_ttc: number; price_is_free: boolean;
   tax_rate: number; tax_rate_id: string; tax_rate_code: string;
   category_id: string | null; category_name: string | null;
@@ -23,6 +23,28 @@ interface Product {
   is_top_product?: boolean;
   store_ids: string[];
   tags: string[];
+}
+
+// Cache liste produits « stale-while-revalidate » (mémoire + sessionStorage) :
+// au retour sur la page, la liste précédente s'affiche instantanément pendant
+// l'actualisation en fond — plus d'attente réseau visible.
+// Nombre max de lignes rendues à l'écran (le compteur total reste exact) :
+// évite de peindre des milliers de <li> d'un coup sur un très gros catalogue.
+const RENDER_CAP = 400;
+
+const _productsListMem = new Map<string, Product[]>();
+function readProductsCache(key: string): Product[] | null {
+  const mem = _productsListMem.get(key);
+  if (mem) return mem;
+  try {
+    const raw = sessionStorage.getItem(`webpos_products:${key}`);
+    if (raw) { const v = JSON.parse(raw) as Product[]; _productsListMem.set(key, v); return v; }
+  } catch { /* indisponible */ }
+  return null;
+}
+function writeProductsCache(key: string, v: Product[]): void {
+  _productsListMem.set(key, v);
+  try { sessionStorage.setItem(`webpos_products:${key}`, JSON.stringify(v)); } catch { /* quota */ }
 }
 
 export default function ProductsList({
@@ -69,20 +91,27 @@ export default function ProductsList({
   }, [backOffice]);
 
   async function reload() {
-    setLoading(true);
     const params = new URLSearchParams();
-    if (q) params.set('q', q);
+    // La recherche est CLIENT (filtrage instantané ci-dessous) : on ne renvoie
+    // pas `q` au serveur, la liste complète est chargée une fois puis filtrée.
     if (showInactive) params.set('active', 'false');
     // Application : on restreint à la boutique du poste (le serveur applique
     // alors le filtrage strict hors BO).
     if (!backOffice && posteStoreId) params.set('store_id', posteStoreId);
+    const cacheKey = `${backOffice ? 'bo' : (posteStoreId || 'none')}:${showInactive ? 'all' : 'active'}`;
+    // Peinture instantanée depuis le cache (stale-while-revalidate).
+    const cached = readProductsCache(cacheKey);
+    if (cached) { setProducts(cached); setLoading(false); }
+    else setLoading(true);
     const res = await fetch(`/api/products?${params.toString()}`);
     if (res.ok) {
       const j = await res.json();
-      setProducts(j.products.map((p: Product) => ({
+      const mapped = j.products.map((p: Product) => ({
         ...p, sale_price_ttc: Number(p.sale_price_ttc), tax_rate: Number(p.tax_rate),
         store_ids: p.store_ids ?? [],
-      })));
+      })) as Product[];
+      setProducts(mapped);
+      writeProductsCache(cacheKey, mapped);
     }
     setLoading(false);
   }
@@ -165,6 +194,10 @@ export default function ProductsList({
     }
   }
 
+  // Recherche différée (useDeferredValue) : la frappe reste fluide, le filtrage
+  // de la liste se fait en priorité basse (pas de saccade même sur un gros
+  // catalogue).
+  const deferredQ = useDeferredValue(q);
   const filtered = useMemo(() => {
     let arr = products;
     if (filterCat !== 'all') arr = arr.filter((p) => p.category_id === filterCat);
@@ -175,8 +208,18 @@ export default function ProductsList({
     if (filterStore) {
       arr = arr.filter((p) => p.store_ids.length === 0 || p.store_ids.includes(filterStore));
     }
+    // Recherche texte instantanée : nom / SKU / code-barres (+ codes multi-EAN).
+    const s = deferredQ.trim().toLowerCase();
+    if (s) {
+      arr = arr.filter((p) =>
+        p.name.toLowerCase().includes(s)
+        || (p.sku?.toLowerCase().includes(s) ?? false)
+        || (p.barcode?.toLowerCase().includes(s) ?? false)
+        || (p.extra_barcodes?.some((b) => b.toLowerCase().includes(s)) ?? false),
+      );
+    }
     return arr;
-  }, [products, filterCat, onlyTop, filterStore]);
+  }, [products, filterCat, onlyTop, filterStore, deferredQ]);
 
   const activeId = editing && 'id' in editing ? editing.id : null;
 
@@ -211,12 +254,15 @@ export default function ProductsList({
             <div className="flex gap-2">
               <input
                 className="input flex-1"
-                placeholder="Rechercher…"
+                placeholder="Rechercher (nom, SKU, code-barres)…"
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && void reload()}
               />
-              <button className="btn-soft whitespace-nowrap" onClick={() => void reload()}>OK</button>
+              {q && (
+                <button className="btn-soft whitespace-nowrap" onClick={() => setQ('')} aria-label="Effacer la recherche">
+                  ✕
+                </button>
+              )}
             </div>
             <div className="flex flex-wrap gap-2">
               {/* Filtre boutique : réservé au back-office (gestion multi-boutiques).
@@ -327,7 +373,7 @@ export default function ProductsList({
               </div>
             ) : (
               <ul className="divide-y divide-border">
-                {filtered.map((p) => {
+                {filtered.slice(0, RENDER_CAP).map((p) => {
                   const limited = p.store_ids.length > 0;
                   return (
                     <li key={p.id}>
@@ -367,6 +413,11 @@ export default function ProductsList({
                     </li>
                   );
                 })}
+                {filtered.length > RENDER_CAP && (
+                  <li className="px-4 md:px-3 py-3 text-xs text-ink-soft">
+                    {RENDER_CAP} résultats affichés sur {filtered.length}. Affinez la recherche pour voir les autres.
+                  </li>
+                )}
               </ul>
             )}
           </div>
