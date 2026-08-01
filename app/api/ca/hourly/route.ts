@@ -35,7 +35,9 @@ export async function GET(req: Request) {
   if (store_id) args.push(store_id);
 
   const r = await query<{ hour: number; ca_ht: string; ca_ttc: string; tickets_count: number }>(
-    `SELECT EXTRACT(HOUR FROM s.validated_at)::int AS hour,
+    // Heure LOCALE (Europe/Paris) : validated_at est en UTC ; sans conversion,
+    // une vente à 10h Paris (08h UTC) tombait dans la tranche « 8h ».
+    `SELECT EXTRACT(HOUR FROM s.validated_at AT TIME ZONE 'Europe/Paris')::int AS hour,
             SUM(s.total_ht)::text  AS ca_ht,
             SUM(s.total_ttc)::text AS ca_ttc,
             COUNT(*)::int          AS tickets_count
