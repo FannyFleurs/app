@@ -1357,13 +1357,12 @@ export default function CashRegister({
           la SEULE à scroller (le bouton Encaisser du panier à droite
           reste toujours visible). */}
       <div
-        className="flex flex-col min-w-0 min-h-0 flex-1 md:flex-none overflow-hidden"
-        style={{ backgroundColor: 'var(--primary-soft)' }}
+        className="flex flex-col bg-white min-w-0 min-h-0 flex-1 md:flex-none overflow-hidden"
         onTouchStart={onTouchStart}
         onTouchEnd={(e) => onTouchEnd(e, 'open')}
       >
         <OfflineBanner />
-        <div className="flex items-center gap-2 px-3 md:px-5 h-[68px] shrink-0 border-b border-border" style={{ backgroundColor: 'var(--primary-soft)' }}>
+        <div className="flex items-center gap-2 px-3 md:px-5 h-[68px] shrink-0 border-b border-border bg-white">
           {/* Barre de recherche VISIBLE : champ dès qu'ouverte, sinon une barre
               cliquable claire (pas une simple loupe). */}
           {searchOpen ? (
@@ -1438,7 +1437,7 @@ export default function CashRegister({
           </button>
         </div>
 
-        <div className="flex-1 overflow-auto p-3 md:p-5 pb-24 md:pb-5" style={{ backgroundColor: 'var(--primary-soft)' }}>
+        <div className="flex-1 overflow-auto p-3 md:p-5 bg-white pb-24 md:pb-5">
           {showingProducts ? (
             <>
               {/* Bouton retour en haut à gauche + libellé contextuel */}
