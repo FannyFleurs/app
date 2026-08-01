@@ -411,11 +411,11 @@ function XzView({
         ) : (
           <ol className="space-y-2">
             {topProducts.map((p, i) => (
-              <li key={p.product_id ?? `x-${i}`} className="flex items-center gap-3">
-                <span className="w-6 text-accent-deep font-semibold tabular-nums">{i + 1}</span>
+              <li key={p.product_id ?? `x-${i}`} className="flex items-center gap-2">
+                <span className="w-6 text-accent-deep font-semibold tabular-nums shrink-0">{i + 1}</span>
                 <span className="flex-1 min-w-0 truncate">{p.product_name}</span>
-                <span className="text-ink-soft text-sm tabular-nums whitespace-nowrap">×{p.quantity}</span>
-                <span className="tabular-nums font-medium whitespace-nowrap">{formatEUR(p.ca_ttc)}</span>
+                <span className="w-10 text-right text-ink-soft text-sm tabular-nums shrink-0">×{p.quantity}</span>
+                <span className="w-24 text-right tabular-nums font-medium shrink-0">{formatEUR(p.ca_ttc)}</span>
               </li>
             ))}
           </ol>
@@ -605,9 +605,8 @@ function HourlyChart({ hours }: { hours: HourBucket[] }) {
                   isPeak ? 'bg-warning' : 'bg-accent'
                 }`}
                 style={{
-                  height: v.value === 0 ? '2px' : `${h}px`,
-                  minHeight: v.value === 0 ? '2px' : '4px',
-                  opacity: v.value === 0 ? 0.25 : 1,
+                  height: v.value === 0 ? '2px' : `${Math.max(h, 8)}px`,
+                  opacity: v.value === 0 ? 0.15 : 1,
                 }}
                 title={`${v.hour}h — ${formatEUR(v.value)}`}
               />
