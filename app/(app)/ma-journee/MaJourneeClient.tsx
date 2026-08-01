@@ -73,6 +73,24 @@ export default function MaJourneeClient() {
   // Rapport X complet (identique au Z) — chargé à la demande.
   const [dayReport, setDayReport] = useState<DayReport | null>(null);
   const [loadingReport, setLoadingReport] = useState(false);
+  const [printingX, setPrintingX] = useState(false);
+
+  // Impression DIRECTE du X sur l'imprimante ticket (comme le Z). Repli sur le
+  // PDF uniquement si aucune imprimante ticket n'est configurée.
+  async function printX() {
+    setPrintingX(true);
+    try {
+      const r = await fetch('/api/reports/day/print', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date }),
+      });
+      if (!r.ok) window.open(`/api/reports/day/pdf?date=${date}`, '_blank');
+    } catch {
+      window.open(`/api/reports/day/pdf?date=${date}`, '_blank');
+    } finally {
+      setPrintingX(false);
+    }
+  }
 
   // Recharge la liste + synthèse du jour (aussi appelé après un retour,
   // pour défalquer le CA et afficher les badges sans recharger la page).
@@ -309,14 +327,13 @@ export default function MaJourneeClient() {
         {/* Action en pied — équivalent du "Actions sur ma journée" */}
         <div className="border-t border-border p-3 bg-white sticky bottom-0 space-y-2">
           {mode === 'complet' && (
-            <a
-              href={`/api/reports/day/pdf?date=${date}`}
-              target="_blank"
-              rel="noreferrer"
-              className="btn-soft w-full text-sm h-11 flex items-center justify-center gap-2"
+            <button
+              onClick={() => void printX()}
+              disabled={printingX}
+              className="btn-soft w-full text-sm h-11 flex items-center justify-center gap-2 disabled:opacity-50"
             >
-              <Icon name="print" size={16} /> Imprimer le X
-            </a>
+              <Icon name="print" size={16} /> {printingX ? 'Impression…' : 'Imprimer le X'}
+            </button>
           )}
           {sealedAt ? (
             <a
