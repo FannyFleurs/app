@@ -88,14 +88,24 @@ export default function CustomerPickerModal({ onClose, onPick }: Props) {
                   Afficher la liste
                 </button>
               </div>
-            ) : loading ? (
-              <div className="py-8 text-center text-ink-soft text-sm">Recherche…</div>
-            ) : results.length === 0 ? (
-              <div className="py-8 text-center text-ink-soft text-sm">
-                Aucun client. Créez-en un avec le bouton + Nouveau.
-              </div>
             ) : (
-              <ul className="space-y-1.5">
+              <>
+                {/* Liste ouverte sans recherche : bouton pour la masquer. */}
+                {showList && !q.trim() && (
+                  <div className="flex justify-end mb-2">
+                    <button className="btn-ghost text-sm h-9 px-3" onClick={() => setShowList(false)}>
+                      Masquer la liste
+                    </button>
+                  </div>
+                )}
+                {loading ? (
+                  <div className="py-8 text-center text-ink-soft text-sm">Recherche…</div>
+                ) : results.length === 0 ? (
+                  <div className="py-8 text-center text-ink-soft text-sm">
+                    Aucun client. Créez-en un avec le bouton + Nouveau.
+                  </div>
+                ) : (
+                  <ul className="space-y-1.5">
                 {results.map((c) => (
                   <li key={c.id}>
                     <button
@@ -112,7 +122,9 @@ export default function CustomerPickerModal({ onClose, onPick }: Props) {
                     </button>
                   </li>
                 ))}
-              </ul>
+                  </ul>
+                )}
+              </>
             )}
           </div>
         </div>
