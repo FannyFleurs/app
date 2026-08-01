@@ -1,4 +1,5 @@
 import { query } from '@/lib/db/client';
+import { loadReceiptSettings } from '@/lib/settings/receipt-server';
 
 /**
  * Rapport de journée (Z scellé ou X en cours), au format « Récapitulatif ».
@@ -159,15 +160,23 @@ export async function computeDayReport(opts: {
   const idRow = ident.rows[0];
   const addr = idRow?.address ?? {};
   const contact = idRow?.contact ?? {};
+  // En-tête = coordonnées de la BOUTIQUE (paramétrage ticket de la boutique :
+  // nom commercial, adresse, téléphone), comme le ticket et la facture — et non
+  // celles de l'organisation. Le pied légal (raison sociale, SIRET, TVA) reste
+  // celui de l'organisation.
+  const rs = await loadReceiptSettings(org, store);
+  const zipCity = rs.address_zip_city?.trim()
+    || [addr.zip, addr.city].filter(Boolean).join(' ')
+    || null;
   const identity: DayReportIdentity = {
-    name: idRow?.name ?? '',
+    name: rs.shop_name?.trim() || idRow?.store_name || idRow?.name || '',
     legal_name: idRow?.legal_name ?? null,
-    line1: addr.line1 ?? null,
-    line2: addr.line2 ?? null,
-    zip: addr.zip ?? null,
-    city: addr.city ?? null,
+    line1: rs.address_line1?.trim() || addr.line1 || null,
+    line2: null,
+    zip: null,
+    city: zipCity,
     country: addr.country ?? null,
-    phone: contact.phone ?? null,
+    phone: rs.phone?.trim() || contact.phone || null,
     siret: idRow?.siret ?? null,
     siren: idRow?.siren ?? null,
     vat_number: idRow?.vat_number ?? null,
