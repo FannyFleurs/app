@@ -102,6 +102,32 @@ type View = { kind: 'categories' } | { kind: 'products'; categoryId: string | 'u
 const FREE_PRICE_TAX_CODE_DEFAULT = 'TVA20';
 
 /**
+ * Cache catalogue (produits + catégories) par boutique — « stale-while-revalidate ».
+ * En mémoire (survit aux navigations SPA) + sessionStorage (survit à un reload).
+ * Permet à la caisse de peindre le catalogue INSTANTANÉMENT au retour, pendant
+ * qu'une actualisation se fait en fond. On ne montre plus une grille vide le
+ * temps du round-trip réseau.
+ */
+const _catalogMem = new Map<string, { products: PosProduct[]; categories: Category[] }>();
+function readCatalogCache(storeId: string): { products: PosProduct[]; categories: Category[] } | null {
+  const mem = _catalogMem.get(storeId);
+  if (mem) return mem;
+  try {
+    const raw = sessionStorage.getItem(`webpos_catalog:${storeId}`);
+    if (raw) {
+      const v = JSON.parse(raw) as { products: PosProduct[]; categories: Category[] };
+      _catalogMem.set(storeId, v);
+      return v;
+    }
+  } catch { /* stockage indisponible / quota */ }
+  return null;
+}
+function writeCatalogCache(storeId: string, v: { products: PosProduct[]; categories: Category[] }): void {
+  _catalogMem.set(storeId, v);
+  try { sessionStorage.setItem(`webpos_catalog:${storeId}`, JSON.stringify(v)); } catch { /* quota */ }
+}
+
+/**
  * Résout un article scanné par son code : code principal, SKU, ou l'un des
  * codes-barres supplémentaires (multi-EAN). Insensible à la casse.
  */
@@ -287,25 +313,40 @@ export default function CashRegister({
   // changement de boutique — la portee par boutique peut varier).
   useEffect(() => {
     if (!storeId) return;
+    // Peinture instantanée depuis le cache (stale-while-revalidate) : le
+    // catalogue précédent s'affiche tout de suite pendant l'actualisation.
+    const cached = readCatalogCache(storeId);
+    if (cached) {
+      if (cached.products.length) setProducts(cached.products);
+      if (cached.categories.length) setCategories(cached.categories);
+    }
     void (async () => {
       const [pRes, cRes, sdRes] = await Promise.all([
         fetch(`/api/products?pos=1&store_id=${encodeURIComponent(storeId)}`),
         fetch(`/api/categories?pos=1&store_id=${encodeURIComponent(storeId)}`),
         fetch(`/api/settings/screen-delivery?store_id=${encodeURIComponent(storeId)}`),
       ]);
+      let freshProducts: PosProduct[] | null = null;
+      let freshCategories: Category[] | null = null;
       if (pRes.ok) {
         const j = await pRes.json();
-        setProducts(
-          j.products.map((p: Record<string, unknown>) => ({
-            ...p,
-            sale_price_ttc: Number(p.sale_price_ttc),
-            tax_rate: Number(p.tax_rate),
-            discount_value: p.discount_value != null ? Number(p.discount_value) : null,
-          })),
-        );
+        freshProducts = j.products.map((p: Record<string, unknown>) => ({
+          ...p,
+          sale_price_ttc: Number(p.sale_price_ttc),
+          tax_rate: Number(p.tax_rate),
+          discount_value: p.discount_value != null ? Number(p.discount_value) : null,
+        })) as PosProduct[];
+        setProducts(freshProducts);
       }
-      if (cRes.ok) setCategories((await cRes.json()).categories);
+      if (cRes.ok) {
+        freshCategories = (await cRes.json()).categories as Category[];
+        setCategories(freshCategories);
+      }
       if (sdRes.ok) setDeferredEnabled(Boolean((await sdRes.json()).settings?.enabled));
+      // Met le cache à jour avec les données fraîches.
+      if (freshProducts && freshCategories) {
+        writeCatalogCache(storeId, { products: freshProducts, categories: freshCategories });
+      }
     })();
   }, [storeId]);
 
@@ -643,6 +684,21 @@ export default function CashRegister({
     });
   }, [ensureSale, customer]);
 
+  // Référence stable vers addProduct : passée aux tuiles (mémoïsées) comme
+  // onPick. Sans ça, l'identité de addProduct change à chaque vente (saleId /
+  // client) et force le re-rendu de TOUTE la grille produits.
+  const addProductRef = useRef(addProduct);
+  addProductRef.current = addProduct;
+  const onPickProductStable = useCallback((p: PosProduct) => addProductRef.current(p), []);
+
+  // Précharge le chunk de l'écran de paiement dès qu'il y a un article au
+  // panier : au moment d'appuyer sur « Paiement », le module est déjà chargé
+  // (pas de délai de chargement du bundle).
+  const hasLines = lines.length > 0;
+  useEffect(() => {
+    if (hasLines) void import('./PaymentModal').catch(() => {});
+  }, [hasLines]);
+
   function useLoyalty(amountEuros: number) {
     if (!customer || amountEuros <= 0) return;
     const subtotal = lines.reduce((s, l) => s + round2(l.unit_price_ttc * l.quantity - l.discount_amount), 0);
@@ -844,32 +900,27 @@ export default function CashRegister({
     } catch { /* ignore */ }
     // Périmètre fidélité : on transmet la boutique du poste pour obtenir le
     // solde du bon groupe (fidélité segmentée possible en Croissance+).
+    // Fidélité + soldes chargés EN PARALLÈLE (indépendants).
     const storeQ = storeId ? `?store_id=${encodeURIComponent(storeId)}` : '';
-    try {
-      const lr = await fetch(`/api/customers/${customerId}/loyalty${storeQ}`);
-      if (lr.ok) {
-        const lj = await lr.json();
-        if (lj.loyalty?.enabled) {
-          setLoyalty({
-            enabled: true,
-            balance_euros: Number(lj.balance_euros) || 0,
-            min_redeem: Number(lj.loyalty.min_redeem) || 0,
-            used: 0,
-          });
-        }
-      }
-    } catch { /* ignore */ }
-    try {
-      const br = await fetch(`/api/customers/${customerId}/balances${storeQ}`);
-      if (br.ok) {
-        const bj = await br.json();
-        setCustomerBalances({
-          gift_card_balance: Number(bj.gift_card_balance) || 0,
-          account_balance: Number(bj.account_balance) || 0,
-          credit_notes_balance: Number(bj.credit_notes_balance) || 0,
-        });
-      }
-    } catch { /* ignore */ }
+    const [lj, bj] = await Promise.all([
+      fetch(`/api/customers/${customerId}/loyalty${storeQ}`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      fetch(`/api/customers/${customerId}/balances${storeQ}`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+    ]);
+    if (lj?.loyalty?.enabled) {
+      setLoyalty({
+        enabled: true,
+        balance_euros: Number(lj.balance_euros) || 0,
+        min_redeem: Number(lj.loyalty.min_redeem) || 0,
+        used: 0,
+      });
+    }
+    if (bj) {
+      setCustomerBalances({
+        gift_card_balance: Number(bj.gift_card_balance) || 0,
+        account_balance: Number(bj.account_balance) || 0,
+        credit_notes_balance: Number(bj.credit_notes_balance) || 0,
+      });
+    }
   }
 
   async function recallSale(id: string) {
@@ -1063,37 +1114,31 @@ export default function CashRegister({
       }));
     }
 
-    // Charge le solde fidélité
-    try {
-      const r = await fetch(`/api/customers/${c.id}/loyalty`);
-      if (r.ok) {
-        const j = await r.json();
-        if (j.loyalty?.enabled) {
-          setLoyalty({
-            enabled: true,
-            balance_euros: Number(j.balance_euros) || 0,
-            min_redeem: Number(j.loyalty.min_redeem) || 0,
-            used: 0,
-          });
-        } else {
-          setLoyalty({ enabled: false, balance_euros: 0, min_redeem: 0, used: 0 });
-    setCustomerBalances({ gift_card_balance: 0, account_balance: 0, credit_notes_balance: 0 });
-        }
+    // Fidélité + soldes complémentaires : chargés EN PARALLÈLE (indépendants) et
+    // sans bloquer — le client est déjà attaché, les pastilles s'affichent dès
+    // que les données arrivent.
+    void Promise.all([
+      fetch(`/api/customers/${c.id}/loyalty`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      fetch(`/api/customers/${c.id}/balances`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+    ]).then(([lj, bj]) => {
+      if (lj?.loyalty?.enabled) {
+        setLoyalty({
+          enabled: true,
+          balance_euros: Number(lj.balance_euros) || 0,
+          min_redeem: Number(lj.loyalty.min_redeem) || 0,
+          used: 0,
+        });
+      } else {
+        setLoyalty({ enabled: false, balance_euros: 0, min_redeem: 0, used: 0 });
       }
-    } catch { /* ignore */ }
-
-    // Charge les soldes complémentaires (cartes cadeau, compte client, avoirs)
-    try {
-      const r = await fetch(`/api/customers/${c.id}/balances`);
-      if (r.ok) {
-        const j = await r.json();
+      if (bj) {
         setCustomerBalances({
-          gift_card_balance: Number(j.gift_card_balance) || 0,
-          account_balance: Number(j.account_balance) || 0,
-          credit_notes_balance: Number(j.credit_notes_balance) || 0,
+          gift_card_balance: Number(bj.gift_card_balance) || 0,
+          account_balance: Number(bj.account_balance) || 0,
+          credit_notes_balance: Number(bj.credit_notes_balance) || 0,
         });
       }
-    } catch { /* ignore */ }
+    });
   }
 
   async function detachCustomer() {
@@ -1464,7 +1509,7 @@ export default function CashRegister({
                   <ProductTile
                     key={p.id}
                     product={p}
-                    onPick={addProduct}
+                    onPick={onPickProductStable}
                     padding={metrics.padding}
                     titleFontSize={metrics.titleFontSize}
                     showImage={posUi.show_product_image}
@@ -1481,7 +1526,7 @@ export default function CashRegister({
               uncategorizedCount={categoriesWithCounts.uncategorized}
               topProducts={topProducts}
               onPick={(id) => setView({ kind: 'products', categoryId: id })}
-              onPickProduct={(p) => addProduct(p)}
+              onPickProduct={onPickProductStable}
               metrics={metrics}
               showImage={posUi.show_product_image}
               showPrice={posUi.show_price}
