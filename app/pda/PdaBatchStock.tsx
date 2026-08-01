@@ -1,7 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { useScanField } from './useScanField';
+import { useMemo, useRef, useState } from 'react';
 
 /**
  * Entrée multiple (PDA) : on scanne des articles EN SÉRIE (chaque scan = +1),
@@ -51,16 +50,49 @@ export default function PdaBatchStock({
     });
   }
 
-  const { scanRef, onKeyDown, onInput, refocus } = useScanField((code) => handleCode(code));
+  // Champ unique : SCAN (douchette → Entrée) OU RECHERCHE (nom / EAN → liste de
+  // suggestions à toucher). Le champ est libre à la saisie.
+  const [query, setQuery] = useState('');
+  const scanRef = useRef<HTMLInputElement>(null);
+  const refocus = () => scanRef.current?.focus();
+  // Re-focus la douchette UNIQUEMENT si le focus est retombé « dans le vide » —
+  // ne vole pas le focus quand on touche une suggestion / un bouton.
+  const guardedRefocus = () => {
+    const a = document.activeElement as HTMLElement | null;
+    if (!a || a.tagName === 'BODY') refocus();
+  };
 
-  function handleCode(raw: string) {
-    const s = raw.trim();
-    if (!s) return;
-    const p = byCode.get(s.toLowerCase());
-    if (!p) { setMsg(`❌ Article introuvable : « ${s} »`); return; }
+  const suggestions = useMemo(() => {
+    const s = query.trim().toLowerCase();
+    if (!s) return [] as ScanProduct[];
+    return products.filter((p) =>
+      p.name.toLowerCase().includes(s)
+      || (p.barcode?.toLowerCase().includes(s) ?? false)
+      || (p.sku?.toLowerCase().includes(s) ?? false)
+      || (p.extra_barcodes?.some((b) => b.toLowerCase().includes(s)) ?? false),
+    ).slice(0, 25);
+  }, [products, query]);
+
+  function addProduct(p: ScanProduct) {
     addOne(p, 1);
     setMsg(`✓ ${p.name}`);
+    setQuery('');
     setTimeout(refocus, 20);
+  }
+
+  // Validation (Entrée / retour douchette) : code exact, sinon résultat unique.
+  function submitCode(raw: string) {
+    const code = raw.trim();
+    if (!code) return;
+    const exact = byCode.get(code.toLowerCase());
+    const hit = exact ?? (suggestions.length === 1 ? suggestions[0] : undefined);
+    if (hit) { addProduct(hit); return; }
+    if (suggestions.length === 0) {
+      setMsg(`❌ Article introuvable : « ${code} »`);
+      setQuery('');
+      setTimeout(refocus, 20);
+    }
+    // Plusieurs résultats : on garde la liste affichée pour choisir.
   }
 
   function setQty(id: string, qty: number) {
@@ -125,18 +157,47 @@ export default function PdaBatchStock({
         <div className="w-14" />
       </header>
 
-      {/* Zone de scan */}
+      {/* Zone de scan / recherche */}
       <div className="shrink-0 p-3 border-b border-border bg-surface">
-        <div className="text-xs text-ink-soft mb-1">Scannez les articles en série (chaque scan = +1)</div>
-        <input
-          ref={scanRef}
-          className="input h-12 w-full text-base font-mono"
-          placeholder="Code-barres / SKU…"
-          autoComplete="off" autoFocus
-          onBlur={() => setTimeout(() => { if (!edit) refocus(); }, 60)}
-          onKeyDown={onKeyDown}
-          onInput={onInput}
-        />
+        <div className="text-xs text-ink-soft mb-1">Scannez (douchette) ou recherchez par nom / EAN (chaque ajout = +1)</div>
+        <div className="relative">
+          <input
+            ref={scanRef}
+            className="input h-12 w-full pr-10 text-base"
+            placeholder="Scanner ou rechercher (nom, EAN, SKU)…"
+            autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} autoFocus
+            value={query}
+            onChange={(e) => {
+              const v = e.target.value;
+              const nl = v.search(/[\r\n\t]/);
+              if (nl >= 0) { submitCode(v.slice(0, nl)); return; } // douchette « paste »
+              setQuery(v);
+            }}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submitCode(e.currentTarget.value); } }}
+            onBlur={() => setTimeout(() => { if (!edit) guardedRefocus(); }, 80)}
+          />
+          {query && (
+            <button type="button" onClick={() => { setQuery(''); refocus(); }} aria-label="Effacer"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 grid place-items-center h-7 w-7 rounded-full text-ink-soft hover:bg-gray-100 hover:text-ink">
+              <span aria-hidden className="text-lg leading-none">×</span>
+            </button>
+          )}
+        </div>
+
+        {/* Suggestions de recherche (nom / EAN) — toucher pour ajouter (+1). */}
+        {suggestions.length > 0 && (
+          <ul className="mt-2 max-h-56 overflow-y-auto rounded-lg border border-border divide-y divide-border bg-white">
+            {suggestions.map((p) => (
+              <li key={p.id}>
+                <button onClick={() => addProduct(p)} className="w-full text-left px-3 py-2.5 active:bg-gray-100">
+                  <div className="font-medium truncate">{p.name}</div>
+                  <div className="text-xs text-ink-soft truncate">{p.barcode ?? p.sku ?? '— pas de code —'}</div>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
         <div className="mt-2 flex items-center justify-between text-xs">
           <span className="text-ink-soft">{cart.length} article(s) · {totalUnits} unité(s)</span>
           {busy && <span className="text-ink-soft">…</span>}
