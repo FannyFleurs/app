@@ -606,10 +606,14 @@ function HourlyChart({ hours }: { hours: HourBucket[] }) {
             return (
               <div
                 key={v.hour}
-                className={`flex-1 rounded-t ${
-                  isPeak ? 'bg-warning' : 'bg-accent'
-                }`}
+                className="flex-1 rounded-t"
                 style={{
+                  // `bg-accent` n'existe pas dans le thème → les barres non-pic
+                  // étaient INVISIBLES (seul le pic en bg-warning s'affichait).
+                  // On utilise des couleurs définies : pic en ambre, autres en vert.
+                  backgroundColor: v.value === 0
+                    ? 'var(--primary)'
+                    : isPeak ? '#B7791F' : 'var(--primary)',
                   height: v.value === 0 ? '2px' : `${Math.max(h, 8)}px`,
                   opacity: v.value === 0 ? 0.15 : 1,
                 }}
