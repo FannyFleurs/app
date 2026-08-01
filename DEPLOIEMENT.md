@@ -103,7 +103,7 @@ Optionnellement :
 
 | Variable | Valeur | Notes |
 |---|---|---|
-| `SESSION_TTL_MINUTES` | `43200` | durée session (min). Défaut 43200 = 30 j. Renouvellement glissant tant que l'appareil est utilisé (voir /api/auth/refresh). |
+| `SESSION_TTL_MINUTES` | `43200` | durée session **en MINUTES**. Défaut 43200 = 30 j. ⚠️ valeur en minutes, pas en heures (ex. 8 h = `480`, pas `8`). Toute valeur < 60 min est ignorée (repli sur le défaut) pour éviter les déconnexions en boucle. Renouvellement glissant tant que l'appareil est utilisé (voir /api/auth/refresh). |
 | `SESSION_TTL_MANAGEMENT_MINUTES` | *(= SESSION_TTL_MINUTES)* | durée des sessions back-office / CA si différente de la caisse. |
 
 ---

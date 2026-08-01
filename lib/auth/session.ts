@@ -20,6 +20,12 @@ function secretKey(): Uint8Array {
 // utilisé reste connecté en continu ; c'est le délai d'inactivité avant qu'un
 // appareil laissé fermé finisse par se déconnecter.
 const DEFAULT_TTL_MIN = 60 * 24 * 30; // 30 jours
+// Plancher : une session de caisse / back-office ne doit jamais durer moins
+// d'une heure. Une valeur d'env plus faible est presque toujours une erreur
+// (confusion heures/minutes : « 8 » saisi pour 8 h → 8 min de session, l'appareil
+// se déconnecte en continu). Dans ce cas on ignore la valeur et on retombe sur
+// le défaut (30 j) — la variable est en MINUTES.
+const MIN_TTL_MIN = 60;
 
 function ttlMinutes(kind: 'pos' | 'management' = 'pos'): number {
   // Les sessions de gestion (back-office / CA) peuvent avoir leur propre durée
@@ -28,7 +34,13 @@ function ttlMinutes(kind: 'pos' | 'management' = 'pos'): number {
     ? (process.env.SESSION_TTL_MANAGEMENT_MINUTES ?? process.env.SESSION_TTL_MINUTES)
     : process.env.SESSION_TTL_MINUTES;
   const v = Number(raw ?? String(DEFAULT_TTL_MIN));
-  return Number.isFinite(v) && v > 0 ? v : DEFAULT_TTL_MIN;
+  if (!Number.isFinite(v) || v <= 0) return DEFAULT_TTL_MIN;
+  if (v < MIN_TTL_MIN) {
+    // eslint-disable-next-line no-console
+    console.warn(`[session] SESSION_TTL trop faible (${v} min) — valeur en MINUTES ; on applique le défaut ${DEFAULT_TTL_MIN} min.`);
+    return DEFAULT_TTL_MIN;
+  }
+  return v;
 }
 
 export interface AuthUser {
