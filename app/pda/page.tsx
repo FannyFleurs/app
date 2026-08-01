@@ -16,5 +16,6 @@ export default async function PdaStationPage() {
   const canRead = await userCan(user, 'products.read');
   if (!canRead) return <PdaPairing />;
   const canWrite = await userCan(user, 'products.write');
-  return <PdaLabelApp userName={user.fullName} canWrite={canWrite} />;
+  const canInventory = await userCan(user, 'stock.adjust');
+  return <PdaLabelApp userName={user.fullName} canWrite={canWrite} canInventory={canInventory} />;
 }
