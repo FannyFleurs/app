@@ -201,6 +201,7 @@ export default function CashRegister({
   const [receipt, setReceipt] = useState<{
     id: string; number: string; saleId: string; customerId: string | null;
     loyalty: { earned: number; redeemed: number; new_balance: number } | null;
+    change?: number;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showHeld, setShowHeld] = useState(false);
@@ -1054,12 +1055,14 @@ export default function CashRegister({
     receiptNumber: string,
     loyaltyInfo?: { earned: number; redeemed: number; new_balance: number } | null,
     giftCardsIssued?: Array<{ id: string; code: string; amount: number }>,
+    change?: number,
   ) {
     setReceipt({
       id: receiptId, number: receiptNumber,
       saleId: saleId ?? '',
       customerId: customer?.id ?? null,
       loyalty: loyaltyInfo ?? null,
+      change: change && change > 0 ? change : undefined,
     });
     // Carte(s) cadeau vendue(s) : on ouvre le PDF imprimable (code-barres) pour
     // remise au client. Déclenché par l'action d'encaissement (pas bloqué par

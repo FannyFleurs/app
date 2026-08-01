@@ -45,7 +45,7 @@ interface Props {
     loyaltyUsed: number,
   ) => Promise<void>;
   onClose: () => void;
-  onValidated: (receiptId: string, receiptNumber: string, loyalty?: { earned: number; redeemed: number; new_balance: number } | null) => void;
+  onValidated: (receiptId: string, receiptNumber: string, loyalty?: { earned: number; redeemed: number; new_balance: number } | null, giftCardsIssued?: Array<{ id: string; code: string; amount: number }>, change?: number) => void;
   /** Mode « règlement de solde en compte » : encaisse via l'écran classique
    *  mais valide un règlement de compte (pas une vente). */
   settlement?: { customerId: string };
@@ -230,7 +230,7 @@ export default function PaymentModal({ saleId, totalTtc, lines = [], storeId, ha
     if (schoolMode) {
       const fakeId = `school-receipt-${Date.now()}`;
       const fakeNumber = `ECOLE-${new Date().toISOString().slice(11, 19).replace(/:/g, '')}`;
-      onValidated(fakeId, fakeNumber, null);
+      onValidated(fakeId, fakeNumber, null, undefined, change);
       return;
     }
     // Hors-ligne : on enregistre en local (scellement à la reprise réseau).
@@ -307,7 +307,7 @@ export default function PaymentModal({ saleId, totalTtc, lines = [], storeId, ha
         }
       }
 
-      onValidated(j.receipt_id, j.receipt_number, j.loyalty);
+      onValidated(j.receipt_id, j.receipt_number, j.loyalty, j.gift_cards_issued, change);
     } finally { setLoading(false); }
   }
 
