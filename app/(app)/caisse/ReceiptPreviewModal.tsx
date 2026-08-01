@@ -4,18 +4,19 @@ import { useEffect, useRef, useState } from 'react';
 import { promptThemed } from '@/lib/ui/dialog';
 import GiftReceiptPickerModal from '@/components/GiftReceiptPickerModal';
 import { printReceipt } from '@/lib/pos/receipt-print';
+import { formatEUR } from '@/lib/services/money';
 
 interface Props {
   receipt: {
     id: string; number: string; saleId: string; customerId: string | null;
     loyalty?: { earned: number; redeemed: number; new_balance: number } | null;
+    /** Rendu monnaie (espèces) — affiché s'il y en a. */
+    change?: number;
   };
   /** Boutique du poste : sert à charger le paramétrage ticket de CETTE boutique. */
   storeId?: string;
   onClose: () => void;
 }
-
-const AUTO_CLOSE_MS = 5_000;
 
 export default function ReceiptPreviewModal({ receipt, storeId, onClose }: Props) {
   const isSchool = receipt.id.startsWith('school-receipt-');
@@ -80,9 +81,6 @@ export default function ReceiptPreviewModal({ receipt, storeId, onClose }: Props
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [emailToast, setEmailToast] = useState<string | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
-  const [timeLeft, setTimeLeft] = useState(AUTO_CLOSE_MS);
-  const timerRef = useRef<number | null>(null);
-  const [paused, setPaused] = useState(false);
   const autoPrintFiredRef = useRef(false);
 
   // Auto-impression : si auto_print_receipt + printer.enabled, on ouvre
@@ -118,25 +116,8 @@ export default function ReceiptPreviewModal({ receipt, storeId, onClose }: Props
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Auto-fermeture après 60s. Pause si on ouvre un sous-modal, survol carte,
-  // ou facture en cours de génération.
-  useEffect(() => {
-    if (paused || showEmailModal || showGiftPicker || generating) return;
-    const start = Date.now();
-    timerRef.current = window.setInterval(() => {
-      const elapsed = Date.now() - start;
-      const left = AUTO_CLOSE_MS - elapsed;
-      if (left <= 0) { onClose(); return; }
-      setTimeLeft(left);
-    }, 250);
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [paused, showEmailModal, showGiftPicker, generating, onClose]);
-
-  // Le clic hors carte NE FERME PAS — l'utilisateur doit fermer explicitement
-  // (sinon, fermeture intempestive en cliquant à côté pour viser un bouton).
-  function onBackdropClick(_e: React.MouseEvent) {
-    // no-op : seul le bouton ✕ ou "Nouvelle vente" ferme la modale
-  }
+  // Pas d'auto-fermeture : l'écran de validation reste affiché jusqu'à ce que
+  // l'utilisateur ferme (clic « Nouvelle vente », ✕, ou clic en dehors).
 
   async function generateInvoice() {
     setGenerating(true); setError(null);
@@ -187,13 +168,12 @@ export default function ReceiptPreviewModal({ receipt, storeId, onClose }: Props
   return (
     <div
       className="fixed inset-0 z-50 grid place-items-center bg-ink/30 backdrop-blur-sm p-2 md:p-4"
-      onClick={onBackdropClick}
+      onClick={() => { if (!showEmailModal && !showGiftPicker) onClose(); }}
     >
       <div
         ref={cardRef}
         className="card max-w-2xl w-full max-h-[95vh] flex flex-col overflow-hidden"
-        onMouseEnter={() => setPaused(true)}
-        onMouseLeave={() => setPaused(false)}
+        onClick={(e) => e.stopPropagation()}
       >
         {/* Header sticky avec bouton fermer toujours visible */}
         <div className="flex items-center justify-between p-4 md:p-6 pb-3 border-b border-border shrink-0">
@@ -201,20 +181,23 @@ export default function ReceiptPreviewModal({ receipt, storeId, onClose }: Props
             <h2 className="text-base md:text-lg font-semibold truncate">Ticket {receipt.number}</h2>
             <p className="text-xs md:text-sm text-ink-soft">Vente validée et scellée fiscalement.</p>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <span className="hidden md:inline text-xs text-ink-soft tabular-nums">
-              Fermeture auto dans {Math.ceil(timeLeft / 1000)}s
-            </span>
-            <button
-              onClick={onClose}
-              className="grid place-items-center h-10 w-10 rounded-full border border-border text-ink-soft hover:text-ink hover:bg-gray-50 text-lg"
-              aria-label="Fermer"
-            >
-              ✕
-            </button>
-          </div>
+          <button
+            onClick={onClose}
+            className="grid place-items-center h-10 w-10 rounded-full border border-border text-ink-soft hover:text-ink hover:bg-gray-50 text-lg shrink-0"
+            aria-label="Fermer"
+          >
+            ✕
+          </button>
         </div>
         <div className="flex-1 overflow-y-auto p-4 md:p-6 pt-3">
+
+        {/* Rendu monnaie (espèces) — bien visible en haut de l'écran. */}
+        {receipt.change != null && receipt.change > 0 && (
+          <div className="mt-1 rounded-xl bg-amber-100 border border-amber-300 px-4 py-3 flex items-center justify-between">
+            <span className="text-base font-semibold text-amber-800">💶 Rendu monnaie</span>
+            <span className="text-3xl font-bold text-amber-800 tabular-nums">{formatEUR(receipt.change)}</span>
+          </div>
+        )}
 
         {isSchool ? (
           <div className="mt-4 rounded-xl border border-warning bg-warning/10 p-4 text-center">

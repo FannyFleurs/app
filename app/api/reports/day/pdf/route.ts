@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/auth/guards';
 import { accessibleStores, storeInOrg } from '@/lib/auth/stores-server';
+import { resolveDeviceStoreId } from '@/lib/pos/current-store';
 import { computeDayReport } from '@/lib/services/day-report';
 import { renderReportPdf } from '@/lib/services/z-report-pdf';
 
@@ -20,7 +21,10 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'STORE_NOT_FOUND' }, { status: 400 });
     }
   } else {
-    storeId = (await accessibleStores(g.user))[0]?.id ?? null;
+    // Boutique du POSTE en priorité (pas la 1re boutique de l'org).
+    storeId = (await resolveDeviceStoreId(g.user.organizationId))
+      ?? (await accessibleStores(g.user))[0]?.id
+      ?? null;
   }
   if (!storeId) return NextResponse.json({ error: 'NO_STORE' }, { status: 400 });
 

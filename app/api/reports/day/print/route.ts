@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requirePermission } from '@/lib/auth/guards';
 import { parseJson } from '@/lib/validation/api';
 import { accessibleStores, storeInOrg } from '@/lib/auth/stores-server';
+import { resolveDeviceStoreId } from '@/lib/pos/current-store';
 import { computeDayReport } from '@/lib/services/day-report';
 import { loadReceiptSettings } from '@/lib/settings/receipt-server';
 import { resolveReceiptPrinter, enqueueJob } from '@/lib/services/cloudprnt/queue';
@@ -34,7 +35,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'STORE_NOT_FOUND' }, { status: 400 });
     }
   } else {
-    storeId = (await accessibleStores(g.user))[0]?.id ?? null;
+    // Boutique du POSTE (caisse appairée) en priorité — pas la 1re boutique de
+    // l'org — pour imprimer le X de la bonne boutique.
+    storeId = (await resolveDeviceStoreId(g.user.organizationId))
+      ?? (await accessibleStores(g.user))[0]?.id
+      ?? null;
   }
   if (!storeId) return NextResponse.json({ error: 'NO_STORE' }, { status: 400 });
 
