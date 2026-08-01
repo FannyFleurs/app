@@ -36,5 +36,7 @@ export async function GET(req: Request) {
     kind: 'X',
     printedAt: new Date().toISOString(),
   });
-  return NextResponse.json({ report });
+  // On renvoie la boutique RÉELLEMENT utilisée pour que la page « verrouille »
+  // l'impression du X sur exactement cette boutique (store_id explicite).
+  return NextResponse.json({ report, store_id: storeId });
 }
