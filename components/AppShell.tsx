@@ -113,8 +113,11 @@ export default function AppShell({
     router.refresh();
   }
 
-  // Auto-logout par inactivité (mode 'timer')
+  // Auto-logout par inactivité (mode 'timer').
+  // Fonctionnalité de sécurité pour la CAISSE (poste partagé) : on ne l'applique
+  // PAS au back-office, où une déconnexion en pleine saisie n'a pas de sens.
   useEffect(() => {
+    if (backOffice) return;
     if (autoLogoutMode !== 'timer' || autoLogoutMinutes <= 0) return;
     let lastActivity = Date.now();
     const events = ['mousedown', 'keydown', 'touchstart'];
@@ -132,8 +135,9 @@ export default function AppShell({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoLogoutMode, autoLogoutMinutes]);
 
-  // Auto-logout après chaque vente
+  // Auto-logout après chaque vente (caisse uniquement, jamais en back-office)
   useEffect(() => {
+    if (backOffice) return;
     if (autoLogoutMode !== 'after_sale') return;
     function onSale() { void logout(); }
     window.addEventListener('webpos:sale_validated', onSale);
