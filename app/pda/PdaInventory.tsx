@@ -50,13 +50,19 @@ export default function PdaInventory({
     const a = document.activeElement as HTMLElement | null;
     if (!a || a.tagName === 'BODY') refocus();
   };
+  // Vide le champ (non contrôlé) ET l'état de recherche.
+  function clearField() {
+    if (scanRef.current) scanRef.current.value = '';
+    setScanQuery('');
+  }
   function submitScan(raw: string) {
     const code = raw.trim();
     if (!code) return;
     const lc = code.toLowerCase();
     const line = lines.find((l) => l.barcode?.toLowerCase() === lc || l.sku?.toLowerCase() === lc);
-    // Code connu / scan → +1. Sinon un seul résultat de recherche → clavier.
-    if (line || visible.length !== 1) { setScanQuery(''); void doScan(code); }
+    // Code connu / scan → +1 (résolu côté serveur). Sinon, un seul résultat de
+    // recherche → on ouvre son clavier de quantité.
+    if (line || visible.length !== 1) { clearField(); void doScan(code); }
     else { openEdit(visible[0]!); }
   }
   const [editLine, setEditLine] = useState<Line | null>(null);
@@ -246,23 +252,24 @@ export default function PdaInventory({
       <div className="shrink-0 p-3 border-b border-border bg-surface">
         <div className="text-xs text-ink-soft mb-1">Scanner (douchette) ou rechercher par nom / EAN — touchez un article pour saisir la quantité</div>
         <div className="relative">
+          {/* Champ NON contrôlé : la douchette écrit directement dans le DOM
+              (fiable même en scan rapide). `scanQuery` ne sert qu'au filtrage. */}
           <input
             ref={scanRef}
             className="input h-12 w-full pr-10 text-base"
             placeholder="Scanner ou rechercher (nom, EAN, SKU)…"
             autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} autoFocus
-            value={scanQuery}
             onChange={(e) => {
               const v = e.target.value;
               const nl = v.search(/[\r\n\t]/);
-              if (nl >= 0) { setScanQuery(''); void doScan(v.slice(0, nl)); return; } // douchette « paste »
+              if (nl >= 0) { clearField(); void doScan(v.slice(0, nl)); return; } // douchette « paste »
               setScanQuery(v);
             }}
             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submitScan(e.currentTarget.value); } }}
             onBlur={() => setTimeout(() => { if (view === 'count' && !editLine) guardedRefocus(); }, 80)}
           />
           {scanQuery && (
-            <button type="button" onClick={() => { setScanQuery(''); refocus(); }} aria-label="Effacer"
+            <button type="button" onClick={() => { clearField(); refocus(); }} aria-label="Effacer"
                     className="absolute right-2 top-1/2 -translate-y-1/2 grid place-items-center h-7 w-7 rounded-full text-ink-soft hover:bg-gray-100 hover:text-ink">
               <span aria-hidden className="text-lg leading-none">×</span>
             </button>
