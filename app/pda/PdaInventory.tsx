@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useScanField } from './useScanField';
 
 /**
  * Module inventaire du PDA — phase de COMPTAGE.
@@ -43,8 +44,7 @@ export default function PdaInventory({
   const [filter, setFilter] = useState('');
   const [editLine, setEditLine] = useState<Line | null>(null);
   const [editStr, setEditStr] = useState('');
-  const scanRef = useRef<HTMLInputElement>(null);
-  const scanTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { scanRef, onKeyDown: onScanKeyDown, onInput: onScanInput, refocus } = useScanField((code) => void doScan(code));
 
   // ---- Liste des inventaires à compter (in_progress, boutique du PDA) ----
   const loadList = useCallback(async () => {
@@ -71,7 +71,7 @@ export default function PdaInventory({
       }
     } catch { /* ignore */ }
     setLoading(false);
-    setTimeout(() => scanRef.current?.focus(), 100);
+    setTimeout(refocus, 100);
   }
 
   function backToList() {
@@ -107,7 +107,7 @@ export default function PdaInventory({
       }
     } finally {
       setBusy(false);
-      setTimeout(() => scanRef.current?.focus(), 30);
+      setTimeout(refocus, 30);
     }
   }, [current]);
 
@@ -234,31 +234,9 @@ export default function PdaInventory({
           className="input h-12 w-full text-base font-mono"
           placeholder="Code-barres / SKU…"
           autoComplete="off" autoFocus
-          onBlur={() => setTimeout(() => { if (view === 'count' && !editLine) scanRef.current?.focus(); }, 60)}
-          onKeyDown={(e) => {
-            if (e.key !== 'Enter') return;
-            e.preventDefault();
-            const el = e.currentTarget; const v = el.value; el.value = '';
-            if (scanTimer.current) { clearTimeout(scanTimer.current); scanTimer.current = null; }
-            if (v.trim()) void doScan(v);
-          }}
-          onInput={(e) => {
-            // Douchette en mode « injection » : lecture de la valeur sans dépendre
-            // des frappes. Fin = retour/tab collé → immédiat ; sinon anti-rebond.
-            const el = e.currentTarget; const val = el.value;
-            const nl = val.search(/[\r\n\t]/);
-            if (nl >= 0) {
-              const code = val.slice(0, nl); el.value = '';
-              if (scanTimer.current) { clearTimeout(scanTimer.current); scanTimer.current = null; }
-              if (code.trim()) void doScan(code);
-              return;
-            }
-            if (scanTimer.current) clearTimeout(scanTimer.current);
-            scanTimer.current = setTimeout(() => {
-              const code = el.value;
-              if (code.trim().length >= 4) { el.value = ''; void doScan(code); }
-            }, 150);
-          }}
+          onBlur={() => setTimeout(() => { if (view === 'count' && !editLine) refocus(); }, 60)}
+          onKeyDown={onScanKeyDown}
+          onInput={onScanInput}
         />
         <div className="mt-2 flex items-center justify-between text-xs">
           <span className="text-ink-soft">{countedTotal} article(s) compté(s)</span>

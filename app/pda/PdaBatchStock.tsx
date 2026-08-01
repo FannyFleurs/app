@@ -1,6 +1,7 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useScanField } from './useScanField';
 
 /**
  * Entrée multiple (PDA) : on scanne des articles EN SÉRIE (chaque scan = +1),
@@ -25,8 +26,6 @@ export default function PdaBatchStock({
   const [busy, setBusy] = useState(false);
   const [edit, setEdit] = useState<CartItem | null>(null);
   const [editStr, setEditStr] = useState('');
-  const scanRef = useRef<HTMLInputElement>(null);
-  const scanTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const byCode = useMemo(() => {
     const m = new Map<string, ScanProduct>();
@@ -52,6 +51,8 @@ export default function PdaBatchStock({
     });
   }
 
+  const { scanRef, onKeyDown, onInput, refocus } = useScanField((code) => handleCode(code));
+
   function handleCode(raw: string) {
     const s = raw.trim();
     if (!s) return;
@@ -59,7 +60,7 @@ export default function PdaBatchStock({
     if (!p) { setMsg(`❌ Article introuvable : « ${s} »`); return; }
     addOne(p, 1);
     setMsg(`✓ ${p.name}`);
-    setTimeout(() => scanRef.current?.focus(), 20);
+    setTimeout(refocus, 20);
   }
 
   function setQty(id: string, qty: number) {
@@ -132,29 +133,9 @@ export default function PdaBatchStock({
           className="input h-12 w-full text-base font-mono"
           placeholder="Code-barres / SKU…"
           autoComplete="off" autoFocus
-          onBlur={() => setTimeout(() => { if (!edit) scanRef.current?.focus(); }, 60)}
-          onKeyDown={(e) => {
-            if (e.key !== 'Enter') return;
-            e.preventDefault();
-            const el = e.currentTarget; const v = el.value; el.value = '';
-            if (scanTimer.current) { clearTimeout(scanTimer.current); scanTimer.current = null; }
-            if (v.trim()) handleCode(v);
-          }}
-          onInput={(e) => {
-            const el = e.currentTarget; const val = el.value;
-            const nl = val.search(/[\r\n\t]/);
-            if (nl >= 0) {
-              const code = val.slice(0, nl); el.value = '';
-              if (scanTimer.current) { clearTimeout(scanTimer.current); scanTimer.current = null; }
-              if (code.trim()) handleCode(code);
-              return;
-            }
-            if (scanTimer.current) clearTimeout(scanTimer.current);
-            scanTimer.current = setTimeout(() => {
-              const code = el.value;
-              if (code.trim().length >= 4) { el.value = ''; handleCode(code); }
-            }, 150);
-          }}
+          onBlur={() => setTimeout(() => { if (!edit) refocus(); }, 60)}
+          onKeyDown={onKeyDown}
+          onInput={onInput}
         />
         <div className="mt-2 flex items-center justify-between text-xs">
           <span className="text-ink-soft">{cart.length} article(s) · {totalUnits} unité(s)</span>
