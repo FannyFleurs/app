@@ -38,7 +38,15 @@ export async function GET(req: Request) {
   const { store_id, from, to, sort, order, limit } = parsed.data;
 
   const storeFilter = store_id ? 'AND s.store_id = $4' : '';
-  const orderClause = `${sort} ${order.toUpperCase()}`;
+  // On trie sur l'EXPRESSION numérique (pas sur l'alias casté en ::text, qui
+  // triait lexicographiquement : « 95.60 » puis « 9.90 » puis « 53.20 »…).
+  const SORT_EXPR: Record<typeof sort, string> = {
+    ca_ttc: 'SUM(sl.line_ttc)',
+    quantity: 'SUM(sl.quantity)',
+    marge_ht: '(SUM(sl.line_ht) - SUM(COALESCE(p.purchase_price_ht, 0) * sl.quantity))',
+    product_name: 'COALESCE(p.name, sl.label)',
+  };
+  const orderClause = `${SORT_EXPR[sort]} ${order.toUpperCase()}`;
 
   const args: unknown[] = [g.user.organizationId, from, to];
   if (store_id) args.push(store_id);
