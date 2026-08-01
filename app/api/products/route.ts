@@ -15,6 +15,8 @@ const productSchema = z.object({
   discount_value: z.number().min(0).optional().nullable(),
   sku: z.string().max(80).optional().nullable(),
   barcode: z.string().max(80).optional().nullable(),
+  // Codes-barres SUPPLÉMENTAIRES (multi-EAN). Le code principal reste `barcode`.
+  extra_barcodes: z.array(z.string().max(80)).max(50).optional(),
   supplier_ref: z.string().max(80).optional().nullable(),
   image_url: z.string().max(500).optional().nullable(),
   unit: z.string().max(20).default('unité'),
@@ -41,6 +43,25 @@ const productSchema = z.object({
    */
   store_ids: z.array(z.string().uuid()).optional(),
 });
+
+/**
+ * Nettoie la liste des codes-barres supplémentaires : trim, retrait des vides,
+ * dédoublonnage, et exclusion du code principal (pour ne pas le stocker deux
+ * fois). Renvoie un tableau prêt pour la colonne text[].
+ */
+function normalizeExtraBarcodes(extra: string[] | undefined, mainBarcode: string | null): string[] {
+  if (!Array.isArray(extra)) return [];
+  const seen = new Set<string>();
+  const main = mainBarcode?.trim();
+  const out: string[] = [];
+  for (const raw of extra) {
+    const c = (raw ?? '').trim();
+    if (!c || c === main || seen.has(c)) continue;
+    seen.add(c);
+    out.push(c);
+  }
+  return out;
+}
 
 /**
  * Cache d'introspection : indique si la colonne products.store_ids
@@ -141,7 +162,11 @@ export async function GET(req: Request) {
   if (q) {
     params.push(`%${q.toLowerCase()}%`);
     params.push(q);
-    where += ` AND (lower(p.name) LIKE $${params.length - 1} OR p.barcode = $${params.length} OR p.sku = $${params.length})`;
+    const likeIdx = params.length - 1;
+    const exactIdx = params.length;
+    const extraMatch = (await hasProductColumn('extra_barcodes'))
+      ? ` OR p.extra_barcodes @> ARRAY[$${exactIdx}]::text[]` : '';
+    where += ` AND (lower(p.name) LIKE $${likeIdx} OR p.barcode = $${exactIdx} OR p.sku = $${exactIdx}${extraMatch})`;
   }
   // Filtre par boutique.
   //  - Back-office / listes : produit visible si store_ids est vide (portee
@@ -210,9 +235,12 @@ export async function GET(req: Request) {
   const discountCols = (await hasDiscountColumns())
     ? `p.discount_type, p.discount_value`
     : `NULL AS discount_type, NULL AS discount_value`;
+  const extraBarcodesCol = (await hasProductColumn('extra_barcodes'))
+    ? `p.extra_barcodes`
+    : `'{}'::text[] AS extra_barcodes`;
 
   const { rows } = await query(
-    `SELECT p.id, p.name, p.short_description, p.sku, p.barcode, p.image_url, p.unit,
+    `SELECT p.id, p.name, p.short_description, p.sku, p.barcode, ${extraBarcodesCol}, p.image_url, p.unit,
             p.sale_price_ttc, p.purchase_price_ht, p.price_is_free,
             p.category_id, p.visible_in_pos, p.is_active,
             ${topCol},
@@ -324,6 +352,10 @@ export async function POST(req: Request) {
     if (await hasDiscountColumns()) {
       cols.push('discount_type', 'discount_value');
       values.push(p.discount_type ?? null, p.discount_value ?? null);
+    }
+    if (await hasProductColumn('extra_barcodes')) {
+      cols.push('extra_barcodes');
+      values.push(normalizeExtraBarcodes(p.extra_barcodes, p.barcode ?? null));
     }
     // created_by + updated_by partagent la même valeur
     cols.push('created_by', 'updated_by');

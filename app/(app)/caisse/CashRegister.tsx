@@ -40,6 +40,7 @@ export interface PosProduct {
   category_name: string | null;
   category_color: string | null;
   barcode: string | null;
+  extra_barcodes?: string[] | null;
   sku: string | null;
   image_url: string | null;
   short_description: string | null;
@@ -99,6 +100,21 @@ interface Props {
 type View = { kind: 'categories' } | { kind: 'products'; categoryId: string | 'uncategorized' };
 
 const FREE_PRICE_TAX_CODE_DEFAULT = 'TVA20';
+
+/**
+ * Résout un article scanné par son code : code principal, SKU, ou l'un des
+ * codes-barres supplémentaires (multi-EAN). Insensible à la casse.
+ */
+function matchProductByCode(products: PosProduct[], code: string): PosProduct | undefined {
+  const c = code.trim();
+  if (!c) return undefined;
+  const up = c.toUpperCase();
+  return products.find((p) =>
+    p.barcode === c || p.barcode === up ||
+    p.sku === c || p.sku === up ||
+    (p.extra_barcodes?.some((b) => b === c || b.toUpperCase() === up) ?? false),
+  );
+}
 
 export default function CashRegister({
   stores, registers, taxRates, storeTaxDefaults, currentUser, posUi, deferredOrdersEnabled, initial,
@@ -545,7 +561,8 @@ export default function CashRegister({
       return products.filter((p) =>
         p.name.toLowerCase().includes(searchQ) ||
         p.sku?.toLowerCase().includes(searchQ) ||
-        (p.barcode ? p.barcode.toLowerCase().includes(searchQ) : false)
+        (p.barcode ? p.barcode.toLowerCase().includes(searchQ) : false) ||
+        (p.extra_barcodes?.some((b) => b.toLowerCase().includes(searchQ)) ?? false)
       );
     }
     if (view.kind === 'products') {
@@ -724,13 +741,7 @@ export default function CashRegister({
   function addByCode(raw: string) {
     const code = raw.trim();
     if (!code) return;
-    const match = products.find(
-      (p) =>
-        p.barcode === code ||
-        p.barcode === code.toUpperCase() ||
-        p.sku === code ||
-        p.sku === code.toUpperCase(),
-    );
+    const match = matchProductByCode(products, code);
     if (match) {
       addProduct(match);
       setShowScanner(false);
@@ -1214,10 +1225,7 @@ export default function CashRegister({
         void attachSerialRef.current(normalized);
         return;
       }
-      const match = products.find(
-        (p) => p.barcode === c || p.barcode === c.toUpperCase() ||
-               p.sku === c || p.sku === c.toUpperCase(),
-      );
+      const match = matchProductByCode(products, c);
       if (match) addProduct(match);
       else setSearch(c);
     }
@@ -1381,7 +1389,7 @@ export default function CashRegister({
                       setSearch('');
                       return;
                     }
-                    const match = products.find((p) => p.barcode === raw);
+                    const match = matchProductByCode(products, raw);
                     if (match) { addProduct(match); setSearch(''); }
                   }
                 }}

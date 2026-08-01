@@ -37,11 +37,23 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   // Resout le produit
   let productId = d.product_id ?? null;
   if (!productId && d.code) {
+    // Résolution multi-EAN : code principal, SKU, ou l'un des codes
+    // supplémentaires (colonne extra_barcodes, migration 0063). On teste la
+    // présence de la colonne pour rester compatible si la migration n'a pas
+    // encore tourné.
+    const hasExtra = await query<{ exists: boolean }>(
+      `SELECT EXISTS (
+         SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'products' AND column_name = 'extra_barcodes'
+       ) AS exists`,
+    );
+    const extraClause = hasExtra.rows[0]?.exists
+      ? ` OR extra_barcodes @> ARRAY[$2]::text[]` : '';
     const p = await query<{ id: string }>(
       `SELECT id FROM products
         WHERE organization_id = $1
           AND is_active = TRUE
-          AND (barcode = $2 OR sku = $2 OR UPPER(barcode) = UPPER($2) OR UPPER(sku) = UPPER($2))
+          AND (barcode = $2 OR sku = $2 OR UPPER(barcode) = UPPER($2) OR UPPER(sku) = UPPER($2)${extraClause})
         LIMIT 1`,
       [g.user.organizationId, d.code],
     );

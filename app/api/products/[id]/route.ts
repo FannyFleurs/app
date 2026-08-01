@@ -15,6 +15,7 @@ const patchSchema = z.object({
   discount_value: z.number().min(0).nullable().optional(),
   sku: z.string().max(80).nullable().optional(),
   barcode: z.string().max(80).nullable().optional(),
+  extra_barcodes: z.array(z.string().max(80)).max(50).optional(),
   image_url: z.string().max(500).nullable().optional(),
   unit: z.string().max(20).optional(),
   tax_rate_id: z.string().uuid().optional(),
@@ -148,15 +149,17 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     let hasSupplierCol = true;
     let hasDiscountCol = true;
     let hasTransportCol = true;
+    let hasExtraBarcodesCol = true;
     if (patch.is_top_product != null || patch.no_discount != null
         || patch.color !== undefined || patch.store_ids !== undefined
         || patch.supplier_id !== undefined
         || patch.transport_cost_ht !== undefined
+        || patch.extra_barcodes !== undefined
         || patch.discount_type !== undefined || patch.discount_value !== undefined) {
       const colCheck = await client.query<{ column_name: string }>(
         `SELECT column_name FROM information_schema.columns
           WHERE table_name = 'products'
-            AND column_name IN ('is_top_product','no_discount','color','store_ids','supplier_id','discount_type','discount_value','transport_cost_ht')`,
+            AND column_name IN ('is_top_product','no_discount','color','store_ids','supplier_id','discount_type','discount_value','transport_cost_ht','extra_barcodes')`,
       );
       const set = new Set(colCheck.rows.map((r) => r.column_name));
       hasTopCol = set.has('is_top_product');
@@ -166,6 +169,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       hasSupplierCol = set.has('supplier_id');
       hasDiscountCol = set.has('discount_type');
       hasTransportCol = set.has('transport_cost_ht');
+      hasExtraBarcodesCol = set.has('extra_barcodes');
     }
 
     const setParts: string[] = ['updated_by = $1', 'updated_at = now()'];
@@ -180,6 +184,22 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       if (k === 'transport_cost_ht' && !hasTransportCol) continue;
       if (k === 'supplier_id' && !hasSupplierCol) continue;
       if ((k === 'discount_type' || k === 'discount_value') && !hasDiscountCol) continue;
+      if (k === 'extra_barcodes') {
+        if (!hasExtraBarcodesCol) continue;
+        // Nettoyage : trim, retrait des vides, dédoublonnage, exclusion du code
+        // principal (barcode) présent dans ce même patch ou en base.
+        const main = (patch.barcode ?? '').trim();
+        const seen = new Set<string>();
+        const cleaned: string[] = [];
+        for (const raw of (v as string[])) {
+          const c = (raw ?? '').trim();
+          if (!c || (main && c === main) || seen.has(c)) continue;
+          seen.add(c); cleaned.push(c);
+        }
+        setParts.push(`extra_barcodes = $${i++}`);
+        values.push(cleaned);
+        continue;
+      }
       setParts.push(`${k} = $${i++}`);
       values.push(v);
     }
