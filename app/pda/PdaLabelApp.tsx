@@ -14,6 +14,7 @@ import { LABEL_DEFAULTS, type LabelSettings } from '@/lib/settings/label';
 
 interface Product extends LabelProduct {
   id: string;
+  extra_barcodes?: string[] | null;
   image_url?: string | null;
   category_name?: string | null;
   /** Enregistrement brut (API) pour l'édition (tous les champs). */
@@ -22,7 +23,7 @@ interface Product extends LabelProduct {
 /** Type accepté par ProductFormModal (structurel). */
 type EditableProduct = {
   id: string; name: string; short_description: string | null;
-  sku: string | null; barcode: string | null; sale_price_ttc: number;
+  sku: string | null; barcode: string | null; extra_barcodes?: string[] | null; sale_price_ttc: number;
   price_is_free: boolean; purchase_price_ht?: number | null; transport_cost_ht?: number | null;
   tax_rate_id: string; category_id: string | null; supplier_id?: string | null;
   discount_type?: 'percent' | 'amount' | null; discount_value?: number | null;
@@ -36,6 +37,7 @@ function toEditable(r: Record<string, unknown>): EditableProduct {
     id: String(r.id), name: String(r.name),
     short_description: (r.short_description as string) ?? null,
     sku: (r.sku as string) ?? null, barcode: (r.barcode as string) ?? null,
+    extra_barcodes: (r.extra_barcodes as string[]) ?? [],
     sale_price_ttc: Number(r.sale_price_ttc), price_is_free: !!r.price_is_free,
     purchase_price_ht: num(r.purchase_price_ht), transport_cost_ht: num(r.transport_cost_ht),
     tax_rate_id: String(r.tax_rate_id ?? ''), category_id: (r.category_id as string) ?? null,
@@ -146,6 +148,7 @@ export default function PdaLabelApp({ userName, canWrite, canInventory }: { user
         name: String(p.name),
         sku: (p.sku as string) ?? null,
         barcode: (p.barcode as string) ?? null,
+        extra_barcodes: (p.extra_barcodes as string[]) ?? [],
         sale_price_ttc: Number(p.sale_price_ttc),
         discount_type: (p.discount_type as 'percent' | 'amount' | null) ?? null,
         discount_value: p.discount_value != null ? Number(p.discount_value) : null,
@@ -233,7 +236,9 @@ export default function PdaLabelApp({ userName, canWrite, canInventory }: { user
   function handleCode(raw: string, mode: 'choice' | 'label' | 'stock' = 'choice') {
     const s = raw.trim();
     if (!s) return;
-    const exact = products.find((p) => p.barcode === s || p.sku === s || p.barcode === s.toUpperCase());
+    const su = s.toUpperCase();
+    const exact = products.find((p) => p.barcode === s || p.sku === s || p.barcode === su
+      || (p.extra_barcodes?.some((b) => b === s || b.toUpperCase() === su) ?? false));
     const hit = exact ?? (filtered.length === 1 ? filtered[0] : undefined);
     if (hit) {
       // Étiquette / stock ouvrent un plein écran → on ferme l'invite de scan.
@@ -579,7 +584,7 @@ export default function PdaLabelApp({ userName, canWrite, canInventory }: { user
     return (
       <PdaBatchStock
         storeId={station.store_id}
-        products={products.map((p) => ({ id: p.id, name: p.name, barcode: p.barcode ?? null, sku: p.sku ?? null }))}
+        products={products.map((p) => ({ id: p.id, name: p.name, barcode: p.barcode ?? null, sku: p.sku ?? null, extra_barcodes: p.extra_barcodes ?? [] }))}
         onClose={() => setBatchOpen(false)}
         onDone={(count) => addRecent('stock', 'Entrée multiple validée', `${count} article(s)`)}
       />

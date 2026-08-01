@@ -6,7 +6,7 @@ import PageHeader from '@/components/PageHeader';
 
 interface Store { id: string; name: string }
 interface Product {
-  id: string; name: string; sku: string | null; barcode: string | null;
+  id: string; name: string; sku: string | null; barcode: string | null; extra_barcodes?: string[] | null;
   store_ids?: string[];
 }
 interface StockRow { product_id: string; quantity: number }
@@ -80,7 +80,8 @@ export default function StockTransferForm({ stores }: { stores: Store[] }) {
     return products.filter((p) =>
       p.name.toLowerCase().includes(q)
       || p.sku?.toLowerCase().includes(q)
-      || p.barcode === search.trim() || p.barcode === search.trim().toUpperCase(),
+      || p.barcode === search.trim() || p.barcode === search.trim().toUpperCase()
+      || (p.extra_barcodes?.some((b) => b === search.trim() || b.toUpperCase() === search.trim().toUpperCase()) ?? false),
     ).slice(0, 30);
   }, [products, search]);
 

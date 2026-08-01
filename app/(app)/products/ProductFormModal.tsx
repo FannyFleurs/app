@@ -11,6 +11,7 @@ import LabelPrintModal from './LabelPrintModal';
 interface Product {
   id: string; name: string; short_description: string | null;
   sku: string | null; barcode: string | null;
+  extra_barcodes?: string[] | null;
   sale_price_ttc: number; price_is_free: boolean;
   purchase_price_ht?: number | null;
   transport_cost_ht?: number | null;
@@ -117,6 +118,7 @@ export default function ProductFormModal({
     short_description: product?.short_description ?? '',
     sku: product?.sku ?? '',
     barcode: product?.barcode ?? prefillBarcode ?? '',
+    extra_barcodes: (product?.extra_barcodes ?? []) as string[],
     sale_price_ttc: product?.sale_price_ttc != null ? String(product.sale_price_ttc) : '',
     purchase_price_ht: product?.purchase_price_ht != null ? String(product.purchase_price_ht) : '',
     transport_cost_ht: product?.transport_cost_ht != null ? String(product.transport_cost_ht) : '',
@@ -217,6 +219,7 @@ export default function ProductFormModal({
       short_description: form.short_description || null,
       sku: form.sku || null,
       barcode: form.barcode || null,
+      extra_barcodes: form.extra_barcodes.map((c) => c.trim()).filter(Boolean),
       sale_price_ttc: parseAmount(form.sale_price_ttc),
       purchase_price_ht: parseAmount(form.purchase_price_ht) > 0 ? parseAmount(form.purchase_price_ht) : null,
       transport_cost_ht: form.transport_cost_ht.trim() ? parseAmount(form.transport_cost_ht) : null,
@@ -354,6 +357,40 @@ export default function ProductFormModal({
                 title="Génère un EAN-13 valide avec préfixe interne 20"
               >
                 Générer EAN
+              </button>
+            </div>
+            {/* Multi-EAN : codes-barres supplémentaires. Le scan reconnaît
+                l'article via son code principal OU l'un de ces codes. */}
+            <div className="mt-2 space-y-2">
+              {form.extra_barcodes.map((code, idx) => (
+                <div key={idx} className="flex gap-2">
+                  <input
+                    className="input flex-1 text-sm"
+                    value={code}
+                    onChange={(e) => {
+                      const next = [...form.extra_barcodes];
+                      next[idx] = e.target.value;
+                      setForm({ ...form, extra_barcodes: next });
+                    }}
+                    placeholder="Code-barres supplémentaire"
+                    maxLength={80}
+                  />
+                  <button
+                    type="button"
+                    className="btn-ghost text-danger text-sm px-3"
+                    onClick={() => setForm({ ...form, extra_barcodes: form.extra_barcodes.filter((_, i) => i !== idx) })}
+                    aria-label="Retirer ce code"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                className="btn-soft text-xs"
+                onClick={() => setForm({ ...form, extra_barcodes: [...form.extra_barcodes, ''] })}
+              >
+                + Ajouter un code-barres
               </button>
             </div>
           </Field>

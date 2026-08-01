@@ -9,7 +9,7 @@ import { useMemo, useRef, useState } from 'react';
  * /api/stock/movement/batch).
  */
 
-interface ScanProduct { id: string; name: string; barcode: string | null; sku: string | null }
+interface ScanProduct { id: string; name: string; barcode: string | null; sku: string | null; extra_barcodes?: string[] | null }
 interface CartItem { product: ScanProduct; qty: number }
 
 export default function PdaBatchStock({
@@ -33,6 +33,7 @@ export default function PdaBatchStock({
     for (const p of products) {
       if (p.barcode) m.set(p.barcode.toLowerCase(), p);
       if (p.sku) m.set(p.sku.toLowerCase(), p);
+      for (const b of p.extra_barcodes ?? []) if (b) m.set(b.toLowerCase(), p);
     }
     return m;
   }, [products]);
