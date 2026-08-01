@@ -138,9 +138,13 @@ export default function PdaLabelApp({ userName, canWrite, canInventory }: { user
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ---- Chargement catalogue (boutique du PDA) + réglages étiquettes ----
-  async function reloadProducts(storeId: string) {
-    const r = await fetch(`/api/products?active=true&store_id=${encodeURIComponent(storeId)}`);
+  // ---- Chargement catalogue + réglages étiquettes ----
+  // Catalogue chargé au niveau ORGANISATION (pas de filtre boutique) : le PDA
+  // doit reconnaître TOUS les articles actifs — les mêmes que la caisse et plus.
+  // (Le PDA étant rattaché à une seule boutique, un filtre par boutique pouvait
+  //  masquer des articles pourtant scannés/vendus en caisse.)
+  async function reloadProducts() {
+    const r = await fetch(`/api/products?active=true`);
     if (r.ok) {
       const j = await r.json();
       setProducts((j.products as Array<Record<string, unknown>>).map((p) => ({
@@ -163,7 +167,7 @@ export default function PdaLabelApp({ userName, canWrite, canInventory }: { user
     setLoading(true);
     void (async () => {
       const [, s, rc, tx] = await Promise.all([
-        reloadProducts(station.store_id),
+        reloadProducts(),
         fetch('/api/settings/labels'),
         fetch('/api/cloudprnt/printers'),
         fetch('/api/tax-rates'),
@@ -456,7 +460,7 @@ export default function PdaLabelApp({ userName, canWrite, canInventory }: { user
             prefillBarcode={createFor || undefined}
             posteStoreOverride={station.store_id}
             onClose={() => setCreateFor(null)}
-            onSaved={async () => { setCreateFor(null); addRecent('create', 'Nouvel article créé', ''); await reloadProducts(station.store_id); }}
+            onSaved={async () => { setCreateFor(null); addRecent('create', 'Nouvel article créé', ''); await reloadProducts(); }}
           />
         </div>
       </div>
@@ -492,7 +496,7 @@ export default function PdaLabelApp({ userName, canWrite, canInventory }: { user
             onClose={() => setEditing(null)}
             onSaved={async () => {
               setEditing(null);
-              await reloadProducts(station.store_id);
+              await reloadProducts();
               // Rafraîchit la fiche ouverte avec les nouvelles données.
               if (selected) {
                 const r = await fetch(`/api/products?active=true&store_id=${encodeURIComponent(station.store_id)}`);
