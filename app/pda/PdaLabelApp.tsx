@@ -721,9 +721,17 @@ export default function PdaLabelApp({ userName, canWrite, canInventory }: { user
             {homeTab === 'articles' && (
               <div className="flex flex-col">
                 <div className="p-3 border-b border-border bg-surface sticky top-0">
-                  <input className="input h-11 w-full" placeholder="Rechercher un article…"
-                         value={q} onChange={(e) => setQ(e.target.value)}
-                         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleCode(q, 'choice'); } }} />
+                  <div className="relative">
+                    <input className="input h-11 w-full pr-10" placeholder="Rechercher un article…"
+                           value={q} onChange={(e) => setQ(e.target.value)}
+                           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleCode(q, 'choice'); } }} />
+                    {q && (
+                      <button type="button" onClick={() => setQ('')} aria-label="Effacer la recherche"
+                              className="absolute right-2 top-1/2 -translate-y-1/2 grid place-items-center h-7 w-7 rounded-full text-ink-soft hover:bg-gray-100 hover:text-ink">
+                        <span aria-hidden className="text-lg leading-none">×</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
                 {loading ? (
                   <div className="p-6 text-sm text-ink-soft">Chargement…</div>
