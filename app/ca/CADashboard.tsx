@@ -559,12 +559,17 @@ function PeriodPills({
 function HourlyChart({ hours }: { hours: HourBucket[] }) {
   if (hours.length === 0) return null;
 
-  const minHour = Math.min(...hours.map((h) => h.hour));
-  const maxHour = Math.max(...hours.map((h) => h.hour));
+  // Coercition numérique défensive : selon le driver, `hour`/`ca_ht` peuvent
+  // arriver en chaîne — sans ça, la correspondance `x.hour === h` échouait pour
+  // les tranches de l'après-midi (elles s'affichaient à 0 alors qu'il y a des
+  // ventes), ne laissant que la première tranche visible.
+  const buckets = hours.map((h) => ({ hour: Number(h.hour), value: Number(h.ca_ht) || 0 }));
+  const minHour = Math.min(...buckets.map((h) => h.hour));
+  const maxHour = Math.max(...buckets.map((h) => h.hour));
   const values: { hour: number; value: number }[] = [];
   for (let h = minHour; h <= maxHour; h++) {
-    const found = hours.find((x) => x.hour === h);
-    values.push({ hour: h, value: found?.ca_ht ?? 0 });
+    const found = buckets.find((x) => x.hour === h);
+    values.push({ hour: h, value: found?.value ?? 0 });
   }
   const max = Math.max(...values.map((v) => v.value), 1);
   const peak = values.reduce((a, b) => b.value > a.value ? b : a, values[0]!);
