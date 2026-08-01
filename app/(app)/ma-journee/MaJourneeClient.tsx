@@ -74,19 +74,24 @@ export default function MaJourneeClient() {
   const [dayReport, setDayReport] = useState<DayReport | null>(null);
   const [loadingReport, setLoadingReport] = useState(false);
   const [printingX, setPrintingX] = useState(false);
+  // Boutique RÉELLEMENT affichée (renvoyée par le rapport) : on la transmet
+  // explicitement à l'impression du X → verrouillage sur la bonne boutique.
+  const [reportStoreId, setReportStoreId] = useState<string | null>(null);
 
   // Impression DIRECTE du X sur l'imprimante ticket (comme le Z). Repli sur le
-  // PDF uniquement si aucune imprimante ticket n'est configurée.
+  // PDF uniquement si aucune imprimante ticket n'est configurée. On envoie
+  // TOUJOURS le store_id de la boutique affichée (pas de résolution implicite).
   async function printX() {
+    const storeQ = reportStoreId ? `&store_id=${encodeURIComponent(reportStoreId)}` : '';
     setPrintingX(true);
     try {
       const r = await fetch('/api/reports/day/print', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date }),
+        body: JSON.stringify({ date, store_id: reportStoreId ?? undefined }),
       });
-      if (!r.ok) window.open(`/api/reports/day/pdf?date=${date}`, '_blank');
+      if (!r.ok) window.open(`/api/reports/day/pdf?date=${date}${storeQ}`, '_blank');
     } catch {
-      window.open(`/api/reports/day/pdf?date=${date}`, '_blank');
+      window.open(`/api/reports/day/pdf?date=${date}${storeQ}`, '_blank');
     } finally {
       setPrintingX(false);
     }
@@ -149,7 +154,10 @@ export default function MaJourneeClient() {
     setDayReport(null);
     void fetch(`/api/reports/day?date=${date}`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((j) => { if (j?.report) setDayReport(j.report as DayReport); })
+      .then((j) => {
+        if (j?.report) setDayReport(j.report as DayReport);
+        if (j?.store_id) setReportStoreId(j.store_id as string);
+      })
       .finally(() => setLoadingReport(false));
   }, [mode, date]);
 
@@ -327,13 +335,20 @@ export default function MaJourneeClient() {
         {/* Action en pied — équivalent du "Actions sur ma journée" */}
         <div className="border-t border-border p-3 bg-white sticky bottom-0 space-y-2">
           {mode === 'complet' && (
-            <button
-              onClick={() => void printX()}
-              disabled={printingX}
-              className="btn-soft w-full text-sm h-11 flex items-center justify-center gap-2 disabled:opacity-50"
-            >
-              <Icon name="print" size={16} /> {printingX ? 'Impression…' : 'Imprimer le X'}
-            </button>
+            <>
+              <button
+                onClick={() => void printX()}
+                disabled={printingX}
+                className="btn-soft w-full text-sm h-11 flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                <Icon name="print" size={16} /> {printingX ? 'Impression…' : 'Imprimer le X'}
+              </button>
+              {dayReport?.store_name && (
+                <p className="text-center text-xs text-ink-soft -mt-1">
+                  Boutique : <span className="font-medium text-ink">{dayReport.store_name}</span>
+                </p>
+              )}
+            </>
           )}
           {sealedAt ? (
             <a
