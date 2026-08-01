@@ -44,16 +44,21 @@ export default function PdaInventory({
   // ci-dessous se filtre, on touche pour saisir la quantité).
   const [scanQuery, setScanQuery] = useState('');
   const scanRef = useRef<HTMLInputElement>(null);
+  // Capture du scan par les FRAPPES (source de vérité), indépendante de la
+  // valeur du champ. Pause > 500 ms = nouvelle séquence.
+  const bufRef = useRef('');
+  const lastKeyRef = useRef(0);
   const refocus = () => scanRef.current?.focus();
   // Ne re-focus la douchette que si le focus est retombé « dans le vide ».
   const guardedRefocus = () => {
     const a = document.activeElement as HTMLElement | null;
     if (!a || a.tagName === 'BODY') refocus();
   };
-  // Vide le champ (non contrôlé) ET l'état de recherche.
+  // Vide le champ (non contrôlé), l'état de recherche ET le buffer de frappes.
   function clearField() {
     if (scanRef.current) scanRef.current.value = '';
     setScanQuery('');
+    bufRef.current = '';
   }
   function submitScan(raw: string) {
     const code = raw.trim();
@@ -262,10 +267,25 @@ export default function PdaInventory({
             onChange={(e) => {
               const v = e.target.value;
               const nl = v.search(/[\r\n\t]/);
-              if (nl >= 0) { clearField(); void doScan(v.slice(0, nl)); return; } // douchette « paste »
+              if (nl >= 0) { const code = v.slice(0, nl); clearField(); void doScan(code); return; } // douchette « paste »
               setScanQuery(v);
             }}
-            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submitScan(e.currentTarget.value); } }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                const code = bufRef.current.trim() || e.currentTarget.value;
+                bufRef.current = '';
+                submitScan(code);
+                return;
+              }
+              if (e.key === 'Backspace') { bufRef.current = bufRef.current.slice(0, -1); return; }
+              if (e.key.length === 1) {
+                const now = performance.now();
+                if (now - lastKeyRef.current > 500) bufRef.current = '';
+                lastKeyRef.current = now;
+                bufRef.current += e.key;
+              }
+            }}
             onBlur={() => setTimeout(() => { if (view === 'count' && !editLine) guardedRefocus(); }, 80)}
           />
           {scanQuery && (

@@ -54,6 +54,11 @@ export default function PdaBatchStock({
   // suggestions à toucher). Le champ est libre à la saisie.
   const [query, setQuery] = useState('');
   const scanRef = useRef<HTMLInputElement>(null);
+  // Capture du scan par les FRAPPES (source de vérité), indépendante de la
+  // valeur du champ : on accumule les touches et on valide sur Entrée. Un temps
+  // de pause > 500 ms = nouvelle séquence (évite de coller deux scans).
+  const bufRef = useRef('');
+  const lastKeyRef = useRef(0);
   const refocus = () => scanRef.current?.focus();
   // Re-focus la douchette UNIQUEMENT si le focus est retombé « dans le vide » —
   // ne vole pas le focus quand on touche une suggestion / un bouton.
@@ -73,10 +78,11 @@ export default function PdaBatchStock({
     ).slice(0, 25);
   }, [products, query]);
 
-  // Vide le champ (non contrôlé) ET l'état de recherche.
+  // Vide le champ (non contrôlé), l'état de recherche ET le buffer de frappes.
   function clearField() {
     if (scanRef.current) scanRef.current.value = '';
     setQuery('');
+    bufRef.current = '';
   }
 
   function addProduct(p: ScanProduct) {
@@ -178,10 +184,26 @@ export default function PdaBatchStock({
             onChange={(e) => {
               const v = e.target.value;
               const nl = v.search(/[\r\n\t]/);
-              if (nl >= 0) { submitCode(v.slice(0, nl)); return; } // douchette « paste »
+              if (nl >= 0) { const code = v.slice(0, nl); bufRef.current = ''; submitCode(code); return; } // douchette « paste »
               setQuery(v);
             }}
-            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submitCode(e.currentTarget.value); } }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                // Priorité au buffer de frappes (fiable), repli sur la valeur du champ.
+                const code = bufRef.current.trim() || e.currentTarget.value;
+                bufRef.current = '';
+                submitCode(code);
+                return;
+              }
+              if (e.key === 'Backspace') { bufRef.current = bufRef.current.slice(0, -1); return; }
+              if (e.key.length === 1) {
+                const now = performance.now();
+                if (now - lastKeyRef.current > 500) bufRef.current = '';
+                lastKeyRef.current = now;
+                bufRef.current += e.key;
+              }
+            }}
             onBlur={() => setTimeout(() => { if (!edit) guardedRefocus(); }, 80)}
           />
           {query && (
