@@ -73,26 +73,33 @@ export default function PdaBatchStock({
     ).slice(0, 25);
   }, [products, query]);
 
+  // Vide le champ (non contrôlé) ET l'état de recherche.
+  function clearField() {
+    if (scanRef.current) scanRef.current.value = '';
+    setQuery('');
+  }
+
   function addProduct(p: ScanProduct) {
     addOne(p, 1);
     setMsg(`✓ ${p.name}`);
-    setQuery('');
+    clearField();
     setTimeout(refocus, 20);
   }
 
-  // Validation (Entrée / retour douchette) : code exact, sinon résultat unique.
+  // Validation Entrée / retour douchette : on n'ajoute QUE sur un code EXACT
+  // (scan). Pour une recherche par nom, l'utilisateur touche un résultat de la
+  // liste — on n'ajoute jamais « au hasard » (évite d'ajouter le mauvais article).
   function submitCode(raw: string) {
     const code = raw.trim();
     if (!code) return;
     const exact = byCode.get(code.toLowerCase());
-    const hit = exact ?? (suggestions.length === 1 ? suggestions[0] : undefined);
-    if (hit) { addProduct(hit); return; }
+    if (exact) { addProduct(exact); return; }
     if (suggestions.length === 0) {
       setMsg(`❌ Article introuvable : « ${code} »`);
-      setQuery('');
+      clearField();
       setTimeout(refocus, 20);
     }
-    // Plusieurs résultats : on garde la liste affichée pour choisir.
+    // Sinon (résultats de recherche) : on garde la liste affichée pour toucher.
   }
 
   function setQty(id: string, qty: number) {
@@ -161,12 +168,13 @@ export default function PdaBatchStock({
       <div className="shrink-0 p-3 border-b border-border bg-surface">
         <div className="text-xs text-ink-soft mb-1">Scannez (douchette) ou recherchez par nom / EAN (chaque ajout = +1)</div>
         <div className="relative">
+          {/* Champ NON contrôlé : la douchette écrit directement dans le DOM
+              (fiable même en scan rapide). `query` ne sert qu'à la recherche. */}
           <input
             ref={scanRef}
             className="input h-12 w-full pr-10 text-base"
             placeholder="Scanner ou rechercher (nom, EAN, SKU)…"
             autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} autoFocus
-            value={query}
             onChange={(e) => {
               const v = e.target.value;
               const nl = v.search(/[\r\n\t]/);
@@ -177,7 +185,7 @@ export default function PdaBatchStock({
             onBlur={() => setTimeout(() => { if (!edit) guardedRefocus(); }, 80)}
           />
           {query && (
-            <button type="button" onClick={() => { setQuery(''); refocus(); }} aria-label="Effacer"
+            <button type="button" onClick={() => { clearField(); refocus(); }} aria-label="Effacer"
                     className="absolute right-2 top-1/2 -translate-y-1/2 grid place-items-center h-7 w-7 rounded-full text-ink-soft hover:bg-gray-100 hover:text-ink">
               <span aria-hidden className="text-lg leading-none">×</span>
             </button>
