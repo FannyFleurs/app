@@ -217,6 +217,12 @@ interface Probes {
     ms: number | null; rows: number | null; ok: boolean;
   }>;
   total_ms: number;
+  auth_ms: number;
+  handler_ms: number;
+  org: {
+    id: string; name: string; products: number;
+    list: Array<{ id: string; name: string; products: number }>;
+  };
   instance: { cold_start: boolean; age_s: number; served: number };
 }
 
@@ -232,14 +238,20 @@ function ProbesCard() {
   // Temps total vu par le navigateur : inclut le trajet réseau, contrairement
   // au temps serveur. L'écart entre les deux EST le coût réseau.
   const [roundTrip, setRoundTrip] = useState<number | null>(null);
+  // Organisation ciblée : mesurer sur une org vide ne veut rien dire, on doit
+  // pouvoir viser celle qui contient réellement le catalogue.
+  const [orgId, setOrgId] = useState<string>('');
 
-  async function measure() {
+  async function measure(org?: string) {
     setBusy(true); setErr(false);
     const t0 = performance.now();
     try {
-      const r = await fetch('/api/admin/health/probes', { cache: 'no-store' });
+      const qs = org ? `?org=${encodeURIComponent(org)}` : '';
+      const r = await fetch(`/api/admin/health/probes${qs}`, { cache: 'no-store' });
       if (!r.ok) { setErr(true); return; }
-      setData(await r.json());
+      const j: Probes = await r.json();
+      setData(j);
+      setOrgId(j.org.id);
       setRoundTrip(Math.round(performance.now() - t0));
     } catch {
       setErr(true);
@@ -249,7 +261,9 @@ function ProbesCard() {
   }
   useEffect(() => { void measure(); }, []);
 
-  const network = data && roundTrip != null ? Math.max(0, Math.round(roundTrip - data.total_ms)) : null;
+  // Le temps serveur à soustraire est celui du handler COMPLET (auth incluse),
+  // sinon le coût de l'authentification est compté à tort comme du réseau.
+  const network = data && roundTrip != null ? Math.max(0, Math.round(roundTrip - data.handler_ms)) : null;
   const slowest = data ? Math.max(...data.probes.map((p) => p.ms ?? 0), 1) : 1;
 
   return (
@@ -262,10 +276,34 @@ function ProbesCard() {
             jouées par l&apos;application. Lecture seule.
           </p>
         </div>
-        <button onClick={() => void measure()} disabled={busy} className="btn-ghost text-sm shrink-0">
+        <button onClick={() => void measure(orgId || undefined)} disabled={busy} className="btn-ghost text-sm shrink-0">
           {busy ? 'Mesure…' : 'Mesurer'}
         </button>
       </div>
+
+      {data && data.org.list.length > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <label htmlFor="probe-org" className="text-xs text-ink-soft">Mesurer sur</label>
+          <select
+            id="probe-org"
+            className="input text-sm py-1.5 w-auto"
+            value={orgId}
+            disabled={busy}
+            onChange={(e) => { setOrgId(e.target.value); void measure(e.target.value); }}
+          >
+            {data.org.list.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.name} — {o.products.toLocaleString('fr-FR')} article{o.products > 1 ? 's' : ''}
+              </option>
+            ))}
+          </select>
+          {data.org.products === 0 && (
+            <span className="text-xs text-warning">
+              ⚠ Organisation sans article : les temps ci-dessous ne sont pas représentatifs.
+            </span>
+          )}
+        </div>
+      )}
 
       {err && <p className="mt-3 text-sm text-danger">Mesure impossible.</p>}
       {busy && !data && <p className="mt-3 text-sm text-ink-soft">Mesure en cours…</p>}
@@ -296,7 +334,9 @@ function ProbesCard() {
                   </div>
                   <div className="mt-0.5 text-xs text-ink-soft">
                     {p.hint}
-                    {p.rows != null && p.rows > 0 && ` · ${p.rows.toLocaleString('fr-FR')} ligne${p.rows > 1 ? 's' : ''}`}
+                    {/* Toujours afficher le volume : « 0 ligne » signale une
+                        mesure non représentative (organisation vide). */}
+                    {p.rows != null && ` · ${p.rows.toLocaleString('fr-FR')} ligne${p.rows > 1 ? 's' : ''} lue${p.rows > 1 ? 's' : ''}`}
                   </div>
                 </div>
               );
@@ -304,13 +344,19 @@ function ProbesCard() {
           </div>
 
           {/* Répartition serveur / réseau */}
-          <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+          <div className="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
             <div className="rounded-xl border border-border p-3">
-              <div className="text-xs text-ink-soft">Total serveur (SQL)</div>
+              <div className="text-xs text-ink-soft">Requêtes SQL</div>
               <div className="text-xl font-semibold tabular-nums">{data.total_ms} ms</div>
+              <div className="text-xs text-ink-soft mt-0.5">les 6 sondes</div>
             </div>
             <div className="rounded-xl border border-border p-3">
-              <div className="text-xs text-ink-soft">Réseau + traitement</div>
+              <div className="text-xs text-ink-soft">Authentification</div>
+              <div className="text-xl font-semibold tabular-nums">{data.auth_ms} ms</div>
+              <div className="text-xs text-ink-soft mt-0.5">payée à chaque appel</div>
+            </div>
+            <div className="rounded-xl border border-border p-3">
+              <div className="text-xs text-ink-soft">Réseau</div>
               <div className="text-xl font-semibold tabular-nums">{network == null ? '—' : `${network} ms`}</div>
               <div className="text-xs text-ink-soft mt-0.5">Trajet appareil ⇄ Francfort</div>
             </div>
@@ -330,12 +376,13 @@ function ProbesCard() {
           </div>
 
           <p className="mt-3 text-xs text-ink-soft">
-            Lecture : si le <strong>total serveur</strong> est faible et le{' '}
-            <strong>réseau</strong> élevé, la lenteur vient de la liaison de la
-            boutique, pas de la base. Si une ligne ressort en rouge, c&apos;est
-            cette requête qu&apos;il faut optimiser. Relance plusieurs fois : si
-            l&apos;instance repart « à froid » à chaque fois, ce sont les
-            démarrages de fonctions qui coûtent.
+            Lecture : si les <strong>requêtes SQL</strong> sont rapides et le{' '}
+            <strong>réseau</strong> élevé, la lenteur vient de la liaison entre
+            l&apos;appareil et Francfort, pas de la base — le levier est alors de
+            réduire le nombre d&apos;appels, pas de les accélérer. Si une ligne
+            ressort en rouge, c&apos;est cette requête qu&apos;il faut optimiser.
+            Relance plusieurs fois : si l&apos;instance repart « à froid » à
+            chaque fois, ce sont les démarrages de fonctions qui coûtent.
           </p>
         </>
       )}
