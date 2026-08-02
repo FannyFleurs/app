@@ -86,6 +86,9 @@ export default function HealthView() {
       {/* Région d'exécution & latence */}
       <RegionCard region={data.region} latency={data.latency} />
 
+      {/* Chronométrage des requêtes réelles */}
+      <ProbesCard />
+
       {/* Connexion / infra */}
       <div className="card p-5">
         <h2 className="font-semibold mb-3">Connexion base de données</h2>
@@ -206,6 +209,144 @@ export default function HealthView() {
       </div>
     </div>
   );
+}
+
+interface Probes {
+  probes: Array<{
+    key: string; label: string; hint: string; warn: number;
+    ms: number | null; rows: number | null; ok: boolean;
+  }>;
+  total_ms: number;
+  instance: { cold_start: boolean; age_s: number; served: number };
+}
+
+/**
+ * Chronomètre les requêtes réellement jouées par la caisse, côté serveur.
+ * Permet de trancher entre « c'est le réseau », « c'est une requête SQL »
+ * et « c'est un démarrage à froid ».
+ */
+function ProbesCard() {
+  const [data, setData] = useState<Probes | null>(null);
+  const [busy, setBusy] = useState(true);
+  const [err, setErr] = useState(false);
+  // Temps total vu par le navigateur : inclut le trajet réseau, contrairement
+  // au temps serveur. L'écart entre les deux EST le coût réseau.
+  const [roundTrip, setRoundTrip] = useState<number | null>(null);
+
+  async function measure() {
+    setBusy(true); setErr(false);
+    const t0 = performance.now();
+    try {
+      const r = await fetch('/api/admin/health/probes', { cache: 'no-store' });
+      if (!r.ok) { setErr(true); return; }
+      setData(await r.json());
+      setRoundTrip(Math.round(performance.now() - t0));
+    } catch {
+      setErr(true);
+    } finally {
+      setBusy(false);
+    }
+  }
+  useEffect(() => { void measure(); }, []);
+
+  const network = data && roundTrip != null ? Math.max(0, Math.round(roundTrip - data.total_ms)) : null;
+  const slowest = data ? Math.max(...data.probes.map((p) => p.ms ?? 0), 1) : 1;
+
+  return (
+    <div className="card p-5">
+      <div className="flex items-start justify-between gap-3 mb-1">
+        <div>
+          <h2 className="font-semibold">Temps des requêtes de la caisse</h2>
+          <p className="text-xs text-ink-soft mt-0.5">
+            Temps d&apos;exécution mesuré côté serveur, sur les requêtes réellement
+            jouées par l&apos;application. Lecture seule.
+          </p>
+        </div>
+        <button onClick={() => void measure()} disabled={busy} className="btn-ghost text-sm shrink-0">
+          {busy ? 'Mesure…' : 'Mesurer'}
+        </button>
+      </div>
+
+      {err && <p className="mt-3 text-sm text-danger">Mesure impossible.</p>}
+      {busy && !data && <p className="mt-3 text-sm text-ink-soft">Mesure en cours…</p>}
+
+      {data && (
+        <>
+          <div className="mt-4 space-y-2.5">
+            {data.probes.map((p) => {
+              const ms = p.ms;
+              const tone =
+                !p.ok || ms == null ? { bar: 'var(--primary)', text: 'text-ink-soft' }
+                : ms <= p.warn        ? { bar: '#2F6B3F', text: 'text-success' }
+                : ms <= p.warn * 2.5  ? { bar: '#B7791F', text: 'text-warning' }
+                :                       { bar: '#B42318', text: 'text-danger' };
+              return (
+                <div key={p.key}>
+                  <div className="flex items-baseline justify-between gap-3 text-sm">
+                    <span className="font-medium">{p.label}</span>
+                    <span className={`tabular-nums font-semibold shrink-0 ${tone.text}`}>
+                      {p.ok && ms != null ? `${ms} ms` : 'n/a'}
+                    </span>
+                  </div>
+                  <div className="mt-1 h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                    <div
+                      className="h-full rounded-full"
+                      style={{ width: `${Math.max(2, ((ms ?? 0) / slowest) * 100)}%`, backgroundColor: tone.bar }}
+                    />
+                  </div>
+                  <div className="mt-0.5 text-xs text-ink-soft">
+                    {p.hint}
+                    {p.rows != null && p.rows > 0 && ` · ${p.rows.toLocaleString('fr-FR')} ligne${p.rows > 1 ? 's' : ''}`}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Répartition serveur / réseau */}
+          <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+            <div className="rounded-xl border border-border p-3">
+              <div className="text-xs text-ink-soft">Total serveur (SQL)</div>
+              <div className="text-xl font-semibold tabular-nums">{data.total_ms} ms</div>
+            </div>
+            <div className="rounded-xl border border-border p-3">
+              <div className="text-xs text-ink-soft">Réseau + traitement</div>
+              <div className="text-xl font-semibold tabular-nums">{network == null ? '—' : `${network} ms`}</div>
+              <div className="text-xs text-ink-soft mt-0.5">Trajet appareil ⇄ Francfort</div>
+            </div>
+            <div
+              className={`rounded-xl border p-3 ${
+                data.instance.cold_start ? 'border-warning/40 bg-warning/5' : 'border-border'
+              }`}
+            >
+              <div className="text-xs text-ink-soft">Instance serveur</div>
+              <div className="text-xl font-semibold tabular-nums">
+                {data.instance.cold_start ? 'À froid' : 'À chaud'}
+              </div>
+              <div className="text-xs text-ink-soft mt-0.5">
+                démarrée il y a {formatAge(data.instance.age_s)}
+              </div>
+            </div>
+          </div>
+
+          <p className="mt-3 text-xs text-ink-soft">
+            Lecture : si le <strong>total serveur</strong> est faible et le{' '}
+            <strong>réseau</strong> élevé, la lenteur vient de la liaison de la
+            boutique, pas de la base. Si une ligne ressort en rouge, c&apos;est
+            cette requête qu&apos;il faut optimiser. Relance plusieurs fois : si
+            l&apos;instance repart « à froid » à chaque fois, ce sont les
+            démarrages de fonctions qui coûtent.
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
+function formatAge(s: number): string {
+  if (s < 60) return `${s} s`;
+  if (s < 3600) return `${Math.round(s / 60)} min`;
+  return `${Math.round(s / 3600)} h`;
 }
 
 /**
