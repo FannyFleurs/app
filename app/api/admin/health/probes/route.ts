@@ -138,24 +138,62 @@ const PROBES: Probe[] = [
   },
 ];
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Organisation sur laquelle mesurer. Mesurer sur l'organisation du compte
+ * super-admin n'a aucun sens si celle-ci est vide : les requêtes rendent la
+ * main instantanément et le chiffre est trompeur. On cible donc par défaut
+ * l'organisation qui a le plus d'articles — celle qui exerce vraiment les
+ * requêtes de la caisse.
+ */
+async function resolveTargetOrg(requested: string | null, fallback: string) {
+  const orgs = await query<{ id: string; name: string; products: number }>(
+    `SELECT o.id, o.name, COUNT(p.id)::int AS products
+       FROM organizations o
+       LEFT JOIN products p ON p.organization_id = o.id
+      GROUP BY o.id, o.name
+      ORDER BY COUNT(p.id) DESC, o.name ASC`,
+  );
+  const list = orgs.rows;
+  const picked =
+    (requested && UUID_RE.test(requested) ? list.find((o) => o.id === requested) : null)
+    ?? list[0]
+    ?? null;
+  return {
+    id: picked?.id ?? fallback,
+    name: picked?.name ?? '—',
+    products: picked?.products ?? 0,
+    list: list.map((o) => ({ id: o.id, name: o.name, products: o.products })),
+  };
+}
+
 /**
  * Chronomètre les requêtes réellement jouées par la caisse, côté serveur.
  * Objectif : distinguer un problème de réseau (latence client -> Vercel) d'un
  * problème de requête SQL (index manquant, volume) ou de démarrage à froid.
  *
- * Toutes les sondes sont en LECTURE SEULE et bornées à l'organisation de
- * l'utilisateur connecté.
+ * Toutes les sondes sont en LECTURE SEULE.
  */
-export async function GET() {
+export async function GET(req: Request) {
   // Âge du process Node : quelques secondes = la lambda vient de démarrer,
   // donc cette requête a payé le démarrage à froid.
   const uptime = process.uptime();
   const coldStart = served === 0 && uptime < 10;
   served++;
 
+  // Chronométré AVANT le garde : la vérification de session (JWT + lecture
+  // en base) est payée par toutes les requêtes de l'app, elle fait partie du
+  // temps serveur réel.
+  const tStart = performance.now();
+
   const g = await requireSuperAdmin();
   if ('response' in g) return g.response;
-  const orgId = g.user.organizationId;
+  const authMs = performance.now() - tStart;
+
+  const url = new URL(req.url);
+  const org = await resolveTargetOrg(url.searchParams.get('org'), g.user.organizationId);
+  const orgId = org.id;
 
   const t0 = performance.now();
   const results = [];
@@ -182,6 +220,11 @@ export async function GET() {
   return NextResponse.json({
     probes: results,
     total_ms: Math.round((performance.now() - t0) * 10) / 10,
+    auth_ms: Math.round(authMs * 10) / 10,
+    // Temps serveur COMPLET du handler (garde d'authentification incluse) :
+    // c'est lui qu'il faut soustraire du temps navigateur pour isoler le réseau.
+    handler_ms: Math.round((performance.now() - tStart) * 10) / 10,
+    org: { id: org.id, name: org.name, products: org.products, list: org.list },
     instance: {
       cold_start: coldStart,
       // Âge de l'instance : s'il repart de ~0 à chaque mesure, les lambdas
