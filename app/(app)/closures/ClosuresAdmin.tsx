@@ -6,7 +6,7 @@ import { PAYMENT_LABELS } from '@/components/labels';
 import Badge from '@/components/Badge';
 import EmptyState from '@/components/EmptyState';
 import BankDepositModal from './BankDepositModal';
-import { promptThemed } from '@/lib/ui/dialog';
+import { promptThemed, confirmThemed } from '@/lib/ui/dialog';
 
 const DENOMINATIONS: Array<{ value: number; label: string }> = [
   { value: 500,  label: '500 €' },
@@ -206,6 +206,25 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
   // affiche donc −(montant attendu) : on « doit » encore compter cette somme.
   const cashVariance = Number((countedCash - expectedCash).toFixed(2));
 
+  // --- Détection des ÉCARTS (erreurs de caisse) ---
+  // Espèces : écart uniquement si l'on a compté quelque chose et que ça ne
+  // correspond pas. Autres règlements : écart si la saisie ≠ total système.
+  const hasCashDiscrepancy = countedCash > 0 && cashVariance !== 0;
+  const paymentVariances = useMemo(() => {
+    if (!preview) return [] as { method: string; variance: number }[];
+    return preview.payments
+      .filter((p) => p.method !== 'cash')
+      .map((p) => {
+        const dv = declared[p.method];
+        const n = Number(dv);
+        if (dv == null || dv === '' || !Number.isFinite(n)) return null;
+        const variance = Number((n - p.total).toFixed(2));
+        return variance !== 0 ? { method: p.method, variance } : null;
+      })
+      .filter((x): x is { method: string; variance: number } => x != null);
+  }, [preview, declared]);
+  const hasAnyDiscrepancy = hasCashDiscrepancy || paymentVariances.length > 0;
+
   // Comptage tactile : 1 clic sur une tuile = +1 ; appui long = saisir le
   // nombre exact (évite de cliquer 50 fois pour 50 pièces).
   const lpTimer = useRef<number | null>(null);
@@ -244,6 +263,19 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
 
   async function seal() {
     if (!preview) return;
+    // Erreur de caisse : on prévient AVANT de sceller (irréversible).
+    if (hasAnyDiscrepancy) {
+      const parts: string[] = [];
+      if (hasCashDiscrepancy) parts.push(`espèces ${cashVariance >= 0 ? '+' : ''}${formatEUR(cashVariance)}`);
+      for (const pv of paymentVariances) {
+        parts.push(`${PAYMENT_LABELS[pv.method] ?? pv.method} ${pv.variance >= 0 ? '+' : ''}${formatEUR(pv.variance)}`);
+      }
+      const ok = await confirmThemed({
+        title: '⚠ Attention — erreur de caisse',
+        message: `Un écart a été détecté : ${parts.join(' · ')}.\n\nClôturer quand même ? La clôture est définitive.`,
+      });
+      if (!ok) return;
+    }
     setSealing(true); setError(null);
     const declaredPayments: Record<string, number> = {};
     for (const [k, v] of Object.entries(declared)) {
@@ -525,147 +557,90 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
                 </section>
               )}
 
-              {preview.tva_breakdown.length > 0 && (
-                <section className="card p-5">
-                  <h3 className="font-semibold">Récapitulatif TVA</h3>
-                  <table className="mt-3 w-full text-sm">
-                    <tbody>
-                      {preview.tva_breakdown.map((t) => (
-                        <tr key={t.rate} className="border-t border-border first:border-t-0">
-                          <td className="py-2">TVA {t.rate}%</td>
-                          <td className="py-2 text-right text-ink-soft">Base {formatEUR(t.base_ht)}</td>
-                          <td className="py-2 text-right font-medium">{formatEUR(t.tva)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </section>
-              )}
             </div>
 
-            {/* Colonne 2 : comptage espèces */}
-            <section className="card p-4 overflow-auto min-h-0">
-              <h3 className="font-semibold">Comptage des espèces en caisse</h3>
-              <p className="mt-1 text-sm text-ink-soft">
-                Touche une valeur pour ajouter <strong>+1</strong>. <strong>Appui long</strong> pour saisir le nombre exact.
-              </p>
-              <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {DENOMINATIONS.map((d) => {
-                  const qty = denomCount[String(d.value)] ?? 0;
-                  const sub = qty * d.value;
-                  return (
-                    <button
-                      key={d.value}
-                      type="button"
-                      disabled={alreadySealed}
-                      onPointerDown={() => pressStart(d.value, d.label)}
-                      onPointerUp={() => pressEnd(d.value)}
-                      onPointerLeave={pressCancel}
-                      onContextMenu={(e) => e.preventDefault()}
-                      className={`relative rounded-xl border p-2.5 text-center select-none touch-none transition-colors disabled:opacity-50 ${
-                        qty > 0 ? 'border-[color:var(--primary)] bg-primary-soft/40' : 'border-border hover:bg-gray-50'
-                      }`}
-                    >
-                      <div className="text-sm font-semibold tabular-nums">{d.label}</div>
-                      <div className="text-xl font-bold tabular-nums leading-tight mt-0.5">{qty}</div>
-                      <div className="text-[11px] text-ink-soft tabular-nums">{formatEUR(sub)}</div>
-                      {qty > 0 && !alreadySealed && (
-                        <span
-                          role="button"
-                          aria-label="Supprimer ce comptage"
-                          title="Supprimer ce comptage"
-                          onPointerDown={(e) => { e.stopPropagation(); }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDenomCount((c) => { const n = { ...c }; delete n[String(d.value)]; return n; });
-                          }}
-                          className="absolute -top-1.5 -right-1.5 grid h-6 w-6 place-items-center rounded-full bg-danger text-white text-xs font-bold leading-none shadow-sm hover:opacity-90"
-                        >
-                          ✕
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
+            {/* Colonne 2 : comptage espèces — résumé TOUJOURS visible */}
+            <section className="card p-4 flex flex-col min-h-0">
+              <div className="shrink-0">
+                <h3 className="font-semibold">Comptage des espèces</h3>
+                <p className="mt-0.5 text-xs text-ink-soft">
+                  Touche une valeur = <strong>+1</strong>. Appui long = saisir le nombre exact.
+                </p>
+              </div>
+              {/* Grille : seule zone qui peut défiler sur petit écran */}
+              <div className="mt-2 flex-1 min-h-0 overflow-auto">
+                <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
+                  {DENOMINATIONS.map((d) => {
+                    const qty = denomCount[String(d.value)] ?? 0;
+                    const sub = qty * d.value;
+                    return (
+                      <button
+                        key={d.value}
+                        type="button"
+                        disabled={alreadySealed}
+                        onPointerDown={() => pressStart(d.value, d.label)}
+                        onPointerUp={() => pressEnd(d.value)}
+                        onPointerLeave={pressCancel}
+                        onContextMenu={(e) => e.preventDefault()}
+                        className={`relative rounded-lg border p-1.5 text-center select-none touch-none transition-colors disabled:opacity-50 ${
+                          qty > 0 ? 'border-[color:var(--primary)] bg-primary-soft/40' : 'border-border hover:bg-gray-50'
+                        }`}
+                      >
+                        <div className="text-xs font-semibold tabular-nums">{d.label}</div>
+                        <div className="text-lg font-bold tabular-nums leading-tight">{qty}</div>
+                        <div className="text-[10px] text-ink-soft tabular-nums">{formatEUR(sub)}</div>
+                        {qty > 0 && !alreadySealed && (
+                          <span
+                            role="button"
+                            aria-label="Supprimer ce comptage"
+                            title="Supprimer ce comptage"
+                            onPointerDown={(e) => { e.stopPropagation(); }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDenomCount((c) => { const n = { ...c }; delete n[String(d.value)]; return n; });
+                            }}
+                            className="absolute -top-1.5 -right-1.5 grid h-5 w-5 place-items-center rounded-full bg-danger text-white text-[10px] font-bold leading-none shadow-sm hover:opacity-90"
+                          >
+                            ✕
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
-              {/* Total compté (toujours visible) */}
-              <div className="mt-4 rounded-xl bg-primary-soft/40 px-4 py-3 flex items-baseline justify-between">
-                <span className="text-sm font-medium">Total compté</span>
-                <span className="text-2xl font-bold tabular-nums">{formatEUR(countedCash)}</span>
-              </div>
-
-              {/* Avancement vers le montant attendu */}
-              {expectedCash > 0 && (
-                <div className="mt-4">
-                  <div className="flex justify-between text-xs text-ink-soft mb-1">
-                    <span>Avancement du comptage</span>
-                    <span className="tabular-nums">{formatEUR(countedCash)} / {formatEUR(expectedCash)}</span>
-                  </div>
-                  <div className="h-2.5 rounded-full bg-gray-200 overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all ${countedCash >= expectedCash ? 'bg-success' : 'bg-[color:var(--primary)]'}`}
-                      style={{ width: `${Math.min(100, Math.round((countedCash / expectedCash) * 100))}%` }}
-                    />
-                  </div>
-                  <div className={`text-xs mt-1 ${
-                    countedCash === expectedCash ? 'text-success' :
-                    countedCash > expectedCash ? 'text-warning' : 'text-ink-soft'}`}>
-                    {countedCash < expectedCash
-                      ? `Reste ${formatEUR(expectedCash - countedCash)} à compter`
-                      : countedCash === expectedCash
-                        ? '✓ Montant attendu atteint'
-                        : `Excédent de ${formatEUR(countedCash - expectedCash)}`}
-                  </div>
+              {/* Résumé — toujours visible (attendu / compté / écart / reste) */}
+              <div className="shrink-0 mt-3 rounded-xl bg-gray-50 p-3">
+                <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-ink-soft tabular-nums">
+                  <span>Fonds {formatEUR(preview.cash_breakdown.opening_floats)}</span>
+                  <span>+ Ventes {formatEUR(preview.cash_breakdown.cash_sales)}</span>
+                  {preview.cash_breakdown.cash_in > 0 && <span>+ Entrées {formatEUR(preview.cash_breakdown.cash_in)}</span>}
+                  {preview.cash_breakdown.bank_deposits > 0 && (
+                    <span className="text-warning">− Banque {formatEUR(preview.cash_breakdown.bank_deposits)}</span>
+                  )}
                 </div>
-              )}
-
-              <div className="mt-4 space-y-1.5 text-sm rounded-xl bg-gray-50 p-4">
-                <div className="flex justify-between">
-                  <span className="text-ink-soft">Fonds de caisse ouverts</span>
-                  <span>{formatEUR(preview.cash_breakdown.opening_floats)}</span>
+                <div className="mt-1.5 flex justify-between text-sm">
+                  <span className="text-ink-soft">Espèces attendues</span>
+                  <span className="font-medium tabular-nums">{formatEUR(expectedCash)}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-ink-soft">+ Ventes espèces</span>
-                  <span>{formatEUR(preview.cash_breakdown.cash_sales)}</span>
-                </div>
-                {preview.cash_breakdown.cash_in > 0 && (
-                  <div className="flex justify-between">
-                    <span className="text-ink-soft">+ Entrées caisse</span>
-                    <span>{formatEUR(preview.cash_breakdown.cash_in)}</span>
-                  </div>
-                )}
-                {preview.cash_breakdown.cash_out > preview.cash_breakdown.bank_deposits && (
-                  <div className="flex justify-between">
-                    <span className="text-ink-soft">- Autres sorties caisse</span>
-                    <span>-{formatEUR(preview.cash_breakdown.cash_out - preview.cash_breakdown.bank_deposits)}</span>
-                  </div>
-                )}
-                {/* Ligne Remise en banque TOUJOURS visible (même à 0) */}
-                <div className="flex justify-between">
-                  <span className="text-ink-soft">⤓ Remise en banque</span>
-                  <span className={preview.cash_breakdown.bank_deposits > 0 ? 'text-warning font-medium' : ''}>
-                    {preview.cash_breakdown.bank_deposits > 0
-                      ? `-${formatEUR(preview.cash_breakdown.bank_deposits)}`
-                      : formatEUR(0)}
-                  </span>
-                </div>
-                <div className="flex justify-between pt-2 mt-1 border-t border-border/70">
-                  <span className="font-medium">Espèces attendues</span>
-                  <span className="font-medium">{formatEUR(expectedCash)}</span>
-                </div>
-                <div className="flex justify-between">
+                <div className="flex justify-between text-sm">
                   <span className="text-ink-soft">Espèces comptées</span>
-                  <span className="font-medium">{formatEUR(countedCash)}</span>
+                  <span className="font-medium tabular-nums">{formatEUR(countedCash)}</span>
                 </div>
-                <div className="flex items-baseline justify-between pt-2 mt-1 border-t border-border/70">
-                  <span className="font-semibold">Écart</span>
-                  <span className={`text-lg font-semibold ${
+                <div className="mt-1.5 pt-1.5 border-t border-border/70 flex items-baseline justify-between">
+                  <span className="font-semibold">Écart de caisse</span>
+                  <span className={`text-2xl font-bold tabular-nums ${
                     cashVariance === 0 ? 'text-success' :
                     cashVariance > 0 ? 'text-warning' : 'text-danger'}`}>
                     {cashVariance >= 0 ? '+' : ''}{formatEUR(cashVariance)}
                   </span>
                 </div>
+                {expectedCash > 0 && countedCash < expectedCash && (
+                  <div className="mt-0.5 text-xs text-danger text-right">
+                    Reste {formatEUR(expectedCash - countedCash)} à compter
+                  </div>
+                )}
               </div>
             </section>
           </div>
@@ -712,12 +687,24 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
                     ⚠ {preview.held_count} panier{preview.held_count > 1 ? 's' : ''} en attente — finissez-les ou videz-les avant de clôturer.
                   </div>
                 )}
+                {/* Erreur de caisse : écart espèces et/ou règlement saisi ≠ système. */}
+                {hasAnyDiscrepancy && (
+                  <div className="rounded-xl bg-danger/10 border border-danger/30 px-3 py-2 text-sm text-danger font-medium flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                    <span>⚠ Erreur de caisse :</span>
+                    {hasCashDiscrepancy && (
+                      <span>espèces {cashVariance >= 0 ? '+' : ''}{formatEUR(cashVariance)}</span>
+                    )}
+                    {paymentVariances.map((pv) => (
+                      <span key={pv.method}>· {PAYMENT_LABELS[pv.method] ?? pv.method} {pv.variance >= 0 ? '+' : ''}{formatEUR(pv.variance)}</span>
+                    ))}
+                  </div>
+                )}
                 <button
                   disabled={sealing || (preview.held_count ?? 0) > 0}
                   onClick={() => void seal()}
-                  className="btn-primary w-full h-11"
+                  className={`w-full h-11 ${hasAnyDiscrepancy ? 'btn-soft border border-danger/40 text-danger' : 'btn-primary'}`}
                 >
-                  {sealing ? 'Clôture…' : 'Clôturer la journée'}
+                  {sealing ? 'Clôture…' : hasAnyDiscrepancy ? 'Clôturer malgré l\'écart' : 'Clôturer la journée'}
                 </button>
               </>
             )}
@@ -741,7 +728,7 @@ function Kpi({ label, value, accent }: { label: string; value: string; accent?: 
   return (
     <div className="card p-4">
       <div className="text-xs uppercase tracking-wider text-ink-soft">{label}</div>
-      <div className={`mt-1 text-xl font-semibold tracking-tight ${accent ? 'text-accent' : ''}`}>{value}</div>
+      <div className="mt-1 text-xl font-semibold tracking-tight" style={accent ? { color: 'var(--primary-deep)' } : undefined}>{value}</div>
     </div>
   );
 }
