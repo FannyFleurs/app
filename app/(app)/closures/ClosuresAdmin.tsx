@@ -633,9 +633,15 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
                   Touche une valeur = <strong>+1</strong>. Appui long = saisir le nombre exact.
                 </p>
               </div>
-              {/* Grille : seule zone qui peut défiler sur petit écran */}
+              {/* Grille : seule zone qui peut défiler sur petit écran.
+                  Les tuiles occupent toute la hauteur disponible — les lignes
+                  s'étirent (1fr) sans jamais descendre sous une taille tactile
+                  confortable (minmax), auquel cas la zone défile. */}
               <div className="mt-2 flex-1 min-h-0 overflow-auto">
-                <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
+                <div
+                  className="grid h-full gap-2 grid-cols-3 sm:grid-cols-4 2xl:grid-cols-5"
+                  style={{ gridAutoRows: 'minmax(clamp(4.5rem, 11vh, 8rem), 1fr)' }}
+                >
                   {DENOMINATIONS.map((d) => {
                     const qty = denomCount[String(d.value)] ?? 0;
                     const sub = qty * d.value;
@@ -648,13 +654,18 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
                         onPointerUp={() => pressEnd(d.value)}
                         onPointerLeave={pressCancel}
                         onContextMenu={(e) => e.preventDefault()}
-                        className={`relative rounded-lg border p-1.5 text-center select-none touch-none transition-colors disabled:opacity-50 ${
+                        className={`relative rounded-xl border p-2 flex flex-col items-center justify-center gap-0.5 text-center select-none touch-none transition-colors disabled:opacity-50 ${
                           qty > 0 ? 'border-[color:var(--primary)] bg-primary-soft/40' : 'border-border hover:bg-gray-50'
                         }`}
                       >
-                        <div className="text-xs font-semibold tabular-nums">{d.label}</div>
-                        <div className="text-lg font-bold tabular-nums leading-tight">{qty}</div>
-                        <div className="text-[10px] text-ink-soft tabular-nums">{formatEUR(sub)}</div>
+                        {/* Tailles fluides : suivent la hauteur d'écran disponible,
+                            bornées pour rester lisibles sur petit comme sur grand. */}
+                        <div className="font-semibold tabular-nums leading-none"
+                             style={{ fontSize: 'clamp(0.8rem, 1.8vh, 1.15rem)' }}>{d.label}</div>
+                        <div className="font-bold tabular-nums leading-none"
+                             style={{ fontSize: 'clamp(1.5rem, 4vh, 3rem)' }}>{qty}</div>
+                        <div className="text-ink-soft tabular-nums leading-none"
+                             style={{ fontSize: 'clamp(0.65rem, 1.4vh, 0.95rem)' }}>{formatEUR(sub)}</div>
                         {qty > 0 && !alreadySealed && (
                           <span
                             role="button"
@@ -665,7 +676,7 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
                               e.stopPropagation();
                               setDenomCount((c) => { const n = { ...c }; delete n[String(d.value)]; return n; });
                             }}
-                            className="absolute -top-1.5 -right-1.5 grid h-5 w-5 place-items-center rounded-full bg-danger text-white text-[10px] font-bold leading-none shadow-sm hover:opacity-90"
+                            className="absolute -top-2 -right-2 grid h-6 w-6 place-items-center rounded-full bg-danger text-white text-xs font-bold leading-none shadow-sm hover:opacity-90"
                           >
                             ✕
                           </span>
