@@ -637,9 +637,12 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
                   Les tuiles occupent toute la hauteur disponible — les lignes
                   s'étirent (1fr) sans jamais descendre sous une taille tactile
                   confortable (minmax), auquel cas la zone défile. */}
-              <div className="mt-2 flex-1 min-h-0 overflow-auto">
+              {/* Padding intérieur : la pastille ✕ déborde de la tuile
+                  (-top-2 / -right-2) et serait rognée par le conteneur
+                  défilant sans cette marge. */}
+              <div className="mt-1 flex-1 min-h-0 overflow-auto p-2.5">
                 <div
-                  className="grid h-full gap-2 grid-cols-3 sm:grid-cols-4 2xl:grid-cols-5"
+                  className="grid h-full gap-2.5 grid-cols-3 sm:grid-cols-4 2xl:grid-cols-5"
                   style={{ gridAutoRows: 'minmax(clamp(4.5rem, 11vh, 8rem), 1fr)' }}
                 >
                   {DENOMINATIONS.map((d) => {
