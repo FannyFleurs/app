@@ -378,7 +378,9 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
             </Badge>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        {/* Toutes les actions de la journée sont réunies ici : ouvrir le tiroir,
+            remise en banque et la clôture elle-même (action finale, en rouge). */}
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <button onClick={() => void openDrawer()} disabled={!registerId}
                   className="btn-soft h-10 px-3.5 text-sm font-medium inline-flex items-center gap-2 disabled:opacity-50"
                   title="Ouvrir le tiroir-caisse">
@@ -387,13 +389,6 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
             </svg>
             Ouvrir le tiroir
           </button>
-          {alreadySealed && (
-            <a href="/caisse" className="btn-primary h-10 px-3.5 text-sm inline-flex items-center gap-2"
-               title="Reprendre les ventes en ouvrant une nouvelle session caisse">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /></svg>
-              Réouvrir la journée
-            </a>
-          )}
           <button onClick={() => setShowDeposit(true)} disabled={!registerId || alreadySealed}
                   className="btn-soft h-10 px-3.5 text-sm font-medium inline-flex items-center gap-2 disabled:opacity-50"
                   title="Enregistrer une remise d'espèces en banque">
@@ -402,6 +397,38 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
             </svg>
             Remise en banque
           </button>
+          {alreadySealed ? (
+            <>
+              {preview?.sealed && (
+                <button onClick={() => void printZ(preview.sealed!.id)}
+                        className="btn-soft h-10 px-3.5 text-sm font-medium inline-flex items-center gap-2">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M6 9V3h12v6" /><rect x="4" y="9" width="16" height="7" rx="1.5" /><path d="M7 16h10v5H7z" />
+                  </svg>
+                  Imprimer le Z
+                </button>
+              )}
+              <a href="/caisse" className="btn-primary h-10 px-3.5 text-sm inline-flex items-center gap-2"
+                 title="Reprendre les ventes en ouvrant une nouvelle session caisse">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /></svg>
+                Réouvrir la journée
+              </a>
+            </>
+          ) : (
+            <button
+              onClick={() => void seal()}
+              disabled={!preview || sealing || (preview.held_count ?? 0) > 0}
+              className="btn h-10 px-4 text-sm font-semibold bg-danger text-white hover:bg-danger/90 disabled:opacity-50"
+              title={(preview?.held_count ?? 0) > 0
+                ? 'Des paniers sont en attente : finissez-les avant de clôturer'
+                : 'Clôturer définitivement la journée'}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="4" y="10" width="16" height="10" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" />
+              </svg>
+              {sealing ? 'Clôture…' : hasAnyDiscrepancy ? 'Clôturer malgré l’écart' : 'Clôturer ma journée'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -443,14 +470,6 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
         )
       ) : (
         <>
-          {/* KPI strip compact */}
-          <div className="grid grid-cols-4 gap-2">
-            <Kpi label="Tickets" value={preview.totals.sales.toString()} />
-            <Kpi label="Total HT" value={formatEUR(preview.totals.ht)} />
-            <Kpi label="TVA collectée" value={formatEUR(preview.totals.tva)} />
-            <Kpi label="Total TTC" value={formatEUR(preview.totals.ttc)} accent />
-          </div>
-
           {alreadySealed && (
             <div className="rounded-xl bg-success/10 px-3 py-2 text-sm text-success">
               ✓ La journée a déjà été clôturée le {new Date(preview!.sealed!.sealed_at).toLocaleString('fr-FR')}.
@@ -461,6 +480,38 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
             <div className="rounded-xl border border-border bg-gray-50 px-3 py-1.5 text-xs text-ink-soft">
               Aucune vente sur cette date. Vous pouvez quand même compter votre tiroir, faire une
               remise en banque et clôturer la journée pour la déclarer.
+            </div>
+          )}
+
+          {/* Bandeaux d'alerte et retours d'action : conditionnels, ils ne
+              prennent de la hauteur que lorsqu'il y a réellement quelque chose
+              à signaler — la section espèces garde sinon toute la place. */}
+          {!alreadySealed && (preview.held_count ?? 0) > 0 && (
+            <div className="rounded-xl bg-warning/10 px-3 py-2 text-xs text-warning shrink-0">
+              ⚠ {preview.held_count} panier{preview.held_count > 1 ? 's' : ''} en attente — finissez-les ou videz-les avant de clôturer.
+            </div>
+          )}
+          {!alreadySealed && hasAnyDiscrepancy && (
+            <div className="rounded-xl bg-danger/10 border border-danger/30 px-3 py-2 text-sm text-danger font-medium flex flex-wrap items-center gap-x-2 gap-y-0.5 shrink-0">
+              <span>⚠ Erreur de caisse :</span>
+              {hasCashDiscrepancy && (
+                <span>espèces {cashVariance >= 0 ? '+' : ''}{formatEUR(cashVariance)}</span>
+              )}
+              {paymentVariances.map((pv) => (
+                <span key={pv.method}>· {PAYMENT_LABELS[pv.method] ?? pv.method} {pv.variance >= 0 ? '+' : ''}{formatEUR(pv.variance)}</span>
+              ))}
+            </div>
+          )}
+          {error && <div className="rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger shrink-0">{error}</div>}
+          {zToast && <div className="rounded-xl bg-success/10 px-3 py-2 text-sm text-success shrink-0">{zToast}</div>}
+          {sealedResult && (
+            <div className="rounded-xl bg-success/10 px-4 py-2.5 text-sm text-success flex items-center justify-between gap-3 shrink-0">
+              <span>
+                ✓ Clôture scellée. Empreinte fiscale <code className="font-mono">{sealedResult.fiscal_hash.slice(0,16)}…</code>
+              </span>
+              <button onClick={() => void printZ(sealedResult.id)} className="btn-primary text-sm">
+                Imprimer le Z
+              </button>
             </div>
           )}
 
@@ -557,9 +608,24 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
                 </section>
               )}
 
+              {/* Notes : dans la colonne de gauche (demi-écran) et non plus en
+                  bandeau pleine largeur, pour laisser toute la hauteur au
+                  comptage des espèces. */}
+              <section className="card p-4">
+                <label className="block">
+                  <span className="text-sm font-semibold">Notes</span>
+                  <textarea
+                    className="input mt-2 h-16"
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="Commentaire, écart justifié, événement particulier…"
+                    disabled={alreadySealed}
+                  />
+                </label>
+              </section>
             </div>
 
-            {/* Colonne 2 : comptage espèces — résumé TOUJOURS visible */}
+            {/* Colonne 2 : comptage espèces — pleine hauteur, résumé toujours visible */}
             <section className="card p-4 flex flex-col min-h-0">
               <div className="shrink-0">
                 <h3 className="font-semibold">Comptage des espèces</h3>
@@ -645,70 +711,6 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
             </section>
           </div>
 
-          {/* Notes + Sceller (sticky en bas) */}
-          <section className="card p-3 space-y-2 shrink-0">
-            <label className="block">
-              <span className="text-xs font-medium text-ink-soft">Notes</span>
-              <textarea
-                className="input mt-1 h-10"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Commentaire, écart justifié, événement particulier…"
-                disabled={alreadySealed}
-              />
-            </label>
-
-            {error && <div className="rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
-            {zToast && <div className="rounded-xl bg-success/10 px-3 py-2 text-sm text-success">{zToast}</div>}
-
-            {sealedResult ? (
-              <div className="rounded-xl bg-success/10 px-4 py-3 text-sm text-success flex items-center justify-between gap-3">
-                <span>
-                  ✓ Clôture scellée. Empreinte fiscale <code className="font-mono">{sealedResult.fiscal_hash.slice(0,16)}…</code>
-                </span>
-                <button
-                  onClick={() => void printZ(sealedResult.id)}
-                  className="btn-primary text-sm"
-                >
-                  Imprimer le Z
-                </button>
-              </div>
-            ) : alreadySealed ? (
-              <button
-                onClick={() => void printZ(preview.sealed!.id)}
-                className="btn-primary w-full justify-center"
-              >
-                Imprimer le Z de cette journée
-              </button>
-            ) : (
-              <>
-                {(preview.held_count ?? 0) > 0 && (
-                  <div className="rounded-xl bg-warning/10 px-3 py-2 text-xs text-warning">
-                    ⚠ {preview.held_count} panier{preview.held_count > 1 ? 's' : ''} en attente — finissez-les ou videz-les avant de clôturer.
-                  </div>
-                )}
-                {/* Erreur de caisse : écart espèces et/ou règlement saisi ≠ système. */}
-                {hasAnyDiscrepancy && (
-                  <div className="rounded-xl bg-danger/10 border border-danger/30 px-3 py-2 text-sm text-danger font-medium flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                    <span>⚠ Erreur de caisse :</span>
-                    {hasCashDiscrepancy && (
-                      <span>espèces {cashVariance >= 0 ? '+' : ''}{formatEUR(cashVariance)}</span>
-                    )}
-                    {paymentVariances.map((pv) => (
-                      <span key={pv.method}>· {PAYMENT_LABELS[pv.method] ?? pv.method} {pv.variance >= 0 ? '+' : ''}{formatEUR(pv.variance)}</span>
-                    ))}
-                  </div>
-                )}
-                <button
-                  disabled={sealing || (preview.held_count ?? 0) > 0}
-                  onClick={() => void seal()}
-                  className={`w-full h-11 ${hasAnyDiscrepancy ? 'btn-soft border border-danger/40 text-danger' : 'btn-primary'}`}
-                >
-                  {sealing ? 'Clôture…' : hasAnyDiscrepancy ? 'Clôturer malgré l\'écart' : 'Clôturer la journée'}
-                </button>
-              </>
-            )}
-          </section>
         </>
       )}
 
@@ -720,15 +722,6 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
           onSaved={() => { setShowDeposit(false); void loadPreview(); }}
         />
       )}
-    </div>
-  );
-}
-
-function Kpi({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
-  return (
-    <div className="card p-4">
-      <div className="text-xs uppercase tracking-wider text-ink-soft">{label}</div>
-      <div className="mt-1 text-xl font-semibold tracking-tight" style={accent ? { color: 'var(--primary-deep)' } : undefined}>{value}</div>
     </div>
   );
 }
