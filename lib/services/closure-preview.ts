@@ -106,7 +106,27 @@ export async function computeClosurePreview(storeId: string, date: string): Prom
   const openingFloats = Number(cashBd.rows[0]?.opening_floats ?? 0);
   const cashIns = Number(cashBd.rows[0]?.ins ?? 0);
   const cashOuts = Number(cashBd.rows[0]?.outs ?? 0);
-  const cashSales = Number(payments.rows.find((p) => p.method === 'cash')?.total ?? 0);
+
+  // Espèces RÉELLEMENT entrées dans le tiroir.
+  // On inclut les ventes annulées après validation : l'argent est bien entré,
+  // et sa restitution est tracée par un mouvement « out » (« Annulation
+  // vente … ») déjà compté dans `cashOuts`. Ne retenir que la sortie
+  // reviendrait à retirer deux fois la même somme et à afficher un écart
+  // fantôme (une vente de 2 € encaissée puis annulée donnait −2 € attendus).
+  // Distinct de `payments` ci-dessus, qui sert à la réconciliation du CA et
+  // ne doit, lui, contenir que les ventes valides.
+  const cashInFromSales = await query<{ total: string }>(
+    `SELECT COALESCE(SUM(p.amount), 0)::text AS total
+       FROM payments p
+       JOIN sales s ON s.id = p.sale_id
+      WHERE s.store_id = $1
+        AND p.method = 'cash'
+        AND s.status IN ('validated', 'cancelled_by_credit_note')
+        AND s.validated_at::date = $2::date
+        AND ($3::timestamptz IS NULL OR s.validated_at > $3)`,
+    [storeId, date, periodStart],
+  );
+  const cashSales = Number(cashInFromSales.rows[0]?.total ?? 0);
 
   const depositsRes = await query<{ total: string }>(
     `SELECT COALESCE(SUM(cm.amount), 0)::text AS total

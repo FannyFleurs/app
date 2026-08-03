@@ -670,6 +670,13 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
                   {preview.cash_breakdown.bank_deposits > 0 && (
                     <span className="text-warning">− Banque {formatEUR(preview.cash_breakdown.bank_deposits)}</span>
                   )}
+                  {/* Sorties hors banque : remboursements, annulations, prélèvements.
+                      Sans cette ligne, le total attendu semblait sorti de nulle part. */}
+                  {preview.cash_breakdown.cash_out - preview.cash_breakdown.bank_deposits > 0 && (
+                    <span className="text-warning">
+                      − Sorties {formatEUR(preview.cash_breakdown.cash_out - preview.cash_breakdown.bank_deposits)}
+                    </span>
+                  )}
                 </div>
                 <div className="mt-1.5 flex justify-between text-sm">
                   <span className="text-ink-soft">Espèces attendues</span>
