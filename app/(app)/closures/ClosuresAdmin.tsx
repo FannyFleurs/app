@@ -66,7 +66,6 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
   const [showDeposit, setShowDeposit] = useState(false);
   const [drawerToast, setDrawerToast] = useState<string | null>(null);
   const [zToast, setZToast] = useState<string | null>(null);
-  const [restored, setRestored] = useState<boolean>(false);
 
   // Impression du Z sur l'imprimante ticket ; repli PDF si aucune imprimante.
   async function printZ(closureId: string) {
@@ -108,7 +107,6 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
   // une journée scellée ne se re-clôture pas.
   useEffect(() => {
     if (!storageKey || typeof window === 'undefined') return;
-    setRestored(false);
     const alreadyClosedToday = preview?.sealed != null;
     if (alreadyClosedToday) {
       setDenomCount({}); setDeclared({}); setNotes('');
@@ -127,7 +125,6 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
         setDenomCount(draft.denom ?? {});
         setDeclared(draft.declared ?? {});
         setNotes(draft.notes ?? '');
-        setRestored(true);
       } else {
         setDenomCount({}); setDeclared({}); setNotes('');
       }
@@ -436,26 +433,6 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
         <div className="rounded-xl bg-success/10 px-3 py-1.5 text-xs text-success">{drawerToast}</div>
       )}
 
-      {restored && !sealedResult && !alreadySealed && (
-        <div className="rounded-xl bg-accent-soft px-3 py-1.5 text-xs flex items-center justify-between gap-3">
-          <span className="text-accent-deep">
-            ↻ Précomptage restauré — votre saisie a été conservée depuis votre dernière visite.
-          </span>
-          <button
-            onClick={() => {
-              setDenomCount({}); setDeclared({}); setNotes('');
-              if (storageKey && typeof window !== 'undefined') {
-                try { localStorage.removeItem(storageKey); } catch { /* ignore */ }
-              }
-              setRestored(false);
-            }}
-            className="text-xs text-ink-soft hover:text-danger underline"
-          >
-            Repartir de zéro
-          </button>
-        </div>
-      )}
-
       {!preview ? (
         loadingPreview ? (
           <div className="flex items-center gap-2 text-ink-soft text-sm py-6">
@@ -474,12 +451,6 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
             <div className="rounded-xl bg-success/10 px-3 py-2 text-sm text-success">
               ✓ La journée a déjà été clôturée le {new Date(preview!.sealed!.sealed_at).toLocaleString('fr-FR')}.
               Les écarts d&apos;espèces ne sont plus pertinents — vous pouvez réimprimer le Z.
-            </div>
-          )}
-          {!alreadySealed && preview.totals.sales === 0 && (
-            <div className="rounded-xl border border-border bg-gray-50 px-3 py-1.5 text-xs text-ink-soft">
-              Aucune vente sur cette date. Vous pouvez quand même compter votre tiroir, faire une
-              remise en banque et clôturer la journée pour la déclarer.
             </div>
           )}
 
