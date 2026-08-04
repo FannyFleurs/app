@@ -23,12 +23,9 @@ interface Product extends LabelProduct {
   extra_barcodes?: string[] | null;
   image_url?: string | null;
   category_name?: string | null;
-
-  /** Enregistrement brut (API) pour l'édition, avec tous les champs. */
   raw?: Record<string, unknown>;
 }
 
-/** Type accepté par ProductFormModal. */
 type EditableProduct = {
   id: string;
   name: string;
@@ -123,7 +120,6 @@ export default function PdaLabelApp({
 }) {
   const rawBrand = useBrand();
 
-  // Logo spécifique PDA si configuré, sinon logo principal.
   const brand = {
     ...rawBrand,
     logo_url: rawBrand.pda_logo_url || rawBrand.logo_url,
@@ -158,51 +154,41 @@ export default function PdaLabelApp({
   const [sending, setSending] = useState(false);
   const [photoBusy, setPhotoBusy] = useState(false);
 
-  // Code-barres prérempli. Chaîne vide = création sans code prérempli.
   const [createFor, setCreateFor] = useState<string | null>(null);
-
-  // Édition article.
   const [editing, setEditing] = useState<EditableProduct | null>(
     null,
   );
 
-  // Choix étiquette / stock.
   const [pending, setPending] = useState<Product | null>(null);
 
-  // Entrée de stock.
   const [stockFor, setStockFor] = useState<Product | null>(null);
   const [stockQtyStr, setStockQtyStr] = useState('');
   const [stockLevel, setStockLevel] = useState<number | null>(null);
   const [stockMsg, setStockMsg] = useState<string | null>(null);
   const [stockSending, setStockSending] = useState(false);
-
-  // Quantité de la dernière entrée validée.
   const [lastStockQty, setLastStockQty] = useState(0);
 
   const photoRef = useRef<HTMLInputElement>(null);
 
-  // Tableau de bord.
   const [homeTab, setHomeTab] = useState<
     'home' | 'articles' | 'history' | 'settings'
   >('home');
 
-  // Mode de scan armé.
   const [scanPrompt, setScanPrompt] = useState<
     null | 'choice' | 'label' | 'stock'
   >(null);
+
+  const [scanInputKey, setScanInputKey] = useState(0);
 
   const [invOpen, setInvOpen] = useState(false);
   const [batchOpen, setBatchOpen] = useState(false);
 
   const promptRef = useRef<HTMLInputElement>(null);
 
-  // Timer pour les lecteurs injectant la donnée sans Entrée.
   const scanTimer = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
 
-  // Protection contre un scan traité deux fois :
-  // une fois dans onInput, puis une seconde fois avec Entrée.
   const lastScanRef = useRef<{
     code: string;
     at: number;
@@ -213,10 +199,6 @@ export default function PdaLabelApp({
 
   const [recent, setRecent] = useState<RecentAction[]>([]);
 
-  // ---------------------------------------------------------------------------
-  // Activité récente
-  // ---------------------------------------------------------------------------
-
   useEffect(() => {
     try {
       const saved = localStorage.getItem('webpos_pda_recent');
@@ -225,7 +207,7 @@ export default function PdaLabelApp({
         setRecent(JSON.parse(saved) as RecentAction[]);
       }
     } catch {
-      // Ignore les erreurs de stockage local.
+      // Ignore
     }
   }, []);
 
@@ -242,7 +224,7 @@ export default function PdaLabelApp({
         minute: '2-digit',
       });
     } catch {
-      // Ignore les erreurs de formatage.
+      // Ignore
     }
 
     setRecent((current) => {
@@ -262,16 +244,60 @@ export default function PdaLabelApp({
           JSON.stringify(next),
         );
       } catch {
-        // Ignore les erreurs de quota.
+        // Ignore
       }
 
       return next;
     });
   }
 
-  // ---------------------------------------------------------------------------
-  // Résolution de la station PDA
-  // ---------------------------------------------------------------------------
+  function clearScanTimer() {
+    if (scanTimer.current) {
+      clearTimeout(scanTimer.current);
+      scanTimer.current = null;
+    }
+  }
+
+  function resetScanReader() {
+    clearScanTimer();
+
+    if (promptRef.current) {
+      promptRef.current.value = '';
+      promptRef.current.blur();
+    }
+
+    lastScanRef.current = {
+      code: '',
+      at: 0,
+    };
+
+    setScanInputKey((current) => current + 1);
+  }
+
+  function openScanPrompt(mode: ScanMode) {
+    resetScanReader();
+
+    setQ('');
+    setMsg(null);
+    setPending(null);
+    setSelected(null);
+    setStockFor(null);
+    setScanPrompt(mode);
+
+    window.setTimeout(() => {
+      const input = promptRef.current;
+
+      if (input) {
+        input.value = '';
+        input.focus();
+      }
+    }, 100);
+  }
+
+  function closeScanPrompt() {
+    resetScanReader();
+    setScanPrompt(null);
+  }
 
   useEffect(() => {
     void (async () => {
@@ -326,10 +352,6 @@ export default function PdaLabelApp({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ---------------------------------------------------------------------------
-  // Chargement du catalogue
-  // ---------------------------------------------------------------------------
-
   async function reloadProducts() {
     const response = await fetch('/api/products?active=true');
 
@@ -340,30 +362,30 @@ export default function PdaLabelApp({
     const json = await response.json();
 
     setProducts(
-      (
-        json.products as Array<Record<string, unknown>>
-      ).map((product) => ({
-        id: String(product.id),
-        name: String(product.name),
-        sku: (product.sku as string) ?? null,
-        barcode: (product.barcode as string) ?? null,
-        extra_barcodes:
-          (product.extra_barcodes as string[]) ?? [],
-        sale_price_ttc: Number(product.sale_price_ttc),
-        discount_type:
-          (product.discount_type as
-            | 'percent'
-            | 'amount'
-            | null) ?? null,
-        discount_value:
-          product.discount_value != null
-            ? Number(product.discount_value)
-            : null,
-        image_url: (product.image_url as string) ?? null,
-        category_name:
-          (product.category_name as string) ?? null,
-        raw: product,
-      })),
+      (json.products as Array<Record<string, unknown>>).map(
+        (product) => ({
+          id: String(product.id),
+          name: String(product.name),
+          sku: (product.sku as string) ?? null,
+          barcode: (product.barcode as string) ?? null,
+          extra_barcodes:
+            (product.extra_barcodes as string[]) ?? [],
+          sale_price_ttc: Number(product.sale_price_ttc),
+          discount_type:
+            (product.discount_type as
+              | 'percent'
+              | 'amount'
+              | null) ?? null,
+          discount_value:
+            product.discount_value != null
+              ? Number(product.discount_value)
+              : null,
+          image_url: (product.image_url as string) ?? null,
+          category_name:
+            (product.category_name as string) ?? null,
+          raw: product,
+        }),
+      ),
     );
   }
 
@@ -399,8 +421,7 @@ export default function PdaLabelApp({
         }>;
 
         const printer = printers.find(
-          (item) =>
-            item.role === 'label' && item.enabled,
+          (item) => item.role === 'label' && item.enabled,
         );
 
         setCloudPrinter(printer ? printer.label : null);
@@ -424,15 +445,10 @@ export default function PdaLabelApp({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [station]);
 
-  // ---------------------------------------------------------------------------
-  // Scanner global
-  // ---------------------------------------------------------------------------
-
   const scanFnRef = useRef<(code: string) => void>(() => {});
 
   useEffect(() => {
     scanFnRef.current = (code: string) => {
-      // Aucun scan pendant les écrans ou modales où une action est déjà en cours.
       if (
         selected ||
         createFor !== null ||
@@ -465,7 +481,6 @@ export default function PdaLabelApp({
 
       const tag = activeElement?.tagName;
 
-      // Lorsqu'un champ est actif, le champ gère lui-même le scan.
       if (
         tag === 'INPUT' ||
         tag === 'TEXTAREA' ||
@@ -481,13 +496,13 @@ export default function PdaLabelApp({
         }
 
         buffer = '';
+        lastKeyAt = 0;
         return;
       }
 
       if (event.key.length === 1) {
         const now = Date.now();
 
-        // Une pause supérieure à 300 ms indique une nouvelle séquence.
         if (now - lastKeyAt > 300) {
           buffer = '';
         }
@@ -504,18 +519,11 @@ export default function PdaLabelApp({
     };
   }, []);
 
-  // Nettoie le timer si le composant est démonté.
   useEffect(() => {
     return () => {
-      if (scanTimer.current) {
-        clearTimeout(scanTimer.current);
-      }
+      clearScanTimer();
     };
   }, []);
-
-  // ---------------------------------------------------------------------------
-  // Recherche catalogue
-  // ---------------------------------------------------------------------------
 
   const filtered = useMemo(() => {
     const search = q.trim().toLowerCase();
@@ -534,23 +542,18 @@ export default function PdaLabelApp({
         product.name.toLowerCase().includes(search) ||
         (product.sku?.toLowerCase().includes(search) ??
           false) ||
-        (product.barcode
-          ?.toLowerCase()
-          .includes(search) ?? false) ||
+        (product.barcode?.toLowerCase().includes(search) ??
+          false) ||
         extraMatch
       );
     });
   }, [products, q]);
 
-  // ---------------------------------------------------------------------------
-  // Traitement strict d'un code scanné
-  // ---------------------------------------------------------------------------
-
   function handleCode(
     raw: string,
     mode: ScanMode = 'choice',
   ) {
-    const code = raw
+    const code = String(raw ?? '')
       .replace(/[\r\n\t]/g, '')
       .trim()
       .toUpperCase();
@@ -561,11 +564,9 @@ export default function PdaLabelApp({
 
     const now = Date.now();
 
-    // Le même scan peut être reçu une fois par onInput puis une seconde fois
-    // via la touche Entrée. On ignore le doublon immédiat.
     if (
       lastScanRef.current.code === code &&
-      now - lastScanRef.current.at < 800
+      now - lastScanRef.current.at < 500
     ) {
       return;
     }
@@ -575,8 +576,6 @@ export default function PdaLabelApp({
       at: now,
     };
 
-    // Recherche uniquement sur une correspondance exacte.
-    // filtered ne doit jamais être utilisé ici comme solution de secours.
     const hit = products.find((product) => {
       const barcode = String(product.barcode ?? '')
         .trim()
@@ -590,9 +589,7 @@ export default function PdaLabelApp({
         product.extra_barcodes,
       )
         ? product.extra_barcodes.map((value) =>
-            String(value ?? '')
-              .trim()
-              .toUpperCase(),
+            String(value ?? '').trim().toUpperCase(),
           )
         : [];
 
@@ -603,32 +600,31 @@ export default function PdaLabelApp({
       );
     });
 
-    // Toujours effacer l'ancienne recherche.
+    clearScanTimer();
+
+    if (promptRef.current) {
+      promptRef.current.value = '';
+      promptRef.current.blur();
+    }
+
     setQ('');
     setMsg(null);
+    setScanPrompt(null);
+    setScanInputKey((current) => current + 1);
 
     if (hit) {
-      if (mode !== 'choice') {
-        setScanPrompt(null);
-      }
-
       routeProduct(hit, mode);
       return;
     }
 
-    // Le code n'est pas reconnu. On ferme tout ancien produit afin de ne jamais
-    // continuer une saisie sur le mauvais article.
     setPending(null);
     setSelected(null);
     setStockFor(null);
-    setScanPrompt(null);
 
     if (canWrite) {
       setCreateFor(code);
     } else {
-      setMsg(
-        `Article introuvable pour le code ${code}.`,
-      );
+      setMsg(`Article introuvable pour le code ${code}.`);
     }
   }
 
@@ -646,12 +642,20 @@ export default function PdaLabelApp({
   }
 
   function pickProduct(product: Product) {
+    resetScanReader();
+
+    setScanPrompt(null);
     setPending(product);
+    setSelected(null);
     setQ('');
     setMsg(null);
   }
 
   function openProduct(product: Product) {
+    resetScanReader();
+
+    setScanPrompt(null);
+    setPending(null);
     setSelected(product);
     setQtyStr('');
     setQ('');
@@ -659,14 +663,15 @@ export default function PdaLabelApp({
   }
 
   function backToList() {
-    setSelected(null);
-    setMsg(null);
-    setQtyStr('');
-  }
+    resetScanReader();
 
-  // ---------------------------------------------------------------------------
-  // Navigation
-  // ---------------------------------------------------------------------------
+    setSelected(null);
+    setPending(null);
+    setScanPrompt(null);
+    setQtyStr('');
+    setQ('');
+    setMsg(null);
+  }
 
   const goTab = (
     tab:
@@ -675,9 +680,12 @@ export default function PdaLabelApp({
       | 'history'
       | 'settings',
   ) => {
+    resetScanReader();
+
     setScanPrompt(null);
     setSelected(null);
     setPending(null);
+    setStockFor(null);
     setMsg(null);
     setQ('');
     setHomeTab(tab);
@@ -709,12 +717,7 @@ export default function PdaLabelApp({
 
       <div className="grid place-items-center">
         <button
-          onClick={() => {
-            setQ('');
-            setMsg(null);
-            setPending(null);
-            setScanPrompt('choice');
-          }}
+          onClick={() => openScanPrompt('choice')}
           className="h-14 w-14 -mt-5 rounded-full accent-bar text-white grid place-items-center shadow-lg relative z-10"
         >
           <IconBarcode />
@@ -749,11 +752,12 @@ export default function PdaLabelApp({
     </nav>
   );
 
-  // ---------------------------------------------------------------------------
-  // Entrée de stock
-  // ---------------------------------------------------------------------------
-
   async function startStock(product: Product) {
+    resetScanReader();
+
+    setScanPrompt(null);
+    setPending(null);
+    setSelected(null);
     setStockFor(product);
     setStockQtyStr('');
     setStockLevel(null);
@@ -787,7 +791,7 @@ export default function PdaLabelApp({
         );
       }
     } catch {
-      // Niveau inconnu.
+      // Niveau inconnu
     }
   }
 
@@ -875,10 +879,6 @@ export default function PdaLabelApp({
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Quantité étiquettes
-  // ---------------------------------------------------------------------------
-
   function pressQty(key: string) {
     setQtyStr((current) => {
       if (key === 'C') {
@@ -901,10 +901,6 @@ export default function PdaLabelApp({
       return Number(next) > 200 ? '200' : next;
     });
   }
-
-  // ---------------------------------------------------------------------------
-  // Impression
-  // ---------------------------------------------------------------------------
 
   async function printLabelsFor(
     product: Product,
@@ -1008,10 +1004,6 @@ export default function PdaLabelApp({
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // Photo produit
-  // ---------------------------------------------------------------------------
-
   async function onPhoto(
     event: React.ChangeEvent<HTMLInputElement>,
   ) {
@@ -1088,15 +1080,11 @@ export default function PdaLabelApp({
         method: 'POST',
       });
     } catch {
-      // Ignore.
+      // Ignore
     }
 
     window.location.assign('/pda');
   }
-
-  // ---------------------------------------------------------------------------
-  // PDA non appairé
-  // ---------------------------------------------------------------------------
 
   if (station === null) {
     return (
@@ -1140,10 +1128,6 @@ export default function PdaLabelApp({
       ? discountedPrice(selected)
       : null;
 
-  // ---------------------------------------------------------------------------
-  // Création article
-  // ---------------------------------------------------------------------------
-
   if (createFor !== null) {
     return (
       <div
@@ -1163,7 +1147,10 @@ export default function PdaLabelApp({
           }}
         >
           <button
-            onClick={() => setCreateFor(null)}
+            onClick={() => {
+              setCreateFor(null);
+              resetScanReader();
+            }}
             className="text-sm text-accent-deep hover:underline"
           >
             ← Retour
@@ -1187,7 +1174,10 @@ export default function PdaLabelApp({
               createFor || undefined
             }
             posteStoreOverride={station.store_id}
-            onClose={() => setCreateFor(null)}
+            onClose={() => {
+              setCreateFor(null);
+              resetScanReader();
+            }}
             onSaved={async () => {
               setCreateFor(null);
 
@@ -1198,16 +1188,13 @@ export default function PdaLabelApp({
               );
 
               await reloadProducts();
+              resetScanReader();
             }}
           />
         </div>
       </div>
     );
   }
-
-  // ---------------------------------------------------------------------------
-  // Édition article
-  // ---------------------------------------------------------------------------
 
   if (editing) {
     return (
@@ -1252,7 +1239,6 @@ export default function PdaLabelApp({
             onClose={() => setEditing(null)}
             onSaved={async () => {
               setEditing(null);
-
               await reloadProducts();
 
               if (selected) {
@@ -1263,19 +1249,15 @@ export default function PdaLabelApp({
                 );
 
                 if (response.ok) {
-                  const productsResponse = (
+                  const product = (
                     (await response.json())
                       .products as Array<
                       Record<string, unknown>
                     >
+                  ).find(
+                    (item) =>
+                      String(item.id) === selected.id,
                   );
-
-                  const product =
-                    productsResponse.find(
-                      (item) =>
-                        String(item.id) ===
-                        selected.id,
-                    );
 
                   if (product) {
                     setSelected({
@@ -1322,10 +1304,6 @@ export default function PdaLabelApp({
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // Entrée de stock
-  // ---------------------------------------------------------------------------
-
   if (stockFor) {
     const stockQuantity =
       parseInt(stockQtyStr || '0', 10) || 0;
@@ -1353,6 +1331,13 @@ export default function PdaLabelApp({
               setStockMsg(null);
               setStockQtyStr('');
               setLastStockQty(0);
+              setScanPrompt(null);
+              setPending(null);
+              setSelected(null);
+              setQ('');
+              setMsg(null);
+
+              resetScanReader();
             }}
             className="text-sm text-accent-deep hover:underline"
           >
@@ -1467,16 +1452,15 @@ export default function PdaLabelApp({
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // Inventaire
-  // ---------------------------------------------------------------------------
-
   if (invOpen) {
     return (
       <PdaInventory
         storeId={station.store_id}
         storeName={station.store_name}
-        onClose={() => setInvOpen(false)}
+        onClose={() => {
+          setInvOpen(false);
+          resetScanReader();
+        }}
         onCounted={(label) =>
           addRecent(
             'stock',
@@ -1487,10 +1471,6 @@ export default function PdaLabelApp({
       />
     );
   }
-
-  // ---------------------------------------------------------------------------
-  // Entrée multiple
-  // ---------------------------------------------------------------------------
 
   if (batchOpen) {
     return (
@@ -1504,7 +1484,10 @@ export default function PdaLabelApp({
           extra_barcodes:
             product.extra_barcodes ?? [],
         }))}
-        onClose={() => setBatchOpen(false)}
+        onClose={() => {
+          setBatchOpen(false);
+          resetScanReader();
+        }}
         onDone={(count) =>
           addRecent(
             'stock',
@@ -1515,10 +1498,6 @@ export default function PdaLabelApp({
       />
     );
   }
-
-  // ---------------------------------------------------------------------------
-  // Application principale
-  // ---------------------------------------------------------------------------
 
   return (
     <div
@@ -1697,11 +1676,9 @@ export default function PdaLabelApp({
                   title="Imprimer une étiquette"
                   desc="Scannez un code-barres pour imprimer l'étiquette du produit."
                   icon={<IconPrinter />}
-                  onClick={() => {
-                    setQ('');
-                    setMsg(null);
-                    setScanPrompt('label');
-                  }}
+                  onClick={() =>
+                    openScanPrompt('label')
+                  }
                 />
 
                 {canWrite && (
@@ -1710,11 +1687,9 @@ export default function PdaLabelApp({
                     title="Entrer en stock"
                     desc="Scannez un code-barres pour entrer la marchandise en stock."
                     icon={<IconBoxDown />}
-                    onClick={() => {
-                      setQ('');
-                      setMsg(null);
-                      setScanPrompt('stock');
-                    }}
+                    onClick={() =>
+                      openScanPrompt('stock')
+                    }
                   />
                 )}
 
@@ -1724,9 +1699,10 @@ export default function PdaLabelApp({
                     title="Entrée multiple"
                     desc="Scannez plusieurs articles en série, puis validez la saisie en une fois."
                     icon={<IconBoxes />}
-                    onClick={() =>
-                      setBatchOpen(true)
-                    }
+                    onClick={() => {
+                      resetScanReader();
+                      setBatchOpen(true);
+                    }}
                   />
                 )}
 
@@ -1736,9 +1712,10 @@ export default function PdaLabelApp({
                     title="Créer un nouvel article"
                     desc="Créez un nouvel article dans le catalogue."
                     icon={<IconBoxPlus />}
-                    onClick={() =>
-                      setCreateFor('')
-                    }
+                    onClick={() => {
+                      resetScanReader();
+                      setCreateFor('');
+                    }}
                   />
                 )}
 
@@ -1748,9 +1725,10 @@ export default function PdaLabelApp({
                     title="Inventaire"
                     desc="Comptez un inventaire créé sur la caisse."
                     icon={<IconClipboard />}
-                    onClick={() =>
-                      setInvOpen(true)
-                    }
+                    onClick={() => {
+                      resetScanReader();
+                      setInvOpen(true);
+                    }}
                   />
                 )}
               </div>
@@ -1808,9 +1786,6 @@ export default function PdaLabelApp({
                       }
 
                       event.preventDefault();
-
-                      // Dans la recherche manuelle, Entrée traite strictement
-                      // la valeur saisie comme un code.
                       handleCode(q, 'choice');
                     }}
                   />
@@ -1941,7 +1916,6 @@ export default function PdaLabelApp({
 
       {renderBottomNav()}
 
-      {/* Invite de scan */}
       {scanPrompt && (
         <div
           className="fixed inset-0 z-[64] flex flex-col bg-bg"
@@ -1954,18 +1928,7 @@ export default function PdaLabelApp({
         >
           <div className="h-14 flex items-center px-4 border-b border-border">
             <button
-              onClick={() => {
-                if (scanTimer.current) {
-                  clearTimeout(scanTimer.current);
-                  scanTimer.current = null;
-                }
-
-                if (promptRef.current) {
-                  promptRef.current.value = '';
-                }
-
-                setScanPrompt(null);
-              }}
+              onClick={closeScanPrompt}
               className="text-sm text-accent-deep"
             >
               ← Annuler
@@ -1997,14 +1960,15 @@ export default function PdaLabelApp({
               </p>
 
               <input
+                key={scanInputKey}
                 ref={promptRef}
                 className="input h-12 mt-4 text-center text-lg w-64 max-w-full"
                 placeholder="Code-barres…"
                 autoComplete="off"
                 autoFocus
                 inputMode="none"
+                defaultValue=""
                 onFocus={(event) => {
-                  // Toujours repartir d'un champ vide.
                   event.currentTarget.value = '';
                 }}
                 onBlur={() => {
@@ -2034,17 +1998,8 @@ export default function PdaLabelApp({
 
                   const value = input.value;
 
-                  // Vider avant de traiter le code empêche l'ancien code
-                  // de rester dans le champ pendant le changement d'écran.
                   input.value = '';
-
-                  if (scanTimer.current) {
-                    clearTimeout(
-                      scanTimer.current,
-                    );
-
-                    scanTimer.current = null;
-                  }
+                  clearScanTimer();
 
                   if (value.trim()) {
                     handleCode(
@@ -2059,7 +2014,6 @@ export default function PdaLabelApp({
 
                   const value = input.value;
 
-                  // Certains lecteurs insèrent directement \r, \n ou \t.
                   const separatorIndex =
                     value.search(/[\r\n\t]/);
 
@@ -2070,14 +2024,7 @@ export default function PdaLabelApp({
                     );
 
                     input.value = '';
-
-                    if (scanTimer.current) {
-                      clearTimeout(
-                        scanTimer.current,
-                      );
-
-                      scanTimer.current = null;
-                    }
+                    clearScanTimer();
 
                     if (code.trim()) {
                       handleCode(
@@ -2089,19 +2036,22 @@ export default function PdaLabelApp({
                     return;
                   }
 
-                  if (scanTimer.current) {
-                    clearTimeout(
-                      scanTimer.current,
-                    );
-                  }
+                  clearScanTimer();
 
-                  // Pour un lecteur qui ne transmet pas Entrée, on considère
-                  // le scan terminé après 150 ms sans nouveau caractère.
                   scanTimer.current = setTimeout(
                     () => {
-                      const code = input.value;
+                      const currentInput =
+                        promptRef.current;
 
-                      input.value = '';
+                      if (!currentInput) {
+                        scanTimer.current = null;
+                        return;
+                      }
+
+                      const code =
+                        currentInput.value;
+
+                      currentInput.value = '';
                       scanTimer.current = null;
 
                       if (
@@ -2124,11 +2074,13 @@ export default function PdaLabelApp({
         </div>
       )}
 
-      {/* Choix après scan */}
       {pending && (
         <div
           className="fixed inset-0 z-[65] grid place-items-center bg-ink/40 backdrop-blur-sm p-6"
-          onClick={() => setPending(null)}
+          onClick={() => {
+            setPending(null);
+            resetScanReader();
+          }}
         >
           <div
             className="card w-full max-w-sm p-5 text-center"
@@ -2176,9 +2128,10 @@ export default function PdaLabelApp({
             )}
 
             <button
-              onClick={() =>
-                setPending(null)
-              }
+              onClick={() => {
+                setPending(null);
+                resetScanReader();
+              }}
               className="mt-3 text-sm text-ink-soft hover:text-ink"
             >
               Annuler
@@ -2233,7 +2186,6 @@ function BrandLogo({
   );
 }
 
-/** Réduit une image en data URL JPEG compressée. */
 function compressImage(
   file: File,
   maxSize: number,
@@ -2298,10 +2250,6 @@ function compressImage(
     image.src = url;
   });
 }
-
-// -----------------------------------------------------------------------------
-// Tableau de bord
-// -----------------------------------------------------------------------------
 
 function ActionCard({
   tone,
@@ -2438,10 +2386,6 @@ function NavItem({
     </button>
   );
 }
-
-// -----------------------------------------------------------------------------
-// Icônes
-// -----------------------------------------------------------------------------
 
 const sv = (
   content: React.ReactNode,
