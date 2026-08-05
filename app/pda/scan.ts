@@ -394,32 +394,75 @@ export function useScanField({ onCode, onSearch, canResolve, enabled = true }: {
 
   /* --- Canal 1 : frappes clavier, y compris hors du champ --- */
   useEffect(() => {
-    if (!enabled) { keyBufferRef.current!.reset(); return; }
+    if (!enabled) {
+      keyBufferRef.current!.reset();
+      return;
+    }
+
     const buffer = keyBufferRef.current!;
+
+    function isTerminator(e: KeyboardEvent) {
+      return e.key === 'Enter' || e.key === 'Tab';
+    }
+
+    function blockTerminator(e: KeyboardEvent) {
+      if (!isTerminator(e)) return false;
+
+      // Le suffixe envoyé par la douchette ne doit jamais continuer vers
+      // l'interface. Sinon Android/Chrome peut activer le bouton actuellement
+      // ciblé et ouvrir la fiche article après avoir correctement scanné.
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      return true;
+    }
 
     function onKeyDown(e: KeyboardEvent) {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
+
       activityRef.current++;
       bumpStats({ keydown: statsRef.current.keydown + 1, lastKey: e.key });
-      if (e.key === 'Enter' || e.key === 'Tab') {
-        e.preventDefault();
-        // Ordre de confiance : ce qui vient d'être inséré, puis les frappes,
-        // puis — en dernier recours seulement — le contenu du champ, qui peut
-        // être resté celui du scan précédent sur certains terminaux.
+
+      if (isTerminator(e)) {
+        blockTerminator(e);
+
+        // Ordre de confiance : texte réellement inséré, frappes reçues, puis
+        // valeur du champ uniquement en dernier recours.
         const fromInsert = insertRef.current.trim();
         const fromKeys = buffer.peek().trim();
+        const fromField = inputRef.current?.value?.trim() ?? '';
+
         buffer.reset();
         insertRef.current = '';
-        const raw = fromInsert || fromKeys || inputRef.current?.value || '';
-        emit(raw, fromInsert ? 'insertion' : fromKeys ? 'touches' : 'champ');
+
+        const raw = fromInsert || fromKeys || fromField;
+        if (raw) {
+          emit(raw, fromInsert ? 'insertion' : fromKeys ? 'touches' : 'champ');
+        }
         return;
       }
+
       buffer.push(e.key, Date.now());
     }
 
+    function onKeyPress(e: KeyboardEvent) {
+      // Certains WebView déclenchent encore l'action par keypress.
+      blockTerminator(e);
+    }
+
+    function onKeyUp(e: KeyboardEvent) {
+      // Certains boutons sont activés au relâchement de la touche.
+      blockTerminator(e);
+    }
+
     window.addEventListener('keydown', onKeyDown, true);
+    window.addEventListener('keypress', onKeyPress, true);
+    window.addEventListener('keyup', onKeyUp, true);
+
     return () => {
       window.removeEventListener('keydown', onKeyDown, true);
+      window.removeEventListener('keypress', onKeyPress, true);
+      window.removeEventListener('keyup', onKeyUp, true);
       buffer.reset();
     };
   }, [enabled, emit, bumpStats]);
