@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { PdaProduct, Station } from './PdaApp';
 import { useCodeIndex, useScanField, normalizeCode } from './scan';
 import {
@@ -66,37 +66,83 @@ export default function PdaStock({ station, products, onUnknownCode, onHome, not
 
   /* ---------------------------------------------------------------- scan */
 
-  const addToCart = useCallback((p: PdaProduct, delta = 1) => {
-    setCart((cur) => {
-      const i = cur.findIndex((x) => x.product.id === p.id);
-      if (i < 0) return [{ product: p, qty: Math.max(1, delta) }, ...cur];
-      const next = [...cur];
-      next[i] = { ...next[i]!, qty: Math.max(0, next[i]!.qty + delta) };
-      // L'article scanné remonte en tête : on voit tout de suite l'effet.
-      const [item] = next.splice(i, 1);
-      return [item!, ...next];
-    });
-  }, []);
+/* ---------------------------------------------------------------- scan */
 
-  /** Applique un article résolu, selon l'onglet actif. */
-  const apply = useCallback((p: PdaProduct) => {
-    if (tab === 'single') {
-      setCurrent(p);
-      setQty(1);
-      setMessage(null);
-    } else {
-      addToCart(p, 1);
-      setMessage({ text: `✓ ${p.name}`, tone: 'ok' });
+const scanFocusRef = useRef<(() => void) | null>(null);
+const scanClearRef = useRef<(() => void) | null>(null);
+
+const addToCart = useCallback((p: PdaProduct, delta = 1) => {
+  setCart((currentCart) => {
+    const index = currentCart.findIndex((item) => item.product.id === p.id);
+
+    if (index < 0) {
+      return [
+        {
+          product: p,
+          qty: Math.max(1, delta),
+        },
+        ...currentCart,
+      ];
     }
-  }, [tab, addToCart]);
 
-  /** Point d'entrée unique d'un code : correspondance exacte, sinon inconnu. */
+    const nextCart = [...currentCart];
+
+    nextCart[index] = {
+      ...nextCart[index]!,
+      qty: Math.max(0, nextCart[index]!.qty + delta),
+    };
+
+    const [updatedItem] = nextCart.splice(index, 1);
+
+    return [updatedItem!, ...nextCart];
+  });
+}, []);
+
+/**
+ * Réarme le champ après la mise à jour de React.
+ *
+ * En mode Input Box, le lecteur écrit uniquement dans l'élément qui possède
+ * réellement le focus. En série, l'ajout dans le panier provoque un nouveau
+ * rendu et certains WebView Android perdent momentanément cette cible.
+ */
+const rearmScanner = useCallback(() => {
+  const rearm = () => {
+    scanClearRef.current?.();
+    scanFocusRef.current?.();
+  };
+
+  requestAnimationFrame(rearm);
+  window.setTimeout(rearm, 40);
+  window.setTimeout(rearm, 120);
+}, []);
+
+/** Applique un article résolu, selon l'onglet actif. */
+const apply = useCallback((product: PdaProduct) => {
+  if (tab === 'single') {
+    setCurrent(product);
+    setQty(1);
+    setMessage(null);
+    rearmScanner();
+    return;
+  }
+
+  addToCart(product, 1);
+
+  setMessage({
+    text: `✓ ${product.name}`,
+    tone: 'ok',
+  });
+
+  rearmScanner();
+}, [tab, addToCart, rearmScanner]);
+
+/** Point d'entrée unique d'un code : correspondance exacte, sinon inconnu. */
 const handleCode = useCallback((rawCode: string) => {
   const code = normalizeCode(rawCode);
-  const hit = index.get(code);
+  const product = index.get(code);
 
-  if (hit) {
-    apply(hit);
+  if (product) {
+    apply(product);
     return;
   }
 
@@ -106,16 +152,48 @@ const handleCode = useCallback((rawCode: string) => {
   });
 
   onUnknownCode(code);
-}, [index, apply, onUnknownCode]);
+  rearmScanner();
+}, [index, apply, onUnknownCode, rearmScanner]);
 
-  // Le pavé numérique prend le clavier à son compte : on suspend le scan.
-  const field = useScanField({
-    onCode: handleCode,
-    onSearch: setSearch,
-    canResolve: (c) => index.has(normalizeCode(c)),
-    enabled: pad === null,
+// Le pavé numérique prend le clavier à son compte : on suspend le scan.
+const field = useScanField({
+  onCode: handleCode,
+  onSearch: setSearch,
+  canResolve: (code) => index.has(normalizeCode(code)),
+  enabled: pad === null,
+});
+
+const {
+  clear: clearField,
+  focus: focusField,
+} = field;
+
+/*
+ * Les fonctions sont stockées en ref afin que apply() puisse réarmer le
+ * scanner sans créer de dépendance circulaire avec useScanField().
+ */
+scanClearRef.current = clearField;
+scanFocusRef.current = focusField;
+
+/*
+ * À l'ouverture de l'onglet Série et après la fermeture du pavé numérique,
+ * le champ doit redevenir immédiatement la cible du lecteur.
+ */
+useEffect(() => {
+  if (pad !== null) return;
+
+  requestAnimationFrame(() => {
+    focusField();
   });
-  const { clear: clearField, focus: focusField } = field;
+
+  const timer = window.setTimeout(() => {
+    focusField();
+  }, 100);
+
+  return () => {
+    window.clearTimeout(timer);
+  };
+}, [tab, pad, focusField]);
 
   /* --------------------------------------------------------- suggestions */
 
