@@ -1,17 +1,26 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { Station } from './PdaApp';
+import { useScanner } from './scan';
+import {
+  Screen, Header, Tabs, ScanField, QtyPad, ActionBar, Toast, InfoRow, IconChevron,
+} from './ui';
 
 /**
- * Module inventaire du PDA — phase de COMPTAGE.
+ * Inventaire — phase de COMPTAGE.
  *
- * Flux : l'inventaire est CRÉÉ sur la caisse (général ou par catégorie), le
- * COMPTAGE se fait ici au PDA (scan douchette → +1, ou saisie manuelle), puis
- * « Valider le comptage » bascule l'inventaire en pointage. On retrouve alors
- * le comptage et les écarts sur la caisse pour validation finale.
+ * L'inventaire est créé sur la caisse (général, par catégorie ou par
+ * fournisseur) ; le comptage se fait ici, puis « Clôturer l'inventaire »
+ * bascule en pointage : les écarts se valident ensuite sur la caisse.
  *
- * Comptage « à l'aveugle » : on n'affiche pas la quantité théorique pour ne pas
- * biaiser le comptage — les écarts apparaissent côté caisse.
+ * Comptage à l'aveugle : la quantité théorique n'est volontairement pas
+ * affichée, pour ne pas influencer le compteur. L'écart n'a de sens qu'une
+ * fois le comptage terminé, et il est calculé côté caisse.
+ *
+ * Résolution du code : elle est faite par le SERVEUR (`/scan`), à partir du
+ * code exact envoyé. Aucun repli local sur une liste filtrée — c'était la
+ * cause des comptages attribués à l'article précédent.
  */
 
 interface Inv {
@@ -25,344 +34,334 @@ interface Line {
   counted_qty: string;
 }
 
-export default function PdaInventory({
-  storeId, storeName, onClose, onCounted,
-}: {
-  storeId: string;
-  storeName: string;
-  onClose: () => void;
-  onCounted?: (label: string) => void;
+export default function PdaInventory({ station, onHome, notify }: {
+  station: Station;
+  onHome: () => void;
+  notify: (text: string, tone?: 'ok' | 'error') => void;
 }) {
-  const [view, setView] = useState<'list' | 'count'>('list');
   const [invs, setInvs] = useState<Inv[] | null>(null);
   const [current, setCurrent] = useState<Inv | null>(null);
   const [lines, setLines] = useState<Line[]>([]);
+  const [tab, setTab] = useState<'list' | 'summary'>('list');
   const [loading, setLoading] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  // Champ unique : scan (douchette → Entrée) OU recherche (nom / EAN → la liste
-  // ci-dessous se filtre, on touche pour saisir la quantité).
-  const [scanQuery, setScanQuery] = useState('');
-  const scanRef = useRef<HTMLInputElement>(null);
-  // Capture du scan par les FRAPPES (source de vérité), indépendante de la
-  // valeur du champ. Pause > 500 ms = nouvelle séquence.
-  const bufRef = useRef('');
-  const lastKeyRef = useRef(0);
-  const refocus = () => scanRef.current?.focus();
-  // Ne re-focus la douchette que si le focus est retombé « dans le vide ».
-  const guardedRefocus = () => {
-    const a = document.activeElement as HTMLElement | null;
-    if (!a || a.tagName === 'BODY') refocus();
-  };
-  // Vide le champ (non contrôlé), l'état de recherche ET le buffer de frappes.
-  function clearField() {
-    if (scanRef.current) scanRef.current.value = '';
-    setScanQuery('');
-    bufRef.current = '';
-  }
-  function submitScan(raw: string) {
-    const code = raw.trim();
-    if (!code) return;
-    const lc = code.toLowerCase();
-    const line = lines.find((l) => l.barcode?.toLowerCase() === lc || l.sku?.toLowerCase() === lc);
-    // Code connu / scan → +1 (résolu côté serveur). Sinon, un seul résultat de
-    // recherche → on ouvre son clavier de quantité.
-    if (line || visible.length !== 1) { clearField(); void doScan(code); }
-    else { openEdit(visible[0]!); }
-  }
-  const [editLine, setEditLine] = useState<Line | null>(null);
-  const [editStr, setEditStr] = useState('');
+  const [message, setMessage] = useState<{ text: string; tone: 'ok' | 'error' } | null>(null);
+  const [search, setSearch] = useState('');
+  const [edit, setEdit] = useState<Line | null>(null);
+  const [editValue, setEditValue] = useState('');
 
-  // ---- Liste des inventaires à compter (in_progress, boutique du PDA) ----
+  const fieldRef = useRef<HTMLInputElement>(null);
+  // Le comptage est envoyé au serveur : on sérialise les scans pour éviter
+  // que deux douchettes rapides ne se croisent sur la même ligne.
+  const chainRef = useRef<Promise<void>>(Promise.resolve());
+
+  const clearField = useCallback(() => {
+    if (fieldRef.current) fieldRef.current.value = '';
+    setSearch('');
+  }, []);
+  const focusField = useCallback(() => {
+    const a = document.activeElement as HTMLElement | null;
+    if (!a || a.tagName === 'BODY') fieldRef.current?.focus();
+  }, []);
+
+  /* ----------------------------------------------- liste des inventaires */
+
   const loadList = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await fetch('/api/inventories');
-      if (r.ok) {
-        const j = await r.json() as { inventories: Inv[] };
-        setInvs(j.inventories.filter((i) => i.store_id === storeId && i.status === 'in_progress'));
-      } else setInvs([]);
+      const r = await fetch('/api/inventories', { cache: 'no-store' });
+      const j = r.ok ? (await r.json()) as { inventories: Inv[] } : { inventories: [] };
+      setInvs(j.inventories.filter((i) => i.store_id === station.store_id && i.status === 'in_progress'));
     } catch { setInvs([]); }
     setLoading(false);
-  }, [storeId]);
+  }, [station.store_id]);
 
   useEffect(() => { void loadList(); }, [loadList]);
 
-  async function openInv(inv: Inv) {
-    setCurrent(inv); setView('count'); setLoading(true); setMsg(null); setScanQuery('');
+  async function open(inv: Inv) {
+    setCurrent(inv); setLoading(true); setMessage(null); setTab('list'); clearField();
     try {
-      const r = await fetch(`/api/inventories/${inv.id}`);
-      if (r.ok) {
-        const j = await r.json() as { lines: Line[] };
-        setLines(j.lines);
-      }
+      const r = await fetch(`/api/inventories/${inv.id}`, { cache: 'no-store' });
+      if (r.ok) setLines(((await r.json()) as { lines: Line[] }).lines);
     } catch { /* ignore */ }
     setLoading(false);
-    setTimeout(refocus, 100);
+    setTimeout(focusField, 80);
   }
 
-  function backToList() {
-    setView('list'); setCurrent(null); setLines([]); setMsg(null); setScanQuery('');
+  function back() {
+    setCurrent(null); setLines([]); setMessage(null); clearField();
     void loadList();
   }
 
-  // ---- Scan → +1 sur la ligne ----
-  const doScan = useCallback(async (code: string) => {
-    if (!current || !code.trim()) return;
+  /* ------------------------------------------------------------- comptage */
+
+  const countCode = useCallback(async (code: string) => {
+    if (!current) return;
     setBusy(true);
     try {
       const r = await fetch(`/api/inventories/${current.id}/scan`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: code.trim(), delta: 1 }),
+        body: JSON.stringify({ code, delta: 1 }),
       });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) {
-        setMsg(j.error === 'PRODUCT_NOT_FOUND' ? '❌ Article introuvable pour ce code.' : '❌ Échec du scan.');
-      } else {
-        const l = j.line as { id: string; counted_qty: string; product_name: string };
-        setLines((cur) => {
-          const idx = cur.findIndex((x) => x.id === l.id);
-          if (idx >= 0) {
-            const next = [...cur];
-            next[idx] = { ...next[idx]!, counted_qty: l.counted_qty };
-            return next;
-          }
-          // Ligne hors périmètre initial créée par le scan : on la rajoute.
-          return [{ id: l.id, product_id: '', product_name: l.product_name, sku: null, barcode: null, counted_qty: l.counted_qty }, ...cur];
+        setMessage({
+          text: j.error === 'PRODUCT_NOT_FOUND'
+            ? `Article introuvable : « ${code} »`
+            : 'Échec du scan.',
+          tone: 'error',
         });
-        setMsg(`✓ ${l.product_name} — ${Number(l.counted_qty)} compté(s)`);
+        return;
       }
+      const l = j.line as { id: string; counted_qty: string; product_name: string };
+      setLines((cur) => {
+        const i = cur.findIndex((x) => x.id === l.id);
+        if (i < 0) {
+          // Article hors périmètre initial : le scan l'ajoute à l'inventaire.
+          return [{
+            id: l.id, product_id: '', product_name: l.product_name,
+            sku: null, barcode: null, counted_qty: l.counted_qty,
+          }, ...cur];
+        }
+        const next = [...cur];
+        next[i] = { ...next[i]!, counted_qty: l.counted_qty };
+        return next;
+      });
+      setMessage({ text: `✓ ${l.product_name} — ${Number(l.counted_qty)} compté(s)`, tone: 'ok' });
     } finally {
       setBusy(false);
-      setTimeout(refocus, 30);
     }
   }, [current]);
 
-  // ---- Saisie manuelle d'une quantité (tap sur une ligne) ----
-  function openEdit(l: Line) {
-    setEditLine(l); setEditStr(String(Number(l.counted_qty) || ''));
-  }
-  function pressKey(k: string) {
-    setEditStr((cur) => {
-      if (k === 'C') return '';
-      if (k === '⌫') return cur.slice(0, -1);
-      const next = (cur + k).replace(/^0+(?=\d)/, '');
-      return next.length > 5 ? cur : next;
-    });
-  }
+  const handleCode = useCallback((raw: string) => {
+    const code = raw.trim();
+    if (!code || !current) return;
+    clearField();
+    // Mise en file : les scans sont appliqués dans l'ordre où ils arrivent.
+    chainRef.current = chainRef.current.then(() => countCode(code)).catch(() => {});
+  }, [current, countCode, clearField]);
+
+  // Scan actif uniquement sur l'écran de comptage, et pas pendant la saisie
+  // d'une quantité au pavé numérique.
+  useScanner(handleCode, current !== null && edit === null);
+
+  /* --------------------------------------------------- saisie manuelle */
+
   async function saveEdit() {
-    if (!current || !editLine) return;
-    const qty = Number(editStr || '0') || 0;
+    if (!current || !edit) return;
+    const qty = Math.max(0, parseInt(editValue || '0', 10) || 0);
     setBusy(true);
     try {
-      const r = await fetch(`/api/inventories/${current.id}/lines/${editLine.id}`, {
+      const r = await fetch(`/api/inventories/${current.id}/lines/${edit.id}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ counted_qty: qty }),
       });
       if (r.ok) {
-        setLines((cur) => cur.map((x) => (x.id === editLine.id ? { ...x, counted_qty: String(qty) } : x)));
-        setMsg(`✓ ${editLine.product_name} — ${qty} compté(s)`);
-        setEditLine(null);
-      } else setMsg('❌ Échec de la mise à jour.');
+        setLines((cur) => cur.map((x) => (x.id === edit.id ? { ...x, counted_qty: String(qty) } : x)));
+        setMessage({ text: `✓ ${edit.product_name} — ${qty} compté(s)`, tone: 'ok' });
+        setEdit(null);
+        setTimeout(focusField, 30);
+      } else {
+        setMessage({ text: 'Échec de la mise à jour.', tone: 'error' });
+      }
     } finally { setBusy(false); }
   }
 
-  // ---- Valider le comptage → passe en pointage (visible sur la caisse) ----
-  async function validate() {
+  /* ------------------------------------------------------------ clôture */
+
+  async function close() {
     if (!current) return;
     const label = current.label;
     setBusy(true);
     try {
       const r = await fetch(`/api/inventories/${current.id}/review`, { method: 'POST' });
       if (r.ok) {
-        onCounted?.(label);
-        backToList();
-        setMsg(`✅ Comptage « ${label} » validé. Écarts disponibles sur la caisse.`);
+        notify(`Comptage « ${label} » clôturé. Écarts disponibles sur la caisse.`);
+        back();
       } else {
         const j = await r.json().catch(() => ({}));
-        setMsg(j.error === 'INVENTORY_NOT_IN_PROGRESS' ? '❌ Cet inventaire n\'est plus en comptage.' : '❌ Échec de la validation.');
+        setMessage({
+          text: j.error === 'INVENTORY_NOT_IN_PROGRESS'
+            ? "Cet inventaire n'est plus en comptage."
+            : 'Échec de la clôture.',
+          tone: 'error',
+        });
       }
     } finally { setBusy(false); }
   }
 
-  const countedTotal = useMemo(() => lines.filter((l) => Number(l.counted_qty) > 0).length, [lines]);
+  /* ------------------------------------------------------------ dérivés */
+
+  const counted = useMemo(() => lines.filter((l) => Number(l.counted_qty) > 0), [lines]);
+  const totalUnits = useMemo(
+    () => counted.reduce((s, l) => s + Number(l.counted_qty), 0),
+    [counted],
+  );
   const visible = useMemo(() => {
-    const q = scanQuery.trim().toLowerCase();
+    const q = search.trim().toLowerCase();
+    // Sans recherche, on montre la progression : les articles déjà comptés.
     const src = q
       ? lines.filter((l) => l.product_name.toLowerCase().includes(q)
           || (l.sku?.toLowerCase().includes(q) ?? false)
           || (l.barcode?.toLowerCase().includes(q) ?? false))
-      // Sans recherche : on montre les articles déjà comptés (progression).
-      : lines.filter((l) => Number(l.counted_qty) > 0);
+      : counted;
     return src.slice(0, 300);
-  }, [lines, scanQuery]);
+  }, [lines, counted, search]);
 
-  const header = (title: string, onBack: () => void) => (
-    <header className="shrink-0 border-b border-border bg-surface flex items-center gap-3 px-4"
-      style={{ paddingTop: 'env(safe-area-inset-top, 0px)', minHeight: 'calc(3.5rem + env(safe-area-inset-top, 0px))' }}>
-      <button onClick={onBack} className="text-sm text-accent-deep hover:underline">← Retour</button>
-      <div className="flex-1 text-center font-semibold truncate">{title}</div>
-      <div className="w-14" />
-    </header>
-  );
+  /* ------------------------------------------------- choix de l'inventaire */
 
-  // ===== Liste des inventaires =====
-  if (view === 'list') {
+  if (!current) {
     return (
-      <div className="h-screen flex flex-col bg-bg text-ink overflow-hidden" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
-        {header('Inventaire', onClose)}
-        <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3">
-          <p className="text-sm text-ink-soft">
-            Boutique : <strong>{storeName}</strong>. Les inventaires se créent sur la caisse ;
-            le comptage se fait ici.
+      <Screen>
+        <Header title="Inventaire" onBack={onHome} onHome={onHome} />
+        <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2.5">
+          <p className="text-sm text-ink-soft px-1">
+            Boutique : <strong className="text-ink">{station.store_name}</strong>. Les inventaires
+            se créent sur la caisse ; le comptage se fait ici.
           </p>
-          {msg && <div className="card p-3 text-sm text-center">{msg}</div>}
           {loading || invs === null ? (
-            <div className="p-6 text-sm text-ink-soft text-center">Chargement…</div>
+            <p className="pt-10 text-center text-sm text-ink-soft">Chargement…</p>
           ) : invs.length === 0 ? (
-            <div className="card p-6 text-sm text-ink-soft text-center">
-              Aucun inventaire à compter. Créez-en un sur la caisse (Inventaire ▸ Nouvel inventaire).
+            <div className="card p-6 text-center text-sm text-ink-soft">
+              Aucun inventaire à compter.<br />
+              Créez-en un sur la caisse (Inventaire ▸ Nouvel inventaire).
             </div>
           ) : (
-            <ul className="space-y-2">
-              {invs.map((i) => (
-                <li key={i.id}>
-                  <button onClick={() => void openInv(i)}
-                    className="card w-full text-left p-4 active:scale-[0.99] transition-transform">
-                    <div className="font-semibold leading-tight">{i.label}</div>
-                    <div className="text-xs text-ink-soft mt-0.5">
-                      {i.scope_type === 'total' ? 'Général (tous les articles)'
-                        : i.scope_type === 'category' ? 'Par catégorie'
-                        : 'Par fournisseur'} · {i.line_count} article(s)
-                    </div>
-                    <div className="text-xs text-ink-soft mt-0.5">
-                      Créé le {new Date(i.created_at).toLocaleDateString('fr-FR')}
-                    </div>
+            invs.map((i) => (
+              <button key={i.id} onClick={() => void open(i)}
+                      className="card w-full flex items-center gap-3 p-3 text-left active:scale-[0.99] transition-transform">
+                <span className="min-w-0 flex-1">
+                  <span className="block font-semibold leading-tight truncate">{i.label}</span>
+                  <span className="block text-xs text-ink-soft">
+                    {i.scope_type === 'total' ? 'Général (tous les articles)'
+                      : i.scope_type === 'category' ? 'Par catégorie' : 'Par fournisseur'}
+                    {' · '}{i.line_count} article(s)
+                  </span>
+                  <span className="block text-xs text-ink-soft">
+                    Créé le {new Date(i.created_at).toLocaleDateString('fr-FR')}
+                  </span>
+                </span>
+                <span className="shrink-0 text-ink-soft"><IconChevron /></span>
+              </button>
+            ))
+          )}
+        </div>
+      </Screen>
+    );
+  }
+
+  /* --------------------------------------------------------- comptage */
+
+  return (
+    <Screen>
+      <Header title="Inventaire" onBack={back} onHome={onHome} />
+
+      <div className="shrink-0 p-3 bg-surface border-b border-border">
+        <div className="text-xs text-ink-soft mb-1.5 truncate">
+          Scanner un produit — {current.label}
+        </div>
+        <ScanField
+          inputRef={fieldRef}
+          onSearch={setSearch}
+          showClear={search.length > 0}
+          placeholder="Scanner ou rechercher…"
+        />
+      </div>
+
+      <Tabs
+        value={tab}
+        onChange={setTab}
+        items={[{ value: 'list', label: 'Liste' }, { value: 'summary', label: 'Synthèse' }]}
+      />
+
+      {tab === 'list' ? (
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          {loading ? (
+            <p className="pt-10 text-center text-sm text-ink-soft">Chargement…</p>
+          ) : visible.length === 0 ? (
+            <p className="pt-10 text-center text-sm text-ink-soft px-6">
+              {search
+                ? 'Aucun article ne correspond à cette recherche.'
+                : 'Scannez un article pour démarrer le comptage.'}
+            </p>
+          ) : (
+            <ul className="divide-y divide-border">
+              {visible.map((l) => (
+                <li key={l.id}>
+                  <button
+                    onClick={() => { setEdit(l); setEditValue(String(Number(l.counted_qty) || '')); }}
+                    className="w-full flex items-center gap-3 px-3 py-3 text-left bg-surface active:bg-gray-100"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block font-medium truncate">{l.product_name}</span>
+                      <span className="block text-xs text-ink-soft truncate">
+                        Réf. : {l.barcode ?? l.sku ?? '—'}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-right">
+                      <span className="block text-[10px] uppercase tracking-wide text-ink-soft">Compté</span>
+                      <span className="block text-lg font-bold tabular-nums" style={{ color: 'var(--primary-deep)' }}>
+                        {Number(l.counted_qty)}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-ink-soft"><IconChevron /></span>
                   </button>
                 </li>
               ))}
             </ul>
           )}
         </div>
-      </div>
-    );
-  }
-
-  // ===== Écran de comptage =====
-  return (
-    <div className="h-screen flex flex-col bg-bg text-ink overflow-hidden" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
-      {header(current?.label ?? 'Comptage', backToList)}
-
-      {/* Zone scan / recherche */}
-      <div className="shrink-0 p-3 border-b border-border bg-surface">
-        <div className="text-xs text-ink-soft mb-1">Scanner (douchette) ou rechercher par nom / EAN — touchez un article pour saisir la quantité</div>
-        <div className="relative">
-          {/* Champ NON contrôlé : la douchette écrit directement dans le DOM
-              (fiable même en scan rapide). `scanQuery` ne sert qu'au filtrage. */}
-          <input
-            ref={scanRef}
-            className="input h-12 w-full pr-10 text-base"
-            placeholder="Scanner ou rechercher (nom, EAN, SKU)…"
-            autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} autoFocus
-            onChange={(e) => {
-              const v = e.target.value;
-              const nl = v.search(/[\r\n\t]/);
-              if (nl >= 0) { const code = v.slice(0, nl); clearField(); void doScan(code); return; } // douchette « paste »
-              setScanQuery(v);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                const code = bufRef.current.trim() || e.currentTarget.value;
-                bufRef.current = '';
-                submitScan(code);
-                return;
-              }
-              if (e.key === 'Backspace') { bufRef.current = bufRef.current.slice(0, -1); return; }
-              if (e.key.length === 1) {
-                const now = performance.now();
-                if (now - lastKeyRef.current > 500) bufRef.current = '';
-                lastKeyRef.current = now;
-                bufRef.current += e.key;
-              }
-            }}
-            onBlur={() => setTimeout(() => { if (view === 'count' && !editLine) guardedRefocus(); }, 80)}
-          />
-          {scanQuery && (
-            <button type="button" onClick={() => { clearField(); refocus(); }} aria-label="Effacer"
-                    className="absolute right-2 top-1/2 -translate-y-1/2 grid place-items-center h-7 w-7 rounded-full text-ink-soft hover:bg-gray-100 hover:text-ink">
-              <span aria-hidden className="text-lg leading-none">×</span>
-            </button>
-          )}
-        </div>
-        <div className="mt-2 flex items-center justify-between text-xs">
-          <span className="text-ink-soft">{countedTotal} article(s) compté(s)</span>
-          {busy && <span className="text-ink-soft">…</span>}
-        </div>
-        {msg && <div className="mt-1 text-sm">{msg}</div>}
-      </div>
-
-      <div className="flex-1 min-h-0 overflow-y-auto">
-        {loading ? (
-          <div className="p-6 text-sm text-ink-soft text-center">Chargement…</div>
-        ) : visible.length === 0 ? (
-          <div className="p-6 text-sm text-ink-soft text-center">
-            {scanQuery.trim() ? 'Aucun article trouvé.' : 'Scannez ou recherchez un article pour démarrer le comptage.'}
+      ) : (
+        <div className="flex-1 min-h-0 overflow-y-auto p-3">
+          <div className="card divide-y divide-border">
+            <div className="px-4 py-2.5 text-[11px] uppercase tracking-widest text-ink-soft font-semibold">
+              Résumé du comptage
+            </div>
+            <InfoRow label="Inventaire" value={current.label} />
+            <InfoRow label="Boutique" value={station.store_name} />
+            <InfoRow label="Périmètre" value={
+              current.scope_type === 'total' ? 'Général'
+                : current.scope_type === 'category' ? 'Par catégorie' : 'Par fournisseur'
+            } />
+            <InfoRow label="Articles au périmètre" value={lines.length} />
+            <InfoRow label="Articles comptés" value={counted.length} tone="success" />
+            <InfoRow label="Unités comptées" value={totalUnits} tone="success" />
           </div>
-        ) : (
-          <ul className="divide-y divide-border">
-            {visible.map((l) => (
-              <li key={l.id}>
-                <button onClick={() => openEdit(l)} className="w-full text-left px-3 py-3 flex items-center gap-3 active:bg-gray-100">
-                  <div className="min-w-0 flex-1">
-                    <div className="font-medium truncate">{l.product_name}</div>
-                    <div className="text-xs text-ink-soft truncate">{l.barcode ?? l.sku ?? '— pas de code —'}</div>
-                  </div>
-                  <div className="text-lg font-semibold tabular-nums shrink-0">{Number(l.counted_qty)}</div>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      {/* Valider */}
-      <div className="shrink-0 p-3 border-t border-border bg-surface">
-        <button onClick={() => void validate()} disabled={busy}
-          className="btn-primary h-14 w-full text-base font-semibold">
-          Valider le comptage
-        </button>
-        <p className="mt-1 text-center text-[11px] text-ink-soft">
-          Les écarts seront visibles sur la caisse pour validation finale.
-        </p>
-      </div>
-
-      {/* Clavier de saisie manuelle */}
-      {editLine && (
-        <div className="fixed inset-0 z-[70] flex flex-col justify-end bg-ink/40" onClick={() => setEditLine(null)}>
-          <div className="bg-surface rounded-t-2xl p-4" onClick={(e) => e.stopPropagation()}
-               style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}>
-            <div className="font-semibold leading-tight">{editLine.product_name}</div>
-            <div className="text-xs text-ink-soft">Quantité comptée</div>
-            <div className="mt-2 rounded-xl border border-border h-14 px-4 flex items-center justify-end text-3xl font-semibold tabular-nums bg-white">
-              {editStr === '' ? <span className="text-ink-soft/40">0</span> : editStr}
-            </div>
-            <div className="mt-3 grid grid-cols-3 gap-2">
-              {['1','2','3','4','5','6','7','8','9','C','0','⌫'].map((k) => (
-                <button key={k} onClick={() => pressKey(k)}
-                  className={`h-14 rounded-xl text-xl font-semibold ${
-                    k === 'C' ? 'bg-danger/10 text-danger'
-                    : k === '⌫' ? 'bg-gray-100 text-ink-soft'
-                    : 'bg-gray-50 border border-border'}`}>{k}</button>
-              ))}
-            </div>
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <button onClick={() => setEditLine(null)} className="btn-soft h-12">Annuler</button>
-              <button onClick={() => void saveEdit()} disabled={busy} className="btn-primary h-12">Enregistrer</button>
-            </div>
-          </div>
+          <p className="mt-3 px-1 text-xs text-ink-soft">
+            Le comptage se fait à l&apos;aveugle : les quantités théoriques ne sont pas
+            affichées ici pour ne pas influencer le comptage. Les écarts sont calculés
+            et validés sur la caisse une fois l&apos;inventaire clôturé.
+          </p>
         </div>
       )}
-    </div>
+
+      {message && <Toast message={message.text} tone={message.tone} />}
+
+      <ActionBar>
+        <button
+          onClick={() => void close()}
+          disabled={busy || counted.length === 0}
+          className="btn-primary h-14 w-full text-base font-semibold disabled:opacity-40"
+        >
+          {busy ? '…' : "Clôturer l'inventaire"}
+        </button>
+      </ActionBar>
+
+      {edit && (
+        <QtyPad
+          title={edit.product_name}
+          subtitle="Quantité comptée"
+          value={editValue}
+          onKey={(k) => setEditValue((cur) => {
+            if (k === 'C') return '';
+            if (k === '⌫') return cur.slice(0, -1);
+            const next = (cur + k).replace(/^0+(?=\d)/, '');
+            return next.length > 5 ? cur : next;
+          })}
+          onCancel={() => { setEdit(null); setTimeout(focusField, 30); }}
+          onSave={() => void saveEdit()}
+        />
+      )}
+    </Screen>
   );
 }

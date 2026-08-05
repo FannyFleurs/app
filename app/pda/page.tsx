@@ -1,6 +1,6 @@
 import { readSessionFromCookie } from '@/lib/auth/session';
 import { userCan } from '@/lib/auth/permissions';
-import PdaLabelApp from './PdaLabelApp';
+import PdaApp from './PdaApp';
 import PdaPairing from './PdaPairing';
 
 export const dynamic = 'force-dynamic';
@@ -17,5 +17,5 @@ export default async function PdaStationPage() {
   if (!canRead) return <PdaPairing />;
   const canWrite = await userCan(user, 'products.write');
   const canInventory = await userCan(user, 'stock.adjust');
-  return <PdaLabelApp userName={user.fullName} canWrite={canWrite} canInventory={canInventory} />;
+  return <PdaApp canWrite={canWrite} canInventory={canInventory} />;
 }
