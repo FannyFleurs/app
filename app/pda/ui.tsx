@@ -197,15 +197,6 @@ export function ScanField({ field, placeholder, onCamera, showClear }: {
       </div>
       {/* Le navigateur refuse le focus automatique hors interaction : tant que
           le champ n'est pas armé, le lecteur intégré n'a nulle part où écrire. */}
-      {!field.armed && (
-        <button
-          onClick={() => field.focus()}
-          className="mt-1.5 w-full rounded-lg px-2 py-1.5 text-xs font-medium text-left"
-          style={{ backgroundColor: 'rgba(183,121,31,0.10)', color: '#96581B' }}
-        >
-          ⚠ Touchez le champ pour activer le scan
-        </button>
-      )}
     </div>
   );
 }
