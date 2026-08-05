@@ -157,14 +157,13 @@ export default function PdaApp({ canWrite, canInventory }: {
       const [, s, rc, tx] = await Promise.all([
         reloadProducts(),
         fetch('/api/settings/labels'),
-        fetch('/api/cloudprnt/printers'),
+        fetch(`/api/cloudprnt/printers/label?store_id=${encodeURIComponent(station.store_id)}`),
         fetch('/api/tax-rates'),
       ]);
       if (s.ok) setSettings((await s.json()).settings as LabelSettings);
       if (rc.ok) {
-        const printers = (await rc.json()).printers as Array<{ label: string; role: string; enabled: boolean }>;
-        const p = printers.find((x) => x.role === 'label' && x.enabled);
-        setCloudPrinter(p ? p.label : null);
+        const p = (await rc.json()).printer as { label: string } | null;
+        setCloudPrinter(p?.label ?? null);
       }
       if (tx.ok) {
         setTaxRates(((await tx.json()).tax_rates as TaxRate[]).map((t) => ({ ...t, rate: Number(t.rate) })));

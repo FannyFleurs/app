@@ -726,6 +726,9 @@ export default function ProductFormModal({
             discount_type: form.discount_type || null,
             discount_value: form.discount_type ? parseAmount(form.discount_value) : null,
           }}
+          // Boutique du poste : sélectionne l'imprimante étiquettes de CETTE
+          // boutique quand plusieurs sont déclarées.
+          storeId={posteStoreOverride ?? null}
           onClose={() => setShowLabel(false)}
         />
       )}
