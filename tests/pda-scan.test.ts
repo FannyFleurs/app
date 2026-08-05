@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  createScanBuffer, buildCodeIndex, normalizeCode, looksLikeCode, SEQUENCE_GAP_MS,
+  createScanBuffer, createValueWatcher, buildCodeIndex, normalizeCode, looksLikeCode,
+  SEQUENCE_GAP_MS, QUIET_MS,
 } from '@/app/pda/scan';
 
 /**
@@ -143,5 +144,77 @@ describe('reconnaissance d\'un code', () => {
   it('refuse un texte trop court', () => {
     expect(looksLikeCode('rose')).toBe(false);
     expect(looksLikeCode('12345')).toBe(false);
+  });
+});
+
+/**
+ * Observation de la valeur du champ : seul canal qui fonctionne quand le
+ * lecteur intégré du terminal écrit dans le DOM sans émettre d'événement.
+ * C'est ce cas qui faisait « scanner dans le vide », puis coller le second
+ * code au premier.
+ */
+describe('surveillance de la valeur du champ', () => {
+  const known = new Set(['111', '222']);
+  const watcher = () => createValueWatcher({
+    isCode: (v) => known.has(v) || looksLikeCode(v),
+  });
+
+  /** Simule une valeur apparue d'un bloc, puis observée périodiquement. */
+  function settle(w: ReturnType<typeof watcher>, value: string, from: number) {
+    w.observe(value, from);                       // première apparition
+    return w.observe(value, from + QUIET_MS + 10); // valeur stable
+  }
+
+  it('valide un code injecté sans aucun événement', () => {
+    expect(settle(watcher(), '3401579847521', 1000).code).toBe('3401579847521');
+  });
+
+  it('valide immédiatement sur un retour chariot', () => {
+    const w = watcher();
+    expect(w.observe('3401579847521\r', 1000).code).toBe('3401579847521');
+  });
+
+  it('valide immédiatement sur une tabulation', () => {
+    const w = watcher();
+    expect(w.observe('222\t', 1000).code).toBe('222');
+  });
+
+  it('enchaîne DEUX codes différents sur le même champ', () => {
+    const w = watcher();
+    expect(settle(w, '111', 1000).code).toBe('111');
+    // Le champ a été vidé par l'appelant : la valeur suivante repart de zéro.
+    expect(settle(w, '222', 2000).code).toBe('222');
+  });
+
+  it('ne valide pas deux fois la même valeur stable', () => {
+    const w = watcher();
+    expect(settle(w, '111', 1000).code).toBe('111');
+    expect(w.observe('111', 1000 + 2 * QUIET_MS).code).toBeNull();
+  });
+
+  it('ne valide jamais une recherche par nom', () => {
+    const w = watcher();
+    expect(settle(w, 'rose avalanche', 1000).code).toBeNull();
+  });
+
+  it('attend le silence avant de valider', () => {
+    const w = watcher();
+    w.observe('340157984', 1000);
+    expect(w.observe('340157984', 1000 + QUIET_MS - 30).code).toBeNull();
+    expect(w.observe('3401579847521', 1000 + QUIET_MS).code).toBeNull(); // toujours en train de grossir
+  });
+
+  it('signale les changements de valeur pour la recherche', () => {
+    const w = watcher();
+    expect(w.observe('ros', 1000).changed).toBe(true);
+    expect(w.observe('ros', 1010).changed).toBe(false);
+    expect(w.observe('rose', 1020).changed).toBe(true);
+  });
+
+  it('repart proprement après réinitialisation', () => {
+    const w = watcher();
+    w.observe('111', 1000);
+    w.reset();
+    expect(settle(w, '222', 1000).code).toBe('222');
   });
 });
