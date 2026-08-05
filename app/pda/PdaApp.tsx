@@ -181,6 +181,21 @@ export default function PdaApp({ canWrite, canInventory }: {
 
   const home = () => setScreen('home');
 
+  /** Purge le cache hors-ligne et le service worker, puis recharge. */
+  async function forceUpdate() {
+    try {
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map((r) => r.unregister()));
+      }
+      if ('caches' in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((k) => caches.delete(k)));
+      }
+    } catch { /* on recharge quand même */ }
+    window.location.replace(`/pda?v=${Date.now()}`);
+  }
+
   /* --- États d'attente --- */
   if (station === undefined || (station && loading)) {
     return (
@@ -277,6 +292,7 @@ export default function PdaApp({ canWrite, canInventory }: {
             <Row label="Articles en mémoire" value={String(products.length)} />
             <Row label="Format d'étiquette" value={`${settings.width_mm} × ${settings.height_mm} mm`} />
             <Row label="Imprimante étiquettes" value={cloudPrinter ?? 'Impression navigateur'} />
+            <Row label="Version installée" value={process.env.NEXT_PUBLIC_BUILD_ID ?? '—'} />
           </div>
           <button
             onClick={() => { void reloadProducts().then(() => notify('Catalogue actualisé.')); }}
@@ -286,6 +302,14 @@ export default function PdaApp({ canWrite, canInventory }: {
           </button>
           <button onClick={() => setScreen('diagnostic')} className="btn-soft h-12 w-full">
             Diagnostic du scan
+          </button>
+          {/* Une PWA ajoutée à l'écran d'accueil peut continuer à exécuter une
+              version en cache. Ce bouton la force à repartir du serveur. */}
+          <button
+            onClick={() => { void forceUpdate(); }}
+            className="btn-soft h-12 w-full"
+          >
+            Forcer la mise à jour de l&apos;application
           </button>
           <button
             onClick={() => { void fetch('/api/auth/logout', { method: 'POST' }).then(() => window.location.assign('/pda')); }}

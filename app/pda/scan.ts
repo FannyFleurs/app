@@ -255,9 +255,11 @@ export function useScanField({ onCode, onSearch, canResolve, enabled = true }: {
     lastKey: '', lastValue: '', lastCode: '', lastSource: '',
   });
   const statsRef = useRef(stats);
+  // Les compteurs ne passent PAS par un état React : une mise à jour d'état à
+  // chaque frappe re-rend le champ pendant la saisie, ce qui perturbe le
+  // clavier système Android. Ils sont accumulés en ref et publiés à part.
   const bumpStats = useCallback((patch: Partial<ScanStats>) => {
     statsRef.current = { ...statsRef.current, ...patch };
-    setStats(statsRef.current);
   }, []);
 
   const keyBufferRef = useRef<ScanBuffer | null>(null);
@@ -274,11 +276,54 @@ export function useScanField({ onCode, onSearch, canResolve, enabled = true }: {
     });
   }
 
+  // Code validé en dernier, et activité (frappe / événement input) survenue
+  // depuis. Sert à distinguer une VRAIE relecture d'un article d'une simple
+  // réinjection du champ par le clavier système.
+  const lastCodeRef = useRef('');
+  const activityRef = useRef(0);
+
+  /**
+   * Vide le champ pour de bon.
+   *
+   * Sur Android, écrire `value = ''` PENDANT un événement clavier est souvent
+   * annulé : le clavier système re-applique aussitôt son tampon de composition,
+   * et le champ retrouve le code précédent. La touche Entrée suivante relit
+   * alors l'ancien code — l'article scanné n'apparaît jamais, et c'est le
+   * précédent qui est recompté.
+   *
+   * On vide donc trois fois : tout de suite, au tour de boucle suivant, puis
+   * une dernière fois après un cycle complet de rendu ; et on force le clavier
+   * à lâcher sa composition par un blur/focus.
+   */
   const clear = useCallback(() => {
-    if (inputRef.current) inputRef.current.value = '';
+    const el = inputRef.current;
+    if (el) el.value = '';
     keyBufferRef.current!.reset();
     watcherRef.current!.reset();
     onSearchRef.current?.('');
+    if (!el) return;
+    // Les vidages différés sont CONDITIONNELS : ils n'effacent que le vide ou
+    // le code déjà traité. Sans cette garde, un scan arrivant dans l'intervalle
+    // serait effacé avant d'avoir pu être lu.
+    const wipeIfStale = () => {
+      const node = inputRef.current;
+      if (!node) return false;
+      const v = node.value.trim();
+      if (v !== '' && v !== lastCodeRef.current) return false;
+      node.value = '';
+      return true;
+    };
+    setTimeout(() => {
+      if (!wipeIfStale()) return;
+      // blur/focus : seule manière fiable de faire lâcher au clavier système
+      // sa composition en cours, sinon il réécrit ce qu'il croit être saisi.
+      if (document.activeElement === inputRef.current) {
+        inputRef.current?.blur();
+        inputRef.current?.focus({ preventScroll: true });
+      }
+      wipeIfStale();
+    }, 0);
+    setTimeout(wipeIfStale, 80);
   }, []);
 
   const focus = useCallback(() => {
@@ -292,9 +337,9 @@ export function useScanField({ onCode, onSearch, canResolve, enabled = true }: {
     // est le geste normal pour en compter deux. La protection contre le double
     // traitement d'un même scan est structurelle — `clear()` vide À LA FOIS le
     // champ et le tampon de frappes, donc le second canal n'a plus rien à lire.
+    lastCodeRef.current = code;
+    activityRef.current = 0;
     clear();
-    manualRef.current = false;
-    setManual(false);
     bumpStats({
       emitted: statsRef.current.emitted + 1,
       lastCode: code,
@@ -310,6 +355,7 @@ export function useScanField({ onCode, onSearch, canResolve, enabled = true }: {
 
     function onKeyDown(e: KeyboardEvent) {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
+      activityRef.current++;
       bumpStats({ keydown: statsRef.current.keydown + 1, lastKey: e.key });
       if (e.key === 'Enter' || e.key === 'Tab') {
         e.preventDefault();
@@ -334,7 +380,10 @@ export function useScanField({ onCode, onSearch, canResolve, enabled = true }: {
     const el = inputRef.current;
     if (!el) return;
 
-    const onInput = () => bumpStats({ input: statsRef.current.input + 1 });
+    const onInput = () => {
+      activityRef.current++;
+      bumpStats({ input: statsRef.current.input + 1 });
+    };
     el.addEventListener('input', onInput);
 
     // Tentative de focus initial : souvent refusée par le navigateur hors
@@ -357,6 +406,16 @@ export function useScanField({ onCode, onSearch, canResolve, enabled = true }: {
         if (!editing) node.focus({ preventScroll: true });
       }
 
+      // Le champ a retrouvé le code déjà validé sans qu'aucune frappe ni
+      // aucun événement ne soit survenu : c'est le clavier système qui l'a
+      // réinjecté, pas un nouveau scan. On efface sans rien recompter.
+      if (node.value.trim() && node.value.trim() === lastCodeRef.current && activityRef.current === 0) {
+        node.value = '';
+        watcherRef.current!.reset();
+        return;
+      }
+
+      setStats(statsRef.current);
       const res = watcherRef.current!.observe(node.value, Date.now());
       if (res.changed) {
         bumpStats({

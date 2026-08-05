@@ -161,3 +161,38 @@ describe('entrée de marchandise — lecteur muet (aucun événement)', () => {
     expect(lines.some((t) => t.includes('Eucalyptus Cinerea'))).toBe(true);
   });
 });
+
+/**
+ * Piège Android : vider le champ pendant l'événement clavier est annulé par le
+ * clavier système, qui réinjecte son tampon de composition. La touche Entrée
+ * suivante relit alors l'ANCIEN code — l'article scanné n'apparaît jamais et
+ * c'est le précédent qui est recompté. C'est le symptôme signalé en boutique.
+ */
+describe('entrée de marchandise — réinjection du champ par le clavier système', () => {
+  it('ne recompte pas un code réinjecté sans nouveau scan', () => {
+    mount();
+    goToSeries();
+    scanBlockThenEnter(A.barcode);
+
+    // Le clavier système remet le code dans le champ, sans aucun événement.
+    act(() => { field().value = A.barcode; });
+    act(() => { vi.advanceTimersByTime(QUIET_MS + 200); });
+
+    expect(cart().some((t) => t.includes('Rose Avalanche') && t.includes('Qté : 1'))).toBe(true);
+    expect(field().value).toBe('');
+  });
+
+  it('affiche bien le SECOND article même après une réinjection', () => {
+    mount();
+    goToSeries();
+    scanBlockThenEnter(A.barcode);
+    act(() => { field().value = A.barcode; });          // réinjection
+    act(() => { vi.advanceTimersByTime(QUIET_MS + 200); });
+
+    scanBlockThenEnter(B.barcode);                       // vrai second scan
+
+    const lines = cart();
+    expect(lines.some((t) => t.includes('Eucalyptus Cinerea') && t.includes('Qté : 1'))).toBe(true);
+    expect(lines.some((t) => t.includes('Rose Avalanche') && t.includes('Qté : 1'))).toBe(true);
+  });
+});
