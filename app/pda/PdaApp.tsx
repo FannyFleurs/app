@@ -173,11 +173,10 @@ export default function PdaApp({ canWrite, canInventory }: {
     })();
   }, [station, reloadProducts]);
 
-  /* --- Code inconnu : proposition de création (si droits) --- */
-  const onUnknownCode = useCallback((code: string) => {
-    if (canWrite) setCreateFor(code);
-    else notify(`Article introuvable pour « ${code} »`, 'error');
-  }, [canWrite, notify]);
+/* --- Code inconnu : rester sur l’écran courant, sans ouvrir la création --- */
+const onUnknownCode = useCallback((code: string) => {
+  notify(`Article introuvable pour « ${code} »`, 'error');
+}, [notify]);
 
   const home = () => setScreen('home');
 
