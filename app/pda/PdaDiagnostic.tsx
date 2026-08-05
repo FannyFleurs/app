@@ -52,6 +52,7 @@ export default function PdaDiagnostic({ onBack, onHome }: {
             tone={field.armed ? 'success' : 'danger'}
           />
           <InfoRow label="Mode" value={field.manual ? 'saisie manuelle' : 'scan'} />
+          <InfoRow label="Version installée" value={process.env.NEXT_PUBLIC_BUILD_ID ?? '—'} />
         </div>
 
         <div className="card divide-y divide-border">
