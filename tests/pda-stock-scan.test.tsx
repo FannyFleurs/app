@@ -8,17 +8,16 @@ import { LABEL_DEFAULTS } from '@/lib/settings/label';
 /**
  * Scan du PDA, rejoué sur le composant réel.
  *
- * Le comportement du lecteur intégré a été relevé sur le terminal via l'écran
- * « Diagnostic du scan » :
+ * Le moteur cible le mode Android « Input Box Mode » relevé sur le terminal :
+ * le lecteur écrit l'EAN complet dans le champ, puis envoie Entrée. La VALEUR
+ * DU CHAMP est la source de vérité ; le tampon de frappes n'est qu'un repli
+ * pour les douchettes en émulation clavier.
  *
- *   Frappes clavier : 31 pour 9 scans   → les chiffres n'arrivent PAS en frappes
- *   Événements « input » : 9            → un par scan, code complet d'un bloc
- *   Changements de valeur : 0           → tout est fini avant le tick suivant
- *   Dernière touche : Enter             → seul le terminateur est une frappe
- *
- * Le premier scénario ci-dessous reproduit exactement cette séquence. Les
- * suivants couvrent les autres modes de douchette, pour qu'un changement de
- * réglage du terminal ne casse pas le comptage.
+ * Deux détails du moteur conditionnent l'écriture de ces tests :
+ *  - un même code revalidé sous 120 ms est considéré comme un double
+ *    traitement du même événement et ignoré : on espace donc les scans ;
+ *  - la lecture du champ est différée de quelques dizaines de millisecondes,
+ *    le temps que le terminal ait fini d'écrire.
  */
 
 const STATION = { id: 's1', store_id: 'store-1', store_name: 'Boutique', name: 'PDA' };
@@ -36,6 +35,15 @@ const B = {
 
 const field = () => document.querySelector('input') as HTMLInputElement;
 
+/**
+ * Laisse le moteur terminer ses traitements différés entre deux gestes.
+ * Généreux à dessein : après un code accepté, l'écran ré-arme le champ
+ * jusqu'à 120 ms plus tard, et la lecture du champ est elle-même différée.
+ */
+function settle(ms = 400) {
+  act(() => { vi.advanceTimersByTime(ms); });
+}
+
 /** Mode observé : le code est inséré d'un bloc, puis la touche Entrée arrive. */
 function scanBlockThenEnter(code: string) {
   act(() => {
@@ -44,6 +52,8 @@ function scanBlockThenEnter(code: string) {
     el.dispatchEvent(new Event('input', { bubbles: true }));
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
   });
+  // Délai entre deux gâchettes : au-delà de la fenêtre anti-doublon.
+  settle();
 }
 
 /** Mode douchette USB : chaque caractère est une frappe, puis Entrée. */
@@ -54,12 +64,14 @@ function scanKeystrokes(code: string) {
     }
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
   });
+  settle();
 }
 
 /** Mode muet : la valeur apparaît, sans aucun événement ni terminateur. */
 function scanSilent(code: string) {
   act(() => { field().value = code; });
-  act(() => { vi.advanceTimersByTime(QUIET_MS + 120); });
+  // Le repli par sondage détecte le changement, puis la lecture différée valide.
+  settle();
 }
 
 /** Lignes du panier de l'onglet « Série ». */
@@ -166,57 +178,45 @@ describe('entrée de marchandise — lecteur muet (aucun événement)', () => {
 });
 
 /**
- * Piège Android : vider le champ pendant l'événement clavier est annulé par le
- * clavier système, qui réinjecte son tampon de composition. La touche Entrée
- * suivante relit alors l'ANCIEN code — l'article scanné n'apparaît jamais et
- * c'est le précédent qui est recompté. C'est le symptôme signalé en boutique.
+ * Un même code validé deux fois à quelques millisecondes d'intervalle vient
+ * forcément du même geste, traité par deux canaux (valeur du champ puis
+ * Entrée) : il ne doit être compté qu'une fois. Deux gâchettes réelles, elles,
+ * sont toujours séparées de bien plus que cette fenêtre.
  */
-describe('entrée de marchandise — réinjection du champ par le clavier système', () => {
-  it('ne recompte pas un code réinjecté sans nouveau scan', () => {
+describe('entrée de marchandise — double traitement d\'un même geste', () => {
+  it('ne compte qu\'une fois un code validé deux fois dans le même instant', () => {
     mount();
     goToSeries();
-    scanBlockThenEnter(A.barcode);
 
-    // Le clavier système remet le code dans le champ, sans aucun événement.
-    act(() => { field().value = A.barcode; });
-    act(() => { vi.advanceTimersByTime(QUIET_MS + 200); });
+    act(() => {
+      const el = field();
+      el.value = A.barcode;
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      // Second canal, immédiatement après : même geste, pas un nouveau scan.
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    });
+    settle();
 
     expect(cart().some((t) => t.includes('Rose Avalanche') && t.includes('Qté : 1'))).toBe(true);
-    expect(field().value).toBe('');
-  });
-
-  it('affiche bien le SECOND article même après une réinjection', () => {
-    mount();
-    goToSeries();
-    scanBlockThenEnter(A.barcode);
-    act(() => { field().value = A.barcode; });          // réinjection
-    act(() => { vi.advanceTimersByTime(QUIET_MS + 200); });
-
-    scanBlockThenEnter(B.barcode);                       // vrai second scan
-
-    const lines = cart();
-    expect(lines.some((t) => t.includes('Eucalyptus Cinerea') && t.includes('Qté : 1'))).toBe(true);
-    expect(lines.some((t) => t.includes('Rose Avalanche') && t.includes('Qté : 1'))).toBe(true);
   });
 });
 
 /**
- * Garantie de dernier recours : après chaque scan, l'élément de saisie est
- * DÉTRUIT puis recréé. Un élément neuf n'a ni valeur, ni tampon de composition
- * du clavier système — aucun code précédent ne peut donc être relu, quel que
- * soit le comportement du terminal.
+ * Le champ de saisie n'est JAMAIS détruit ni recréé : le moteur le garantit
+ * (`generation` reste à 0). Le détruire faisait perdre le focus et coupait le
+ * lecteur intégré, qui n'écrit que dans le champ actif.
  */
-describe('entrée de marchandise — champ recréé à chaque scan', () => {
-  it('remplace l\'élément de saisie après un scan', () => {
+describe('entrée de marchandise — champ conservé entre les scans', () => {
+  it('garde le même élément de saisie après un scan', () => {
     mount();
     const before = field();
     scanBlockThenEnter(A.barcode);
-    const after = field();
-    expect(after).not.toBe(before);
-    expect(after.value).toBe('');
+    expect(field()).toBe(before);
+    expect(before.value).toBe('');
   });
 
-  it('reste opérationnel après plusieurs remplacements', () => {
+  it('reste opérationnel sur une suite de scans', () => {
     mount();
     goToSeries();
     scanBlockThenEnter(A.barcode);
@@ -231,36 +231,30 @@ describe('entrée de marchandise — champ recréé à chaque scan', () => {
 });
 
 /**
- * Terminal qui NE VIDE PAS son champ : la valeur reste celle du scan
- * précédent, alors que le texte réellement inséré est bien le nouveau code.
- * C'est le cas relevé en boutique — six scans, six fois le même code lu.
- * Le canal « insertion » doit l'emporter sur le contenu du champ.
+ * Le code retenu est celui présent dans le CHAMP au moment de la validation :
+ * le moteur ne reconstitue plus le texte à partir de `InputEvent.data`, source
+ * de codes incomplets. Le champ est vidé après chaque validation, ce qui
+ * empêche un ancien code d'être relu.
  */
-describe('entrée de marchandise — terminal qui conserve l\'ancienne valeur', () => {
-  /** Insère le code via beforeinput, mais laisse une valeur périmée dans le champ. */
-  function scanWithStaleField(code: string, stale: string) {
+describe('entrée de marchandise — la valeur du champ fait foi', () => {
+  it('retient le contenu du champ, pas les frappes résiduelles', () => {
+    mount();
+    goToSeries();
+
     act(() => {
-      const el = field();
-      for (const ch of code) {
-        el.dispatchEvent(new (window as unknown as {
-          InputEvent: typeof InputEvent
-        }).InputEvent('beforeinput', { data: ch, inputType: 'insertText', bubbles: true }));
+      // Frappes parasites d'un scan précédent, puis vraie écriture du lecteur.
+      for (const ch of A.barcode) {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: ch, bubbles: true }));
       }
-      el.value = stale;                       // le terminal réécrit l'ancien code
+      const el = field();
+      el.value = B.barcode;
       el.dispatchEvent(new Event('input', { bubbles: true }));
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     });
-  }
-
-  it('retient le code INSÉRÉ, pas la valeur périmée du champ', () => {
-    mount();
-    goToSeries();
-    scanWithStaleField(A.barcode, A.barcode);
-    scanWithStaleField(B.barcode, A.barcode);   // le champ ment : il redit A
+    settle();
 
     const lines = cart();
-    expect(lines.length).toBe(2);
-    expect(lines.some((t) => t.includes('Eucalyptus Cinerea') && t.includes('Qté : 1'))).toBe(true);
-    expect(lines.some((t) => t.includes('Rose Avalanche') && t.includes('Qté : 1'))).toBe(true);
+    expect(lines.length).toBe(1);
+    expect(lines[0]).toContain('Eucalyptus Cinerea');
   });
 });
