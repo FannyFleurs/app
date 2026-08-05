@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useState } from 'react';
-import { useScanField } from './scan';
+import { useScanField, type ScanInfo } from './scan';
 import { Screen, Header, ScanField, InfoRow } from './ui';
 
 /**
@@ -19,12 +19,19 @@ export default function PdaDiagnostic({ onBack, onHome }: {
   onBack: () => void;
   onHome: () => void;
 }) {
-  const [log, setLog] = useState<Array<{ code: string; source: string; at: string }>>([]);
+  const [log, setLog] = useState<Array<{
+    code: string; at: string; source: string; field: string; dirty: boolean;
+  }>>([]);
 
-  const onCode = useCallback((code: string) => {
+  const onCode = useCallback((code: string, info?: ScanInfo) => {
     let at = '';
     try { at = new Date().toLocaleTimeString('fr-FR'); } catch { /* ignore */ }
-    setLog((cur) => [{ code, source: '', at }, ...cur].slice(0, 12));
+    setLog((cur) => [{
+      code, at,
+      source: info?.source ?? '—',
+      field: info?.field ?? '',
+      dirty: info?.dirty ?? false,
+    }, ...cur].slice(0, 12));
   }, []);
 
   // Aucun catalogue ici : on accepte tout code, l'objectif est d'observer.
@@ -71,9 +78,15 @@ export default function PdaDiagnostic({ onBack, onHome }: {
             Dernières valeurs
           </div>
           <InfoRow label="Dernière touche" value={field.stats.lastKey || '—'} />
-          <InfoRow label="Contenu du champ" value={field.stats.lastValue || '—'} />
           <InfoRow label="Dernier code" value={field.stats.lastCode || '—'} />
           <InfoRow label="Canal du dernier code" value={field.stats.lastSource || '—'} />
+          <InfoRow label="Champ lu à la validation" value={field.stats.lastField || '(vide)'} />
+          <InfoRow label="Frappes lues à la validation" value={field.stats.lastKeys || '(vide)'} />
+          <InfoRow
+            label="Champ NON vidé avant un scan"
+            value={field.stats.dirtyBefore}
+            tone={field.stats.dirtyBefore > 0 ? 'danger' : 'success'}
+          />
         </div>
 
         <div className="card">
@@ -85,9 +98,15 @@ export default function PdaDiagnostic({ onBack, onHome }: {
           ) : (
             <ul className="divide-y divide-border">
               {log.map((l, i) => (
-                <li key={`${l.at}-${i}`} className="flex items-baseline justify-between gap-3 px-4 py-2.5">
-                  <span className="font-mono text-sm truncate">{l.code}</span>
-                  <span className="text-xs text-ink-soft shrink-0">{l.at}</span>
+                <li key={`${l.at}-${i}`} className="px-4 py-2.5">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="font-mono text-sm truncate">{l.code}</span>
+                    <span className="text-xs text-ink-soft shrink-0">{l.at}</span>
+                  </div>
+                  <div className="text-xs text-ink-soft truncate">
+                    canal : {l.source}
+                    {l.dirty && <span className="text-danger font-semibold"> · champ résiduel : {l.field}</span>}
+                  </div>
                 </li>
               ))}
             </ul>
@@ -95,10 +114,10 @@ export default function PdaDiagnostic({ onBack, onHome }: {
         </div>
 
         <p className="px-1 text-xs text-ink-soft">
-          Lecture : si « Frappes clavier » reste à 0 et que « Changements de valeur »
-          augmente, le lecteur écrit directement dans le champ. Si les deux restent à 0
-          alors que le champ se remplit, aucun événement n&apos;est émis — c&apos;est
-          l&apos;observation périodique qui fait le travail.
+          Lecture : scannez DEUX articles différents. Si les deux codes lus sont
+          identiques, ou si « Champ NON vidé avant un scan » est supérieur à 0, c&apos;est
+          que le terminal renvoie l&apos;ancien contenu — la ligne concernée affiche alors
+          le résidu en rouge.
         </p>
       </div>
     </Screen>
