@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 /**
  * Moteur de scan du PDA — point d'entrée UNIQUE de toute l'application.
@@ -110,20 +110,17 @@ export function createScanBuffer(): ScanBuffer {
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Champ de scan tolérant au mode de la douchette                             */
+/*  Surveillance de la VALEUR du champ                                         */
 /* -------------------------------------------------------------------------- */
 
 /** Caractères que les douchettes emploient comme fin de code. */
 const TERMINATORS = /[\r\n\t]/;
 
-/** Délai d'inactivité après lequel un code déjà complet est validé seul (ms). */
-const IDLE_FLUSH_MS = 140;
-
-/** Vitesse au-delà de laquelle la saisie ne peut venir que d'une machine. */
-const MACHINE_MS_PER_CHAR = 35;
+/** Silence après lequel une valeur stable est considérée comme un code complet. */
+export const QUIET_MS = 180;
 
 /** Deux validations du même code à moins de ce délai : la seconde est un écho. */
-const ECHO_WINDOW_MS = 250;
+const ECHO_WINDOW_MS = 400;
 
 /** Ressemble à un code-barres / une référence, par opposition à une recherche. */
 export function looksLikeCode(s: string): boolean {
@@ -133,110 +130,201 @@ export function looksLikeCode(s: string): boolean {
   return /^[A-Z0-9][A-Z0-9._\-/]{5,}$/.test(v);        // référence en majuscules
 }
 
-export interface ScanFieldApi {
-  inputRef: React.RefObject<HTMLInputElement>;
-  /** À étaler sur l'`<input>`. */
-  bind: {
-    onInput: (e: React.FormEvent<HTMLInputElement>) => void;
-    onBlur: () => void;
-  };
-  clear: () => void;
-  focus: () => void;
+export interface WatchResult {
+  /** Code complet à traiter, ou null. */
+  code: string | null;
+  /** La valeur a changé depuis la dernière observation. */
+  changed: boolean;
+}
+
+export interface ValueWatcher {
+  observe(value: string, at: number): WatchResult;
+  reset(): void;
 }
 
 /**
- * Champ de scan compatible avec TOUTES les configurations de douchette.
+ * Détecte un code complet à partir des seules VALEURS successives du champ.
  *
- * Selon le modèle et le réglage du terminal, un scan arrive par des chemins
- * très différents, et une implémentation qui n'en couvre qu'un seul « rate »
- * les scans en silence :
+ * C'est le cœur de la fiabilité du scan : peu importe comment le texte est
+ * arrivé — frappes clavier, événements `input`, ou écriture directe dans le
+ * DOM par le lecteur intégré du terminal, cas où AUCUN événement n'est émis et
+ * où toute approche événementielle échoue en silence.
  *
- *  - frappes clavier caractère par caractère, puis Entrée (douchette USB / HID) ;
- *  - injection directe dans le champ actif, sans frappe exploitable — cas des
- *    terminaux Android en mode « clavier logiciel » : le code n'existe que dans
- *    la valeur du champ ;
- *  - code suivi d'un retour chariot ou d'une tabulation contenus dans la valeur ;
- *  - aucun terminateur du tout.
+ * Deux déclencheurs :
+ *  - un terminateur (retour chariot / tabulation) contenu dans la valeur ;
+ *  - une valeur stable depuis `quietMs`, à condition qu'elle soit reconnue
+ *    comme un code : une recherche par nom n'est jamais validée toute seule.
+ */
+export function createValueWatcher({ isCode, quietMs = QUIET_MS }: {
+  isCode: (value: string) => boolean;
+  quietMs?: number;
+}): ValueWatcher {
+  let last = '';
+  let since = 0;
+  return {
+    observe(value, at) {
+      const cut = value.search(TERMINATORS);
+      if (cut >= 0) {
+        last = ''; since = at;
+        const code = value.slice(0, cut).trim();
+        return { code: code.length >= MIN_CODE_LENGTH ? code : null, changed: true };
+      }
+      if (value !== last) {
+        last = value; since = at;
+        return { code: null, changed: true };
+      }
+      const v = value.trim();
+      if (v.length >= MIN_CODE_LENGTH && at - since >= quietMs && isCode(v)) {
+        last = ''; since = at;
+        return { code: v, changed: false };
+      }
+      return { code: null, changed: false };
+    },
+    reset() { last = ''; since = 0; },
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Champ de scan                                                              */
+/* -------------------------------------------------------------------------- */
+
+/** Période d'observation de la valeur du champ (ms). */
+const POLL_MS = 60;
+
+export interface ScanFieldApi {
+  inputRef: React.RefObject<HTMLInputElement>;
+  bind: {
+    onPointerDown: () => void;
+    onBlur: () => void;
+  };
+  /** Le champ a le focus : le lecteur intégré peut y écrire. */
+  armed: boolean;
+  /** L'utilisateur a demandé le clavier (saisie manuelle). */
+  manual: boolean;
+  clear: () => void;
+  focus: () => void;
+  /** Compteurs bruts, pour l'écran de diagnostic. */
+  stats: ScanStats;
+}
+
+export interface ScanStats {
+  keydown: number;
+  input: number;
+  valueChanges: number;
+  emitted: number;
+  lastKey: string;
+  lastValue: string;
+  lastCode: string;
+  lastSource: string;
+}
+
+/**
+ * Champ de scan.
  *
- * On lit donc les DEUX sources (tampon de frappes et valeur du champ), on
- * accepte les trois terminateurs, et à défaut on valide sur inactivité — mais
- * seulement si le texte est reconnu comme un code, pour ne jamais transformer
- * une recherche par nom en scan.
+ * Trois canaux, cumulés, parce qu'aucun n'est universel :
  *
- * Le champ est vidé à CHAQUE validation : c'est ce qui empêchait le code
- * suivant de se coller au précédent.
+ *  1. `keydown` sur la fenêtre — douchette USB/HID qui « tape » le code,
+ *     fonctionne même sans focus dans le champ ;
+ *  2. événements `input` du champ — lecteur intégré passant par le clavier
+ *     logiciel ;
+ *  3. **observation périodique de la valeur du champ** — seul canal qui
+ *     fonctionne quand le lecteur écrit directement dans le DOM sans émettre
+ *     le moindre événement.
+ *
+ * Le champ est vidé après CHAQUE validation, et un même code arrivant par deux
+ * canaux n'est traité qu'une fois.
+ *
+ * Le focus ne peut pas être garanti : sur mobile, `focus()` appelé hors d'une
+ * interaction utilisateur est ignoré par le navigateur. `armed` expose donc
+ * l'état réel, à charge pour l'écran d'inviter à toucher le champ.
  */
 export function useScanField({ onCode, onSearch, canResolve, enabled = true }: {
   onCode: (code: string) => void;
   onSearch?: (value: string) => void;
-  /** Vrai si le code est reconnaissable : autorise la validation automatique. */
   canResolve?: (code: string) => boolean;
   enabled?: boolean;
 }): ScanFieldApi {
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const onCodeRef = useRef(onCode);       onCodeRef.current = onCode;
-  const onSearchRef = useRef(onSearch);   onSearchRef.current = onSearch;
+  const onCodeRef = useRef(onCode);         onCodeRef.current = onCode;
+  const onSearchRef = useRef(onSearch);     onSearchRef.current = onSearch;
   const canResolveRef = useRef(canResolve); canResolveRef.current = canResolve;
 
-  const bufferRef = useRef<ScanBuffer | null>(null);
-  if (bufferRef.current === null) bufferRef.current = createScanBuffer();
-
-  const idleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastEmitRef = useRef<{ code: string; at: number }>({ code: '', at: 0 });
-  const burstStartRef = useRef(0);
-
-  const cancelIdle = useCallback(() => {
-    if (idleRef.current) { clearTimeout(idleRef.current); idleRef.current = null; }
+  const [armed, setArmed] = useState(false);
+  const [manual, setManual] = useState(false);
+  const manualRef = useRef(false);
+  const [stats, setStats] = useState<ScanStats>({
+    keydown: 0, input: 0, valueChanges: 0, emitted: 0,
+    lastKey: '', lastValue: '', lastCode: '', lastSource: '',
+  });
+  const statsRef = useRef(stats);
+  const bumpStats = useCallback((patch: Partial<ScanStats>) => {
+    statsRef.current = { ...statsRef.current, ...patch };
+    setStats(statsRef.current);
   }, []);
+
+  const keyBufferRef = useRef<ScanBuffer | null>(null);
+  if (keyBufferRef.current === null) keyBufferRef.current = createScanBuffer();
+
+  const watcherRef = useRef<ValueWatcher | null>(null);
+  if (watcherRef.current === null) {
+    watcherRef.current = createValueWatcher({
+      isCode: (v) => {
+        // Un code reconnu par le catalogue est toujours accepté. Sinon, on
+        // exige qu'il ressemble à un code — et jamais en saisie manuelle,
+        // où l'utilisateur tape un nom et valide lui-même.
+        if (canResolveRef.current?.(v)) return true;
+        return !manualRef.current && looksLikeCode(v);
+      },
+    });
+  }
+
+  const lastEmitRef = useRef<{ code: string; at: number }>({ code: '', at: 0 });
 
   const clear = useCallback(() => {
     if (inputRef.current) inputRef.current.value = '';
-    bufferRef.current!.reset();
-    burstStartRef.current = 0;
-    cancelIdle();
+    keyBufferRef.current!.reset();
+    watcherRef.current!.reset();
     onSearchRef.current?.('');
-  }, [cancelIdle]);
-
-  const focus = useCallback(() => {
-    // Ne vole pas le focus à un bouton que l'on vient de toucher.
-    const a = document.activeElement as HTMLElement | null;
-    if (!a || a.tagName === 'BODY' || a === inputRef.current) inputRef.current?.focus();
   }, []);
 
-  /** Valide un code : dédoublonne les échos, vide le champ, prévient l'écran. */
-  const emit = useCallback((raw: string) => {
+  const focus = useCallback(() => {
+    inputRef.current?.focus({ preventScroll: true });
+  }, []);
+
+  const emit = useCallback((raw: string, source: string) => {
     const code = raw.trim();
     if (code.length < MIN_CODE_LENGTH) return;
     const now = Date.now();
-    // Le même code peut arriver par deux canaux (frappes + valeur du champ) :
-    // on n'en garde qu'une occurrence. 250 ms est très inférieur au temps
-    // physique entre deux gâchettes, un double scan volontaire passe donc.
     if (code === lastEmitRef.current.code && now - lastEmitRef.current.at < ECHO_WINDOW_MS) {
       clear();
       return;
     }
     lastEmitRef.current = { code, at: now };
     clear();
+    manualRef.current = false;
+    setManual(false);
+    bumpStats({
+      emitted: statsRef.current.emitted + 1,
+      lastCode: code,
+      lastSource: source,
+    });
     onCodeRef.current(code);
-    // Le champ doit rester prêt pour le scan suivant, sans intervention.
-    setTimeout(focus, 0);
-  }, [clear, focus]);
+  }, [clear, bumpStats]);
 
-  /* --- Canal 1 : frappes clavier, y compris champ non focalisé --- */
+  /* --- Canal 1 : frappes clavier, y compris hors du champ --- */
   useEffect(() => {
-    if (!enabled) { bufferRef.current!.reset(); return; }
-    const buffer = bufferRef.current!;
+    if (!enabled) { keyBufferRef.current!.reset(); return; }
+    const buffer = keyBufferRef.current!;
 
     function onKeyDown(e: KeyboardEvent) {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
-      // Tabulation : terminateur courant sur les douchettes, jamais une
-      // navigation utile dans cette application.
-      if (e.key === 'Tab' || e.key === 'Enter') {
+      bumpStats({ keydown: statsRef.current.keydown + 1, lastKey: e.key });
+      if (e.key === 'Enter' || e.key === 'Tab') {
         e.preventDefault();
         const fromKeys = buffer.peek().trim();
         buffer.reset();
-        emit(fromKeys || inputRef.current?.value || '');
+        emit(fromKeys || inputRef.current?.value || '', fromKeys ? 'touches' : 'champ');
         return;
       }
       buffer.push(e.key, Date.now());
@@ -247,52 +335,71 @@ export function useScanField({ onCode, onSearch, canResolve, enabled = true }: {
       window.removeEventListener('keydown', onKeyDown, true);
       buffer.reset();
     };
-  }, [enabled, emit]);
+  }, [enabled, emit, bumpStats]);
 
-  /* --- Canal 2 : contenu du champ (injection directe, sans frappe) --- */
-  const onInput = useCallback((e: React.FormEvent<HTMLInputElement>) => {
-    if (!enabled) return;
-    const value = (e.target as HTMLInputElement).value;
-
-    // Terminateur contenu dans la valeur : tout ce qui précède est le code.
-    const cut = value.search(TERMINATORS);
-    if (cut >= 0) { emit(value.slice(0, cut)); return; }
-
-    onSearchRef.current?.(value);
-
-    const now = Date.now();
-    if (value.length <= 1) burstStartRef.current = now;
-    cancelIdle();
-    if (value.length < MIN_CODE_LENGTH) return;
-
-    // Validation sur inactivité : réservée à une saisie à vitesse machine ET
-    // à un texte qui ressemble à un code (ou reconnu par le catalogue). Une
-    // recherche tapée à la main n'est jamais validée toute seule.
-    const perChar = (now - burstStartRef.current) / Math.max(1, value.length - 1);
-    const machine = burstStartRef.current > 0 && perChar <= MACHINE_MS_PER_CHAR;
-    const resolvable = canResolveRef.current?.(value.trim()) ?? false;
-    if (!machine && !resolvable) return;
-    if (!resolvable && !looksLikeCode(value)) return;
-
-    idleRef.current = setTimeout(() => {
-      const v = inputRef.current?.value ?? '';
-      if (v.trim()) emit(v);
-    }, IDLE_FLUSH_MS);
-  }, [enabled, emit, cancelIdle]);
-
-  /* --- Le champ reste armé : sans focus, une douchette « clavier logiciel »
-         n'écrit nulle part et le scan est perdu. --- */
-  const onBlur = useCallback(() => {
-    setTimeout(focus, 60);
-  }, [focus]);
-
+  /* --- Canaux 2 et 3 : événements `input` ET observation de la valeur --- */
   useEffect(() => {
     if (!enabled) return;
-    const t = setTimeout(() => inputRef.current?.focus(), 50);
-    return () => clearTimeout(t);
-  }, [enabled]);
+    const el = inputRef.current;
+    if (!el) return;
 
-  useEffect(() => () => cancelIdle(), [cancelIdle]);
+    const onInput = () => bumpStats({ input: statsRef.current.input + 1 });
+    el.addEventListener('input', onInput);
 
-  return { inputRef, bind: { onInput, onBlur }, clear, focus };
+    // Tentative de focus initial : souvent refusée par le navigateur hors
+    // interaction, d'où l'indicateur `armed` et l'invite à toucher le champ.
+    el.focus({ preventScroll: true });
+
+    const id = setInterval(() => {
+      if (document.hidden) return;
+      const node = inputRef.current;
+      if (!node) return;
+
+      const isFocused = document.activeElement === node;
+      setArmed(isFocused);
+      // Le navigateur accepte parfois un focus tardif (retour d'arrière-plan,
+      // fermeture d'une modale) : on retente, sans jamais voler le focus à un
+      // autre champ de saisie.
+      if (!isFocused) {
+        const a = document.activeElement as HTMLElement | null;
+        const editing = a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.isContentEditable);
+        if (!editing) node.focus({ preventScroll: true });
+      }
+
+      const res = watcherRef.current!.observe(node.value, Date.now());
+      if (res.changed) {
+        bumpStats({
+          valueChanges: statsRef.current.valueChanges + 1,
+          lastValue: node.value,
+        });
+        onSearchRef.current?.(node.value);
+      }
+      if (res.code) emit(res.code, 'valeur');
+    }, POLL_MS);
+
+    return () => {
+      clearInterval(id);
+      el.removeEventListener('input', onInput);
+      watcherRef.current!.reset();
+    };
+  }, [enabled, emit, bumpStats]);
+
+  const onPointerDown = useCallback(() => {
+    // Toucher le champ = intention de saisie manuelle : on autorise le clavier
+    // logiciel et on suspend la validation automatique par ressemblance.
+    manualRef.current = true;
+    setManual(true);
+  }, []);
+
+  const onBlur = useCallback(() => setArmed(false), []);
+
+  return {
+    inputRef,
+    bind: { onPointerDown, onBlur },
+    armed,
+    manual,
+    clear: useCallback(() => { manualRef.current = false; setManual(false); clear(); }, [clear]),
+    focus,
+    stats,
+  };
 }

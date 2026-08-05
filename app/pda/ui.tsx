@@ -154,37 +154,55 @@ export function ScanField({ field, placeholder, onCamera, showClear }: {
   showClear?: boolean;
 }) {
   return (
-    <div className="flex items-center gap-2">
-      <div className="relative flex-1">
-        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-soft">
-          <IconBarcode />
-        </span>
-        <input
-          ref={field.inputRef}
-          {...field.bind}
-          type="text"
-          inputMode="text"
-          enterKeyHint="done"
-          className={`input h-12 w-full pl-10 text-base ${showClear ? 'pr-11' : 'pr-3'}`}
-          placeholder={placeholder ?? 'Scanner ou rechercher…'}
-          autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
-          autoFocus
-        />
-        {showClear && (
-          <button
-            type="button"
-            aria-label="Effacer"
-            onClick={() => { field.clear(); field.focus(); }}
-            className="absolute right-1 top-1/2 -translate-y-1/2 grid h-9 w-9 place-items-center rounded-full text-ink-soft active:bg-gray-100"
-          >
-            <span aria-hidden className="text-xl leading-none">×</span>
+    <div>
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"
+                style={{ color: field.armed ? 'var(--primary)' : undefined }}>
+            <IconBarcode />
+          </span>
+          <input
+            ref={field.inputRef}
+            {...field.bind}
+            type="text"
+            // En mode scan, on n'ouvre pas le clavier logiciel : il masquerait
+            // la moitié de l'écran sans servir. Toucher le champ bascule en
+            // saisie manuelle et le fait apparaître.
+            inputMode={field.manual ? 'text' : 'none'}
+            enterKeyHint="done"
+            className={`input h-12 w-full pl-10 text-base ${showClear ? 'pr-11' : 'pr-3'}`}
+            style={field.armed ? { borderColor: 'var(--primary)' } : undefined}
+            placeholder={placeholder ?? 'Scanner ou rechercher…'}
+            autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
+            autoFocus
+          />
+          {showClear && (
+            <button
+              type="button"
+              aria-label="Effacer"
+              onClick={() => { field.clear(); field.focus(); }}
+              className="absolute right-1 top-1/2 -translate-y-1/2 grid h-9 w-9 place-items-center rounded-full text-ink-soft active:bg-gray-100"
+            >
+              <span aria-hidden className="text-xl leading-none">×</span>
+            </button>
+          )}
+        </div>
+        {onCamera && (
+          <button onClick={onCamera} aria-label="Scanner avec la caméra"
+                  className="h-12 w-12 shrink-0 grid place-items-center rounded-xl border border-border bg-surface active:bg-gray-100">
+            <IconScanFrame />
           </button>
         )}
       </div>
-      {onCamera && (
-        <button onClick={onCamera} aria-label="Scanner avec la caméra"
-                className="h-12 w-12 shrink-0 grid place-items-center rounded-xl border border-border bg-surface active:bg-gray-100">
-          <IconScanFrame />
+      {/* Le navigateur refuse le focus automatique hors interaction : tant que
+          le champ n'est pas armé, le lecteur intégré n'a nulle part où écrire. */}
+      {!field.armed && (
+        <button
+          onClick={() => field.focus()}
+          className="mt-1.5 w-full rounded-lg px-2 py-1.5 text-xs font-medium text-left"
+          style={{ backgroundColor: 'rgba(183,121,31,0.10)', color: '#96581B' }}
+        >
+          ⚠ Touchez le champ pour activer le scan
         </button>
       )}
     </div>

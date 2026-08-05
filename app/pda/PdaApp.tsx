@@ -9,6 +9,7 @@ import type { LabelProduct } from '@/lib/services/label-print';
 import PdaStock from './PdaStock';
 import PdaLabels from './PdaLabels';
 import PdaInventory from './PdaInventory';
+import PdaDiagnostic from './PdaDiagnostic';
 import {
   Screen, Header, MenuCard, Toast,
   IconScanIn, IconTag, IconClipboard, IconGear,
@@ -66,7 +67,7 @@ function toEditable(r: Record<string, unknown>): EditableProduct {
   };
 }
 
-type ScreenName = 'home' | 'stock' | 'labels' | 'inventory' | 'settings';
+type ScreenName = 'home' | 'stock' | 'labels' | 'inventory' | 'settings' | 'diagnostic';
 
 /* --------------------------------------------------------------------- app */
 
@@ -262,6 +263,9 @@ export default function PdaApp({ canWrite, canInventory }: {
   if (screen === 'inventory') {
     return <PdaInventory station={station} onHome={home} notify={notify} />;
   }
+  if (screen === 'diagnostic') {
+    return <PdaDiagnostic onBack={() => setScreen('settings')} onHome={home} />;
+  }
   if (screen === 'settings') {
     return (
       <Screen>
@@ -279,6 +283,9 @@ export default function PdaApp({ canWrite, canInventory }: {
             className="btn-soft h-12 w-full"
           >
             Actualiser le catalogue
+          </button>
+          <button onClick={() => setScreen('diagnostic')} className="btn-soft h-12 w-full">
+            Diagnostic du scan
           </button>
           <button
             onClick={() => { void fetch('/api/auth/logout', { method: 'POST' }).then(() => window.location.assign('/pda')); }}
