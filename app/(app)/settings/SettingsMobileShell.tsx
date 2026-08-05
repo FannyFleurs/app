@@ -2,10 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import SettingsSidebar from './SettingsSidebar';
-import type { IconName } from '@/components/Icon';
-
-interface Item { href: string; label: string; icon: IconName }
+import SettingsSidebar, { type Item } from './SettingsSidebar';
 
 interface Props {
   items: Item[];
@@ -45,7 +42,10 @@ export default function SettingsMobileShell({ items, children }: Props) {
           <div className="md:hidden sticky top-0 z-10 bg-white border-b border-border px-3 py-2 flex items-center gap-2">
             <Link href="/settings" className="btn-ghost text-sm">← Paramètres</Link>
             {active && (
-              <span className="text-sm font-medium text-ink truncate">· {active.label}</span>
+              <span className="text-sm font-medium text-ink truncate">
+                · {active.group === 'ticket' ? 'Ticket · '
+                  : active.group === 'labels' ? 'Étiquettes · ' : ''}{active.label}
+              </span>
             )}
           </div>
         )}
