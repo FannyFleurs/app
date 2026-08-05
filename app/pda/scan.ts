@@ -293,6 +293,7 @@ export function useScanField({ onCode, onSearch, canResolve, enabled = true }: {
   // plus faire relire un code déjà traité.
   const insertRef = useRef('');
   const insertAtRef = useRef(0);
+  const lastInsertChunkRef = useRef<{ data: string; at: number }>({ data: '', at: 0 });
 
   const keyBufferRef = useRef<ScanBuffer | null>(null);
   if (keyBufferRef.current === null) keyBufferRef.current = createScanBuffer();
@@ -331,6 +332,7 @@ export function useScanField({ onCode, onSearch, canResolve, enabled = true }: {
     const el = inputRef.current;
     if (el) el.value = '';
     insertRef.current = '';
+    lastInsertChunkRef.current = { data: '', at: 0 };
     keyBufferRef.current!.reset();
     watcherRef.current!.reset();
     onSearchRef.current?.('');
@@ -431,9 +433,50 @@ export function useScanField({ onCode, onSearch, canResolve, enabled = true }: {
     const el = inputRef.current;
     if (!el) return;
 
-    const onInput = () => {
+    /**
+     * Certains PDA Android n'émettent pas `beforeinput`, mais fournissent le
+     * code neuf dans `InputEvent.data` sur l'événement `input`. C'était le trou
+     * principal de l'ancienne implémentation : l'événement était compté mais
+     * son contenu était ignoré, puis Enter relisait `input.value` encore égal
+     * au code précédent.
+     */
+    const appendFreshData = (data: string | null | undefined, inputType = '') => {
+      if (inputType.startsWith('delete')) {
+        insertRef.current = insertRef.current.slice(0, -1);
+        return;
+      }
+      if (!data) return;
+      const now = Date.now();
+
+      // Chrome peut exposer la même insertion sur `beforeinput` puis `input`.
+      // On ne conserve qu'un exemplaire du même fragment dans une fenêtre très
+      // courte, sans empêcher deux vrais scans identiques successifs.
+      const previous = lastInsertChunkRef.current;
+      if (previous.data === data && now - previous.at < 25) return;
+      lastInsertChunkRef.current = { data, at: now };
+
+      if (now - insertAtRef.current > SEQUENCE_GAP_MS) insertRef.current = '';
+      insertAtRef.current = now;
+      insertRef.current += data;
+      activityRef.current++;
+      bumpStats({ lastInsert: insertRef.current });
+
+      const cut = insertRef.current.search(TERMINATORS);
+      if (cut >= 0) {
+        const code = insertRef.current.slice(0, cut);
+        insertRef.current = '';
+        emit(code, 'insertion');
+      }
+    };
+
+    const onInput = (ev: Event) => {
+      const e = ev as InputEvent;
       activityRef.current++;
       bumpStats({ input: statsRef.current.input + 1 });
+
+      // Sur beaucoup de WebView Android, le code complet est disponible ici
+      // en une seule fois, même lorsque la valeur visible du champ est périmée.
+      appendFreshData(e.data, e.inputType ?? '');
     };
 
     /**
@@ -443,31 +486,28 @@ export function useScanField({ onCode, onSearch, canResolve, enabled = true }: {
      */
     function onInsert(ev: Event) {
       const e = ev as InputEvent;
-      const type = e.inputType ?? '';
-      if (type.startsWith('delete')) {
-        insertRef.current = insertRef.current.slice(0, -1);
-        return;
-      }
-      const data = e.data ?? '';
+      appendFreshData(e.data, e.inputType ?? '');
+    }
+
+    // Certains lecteurs utilisent l'IME Android et terminent leur saisie via
+    // un événement de composition. `compositionend.data` contient alors le
+    // nouveau code, indépendamment de la valeur résiduelle du champ.
+    function onCompositionEnd(ev: CompositionEvent) {
+      appendFreshData(ev.data, 'insertCompositionText');
+    }
+
+    // D'autres terminaux sont configurés en mode presse-papiers/collage.
+    function onPaste(ev: ClipboardEvent) {
+      const data = ev.clipboardData?.getData('text') ?? '';
       if (!data) return;
-      activityRef.current++;
-      const now = Date.now();
-      // Une pause franche marque le début d'un nouveau code.
-      if (now - insertAtRef.current > 1000) insertRef.current = '';
-      insertAtRef.current = now;
-      insertRef.current += data;
-      bumpStats({ lastInsert: insertRef.current });
-      // Terminateur transmis dans les données insérées.
-      const cut = insertRef.current.search(TERMINATORS);
-      if (cut >= 0) {
-        const code = insertRef.current.slice(0, cut);
-        insertRef.current = '';
-        emit(code, 'insertion');
-      }
+      ev.preventDefault();
+      appendFreshData(data, 'insertFromPaste');
     }
 
     el.addEventListener('input', onInput);
     el.addEventListener('beforeinput', onInsert);
+    el.addEventListener('compositionend', onCompositionEnd);
+    el.addEventListener('paste', onPaste);
 
     // Tentative de focus initial : souvent refusée par le navigateur hors
     // interaction, d'où l'indicateur `armed` et l'invite à toucher le champ.
@@ -514,6 +554,8 @@ export function useScanField({ onCode, onSearch, canResolve, enabled = true }: {
       clearInterval(id);
       el.removeEventListener('input', onInput);
       el.removeEventListener('beforeinput', onInsert);
+      el.removeEventListener('compositionend', onCompositionEnd);
+      el.removeEventListener('paste', onPaste);
       watcherRef.current!.reset();
     };
   }, [enabled, emit, bumpStats, generation]);
