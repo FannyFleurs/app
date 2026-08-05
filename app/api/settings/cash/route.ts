@@ -17,6 +17,7 @@ const schema = z.object({
   bank_deposit_required: z.boolean().optional(),
   print_bank_deposit_receipt: z.boolean().optional(),
   minimum_float: z.number().min(0).max(10000).optional(),
+  shared_float: z.boolean().optional(),
 });
 
 export async function GET(req: Request) {

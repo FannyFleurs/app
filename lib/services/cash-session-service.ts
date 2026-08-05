@@ -2,6 +2,36 @@ import { withTransaction, query } from '@/lib/db/client';
 import { FiscalCore } from '@/lib/fiscal/core';
 
 export class CashSessionService {
+  /**
+   * Session ouverte de la BOUTIQUE, quel que soit le poste qui l'a ouverte.
+   *
+   * Utilisée en mode « fonds commun » : la boutique n'a qu'un seul fonds, donc
+   * une seule session ouverte. Tous les postes s'y rattachent — le premier
+   * l'ouvre, les autres encaissent dessus, et la première fermeture vaut pour
+   * toute la boutique.
+   */
+  static async getOpenForStore(storeId: string) {
+    const { rows } = await query<{
+      id: string;
+      opened_at: string;
+      opened_by: string;
+      opening_float: string;
+      register_id: string;
+      register_name: string | null;
+      opened_by_name: string | null;
+    }>(
+      `SELECT cs.id, cs.opened_at, cs.opened_by, cs.opening_float, cs.register_id,
+              r.name AS register_name, u.full_name AS opened_by_name
+         FROM cash_sessions cs
+         LEFT JOIN registers r ON r.id = cs.register_id
+         LEFT JOIN users u ON u.id = cs.opened_by
+        WHERE cs.store_id = $1 AND cs.status = 'open'
+        ORDER BY cs.opened_at ASC LIMIT 1`,
+      [storeId],
+    );
+    return rows[0] ?? null;
+  }
+
   static async getOpenForRegister(registerId: string) {
     const { rows } = await query<{
       id: string;
@@ -24,8 +54,24 @@ export class CashSessionService {
     registerId: string;
     userId: string;
     openingFloat: number;
+    /** Fonds commun : une seule session ouverte pour toute la boutique. */
+    shared?: boolean;
   }) {
     return withTransaction(async (client) => {
+      // En fonds commun, une session déjà ouverte sur la boutique — même
+      // depuis un autre poste — est REJOINTE, pas refusée : le second poste
+      // n'a rien à ouvrir, il encaisse sur le fonds déjà déclaré.
+      if (args.shared) {
+        const shared = await client.query<{ id: string }>(
+          `SELECT id FROM cash_sessions
+            WHERE store_id = $1 AND status = 'open'
+            ORDER BY opened_at ASC LIMIT 1`,
+          [args.storeId],
+        );
+        const joined = shared.rows[0];
+        if (joined) return { id: joined.id, joined: true };
+      }
+
       const existing = await client.query(
         `SELECT id FROM cash_sessions
           WHERE register_id = $1 AND status = 'open'`,

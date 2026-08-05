@@ -19,6 +19,16 @@ export interface CashSettings {
   print_bank_deposit_receipt: boolean;
   /** Fonds de caisse minimum à laisser après remise. */
   minimum_float: number;
+  /**
+   * Fonds de caisse COMMUN à toutes les caisses de la boutique.
+   *
+   * false (défaut) : chaque caisse a son propre fonds — elle l'ouvre et le
+   *   ferme indépendamment des autres.
+   * true : la boutique n'a qu'un seul fonds. La première caisse ouverte le
+   *   déclare pour toute la boutique ; les autres n'ont rien à ouvrir. La
+   *   première fermeture referme la caisse pour tous les postes.
+   */
+  shared_float: boolean;
 }
 
 export const CASH_DEFAULTS: CashSettings = {
@@ -28,6 +38,7 @@ export const CASH_DEFAULTS: CashSettings = {
   bank_deposit_required: false,
   print_bank_deposit_receipt: true,
   minimum_float: 0,
+  shared_float: false,
 };
 
 export function mergeCashDefaults(partial: Partial<CashSettings> | null | undefined): CashSettings {

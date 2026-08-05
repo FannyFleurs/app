@@ -57,6 +57,24 @@ export default function CashSettingsForm({ canEdit, stores, lockedStoreId }: {
         <StoreScopeSelect stores={stores} value={storeId} onChange={setStoreId} lockedStoreId={lockedStoreId} />
       </div>
 
+      {/* Le mode de fonds de caisse change la façon dont la journée s'ouvre et
+          se ferme sur les postes : il mérite son propre bloc, en tête. */}
+      <div className="card p-5 space-y-3">
+        <div>
+          <h2 className="font-semibold">Fonds de caisse de la boutique</h2>
+          <p className="text-sm text-ink-soft mt-0.5">
+            Détermine si chaque caisse gère son propre fonds, ou si la boutique
+            n&apos;en a qu&apos;un seul pour tous les postes.
+          </p>
+        </div>
+
+        <ModeChoice
+          value={form.shared_float}
+          disabled={!canEdit}
+          onChange={(v) => setForm({ ...form, shared_float: v })}
+        />
+      </div>
+
       <div className="card p-5 space-y-4">
         <Field
           label="Plafond d'espèces en caisse (€)"
@@ -153,5 +171,72 @@ function Check({ label, checked, onChange, disabled }: {
       />
       <span>{label}</span>
     </label>
+  );
+}
+
+/**
+ * Choix du mode de fonds de caisse. Deux cartes plutôt que deux cases : la
+ * conséquence sur l'ouverture et la fermeture de la journée doit être lisible
+ * avant de cliquer, pas après.
+ */
+function ModeChoice({ value, disabled, onChange }: {
+  value: boolean;
+  disabled: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  const options = [
+    {
+      shared: false,
+      title: 'Un fonds par caisse',
+      lines: [
+        'Chaque caisse ouvre la journée avec son propre fonds.',
+        'Chaque caisse compte et ferme la sienne.',
+      ],
+    },
+    {
+      shared: true,
+      title: 'Un fonds commun à la boutique',
+      lines: [
+        'La première caisse ouverte déclare le fonds pour toute la boutique.',
+        'Les autres postes n\'ont rien à ouvrir : ils encaissent directement.',
+        'La première fermeture referme la caisse sur tous les postes.',
+      ],
+    },
+  ];
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      {options.map((o) => {
+        const active = o.shared === value;
+        return (
+          <button
+            key={String(o.shared)}
+            type="button"
+            disabled={disabled}
+            onClick={() => onChange(o.shared)}
+            className={`rounded-xl border p-4 text-left transition-colors disabled:opacity-60 ${
+              active ? 'bg-primary-soft/40' : 'border-border hover:bg-gray-50'
+            }`}
+            style={active ? { borderColor: 'var(--primary)' } : undefined}
+          >
+            <div className="flex items-center gap-2">
+              <span
+                aria-hidden
+                className="grid h-4 w-4 shrink-0 place-items-center rounded-full border"
+                style={{ borderColor: active ? 'var(--primary)' : 'var(--border)' }}
+              >
+                {active && (
+                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: 'var(--primary)' }} />
+                )}
+              </span>
+              <span className="font-semibold">{o.title}</span>
+            </div>
+            <ul className="mt-2 space-y-1 text-xs text-ink-soft">
+              {o.lines.map((l) => <li key={l}>{l}</li>)}
+            </ul>
+          </button>
+        );
+      })}
+    </div>
   );
 }
