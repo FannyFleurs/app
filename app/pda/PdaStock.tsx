@@ -91,12 +91,22 @@ export default function PdaStock({ station, products, onUnknownCode, onHome, not
   }, [tab, addToCart]);
 
   /** Point d'entrée unique d'un code : correspondance exacte, sinon inconnu. */
-  const handleCode = useCallback((code: string) => {
-    const hit = index.get(normalizeCode(code));
-    if (hit) { apply(hit); return; }
-    setMessage({ text: `Article introuvable : « ${code} »`, tone: 'error' });
-    onUnknownCode(code);
-  }, [index, apply, onUnknownCode]);
+const handleCode = useCallback((rawCode: string) => {
+  const code = normalizeCode(rawCode);
+  const hit = index.get(code);
+
+  if (hit) {
+    apply(hit);
+    return;
+  }
+
+  setMessage({
+    text: `Article introuvable : « ${code} »`,
+    tone: 'error',
+  });
+
+  onUnknownCode(code);
+}, [index, apply, onUnknownCode]);
 
   // Le pavé numérique prend le clavier à son compte : on suspend le scan.
   const field = useScanField({
@@ -218,8 +228,16 @@ export default function PdaStock({ station, products, onUnknownCode, onHome, not
           <ul className="mt-2 max-h-52 overflow-y-auto rounded-xl border border-border divide-y divide-border bg-surface">
             {suggestions.map((p) => (
               <li key={p.id}>
-                <button onClick={() => { apply(p); setTimeout(focusField, 30); }}
-                        className="w-full text-left px-3 py-3 active:bg-gray-100">
+<button
+  type="button"
+  onPointerDown={(event) => {
+    event.preventDefault();
+    apply(p);
+    clearField();
+    setTimeout(focusField, 30);
+  }}
+  className="w-full text-left px-3 py-3 active:bg-gray-100"
+>
                   <div className="font-medium truncate">{p.name}</div>
                   <div className="text-xs text-ink-soft truncate">{p.barcode ?? p.sku ?? 'Sans code'}</div>
                 </button>
