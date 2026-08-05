@@ -119,9 +119,6 @@ const TERMINATORS = /[\r\n\t]/;
 /** Silence après lequel une valeur stable est considérée comme un code complet. */
 export const QUIET_MS = 180;
 
-/** Deux validations du même code à moins de ce délai : la seconde est un écho. */
-const ECHO_WINDOW_MS = 400;
-
 /** Ressemble à un code-barres / une référence, par opposition à une recherche. */
 export function looksLikeCode(s: string): boolean {
   const v = s.trim();
@@ -269,17 +266,13 @@ export function useScanField({ onCode, onSearch, canResolve, enabled = true }: {
   const watcherRef = useRef<ValueWatcher | null>(null);
   if (watcherRef.current === null) {
     watcherRef.current = createValueWatcher({
-      isCode: (v) => {
-        // Un code reconnu par le catalogue est toujours accepté. Sinon, on
-        // exige qu'il ressemble à un code — et jamais en saisie manuelle,
-        // où l'utilisateur tape un nom et valide lui-même.
-        if (canResolveRef.current?.(v)) return true;
-        return !manualRef.current && looksLikeCode(v);
-      },
+      // Un code reconnu par le catalogue est toujours accepté ; sinon il doit
+      // ressembler à un code. Une recherche par nom ne remplit ni l'une ni
+      // l'autre condition et n'est donc jamais validée toute seule — y compris
+      // en saisie manuelle, où le mode ne sert qu'à ouvrir le clavier.
+      isCode: (v) => (canResolveRef.current?.(v) ?? false) || looksLikeCode(v),
     });
   }
-
-  const lastEmitRef = useRef<{ code: string; at: number }>({ code: '', at: 0 });
 
   const clear = useCallback(() => {
     if (inputRef.current) inputRef.current.value = '';
@@ -295,12 +288,10 @@ export function useScanField({ onCode, onSearch, canResolve, enabled = true }: {
   const emit = useCallback((raw: string, source: string) => {
     const code = raw.trim();
     if (code.length < MIN_CODE_LENGTH) return;
-    const now = Date.now();
-    if (code === lastEmitRef.current.code && now - lastEmitRef.current.at < ECHO_WINDOW_MS) {
-      clear();
-      return;
-    }
-    lastEmitRef.current = { code, at: now };
+    // Pas de dédoublonnage par le temps : scanner DEUX FOIS le même article
+    // est le geste normal pour en compter deux. La protection contre le double
+    // traitement d'un même scan est structurelle — `clear()` vide À LA FOIS le
+    // champ et le tampon de frappes, donc le second canal n'a plus rien à lire.
     clear();
     manualRef.current = false;
     setManual(false);
