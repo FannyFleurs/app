@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { PdaProduct, Station } from './PdaApp';
 import { useCodeIndex, useScanField, normalizeCode } from './scan';
+import { printProductLabels } from './print-labels';
+import type { LabelSettings } from '@/lib/settings/label';
 import {
   Screen, Header, Tabs, ScanField, ProductCard, Stepper, QtyPad, ActionBar, Toast,
-  IconTrash,
+  IconTrash, IconPrinter,
 } from './ui';
 
 /**
@@ -23,9 +25,15 @@ import {
 
 interface CartItem { product: PdaProduct; qty: number }
 
-export default function PdaStock({ station, products, onUnknownCode, onHome, notify }: {
+export default function PdaStock({
+  station, products, settings, cloudPrinter, onUnknownCode, onHome, notify,
+}: {
   station: Station;
   products: PdaProduct[];
+  /** Réglages d'étiquette : nécessaires au repli d'impression navigateur. */
+  settings: LabelSettings;
+  /** Imprimante réseau déclarée pour la boutique, ou null. */
+  cloudPrinter: string | null;
   onUnknownCode: (code: string) => void;
   onHome: () => void;
   notify: (text: string, tone?: 'ok' | 'error') => void;
@@ -40,6 +48,10 @@ export default function PdaStock({ station, products, onUnknownCode, onHome, not
   // Onglet « Unitaire »
   const [current, setCurrent] = useState<PdaProduct | null>(null);
   const [qty, setQty] = useState(1);
+  // Dernière entrée validée : permet d'imprimer les étiquettes correspondantes
+  // dans la foulée, sans avoir à re-scanner l'article dans l'écran Étiquettes.
+  const [lastEntry, setLastEntry] = useState<{ product: PdaProduct; qty: number } | null>(null);
+  const [printing, setPrinting] = useState(false);
 
   // Onglet « Série »
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -224,6 +236,7 @@ useEffect(() => {
       if (r.ok) {
         notify(`+${qty} · ${current.name}`);
         setLevels((cur) => new Map(cur).set(current.id, (cur.get(current.id) ?? 0) + qty));
+        setLastEntry({ product: current, qty });
         setCurrent(null); setQty(1); setMessage(null);
         setTimeout(focusField, 30);
       } else {
@@ -231,6 +244,30 @@ useEffect(() => {
         setMessage({ text: j.error === 'FORBIDDEN' ? 'Droits insuffisants.' : "Échec de l'entrée.", tone: 'error' });
       }
     } finally { setBusy(false); }
+  }
+
+  /** Imprime les étiquettes de l'entrée qui vient d'être validée. */
+  async function printLastEntry() {
+    if (!lastEntry) return;
+    setPrinting(true);
+    try {
+      const res = await printProductLabels({
+        product: lastEntry.product,
+        qty: lastEntry.qty,
+        settings,
+        cloudPrinter,
+        storeId: station.store_id,
+      });
+      if (res.ok) {
+        notify(res.message);
+        setLastEntry(null);
+      } else {
+        setMessage({ text: res.message, tone: 'error' });
+      }
+    } finally {
+      setPrinting(false);
+      setTimeout(focusField, 30);
+    }
   }
 
   async function validateBatch() {
@@ -373,6 +410,19 @@ useEffect(() => {
             >
               {busy ? '…' : "Valider l'entrée"}
             </button>
+            {lastEntry && !current && (
+              <button
+                type="button"
+                onClick={() => void printLastEntry()}
+                disabled={printing}
+                className="btn-soft mt-2 h-12 w-full text-sm font-semibold inline-flex items-center justify-center gap-2 disabled:opacity-40"
+              >
+                <IconPrinter />
+                {printing
+                  ? '…'
+                  : `Imprimer ${lastEntry.qty} étiquette${lastEntry.qty > 1 ? 's' : ''}`}
+              </button>
+            )}
           </ActionBar>
         </>
       ) : (
