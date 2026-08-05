@@ -69,48 +69,42 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   // ---------------------------------------------------------------------
   // Respect du PÉRIMÈTRE de l'inventaire
   // ---------------------------------------------------------------------
-  // Un inventaire par catégorie (ou par fournisseur) ne doit compter que les
-  // articles de ce périmètre. Sans ce contrôle, scanner un article d'une autre
-  // catégorie l'ajoutait silencieusement à l'inventaire et faussait les écarts.
+  // Un inventaire par catégorie (ou par fournisseur) ne compte QUE les articles
+  // de ce périmètre. Sans ce contrôle, scanner un article d'une autre catégorie
+  // l'ajoutait silencieusement à l'inventaire et faussait les écarts.
   //
-  // Exception : si la ligne existe DÉJÀ dans cet inventaire, on l'incrémente.
-  // Elle a pu y être ajoutée avant ce contrôle, ou volontairement depuis la
-  // caisse ; bloquer sa correction n'aurait aucun sens.
+  // Blocage strict : le refus s'applique même si une ligne existe déjà pour cet
+  // article — une ligne hors périmètre n'a rien à faire dans l'inventaire, et
+  // continuer à l'incrémenter ne ferait qu'aggraver l'écart. Elle reste
+  // corrigeable à la main depuis la liste (saisie de quantité).
   if (inventory.scope_type !== 'total') {
-    const known = await query<{ id: string }>(
-      `SELECT id FROM inventory_lines WHERE inventory_id = $1 AND product_id = $2`,
-      [params.id, productId],
-    );
+    // Même règle qu'à la création de l'inventaire.
+    const scopeCheck = inventory.scope_type === 'category'
+      ? await query<{ in_scope: boolean; name: string; label: string | null }>(
+          `SELECT (p.category_id = ANY($3::uuid[])) AS in_scope,
+                  p.name, c.name AS label
+             FROM products p
+             LEFT JOIN product_categories c ON c.id = p.category_id
+            WHERE p.id = $1 AND p.organization_id = $2`,
+          [productId, g.user.organizationId, inventory.scope_ids],
+        )
+      : await query<{ in_scope: boolean; name: string; label: string | null }>(
+          `SELECT (p.supplier_ref = ANY($3::text[])) AS in_scope,
+                  p.name, p.supplier_ref AS label
+             FROM products p
+            WHERE p.id = $1 AND p.organization_id = $2`,
+          [productId, g.user.organizationId, inventory.scope_ids],
+        );
 
-    if (known.rowCount === 0) {
-      // Même règle qu'à la création de l'inventaire.
-      const scopeCheck = inventory.scope_type === 'category'
-        ? await query<{ in_scope: boolean; name: string; label: string | null }>(
-            `SELECT (p.category_id = ANY($3::uuid[])) AS in_scope,
-                    p.name, c.name AS label
-               FROM products p
-               LEFT JOIN product_categories c ON c.id = p.category_id
-              WHERE p.id = $1 AND p.organization_id = $2`,
-            [productId, g.user.organizationId, inventory.scope_ids],
-          )
-        : await query<{ in_scope: boolean; name: string; label: string | null }>(
-            `SELECT (p.supplier_ref = ANY($3::text[])) AS in_scope,
-                    p.name, p.supplier_ref AS label
-               FROM products p
-              WHERE p.id = $1 AND p.organization_id = $2`,
-            [productId, g.user.organizationId, inventory.scope_ids],
-          );
-
-      const row = scopeCheck.rows[0];
-      if (!row?.in_scope) {
-        return NextResponse.json({
-          error: 'PRODUCT_OUT_OF_SCOPE',
-          product_name: row?.name ?? null,
-          // Catégorie (ou fournisseur) réel de l'article, pour un message clair.
-          product_scope: row?.label ?? null,
-          scope_type: inventory.scope_type,
-        }, { status: 409 });
-      }
+    const row = scopeCheck.rows[0];
+    if (!row?.in_scope) {
+      return NextResponse.json({
+        error: 'PRODUCT_OUT_OF_SCOPE',
+        product_name: row?.name ?? null,
+        // Catégorie (ou fournisseur) réel de l'article, pour un message clair.
+        product_scope: row?.label ?? null,
+        scope_type: inventory.scope_type,
+      }, { status: 409 });
     }
   }
 
