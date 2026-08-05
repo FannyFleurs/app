@@ -190,6 +190,8 @@ const POLL_MS = 60;
 
 export interface ScanFieldApi {
   inputRef: React.RefObject<HTMLInputElement>;
+  /** Change à chaque scan : sert de clé React pour recréer l'élément. */
+  generation: number;
   bind: {
     onPointerDown: () => void;
     onBlur: () => void;
@@ -213,6 +215,20 @@ export interface ScanStats {
   lastValue: string;
   lastCode: string;
   lastSource: string;
+  /** Contenu BRUT du champ au moment de la validation. */
+  lastField: string;
+  /** Contenu du tampon de frappes au moment de la validation. */
+  lastKeys: string;
+  /** Nombre de fois où le champ n'était pas vide juste avant un scan. */
+  dirtyBefore: number;
+}
+
+/** Détail transmis à l'écran de diagnostic à chaque code validé. */
+export interface ScanInfo {
+  source: string;
+  field: string;
+  keys: string;
+  dirty: boolean;
 }
 
 /**
@@ -236,7 +252,7 @@ export interface ScanStats {
  * l'état réel, à charge pour l'écran d'inviter à toucher le champ.
  */
 export function useScanField({ onCode, onSearch, canResolve, enabled = true }: {
-  onCode: (code: string) => void;
+  onCode: (code: string, info?: ScanInfo) => void;
   onSearch?: (value: string) => void;
   canResolve?: (code: string) => boolean;
   enabled?: boolean;
@@ -247,12 +263,19 @@ export function useScanField({ onCode, onSearch, canResolve, enabled = true }: {
   const onSearchRef = useRef(onSearch);     onSearchRef.current = onSearch;
   const canResolveRef = useRef(canResolve); canResolveRef.current = canResolve;
 
+  // Compteur de « génération » du champ : il sert de clé React. À chaque
+  // validation, l'élément <input> est DÉTRUIT puis recréé. Un élément neuf
+  // n'a ni valeur, ni tampon de composition du clavier système, ni historique
+  // de saisie — c'est la seule garantie absolue qu'aucun code précédent ne
+  // puisse être relu.
+  const [generation, setGeneration] = useState(0);
   const [armed, setArmed] = useState(false);
   const [manual, setManual] = useState(false);
   const manualRef = useRef(false);
   const [stats, setStats] = useState<ScanStats>({
     keydown: 0, input: 0, valueChanges: 0, emitted: 0,
     lastKey: '', lastValue: '', lastCode: '', lastSource: '',
+    lastField: '', lastKeys: '', dirtyBefore: 0,
   });
   const statsRef = useRef(stats);
   // Les compteurs ne passent PAS par un état React : une mise à jour d'état à
@@ -337,15 +360,24 @@ export function useScanField({ onCode, onSearch, canResolve, enabled = true }: {
     // est le geste normal pour en compter deux. La protection contre le double
     // traitement d'un même scan est structurelle — `clear()` vide À LA FOIS le
     // champ et le tampon de frappes, donc le second canal n'a plus rien à lire.
+    const fieldValue = inputRef.current?.value ?? '';
+    const keys = keyBufferRef.current!.peek();
+    const dirty = fieldValue.trim() !== '' && fieldValue.trim() !== code;
+
     lastCodeRef.current = code;
     activityRef.current = 0;
     clear();
+    // Recrée l'élément de saisie : aucun résidu possible.
+    setGeneration((g) => g + 1);
     bumpStats({
       emitted: statsRef.current.emitted + 1,
       lastCode: code,
       lastSource: source,
+      lastField: fieldValue,
+      lastKeys: keys,
+      dirtyBefore: statsRef.current.dirtyBefore + (dirty ? 1 : 0),
     });
-    onCodeRef.current(code);
+    onCodeRef.current(code, { source, field: fieldValue, keys, dirty });
   }, [clear, bumpStats]);
 
   /* --- Canal 1 : frappes clavier, y compris hors du champ --- */
@@ -434,6 +466,13 @@ export function useScanField({ onCode, onSearch, canResolve, enabled = true }: {
     };
   }, [enabled, emit, bumpStats]);
 
+  // Le champ vient d'être recréé : on lui redonne le focus immédiatement,
+  // sinon le lecteur intégré n'aurait plus de cible.
+  useEffect(() => {
+    if (!enabled || generation === 0) return;
+    inputRef.current?.focus({ preventScroll: true });
+  }, [generation, enabled]);
+
   const onPointerDown = useCallback(() => {
     // Toucher le champ = intention de saisie manuelle : on autorise le clavier
     // logiciel et on suspend la validation automatique par ressemblance.
@@ -445,6 +484,7 @@ export function useScanField({ onCode, onSearch, canResolve, enabled = true }: {
 
   return {
     inputRef,
+    generation,
     bind: { onPointerDown, onBlur },
     armed,
     manual,

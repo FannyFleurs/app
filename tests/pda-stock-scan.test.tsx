@@ -196,3 +196,33 @@ describe('entrée de marchandise — réinjection du champ par le clavier systè
     expect(lines.some((t) => t.includes('Rose Avalanche') && t.includes('Qté : 1'))).toBe(true);
   });
 });
+
+/**
+ * Garantie de dernier recours : après chaque scan, l'élément de saisie est
+ * DÉTRUIT puis recréé. Un élément neuf n'a ni valeur, ni tampon de composition
+ * du clavier système — aucun code précédent ne peut donc être relu, quel que
+ * soit le comportement du terminal.
+ */
+describe('entrée de marchandise — champ recréé à chaque scan', () => {
+  it('remplace l\'élément de saisie après un scan', () => {
+    mount();
+    const before = field();
+    scanBlockThenEnter(A.barcode);
+    const after = field();
+    expect(after).not.toBe(before);
+    expect(after.value).toBe('');
+  });
+
+  it('reste opérationnel après plusieurs remplacements', () => {
+    mount();
+    goToSeries();
+    scanBlockThenEnter(A.barcode);
+    scanBlockThenEnter(B.barcode);
+    scanBlockThenEnter(A.barcode);
+
+    const lines = cart();
+    expect(lines.length).toBe(2);
+    expect(lines.some((t) => t.includes('Rose Avalanche') && t.includes('Qté : 2'))).toBe(true);
+    expect(lines.some((t) => t.includes('Eucalyptus Cinerea') && t.includes('Qté : 1'))).toBe(true);
+  });
+});

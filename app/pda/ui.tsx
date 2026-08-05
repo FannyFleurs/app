@@ -162,6 +162,7 @@ export function ScanField({ field, placeholder, onCamera, showClear }: {
             <IconBarcode />
           </span>
           <input
+            key={field.generation}
             ref={field.inputRef}
             {...field.bind}
             type="text"
