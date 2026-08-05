@@ -80,6 +80,7 @@ export default function PdaDiagnostic({ onBack, onHome }: {
           <InfoRow label="Dernière touche" value={field.stats.lastKey || '—'} />
           <InfoRow label="Dernier code" value={field.stats.lastCode || '—'} />
           <InfoRow label="Canal du dernier code" value={field.stats.lastSource || '—'} />
+          <InfoRow label="Texte inséré (canal fiable)" value={field.stats.lastInsert || '(vide)'} />
           <InfoRow label="Champ lu à la validation" value={field.stats.lastField || '(vide)'} />
           <InfoRow label="Frappes lues à la validation" value={field.stats.lastKeys || '(vide)'} />
           <InfoRow

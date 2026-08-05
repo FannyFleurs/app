@@ -226,3 +226,38 @@ describe('entrée de marchandise — champ recréé à chaque scan', () => {
     expect(lines.some((t) => t.includes('Eucalyptus Cinerea') && t.includes('Qté : 1'))).toBe(true);
   });
 });
+
+/**
+ * Terminal qui NE VIDE PAS son champ : la valeur reste celle du scan
+ * précédent, alors que le texte réellement inséré est bien le nouveau code.
+ * C'est le cas relevé en boutique — six scans, six fois le même code lu.
+ * Le canal « insertion » doit l'emporter sur le contenu du champ.
+ */
+describe('entrée de marchandise — terminal qui conserve l\'ancienne valeur', () => {
+  /** Insère le code via beforeinput, mais laisse une valeur périmée dans le champ. */
+  function scanWithStaleField(code: string, stale: string) {
+    act(() => {
+      const el = field();
+      for (const ch of code) {
+        el.dispatchEvent(new (window as unknown as {
+          InputEvent: typeof InputEvent
+        }).InputEvent('beforeinput', { data: ch, inputType: 'insertText', bubbles: true }));
+      }
+      el.value = stale;                       // le terminal réécrit l'ancien code
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    });
+  }
+
+  it('retient le code INSÉRÉ, pas la valeur périmée du champ', () => {
+    mount();
+    goToSeries();
+    scanWithStaleField(A.barcode, A.barcode);
+    scanWithStaleField(B.barcode, A.barcode);   // le champ ment : il redit A
+
+    const lines = cart();
+    expect(lines.length).toBe(2);
+    expect(lines.some((t) => t.includes('Eucalyptus Cinerea') && t.includes('Qté : 1'))).toBe(true);
+    expect(lines.some((t) => t.includes('Rose Avalanche') && t.includes('Qté : 1'))).toBe(true);
+  });
+});
