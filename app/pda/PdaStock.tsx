@@ -1,8 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { PdaProduct, Station } from './PdaApp';
-import { useCodeIndex, useScanner, normalizeCode } from './scan';
+import { useCodeIndex, useScanField, normalizeCode } from './scan';
 import {
   Screen, Header, Tabs, ScanField, ProductCard, Stepper, QtyPad, ActionBar, Toast,
   IconTrash,
@@ -34,9 +34,8 @@ export default function PdaStock({ station, products, onUnknownCode, onHome, not
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ text: string; tone: 'ok' | 'error' } | null>(null);
 
-  // Recherche (affichage seulement) et champ de scan non contrôlé.
+  // Recherche : affichage des suggestions uniquement.
   const [search, setSearch] = useState('');
-  const fieldRef = useRef<HTMLInputElement>(null);
 
   // Onglet « Unitaire »
   const [current, setCurrent] = useState<PdaProduct | null>(null);
@@ -67,17 +66,6 @@ export default function PdaStock({ station, products, onUnknownCode, onHome, not
 
   /* ---------------------------------------------------------------- scan */
 
-  const clearField = useCallback(() => {
-    if (fieldRef.current) fieldRef.current.value = '';
-    setSearch('');
-  }, []);
-
-  const focusField = useCallback(() => {
-    // Redonne le focus sans le voler à un bouton que l'on vient de toucher.
-    const a = document.activeElement as HTMLElement | null;
-    if (!a || a.tagName === 'BODY') fieldRef.current?.focus();
-  }, []);
-
   const addToCart = useCallback((p: PdaProduct, delta = 1) => {
     setCart((cur) => {
       const i = cur.findIndex((x) => x.product.id === p.id);
@@ -100,20 +88,24 @@ export default function PdaStock({ station, products, onUnknownCode, onHome, not
       addToCart(p, 1);
       setMessage({ text: `✓ ${p.name}`, tone: 'ok' });
     }
-    clearField();
-  }, [tab, addToCart, clearField]);
+  }, [tab, addToCart]);
 
   /** Point d'entrée unique d'un code : correspondance exacte, sinon inconnu. */
   const handleCode = useCallback((code: string) => {
     const hit = index.get(normalizeCode(code));
     if (hit) { apply(hit); return; }
-    clearField();
     setMessage({ text: `Article introuvable : « ${code} »`, tone: 'error' });
     onUnknownCode(code);
-  }, [index, apply, clearField, onUnknownCode]);
+  }, [index, apply, onUnknownCode]);
 
   // Le pavé numérique prend le clavier à son compte : on suspend le scan.
-  useScanner(handleCode, pad === null);
+  const field = useScanField({
+    onCode: handleCode,
+    onSearch: setSearch,
+    canResolve: (c) => index.has(normalizeCode(c)),
+    enabled: pad === null,
+  });
+  const { clear: clearField, focus: focusField } = field;
 
   /* --------------------------------------------------------- suggestions */
 
@@ -221,12 +213,7 @@ export default function PdaStock({ station, products, onUnknownCode, onHome, not
         <div className="text-xs text-ink-soft mb-1.5">
           {tab === 'single' ? 'Scanner un produit' : 'Scanner les produits (chaque scan = +1)'}
         </div>
-        <ScanField
-          inputRef={fieldRef}
-          onSearch={setSearch}
-          showClear={search.length > 0}
-          placeholder="Scanner ou rechercher…"
-        />
+        <ScanField field={field} showClear={search.length > 0} />
         {suggestions.length > 0 && (
           <ul className="mt-2 max-h-52 overflow-y-auto rounded-xl border border-border divide-y divide-border bg-surface">
             {suggestions.map((p) => (

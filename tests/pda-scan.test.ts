@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  createScanBuffer, buildCodeIndex, normalizeCode, SEQUENCE_GAP_MS,
+  createScanBuffer, buildCodeIndex, normalizeCode, looksLikeCode, SEQUENCE_GAP_MS,
 } from '@/app/pda/scan';
 
 /**
@@ -118,5 +118,30 @@ describe('index des codes', () => {
     const second = scan(b, '222', 1500);
     expect(index.get(normalizeCode(first!))).toBe(A);
     expect(index.get(normalizeCode(second!))).toBe(B);
+  });
+});
+
+/**
+ * Validation automatique sur inactivité : elle n'existe que pour les
+ * douchettes qui n'envoient aucun terminateur. Elle ne doit jamais
+ * transformer une recherche par nom en scan.
+ */
+describe('reconnaissance d\'un code', () => {
+  it('accepte un EAN', () => {
+    expect(looksLikeCode('3401579847521')).toBe(true);
+  });
+
+  it('accepte une référence en majuscules', () => {
+    expect(looksLikeCode('PROD-A-001')).toBe(true);
+  });
+
+  it('refuse une recherche par nom', () => {
+    expect(looksLikeCode('rose avalanche')).toBe(false);
+    expect(looksLikeCode('Eucalyptus')).toBe(false);
+  });
+
+  it('refuse un texte trop court', () => {
+    expect(looksLikeCode('rose')).toBe(false);
+    expect(looksLikeCode('12345')).toBe(false);
   });
 });

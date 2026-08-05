@@ -1,8 +1,8 @@
 'use client';
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import type { PdaProduct, Station } from './PdaApp';
-import { useCodeIndex, useScanner, normalizeCode } from './scan';
+import { useCodeIndex, useScanField, normalizeCode } from './scan';
 import { formatEUR } from '@/lib/services/money';
 import { buildLabelsDocument, openPrintWindow, discountedPrice } from '@/lib/services/label-print';
 import type { LabelSettings } from '@/lib/settings/label';
@@ -39,34 +39,28 @@ export default function PdaLabels({
   const [pad, setPad] = useState(false);
   const [padValue, setPadValue] = useState('');
 
-  const fieldRef = useRef<HTMLInputElement>(null);
   const index = useCodeIndex(products);
-
-  const clearField = useCallback(() => {
-    if (fieldRef.current) fieldRef.current.value = '';
-    setSearch('');
-  }, []);
-  const focusField = useCallback(() => {
-    const a = document.activeElement as HTMLElement | null;
-    if (!a || a.tagName === 'BODY') fieldRef.current?.focus();
-  }, []);
 
   const apply = useCallback((p: PdaProduct) => {
     setCurrent(p);
     setCount(1);
     setMessage(null);
-    clearField();
-  }, [clearField]);
+  }, []);
 
   const handleCode = useCallback((code: string) => {
     const hit = index.get(normalizeCode(code));
     if (hit) { apply(hit); return; }
-    clearField();
     setMessage({ text: `Article introuvable : « ${code} »`, tone: 'error' });
     onUnknownCode(code);
-  }, [index, apply, clearField, onUnknownCode]);
+  }, [index, apply, onUnknownCode]);
 
-  useScanner(handleCode, !pad);
+  const field = useScanField({
+    onCode: handleCode,
+    onSearch: setSearch,
+    canResolve: (c) => index.has(normalizeCode(c)),
+    enabled: !pad,
+  });
+  const { focus: focusField } = field;
 
   const suggestions = useMemo(() => {
     const s = search.trim().toLowerCase();
@@ -116,12 +110,7 @@ export default function PdaLabels({
 
       <div className="shrink-0 p-3 bg-surface border-b border-border">
         <div className="text-xs text-ink-soft mb-1.5">Scanner un produit</div>
-        <ScanField
-          inputRef={fieldRef}
-          onSearch={setSearch}
-          showClear={search.length > 0}
-          placeholder="Scanner ou rechercher…"
-        />
+        <ScanField field={field} showClear={search.length > 0} />
         {suggestions.length > 0 && (
           <ul className="mt-2 max-h-52 overflow-y-auto rounded-xl border border-border divide-y divide-border bg-surface">
             {suggestions.map((p) => (

@@ -1,6 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import type { ScanFieldApi } from './scan';
 
 /**
  * Briques d'interface communes aux écrans du PDA.
@@ -146,14 +147,11 @@ export function Tabs<T extends string>({ value, onChange, items }: {
  * `onSearch` ne sert qu'à filtrer une liste affichée : aucune action
  * automatique n'est jamais déclenchée à partir de ce filtre.
  */
-export function ScanField({ inputRef, placeholder, onSearch, onCamera, showClear, autoFocus = true }: {
-  inputRef: React.RefObject<HTMLInputElement>;
+export function ScanField({ field, placeholder, onCamera, showClear }: {
+  field: ScanFieldApi;
   placeholder?: string;
-  onSearch: (value: string) => void;
   onCamera?: () => void;
-  /** Affiche la croix d'effacement — le parent sait si le champ est rempli. */
   showClear?: boolean;
-  autoFocus?: boolean;
 }) {
   return (
     <div className="flex items-center gap-2">
@@ -162,23 +160,21 @@ export function ScanField({ inputRef, placeholder, onSearch, onCamera, showClear
           <IconBarcode />
         </span>
         <input
-          ref={inputRef}
+          ref={field.inputRef}
+          {...field.bind}
           type="text"
           inputMode="text"
+          enterKeyHint="done"
           className={`input h-12 w-full pl-10 text-base ${showClear ? 'pr-11' : 'pr-3'}`}
           placeholder={placeholder ?? 'Scanner ou rechercher…'}
           autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
-          autoFocus={autoFocus}
-          onChange={(e) => onSearch(e.target.value)}
+          autoFocus
         />
         {showClear && (
           <button
             type="button"
             aria-label="Effacer"
-            onClick={() => {
-              if (inputRef.current) { inputRef.current.value = ''; inputRef.current.focus(); }
-              onSearch('');
-            }}
+            onClick={() => { field.clear(); field.focus(); }}
             className="absolute right-1 top-1/2 -translate-y-1/2 grid h-9 w-9 place-items-center rounded-full text-ink-soft active:bg-gray-100"
           >
             <span aria-hidden className="text-xl leading-none">×</span>
