@@ -3,16 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 /**
- * Moteur de scan du PDA — point d'entrée UNIQUE de toute l'application.
+ * Moteur de scan PDA.
  *
- * Principes :
- *  1. résolution uniquement par correspondance exacte dans un index ;
- *  2. conservation permanente du même élément <input> ;
- *  3. lecture des frappes clavier, événements input/beforeinput,
- *     composition Android, collage et valeur du champ ;
- *  4. neutralisation complète de Enter/Tab pour éviter l'ouverture
- *     involontaire d'une fiche article ;
- *  5. nettoyage du champ sans blur ni recréation du DOM.
+ * Cette version privilégie le mode Android « Input Box Mode » :
+ * le lecteur écrit l'EAN complet dans le champ, puis envoie éventuellement
+ * Enter. On ne reconstitue plus le code en mélangeant beforeinput, input,
+ * keydown et polling : c'était la cause des codes incomplets ou instables.
  */
 
 export interface Scannable {
@@ -33,9 +29,9 @@ export function buildCodeIndex<T extends Scannable>(items: T[]): Map<string, T> 
   const index = new Map<string, T>();
 
   for (const item of items) {
-    const add = (value: string | null | undefined) => {
-      if (!value) return;
-      const code = normalizeCode(value);
+    const add = (raw: string | null | undefined) => {
+      if (!raw) return;
+      const code = normalizeCode(raw);
       if (code && !index.has(code)) index.set(code, item);
     };
 
@@ -62,6 +58,7 @@ export interface ScanBuffer {
 
 export const MIN_CODE_LENGTH = 2;
 export const SEQUENCE_GAP_MS = 1000;
+export const QUIET_MS = 90;
 
 export function createScanBuffer(): ScanBuffer {
   let buffer = '';
@@ -70,8 +67,9 @@ export function createScanBuffer(): ScanBuffer {
   return {
     push(key, at) {
       if (key === 'Enter' || key === 'Tab') {
-        const code = buffer.trim();
+        const code = normalizeCode(buffer);
         buffer = '';
+        lastAt = 0;
         return code.length >= MIN_CODE_LENGTH ? code : null;
       }
 
@@ -102,9 +100,6 @@ export function createScanBuffer(): ScanBuffer {
   };
 }
 
-const TERMINATORS = /[\r\n\t]/;
-export const QUIET_MS = 180;
-
 export function looksLikeCode(raw: string): boolean {
   const value = normalizeCode(raw);
 
@@ -124,6 +119,10 @@ export interface ValueWatcher {
   reset(): void;
 }
 
+/**
+ * Conservé pour les tests existants.
+ * Le hook principal utilise désormais un debounce direct sur la valeur complète.
+ */
 export function createValueWatcher({
   isCode,
   quietMs = QUIET_MS,
@@ -131,70 +130,37 @@ export function createValueWatcher({
   isCode: (value: string) => boolean;
   quietMs?: number;
 }): ValueWatcher {
-  let lastValue = '';
+  let last = '';
   let changedAt = 0;
 
   return {
-    observe(value, at) {
-      const terminatorIndex = value.search(TERMINATORS);
+    observe(rawValue, at) {
+      const value = normalizeCode(rawValue);
 
-      if (terminatorIndex >= 0) {
-        const code = normalizeCode(value.slice(0, terminatorIndex));
-        lastValue = '';
-        changedAt = at;
-
-        return {
-          code: code.length >= MIN_CODE_LENGTH ? code : null,
-          changed: true,
-        };
-      }
-
-      if (value !== lastValue) {
-        lastValue = value;
+      if (value !== last) {
+        last = value;
         changedAt = at;
         return { code: null, changed: true };
       }
 
-      const normalized = normalizeCode(value);
-
       if (
-        normalized.length >= MIN_CODE_LENGTH
+        value.length >= MIN_CODE_LENGTH
         && at - changedAt >= quietMs
-        && isCode(normalized)
+        && isCode(value)
       ) {
-        lastValue = '';
-        changedAt = at;
-        return { code: normalized, changed: false };
+        last = '';
+        changedAt = 0;
+        return { code: value, changed: false };
       }
 
       return { code: null, changed: false };
     },
 
     reset() {
-      lastValue = '';
+      last = '';
       changedAt = 0;
     },
   };
-}
-
-const POLL_MS = 60;
-
-export interface ScanFieldApi {
-  inputRef: React.RefObject<HTMLInputElement>;
-  /**
-   * Conservé pour compatibilité avec le composant ScanField.
-   * La valeur reste toujours à 0 : le champ ne doit plus être recréé.
-   */
-  generation: number;
-  bind: {
-    onPointerDown: () => void;
-    onBlur: () => void;
-  };
-  armed: boolean;
-  manual: boolean;
-  clear: () => void;
-  focus: () => void;
-  stats: ScanStats;
 }
 
 export interface ScanStats {
@@ -218,6 +184,28 @@ export interface ScanInfo {
   keys: string;
   dirty: boolean;
 }
+
+export interface ScanFieldApi {
+  inputRef: React.RefObject<HTMLInputElement>;
+  /**
+   * Compatibilité avec le composant visuel existant.
+   * Toujours 0 : le champ ne doit jamais être détruit/recréé.
+   */
+  generation: number;
+  bind: {
+    onPointerDown: () => void;
+    onBlur: () => void;
+  };
+  armed: boolean;
+  manual: boolean;
+  clear: () => void;
+  focus: () => void;
+  stats: ScanStats;
+}
+
+const INPUT_DEBOUNCE_MS = 55;
+const SILENT_POLL_MS = 80;
+const SAME_EVENT_DEDUP_MS = 120;
 
 export function useScanField({
   onCode,
@@ -259,6 +247,14 @@ export function useScanField({
   });
 
   const statsRef = useRef(stats);
+  const keyBufferRef = useRef<ScanBuffer>(createScanBuffer());
+
+  const pendingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastObservedValueRef = useRef('');
+  const lastEmissionRef = useRef<{ code: string; at: number }>({
+    code: '',
+    at: 0,
+  });
 
   const bumpStats = useCallback((patch: Partial<ScanStats>) => {
     statsRef.current = {
@@ -267,51 +263,23 @@ export function useScanField({
     };
   }, []);
 
-  const insertRef = useRef('');
-  const insertAtRef = useRef(0);
-  const lastInsertChunkRef = useRef<{ data: string; at: number }>({
-    data: '',
-    at: 0,
-  });
-
-  const keyBufferRef = useRef<ScanBuffer | null>(null);
-  if (keyBufferRef.current === null) {
-    keyBufferRef.current = createScanBuffer();
-  }
-
-  const watcherRef = useRef<ValueWatcher | null>(null);
-  if (watcherRef.current === null) {
-    watcherRef.current = createValueWatcher({
-      isCode: (value) => {
-        const code = normalizeCode(value);
-        return (canResolveRef.current?.(code) ?? false) || looksLikeCode(code);
-      },
-    });
-  }
-
-  const lastCodeRef = useRef('');
-  const activityRef = useRef(0);
-
-  /**
-   * Nettoyage sans remplacement du champ, sans blur et sans recréation.
-   * Le scanner garde donc toujours la même cible DOM.
-   */
-  const clearInternal = useCallback(() => {
-    const node = inputRef.current;
-
-    if (node) {
-      node.value = '';
+  const cancelPending = useCallback(() => {
+    if (pendingTimerRef.current) {
+      clearTimeout(pendingTimerRef.current);
+      pendingTimerRef.current = null;
     }
-
-    insertRef.current = '';
-    insertAtRef.current = 0;
-    lastInsertChunkRef.current = { data: '', at: 0 };
-    keyBufferRef.current?.reset();
-    watcherRef.current?.reset();
-    activityRef.current = 0;
-
-    onSearchRef.current?.('');
   }, []);
+
+  const clearInternal = useCallback(() => {
+    cancelPending();
+
+    const node = inputRef.current;
+    if (node) node.value = '';
+
+    lastObservedValueRef.current = '';
+    keyBufferRef.current.reset();
+    onSearchRef.current?.('');
+  }, [cancelPending]);
 
   const focus = useCallback(() => {
     const node = inputRef.current;
@@ -326,19 +294,31 @@ export function useScanField({
 
   const emit = useCallback((raw: string, source: string) => {
     const code = normalizeCode(raw);
-
     if (code.length < MIN_CODE_LENGTH) return;
 
-    const fieldValue = inputRef.current?.value ?? '';
-    const keys = keyBufferRef.current?.peek() ?? '';
+    const now = Date.now();
+
+    /*
+     * Empêche uniquement le double traitement technique du même événement
+     * (input puis Enter presque simultanés). Un vrai second scan du même article,
+     * effectué normalement, reste accepté.
+     */
+    if (
+      lastEmissionRef.current.code === code
+      && now - lastEmissionRef.current.at < SAME_EVENT_DEDUP_MS
+    ) {
+      clearInternal();
+      return;
+    }
+
+    const node = inputRef.current;
+    const fieldValue = node?.value ?? '';
+    const keys = keyBufferRef.current.peek();
+
     const normalizedField = normalizeCode(fieldValue);
+    const dirty = normalizedField !== '' && normalizedField !== code;
 
-    const dirty = (
-      normalizedField !== ''
-      && normalizedField !== code
-    );
-
-    lastCodeRef.current = code;
+    lastEmissionRef.current = { code, at: now };
 
     bumpStats({
       emitted: statsRef.current.emitted + 1,
@@ -346,13 +326,10 @@ export function useScanField({
       lastSource: source,
       lastField: fieldValue,
       lastKeys: keys,
+      lastInsert: fieldValue,
       dirtyBefore: statsRef.current.dirtyBefore + (dirty ? 1 : 0),
     });
 
-    /*
-     * On nettoie avant l'appel métier pour empêcher un second canal
-     * de relire la même séquence.
-     */
     clearInternal();
 
     onCodeRef.current(code, {
@@ -362,84 +339,83 @@ export function useScanField({
       dirty,
     });
 
-    /*
-     * Le même champ reste monté. On lui redonne simplement le focus
-     * au prochain frame, sans blur intermédiaire.
-     */
     requestAnimationFrame(() => {
+      focus();
+    });
+  }, [bumpStats, clearInternal, focus]);
+
+  const scheduleFieldRead = useCallback((source: string) => {
+    cancelPending();
+
+    pendingTimerRef.current = setTimeout(() => {
+      pendingTimerRef.current = null;
+
       const node = inputRef.current;
       if (!node) return;
 
-      node.value = '';
+      const raw = node.value;
+      const code = normalizeCode(raw);
 
-      try {
-        node.focus({ preventScroll: true });
-      } catch {
-        node.focus();
+      if (code.length < MIN_CODE_LENGTH) return;
+
+      const resolvable = canResolveRef.current?.(code) ?? false;
+
+      /*
+       * Un EAN ou une référence structurée est validé.
+       * Une simple recherche textuelle reste affichée sans être exécutée.
+       */
+      if (resolvable || looksLikeCode(code)) {
+        emit(code, source);
       }
-    });
-  }, [bumpStats, clearInternal]);
+    }, INPUT_DEBOUNCE_MS);
+  }, [cancelPending, emit]);
 
   useEffect(() => {
     if (!enabled) {
-      keyBufferRef.current?.reset();
+      cancelPending();
+      keyBufferRef.current.reset();
       return;
     }
 
-    const buffer = keyBufferRef.current!;
-
-    const isTerminator = (event: KeyboardEvent) => (
-      event.key === 'Enter'
-      || event.key === 'Tab'
-    );
-
     const blockTerminator = (event: KeyboardEvent) => {
-      if (!isTerminator(event)) return false;
+      if (event.key !== 'Enter' && event.key !== 'Tab') return false;
 
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
-
       return true;
     };
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.ctrlKey || event.metaKey || event.altKey) return;
 
-      activityRef.current += 1;
-
       bumpStats({
         keydown: statsRef.current.keydown + 1,
         lastKey: event.key,
       });
 
-      if (isTerminator(event)) {
+      if (event.key === 'Enter' || event.key === 'Tab') {
         blockTerminator(event);
+        cancelPending();
 
-        const fromInsert = normalizeCode(insertRef.current);
-        const fromKeys = normalizeCode(buffer.peek());
+        /*
+         * En Input Box Mode, la valeur du champ est la source prioritaire.
+         * Le tampon clavier n'est qu'un repli pour Keyboard Simulate Mode.
+         */
         const fromField = normalizeCode(inputRef.current?.value ?? '');
+        const fromKeys = normalizeCode(keyBufferRef.current.peek());
 
-        buffer.reset();
-        insertRef.current = '';
+        keyBufferRef.current.reset();
 
-        const code = fromInsert || fromKeys || fromField;
-
+        const code = fromField || fromKeys;
         if (code) {
-          emit(
-            code,
-            fromInsert
-              ? 'insertion'
-              : fromKeys
-                ? 'touches'
-                : 'champ',
-          );
+          emit(code, fromField ? 'champ-enter' : 'touches-enter');
         }
 
         return;
       }
 
-      buffer.push(event.key, Date.now());
+      keyBufferRef.current.push(event.key, Date.now());
     };
 
     const onKeyPress = (event: KeyboardEvent) => {
@@ -458,9 +434,9 @@ export function useScanField({
       window.removeEventListener('keydown', onKeyDown, true);
       window.removeEventListener('keypress', onKeyPress, true);
       window.removeEventListener('keyup', onKeyUp, true);
-      buffer.reset();
+      keyBufferRef.current.reset();
     };
-  }, [enabled, emit, bumpStats]);
+  }, [enabled, bumpStats, cancelPending, emit]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -468,100 +444,58 @@ export function useScanField({
     const element = inputRef.current;
     if (!element) return;
 
-    const appendFreshData = (
-      data: string | null | undefined,
-      inputType = '',
-    ) => {
-      if (inputType.startsWith('delete')) {
-        insertRef.current = insertRef.current.slice(0, -1);
-        return;
-      }
-
-      if (!data) return;
-
-      const now = Date.now();
-      const previous = lastInsertChunkRef.current;
-
-      /*
-       * Certains WebView envoient la même donnée dans beforeinput puis input.
-       * Une fenêtre très courte empêche seulement ce doublon technique.
-       */
-      if (
-        previous.data === data
-        && now - previous.at < 25
-      ) {
-        return;
-      }
-
-      lastInsertChunkRef.current = { data, at: now };
-
-      if (now - insertAtRef.current > SEQUENCE_GAP_MS) {
-        insertRef.current = '';
-      }
-
-      insertAtRef.current = now;
-      insertRef.current += data;
-      activityRef.current += 1;
-
-      bumpStats({
-        lastInsert: insertRef.current,
-      });
-
-      const terminatorIndex = insertRef.current.search(TERMINATORS);
-
-      if (terminatorIndex >= 0) {
-        const code = insertRef.current.slice(0, terminatorIndex);
-        insertRef.current = '';
-        emit(code, 'insertion');
-      }
-    };
-
-    const onBeforeInput = (event: Event) => {
-      const inputEvent = event as InputEvent;
-      appendFreshData(
-        inputEvent.data,
-        inputEvent.inputType ?? '',
-      );
-    };
-
-    const onInput = (event: Event) => {
-      const inputEvent = event as InputEvent;
-
-      activityRef.current += 1;
+    const onInput = () => {
+      const raw = element.value;
 
       bumpStats({
         input: statsRef.current.input + 1,
+        lastValue: raw,
+        lastInsert: raw,
       });
 
-      appendFreshData(
-        inputEvent.data,
-        inputEvent.inputType ?? '',
-      );
+      lastObservedValueRef.current = raw;
+      onSearchRef.current?.(raw);
+
+      /*
+       * On attend quelques millisecondes que le PDA ait fini de remplacer
+       * entièrement la valeur. On ne lit jamais InputEvent.data.
+       */
+      scheduleFieldRead('champ-input');
     };
 
-    const onCompositionEnd = (event: CompositionEvent) => {
-      appendFreshData(
-        event.data,
-        'insertCompositionText',
-      );
+    const onCompositionEnd = () => {
+      scheduleFieldRead('champ-composition');
     };
 
     const onPaste = (event: ClipboardEvent) => {
-      const data = event.clipboardData?.getData('text') ?? '';
-      if (!data) return;
+      const pasted = event.clipboardData?.getData('text') ?? '';
+      if (!pasted) return;
 
       event.preventDefault();
-      appendFreshData(data, 'insertFromPaste');
+      element.value = pasted;
+
+      bumpStats({
+        input: statsRef.current.input + 1,
+        lastValue: pasted,
+        lastInsert: pasted,
+      });
+
+      lastObservedValueRef.current = pasted;
+      onSearchRef.current?.(pasted);
+      scheduleFieldRead('champ-collage');
     };
 
-    element.addEventListener('beforeinput', onBeforeInput);
     element.addEventListener('input', onInput);
     element.addEventListener('compositionend', onCompositionEnd);
     element.addEventListener('paste', onPaste);
 
     focus();
 
-    const intervalId = window.setInterval(() => {
+    /*
+     * Repli pour les lecteurs qui modifient directement input.value
+     * sans émettre d'événement input.
+     */
+    const pollId = window.setInterval(() => {
       if (document.hidden) return;
 
       const node = inputRef.current;
@@ -570,9 +504,6 @@ export function useScanField({
       const focused = document.activeElement === node;
       setArmed(focused);
 
-      /*
-       * On ne vole pas le focus à un autre champ réellement utilisé.
-       */
       if (!focused) {
         const active = document.activeElement as HTMLElement | null;
         const editingAnotherField = Boolean(
@@ -585,63 +516,33 @@ export function useScanField({
           ),
         );
 
-        if (!editingAnotherField) {
-          focus();
-        }
+        if (!editingAnotherField) focus();
       }
 
-      const currentValue = node.value;
-      const normalizedValue = normalizeCode(currentValue);
+      if (node.value !== lastObservedValueRef.current) {
+        lastObservedValueRef.current = node.value;
 
-      /*
-       * Le clavier Android peut réinjecter l'ancien code sans nouvelle
-       * activité. Dans ce cas, on l'efface mais on ne le recompte pas.
-       */
-      if (
-        normalizedValue
-        && normalizedValue === lastCodeRef.current
-        && activityRef.current === 0
-      ) {
-        node.value = '';
-        watcherRef.current?.reset();
-        return;
+        bumpStats({
+          valueChanges: statsRef.current.valueChanges + 1,
+          lastValue: node.value,
+          lastInsert: node.value,
+        });
+
+        onSearchRef.current?.(node.value);
+        scheduleFieldRead('champ-polling');
       }
 
       setStats({ ...statsRef.current });
-
-      const result = watcherRef.current!.observe(
-        currentValue,
-        Date.now(),
-      );
-
-      if (result.changed) {
-        bumpStats({
-          valueChanges: statsRef.current.valueChanges + 1,
-          lastValue: currentValue,
-        });
-
-        onSearchRef.current?.(currentValue);
-      }
-
-      if (result.code) {
-        const inserted = normalizeCode(insertRef.current);
-
-        emit(
-          inserted || result.code,
-          inserted ? 'insertion' : 'valeur',
-        );
-      }
-    }, POLL_MS);
+    }, SILENT_POLL_MS);
 
     return () => {
-      window.clearInterval(intervalId);
-      element.removeEventListener('beforeinput', onBeforeInput);
+      window.clearInterval(pollId);
+      cancelPending();
       element.removeEventListener('input', onInput);
       element.removeEventListener('compositionend', onCompositionEnd);
       element.removeEventListener('paste', onPaste);
-      watcherRef.current?.reset();
     };
-  }, [enabled, emit, bumpStats, focus]);
+  }, [enabled, bumpStats, cancelPending, focus, scheduleFieldRead]);
 
   const onPointerDown = useCallback(() => {
     setManual(true);
