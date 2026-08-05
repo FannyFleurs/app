@@ -188,14 +188,9 @@ export default function LabelsManager() {
               <button className="text-xs text-ink-soft hover:text-danger" onClick={() => setBatch([])}>Vider la liste</button>
               <div className="flex items-center gap-2">
                 {cloudPrinter ? (
-                  <>
-                    <button className="btn-soft" onClick={printBatch} title="Via la boîte d'impression du navigateur">
-                      PDF / navigateur
-                    </button>
-                    <button className="btn-primary" onClick={() => void printBatchCloud()}>
-                      🖨 Imprimer sur « {cloudPrinter} » ({batchTotal})
-                    </button>
-                  </>
+                  <button className="btn-primary" onClick={() => void printBatchCloud()}>
+                    🖨 Imprimer tout ({batchTotal} étiquette{batchTotal > 1 ? 's' : ''})
+                  </button>
                 ) : (
                   <button className="btn-primary" onClick={printBatch}>
                     Imprimer tout ({batchTotal} étiquette{batchTotal > 1 ? 's' : ''})

@@ -180,16 +180,12 @@ export default function LabelPrintModal({
 
         <div className="mt-5 flex flex-wrap justify-end gap-2">
           <button onClick={onClose} className="btn-ghost">Fermer</button>
+          {/* Imprimante déclarée : impression directe, sans alternative — le
+              repli navigateur reste automatique si elle devient injoignable. */}
           {cloudPrinter ? (
-            <>
-              <button onClick={printLabels} disabled={qty < 1} className="btn-soft"
-                      title="Via la boîte d'impression du navigateur">
-                PDF / navigateur
-              </button>
-              <button onClick={() => void printCloud()} disabled={qty < 1 || sending} className="btn-primary">
-                {sending ? 'Envoi…' : `🖨 Imprimer sur « ${cloudPrinter} »${qty > 1 ? ` (${qty})` : ''}`}
-              </button>
-            </>
+            <button onClick={() => void printCloud()} disabled={qty < 1 || sending} className="btn-primary">
+              {sending ? 'Envoi…' : `🖨 Imprimer${qty > 1 ? ` ${qty} étiquettes` : " l'étiquette"}`}
+            </button>
           ) : (
             <button onClick={printLabels} disabled={qty < 1} className="btn-primary">
               {qty >= 1
