@@ -4,6 +4,15 @@ import { requirePermission } from '@/lib/auth/guards';
 import { parseJson, jsonError } from '@/lib/validation/api';
 import { CashSessionService } from '@/lib/services/cash-session-service';
 import { query } from '@/lib/db/client';
+import { CASH_KEY, mergeCashDefaults, type CashSettings } from '@/lib/settings/cash';
+import { loadScopedSettingValue } from '@/lib/settings/scoped-server';
+
+/** Mode « fonds commun » configuré pour cette boutique. */
+async function isSharedFloat(organizationId: string, storeId: string | null): Promise<boolean> {
+  if (!storeId) return false;
+  const value = await loadScopedSettingValue<CashSettings>(organizationId, CASH_KEY, storeId);
+  return mergeCashDefaults(value).shared_float;
+}
 
 const openSchema = z.object({
   store_id: z.string().uuid(),
@@ -17,8 +26,26 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const registerId = url.searchParams.get('register_id');
   if (!registerId) return jsonError('register_id requis', 400);
-  const session = await CashSessionService.getOpenForRegister(registerId);
-  return NextResponse.json({ session });
+
+  // La boutique peut être déduite du poste : le client n'a pas à la fournir.
+  const storeRow = await query<{ store_id: string }>(
+    `SELECT store_id FROM registers WHERE id = $1 AND organization_id = $2`,
+    [registerId, g.user.organizationId],
+  );
+  const storeId = storeRow.rows[0]?.store_id ?? null;
+  const shared = await isSharedFloat(g.user.organizationId, storeId);
+
+  // Fonds commun : c'est la session de la BOUTIQUE qui fait foi, ouverte par
+  // n'importe lequel des postes. Fonds individuel : celle du poste seul.
+  const session = shared && storeId
+    ? await CashSessionService.getOpenForStore(storeId)
+    : await CashSessionService.getOpenForRegister(registerId);
+
+  const openedElsewhere = Boolean(
+    shared && session && 'register_id' in session && session.register_id !== registerId,
+  );
+
+  return NextResponse.json({ session, shared, opened_elsewhere: openedElsewhere });
 }
 
 export async function POST(req: Request) {
@@ -33,6 +60,7 @@ export async function POST(req: Request) {
     [parsed.data.register_id, parsed.data.store_id, g.user.organizationId],
   );
   if (r.rowCount === 0) return jsonError('REGISTER_NOT_FOUND', 404);
+  const shared = await isSharedFloat(g.user.organizationId, parsed.data.store_id);
   try {
     const out = await CashSessionService.open({
       organizationId: g.user.organizationId,
@@ -40,6 +68,7 @@ export async function POST(req: Request) {
       registerId: parsed.data.register_id,
       userId: g.user.id,
       openingFloat: parsed.data.opening_float,
+      shared,
     });
     return NextResponse.json(out, { status: 201 });
   } catch (e) {
