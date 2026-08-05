@@ -219,6 +219,8 @@ export interface ScanStats {
   lastField: string;
   /** Contenu du tampon de frappes au moment de la validation. */
   lastKeys: string;
+  /** Texte inséré reconstitué (canal `beforeinput`). */
+  lastInsert: string;
   /** Nombre de fois où le champ n'était pas vide juste avant un scan. */
   dirtyBefore: number;
 }
@@ -275,7 +277,7 @@ export function useScanField({ onCode, onSearch, canResolve, enabled = true }: {
   const [stats, setStats] = useState<ScanStats>({
     keydown: 0, input: 0, valueChanges: 0, emitted: 0,
     lastKey: '', lastValue: '', lastCode: '', lastSource: '',
-    lastField: '', lastKeys: '', dirtyBefore: 0,
+    lastField: '', lastKeys: '', lastInsert: '', dirtyBefore: 0,
   });
   const statsRef = useRef(stats);
   // Les compteurs ne passent PAS par un état React : une mise à jour d'état à
@@ -284,6 +286,13 @@ export function useScanField({ onCode, onSearch, canResolve, enabled = true }: {
   const bumpStats = useCallback((patch: Partial<ScanStats>) => {
     statsRef.current = { ...statsRef.current, ...patch };
   }, []);
+
+  // Texte RÉELLEMENT inséré à ce scan, reconstitué depuis InputEvent.data.
+  // C'est le seul canal qui décrit ce qui vient d'arriver, indépendamment du
+  // contenu du champ : un terminal qui conserve l'ancienne valeur ne peut donc
+  // plus faire relire un code déjà traité.
+  const insertRef = useRef('');
+  const insertAtRef = useRef(0);
 
   const keyBufferRef = useRef<ScanBuffer | null>(null);
   if (keyBufferRef.current === null) keyBufferRef.current = createScanBuffer();
@@ -321,6 +330,7 @@ export function useScanField({ onCode, onSearch, canResolve, enabled = true }: {
   const clear = useCallback(() => {
     const el = inputRef.current;
     if (el) el.value = '';
+    insertRef.current = '';
     keyBufferRef.current!.reset();
     watcherRef.current!.reset();
     onSearchRef.current?.('');
@@ -391,9 +401,15 @@ export function useScanField({ onCode, onSearch, canResolve, enabled = true }: {
       bumpStats({ keydown: statsRef.current.keydown + 1, lastKey: e.key });
       if (e.key === 'Enter' || e.key === 'Tab') {
         e.preventDefault();
+        // Ordre de confiance : ce qui vient d'être inséré, puis les frappes,
+        // puis — en dernier recours seulement — le contenu du champ, qui peut
+        // être resté celui du scan précédent sur certains terminaux.
+        const fromInsert = insertRef.current.trim();
         const fromKeys = buffer.peek().trim();
         buffer.reset();
-        emit(fromKeys || inputRef.current?.value || '', fromKeys ? 'touches' : 'champ');
+        insertRef.current = '';
+        const raw = fromInsert || fromKeys || inputRef.current?.value || '';
+        emit(raw, fromInsert ? 'insertion' : fromKeys ? 'touches' : 'champ');
         return;
       }
       buffer.push(e.key, Date.now());
@@ -406,7 +422,10 @@ export function useScanField({ onCode, onSearch, canResolve, enabled = true }: {
     };
   }, [enabled, emit, bumpStats]);
 
-  /* --- Canaux 2 et 3 : événements `input` ET observation de la valeur --- */
+  /* --- Canaux 2 et 3 : événements d'insertion ET observation de la valeur ---
+     Dépend de `generation` : l'élément étant recréé après chaque scan, les
+     écouteurs doivent être rattachés au NOUVEL élément — sinon ils restent sur
+     un nœud détaché et le canal d'insertion devient muet dès le second scan. */
   useEffect(() => {
     if (!enabled) return;
     const el = inputRef.current;
@@ -416,7 +435,39 @@ export function useScanField({ onCode, onSearch, canResolve, enabled = true }: {
       activityRef.current++;
       bumpStats({ input: statsRef.current.input + 1 });
     };
+
+    /**
+     * `beforeinput` / `input` portent, dans `data`, le texte inséré par CETTE
+     * frappe — et lui seul. On le cumule pour reconstituer le code du scan en
+     * cours, sans jamais dépendre de la valeur du champ.
+     */
+    function onInsert(ev: Event) {
+      const e = ev as InputEvent;
+      const type = e.inputType ?? '';
+      if (type.startsWith('delete')) {
+        insertRef.current = insertRef.current.slice(0, -1);
+        return;
+      }
+      const data = e.data ?? '';
+      if (!data) return;
+      activityRef.current++;
+      const now = Date.now();
+      // Une pause franche marque le début d'un nouveau code.
+      if (now - insertAtRef.current > 1000) insertRef.current = '';
+      insertAtRef.current = now;
+      insertRef.current += data;
+      bumpStats({ lastInsert: insertRef.current });
+      // Terminateur transmis dans les données insérées.
+      const cut = insertRef.current.search(TERMINATORS);
+      if (cut >= 0) {
+        const code = insertRef.current.slice(0, cut);
+        insertRef.current = '';
+        emit(code, 'insertion');
+      }
+    }
+
     el.addEventListener('input', onInput);
+    el.addEventListener('beforeinput', onInsert);
 
     // Tentative de focus initial : souvent refusée par le navigateur hors
     // interaction, d'où l'indicateur `armed` et l'invite à toucher le champ.
@@ -456,15 +507,16 @@ export function useScanField({ onCode, onSearch, canResolve, enabled = true }: {
         });
         onSearchRef.current?.(node.value);
       }
-      if (res.code) emit(res.code, 'valeur');
+      if (res.code) emit(insertRef.current.trim() || res.code, insertRef.current.trim() ? 'insertion' : 'valeur');
     }, POLL_MS);
 
     return () => {
       clearInterval(id);
       el.removeEventListener('input', onInput);
+      el.removeEventListener('beforeinput', onInsert);
       watcherRef.current!.reset();
     };
-  }, [enabled, emit, bumpStats]);
+  }, [enabled, emit, bumpStats, generation]);
 
   // Le champ vient d'être recréé : on lui redonne le focus immédiatement,
   // sinon le lecteur intégré n'aurait plus de cible.
