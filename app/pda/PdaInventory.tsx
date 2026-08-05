@@ -34,6 +34,21 @@ interface Line {
   counted_qty: string;
 }
 
+/** Réponse d'erreur du scan, traduite pour l'opérateur. */
+function scanErrorMessage(j: Record<string, unknown>, code: string): string {
+  if (j.error === 'PRODUCT_NOT_FOUND') return `Article introuvable : « ${code} »`;
+  if (j.error === 'PRODUCT_OUT_OF_SCOPE') {
+    const name = typeof j.product_name === 'string' ? j.product_name : 'Cet article';
+    const scope = typeof j.product_scope === 'string' ? j.product_scope : null;
+    const kind = j.scope_type === 'supplier' ? 'fournisseur' : 'catégorie';
+    return scope
+      ? `⚠ ${name} n'est pas dans le périmètre — ${kind} « ${scope} ». Non compté.`
+      : `⚠ ${name} n'est pas dans le périmètre de cet inventaire. Non compté.`;
+  }
+  if (j.error === 'INVENTORY_LOCKED') return "Cet inventaire n'accepte plus de comptage.";
+  return 'Échec du scan.';
+}
+
 export default function PdaInventory({ station, onHome, notify }: {
   station: Station;
   onHome: () => void;
@@ -95,19 +110,16 @@ export default function PdaInventory({ station, onHome, notify }: {
       });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) {
-        setMessage({
-          text: j.error === 'PRODUCT_NOT_FOUND'
-            ? `Article introuvable : « ${code} »`
-            : 'Échec du scan.',
-          tone: 'error',
-        });
+        setMessage({ text: scanErrorMessage(j, code), tone: 'error' });
         return;
       }
       const l = j.line as { id: string; counted_qty: string; product_name: string };
       setLines((cur) => {
         const i = cur.findIndex((x) => x.id === l.id);
         if (i < 0) {
-          // Article hors périmètre initial : le scan l'ajoute à l'inventaire.
+          // Inventaire général : un article absent du pré-remplissage est
+          // ajouté par le scan. Sur un inventaire par catégorie ou par
+          // fournisseur, le serveur refuse en amont (PRODUCT_OUT_OF_SCOPE).
           return [{
             id: l.id, product_id: '', product_name: l.product_name,
             sku: null, barcode: null, counted_qty: l.counted_qty,
