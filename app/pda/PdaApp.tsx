@@ -252,6 +252,8 @@ const onUnknownCode = useCallback((code: string) => {
       <PdaStock
         station={station}
         products={products}
+        settings={settings}
+        cloudPrinter={cloudPrinter}
         onUnknownCode={onUnknownCode}
         onHome={home}
         notify={notify}

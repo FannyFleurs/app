@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, act, cleanup } from '@testing-library/react';
 import PdaStock from '@/app/pda/PdaStock';
 import { QUIET_MS } from '@/app/pda/scan';
+import { LABEL_DEFAULTS } from '@/lib/settings/label';
 
 /**
  * Scan du PDA, rejoué sur le composant réel.
@@ -73,6 +74,8 @@ function mount() {
     <PdaStock
       station={STATION}
       products={[A, B]}
+      settings={LABEL_DEFAULTS}
+      cloudPrinter={null}
       onUnknownCode={() => {}}
       onHome={() => {}}
       notify={() => {}}

@@ -4,7 +4,8 @@ import { useCallback, useMemo, useState } from 'react';
 import type { PdaProduct, Station } from './PdaApp';
 import { useCodeIndex, useScanField, normalizeCode } from './scan';
 import { formatEUR } from '@/lib/services/money';
-import { buildLabelsDocument, openPrintWindow, discountedPrice } from '@/lib/services/label-print';
+import { discountedPrice } from '@/lib/services/label-print';
+import { printProductLabels } from './print-labels';
 import type { LabelSettings } from '@/lib/settings/label';
 import {
   Screen, Header, ScanField, ProductCard, Stepper, QtyPad, ActionBar, Toast, IconPrinter,
@@ -77,27 +78,15 @@ export default function PdaLabels({
     if (!current || count < 1) return;
     setBusy(true);
     try {
-      if (cloudPrinter) {
-        const r = await fetch('/api/cloudprnt/print-labels', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ entries: [{ product: current, qty: count }], store_id: station.store_id }),
-        });
-        if (r.ok) {
-          const j = await r.json();
-          notify(`${j.count} étiquette(s) envoyée(s) à « ${j.printer} ».`);
-          setCurrent(null); setCount(1);
-          setTimeout(focusField, 30);
-        } else {
-          setMessage({ text: "Échec de l'envoi à l'imprimante.", tone: 'error' });
-        }
-        return;
-      }
-      const doc = buildLabelsDocument([{ product: current, qty: count }], settings);
-      if (openPrintWindow(doc)) {
-        notify(`${count} étiquette(s) envoyée(s) à l'impression.`);
+      const res = await printProductLabels({
+        product: current, qty: count, settings, cloudPrinter, storeId: station.store_id,
+      });
+      if (res.ok) {
+        notify(res.message);
         setCurrent(null); setCount(1);
+        setTimeout(focusField, 30);
       } else {
-        setMessage({ text: 'Autorisez les fenêtres pop-up pour imprimer.', tone: 'error' });
+        setMessage({ text: res.message, tone: 'error' });
       }
     } finally { setBusy(false); }
   }
