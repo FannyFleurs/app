@@ -31,9 +31,14 @@ export interface Scannable {
   extra_barcodes?: string[] | null;
 }
 
-/** Normalisation d'un code : casse et espaces uniquement. */
 export function normalizeCode(raw: string): string {
-  return raw.trim().toLowerCase();
+  return String(raw ?? '')
+    // Retire les caractères de contrôle : Enter, Tab, CR/LF, caractères invisibles.
+    .replace(/[\u0000-\u001F\u007F-\u009F]/g, '')
+    // Retire les espaces classiques, insécables et caractères Unicode invisibles.
+    .replace(/[\s\u00A0\u200B-\u200D\u2060\uFEFF]/g, '')
+    .trim()
+    .toLowerCase();
 }
 
 /**
