@@ -25,12 +25,17 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   if ('response' in parsed) return parsed.response;
   const d = parsed.data;
 
-  const inv = await query<{ status: string; store_id: string }>(
-    `SELECT status, store_id FROM inventories WHERE id = $1 AND organization_id = $2`,
+  const inv = await query<{
+    status: string; store_id: string;
+    scope_type: 'total' | 'category' | 'supplier'; scope_ids: string[];
+  }>(
+    `SELECT status, store_id, scope_type, scope_ids
+       FROM inventories WHERE id = $1 AND organization_id = $2`,
     [params.id, g.user.organizationId],
   );
   if (inv.rowCount === 0) return jsonError('NOT_FOUND', 404);
-  if (inv.rows[0]!.status === 'finalized' || inv.rows[0]!.status === 'cancelled') {
+  const inventory = inv.rows[0]!;
+  if (inventory.status === 'finalized' || inventory.status === 'cancelled') {
     return jsonError('INVENTORY_LOCKED', 409);
   }
 
@@ -60,6 +65,54 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     productId = p.rows[0]?.id ?? null;
   }
   if (!productId) return jsonError('PRODUCT_NOT_FOUND', 404);
+
+  // ---------------------------------------------------------------------
+  // Respect du PÉRIMÈTRE de l'inventaire
+  // ---------------------------------------------------------------------
+  // Un inventaire par catégorie (ou par fournisseur) ne doit compter que les
+  // articles de ce périmètre. Sans ce contrôle, scanner un article d'une autre
+  // catégorie l'ajoutait silencieusement à l'inventaire et faussait les écarts.
+  //
+  // Exception : si la ligne existe DÉJÀ dans cet inventaire, on l'incrémente.
+  // Elle a pu y être ajoutée avant ce contrôle, ou volontairement depuis la
+  // caisse ; bloquer sa correction n'aurait aucun sens.
+  if (inventory.scope_type !== 'total') {
+    const known = await query<{ id: string }>(
+      `SELECT id FROM inventory_lines WHERE inventory_id = $1 AND product_id = $2`,
+      [params.id, productId],
+    );
+
+    if (known.rowCount === 0) {
+      // Même règle qu'à la création de l'inventaire.
+      const scopeCheck = inventory.scope_type === 'category'
+        ? await query<{ in_scope: boolean; name: string; label: string | null }>(
+            `SELECT (p.category_id = ANY($3::uuid[])) AS in_scope,
+                    p.name, c.name AS label
+               FROM products p
+               LEFT JOIN product_categories c ON c.id = p.category_id
+              WHERE p.id = $1 AND p.organization_id = $2`,
+            [productId, g.user.organizationId, inventory.scope_ids],
+          )
+        : await query<{ in_scope: boolean; name: string; label: string | null }>(
+            `SELECT (p.supplier_ref = ANY($3::text[])) AS in_scope,
+                    p.name, p.supplier_ref AS label
+               FROM products p
+              WHERE p.id = $1 AND p.organization_id = $2`,
+            [productId, g.user.organizationId, inventory.scope_ids],
+          );
+
+      const row = scopeCheck.rows[0];
+      if (!row?.in_scope) {
+        return NextResponse.json({
+          error: 'PRODUCT_OUT_OF_SCOPE',
+          product_name: row?.name ?? null,
+          // Catégorie (ou fournisseur) réel de l'article, pour un message clair.
+          product_scope: row?.label ?? null,
+          scope_type: inventory.scope_type,
+        }, { status: 409 });
+      }
+    }
+  }
 
   // Incremente ou cree la ligne. Le expected_qty (si creation) vient
   // du stock_levels courant pour le store de l'inventaire.
