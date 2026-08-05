@@ -25,20 +25,25 @@ export default function LabelPrintModal({
   const [sending, setSending] = useState(false);
 
   // Format + éléments : configurés dans Réglages → Paramètres étiquettes.
+  // L'imprimante est résolue par une route dédiée, accessible avec la même
+  // permission que l'impression elle-même (`products.read`). La liste complète
+  // des imprimantes exige `settings.read`, que les utilisateurs de la caisse
+  // n'ont pas : l'interrogation échouait donc en silence et l'impression
+  // directe disparaissait au profit du PDF.
   useEffect(() => {
     void (async () => {
+      const qs = storeId ? `?store_id=${encodeURIComponent(storeId)}` : '';
       const [r, rc] = await Promise.all([
         fetch('/api/settings/labels'),
-        fetch('/api/cloudprnt/printers'),
+        fetch(`/api/cloudprnt/printers/label${qs}`),
       ]);
       if (r.ok) setSettings((await r.json()).settings as LabelSettings);
       if (rc.ok) {
-        const printers = (await rc.json()).printers as Array<{ label: string; role: string; enabled: boolean }>;
-        const p = printers.find((x) => x.role === 'label' && x.enabled);
-        setCloudPrinter(p ? p.label : null);
+        const p = (await rc.json()).printer as { label: string } | null;
+        setCloudPrinter(p?.label ?? null);
       }
     })();
-  }, []);
+  }, [storeId]);
 
   function pressQty(k: string) {
     setError(null);
@@ -64,17 +69,30 @@ export default function LabelPrintModal({
 
   async function printCloud() {
     setError(null); setCloudMsg(null); setSending(true);
-    const r = await fetch('/api/cloudprnt/print-labels', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ entries: [{ product, qty }], store_id: storeId }),
-    });
-    setSending(false);
-    if (r.ok) {
-      const j = await r.json();
-      setCloudMsg(`${j.count} étiquette(s) envoyée(s) à « ${j.printer} ».`);
-    } else {
+    try {
+      const r = await fetch('/api/cloudprnt/print-labels', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entries: [{ product, qty }], store_id: storeId }),
+      });
+      if (r.ok) {
+        const j = await r.json();
+        setCloudMsg(`${j.count} étiquette(s) envoyée(s) à « ${j.printer} ».`);
+        return;
+      }
       const j = await r.json().catch(() => null);
-      setError(j?.error === 'NO_PRINTER' ? 'Aucune imprimante CloudPRNT active.' : 'Échec de l\'envoi à l\'imprimante.');
+      if (j?.error === 'NO_PRINTER') {
+        // L'imprimante a été retirée ou désactivée entre-temps : on ne laisse
+        // pas l'opérateur sans solution, on bascule sur l'impression navigateur.
+        setCloudPrinter(null);
+        setError('Aucune imprimante étiquettes active — impression par le navigateur.');
+        printLabels();
+        return;
+      }
+      setError("Échec de l'envoi à l'imprimante.");
+    } catch {
+      setError("Imprimante injoignable (réseau).");
+    } finally {
+      setSending(false);
     }
   }
 

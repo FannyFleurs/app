@@ -43,7 +43,9 @@ export default function LabelsManager() {
       const [rp, rs, rc] = await Promise.all([
         fetch('/api/products?order=recent'),
         fetch('/api/settings/labels'),
-        fetch('/api/cloudprnt/printers'),
+        // Route dédiée : même permission que l'impression (`products.read`).
+        // La liste complète exige `settings.read`, absente en caisse.
+        fetch('/api/cloudprnt/printers/label'),
       ]);
       if (rp.ok) {
         const list = ((await rp.json()).products as LabelItem[]).map((p) => ({
@@ -53,9 +55,8 @@ export default function LabelsManager() {
       }
       if (rs.ok) setSettings((await rs.json()).settings as LabelSettings);
       if (rc.ok) {
-        const printers = (await rc.json()).printers as Array<{ label: string; role: string; enabled: boolean }>;
-        const p = printers.find((x) => x.role === 'label' && x.enabled);
-        setCloudPrinter(p ? p.label : null);
+        const p = (await rc.json()).printer as { label: string } | null;
+        setCloudPrinter(p?.label ?? null);
       }
       setLoading(false);
     })();
