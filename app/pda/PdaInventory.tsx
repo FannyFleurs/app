@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Station } from './PdaApp';
-import { useScanner } from './scan';
+import { useScanField } from './scan';
 import {
   Screen, Header, Tabs, ScanField, QtyPad, ActionBar, Toast, InfoRow, IconChevron,
 } from './ui';
@@ -50,19 +50,9 @@ export default function PdaInventory({ station, onHome, notify }: {
   const [edit, setEdit] = useState<Line | null>(null);
   const [editValue, setEditValue] = useState('');
 
-  const fieldRef = useRef<HTMLInputElement>(null);
   // Le comptage est envoyé au serveur : on sérialise les scans pour éviter
   // que deux douchettes rapides ne se croisent sur la même ligne.
   const chainRef = useRef<Promise<void>>(Promise.resolve());
-
-  const clearField = useCallback(() => {
-    if (fieldRef.current) fieldRef.current.value = '';
-    setSearch('');
-  }, []);
-  const focusField = useCallback(() => {
-    const a = document.activeElement as HTMLElement | null;
-    if (!a || a.tagName === 'BODY') fieldRef.current?.focus();
-  }, []);
 
   /* ----------------------------------------------- liste des inventaires */
 
@@ -136,14 +126,18 @@ export default function PdaInventory({ station, onHome, notify }: {
   const handleCode = useCallback((raw: string) => {
     const code = raw.trim();
     if (!code || !current) return;
-    clearField();
     // Mise en file : les scans sont appliqués dans l'ordre où ils arrivent.
     chainRef.current = chainRef.current.then(() => countCode(code)).catch(() => {});
-  }, [current, countCode, clearField]);
+  }, [current, countCode]);
 
   // Scan actif uniquement sur l'écran de comptage, et pas pendant la saisie
   // d'une quantité au pavé numérique.
-  useScanner(handleCode, current !== null && edit === null);
+  const field = useScanField({
+    onCode: handleCode,
+    onSearch: setSearch,
+    enabled: current !== null && edit === null,
+  });
+  const { clear: clearField, focus: focusField } = field;
 
   /* --------------------------------------------------- saisie manuelle */
 
@@ -260,12 +254,7 @@ export default function PdaInventory({ station, onHome, notify }: {
         <div className="text-xs text-ink-soft mb-1.5 truncate">
           Scanner un produit — {current.label}
         </div>
-        <ScanField
-          inputRef={fieldRef}
-          onSearch={setSearch}
-          showClear={search.length > 0}
-          placeholder="Scanner ou rechercher…"
-        />
+        <ScanField field={field} showClear={search.length > 0} />
       </div>
 
       <Tabs
