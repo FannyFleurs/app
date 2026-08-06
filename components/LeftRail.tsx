@@ -175,8 +175,13 @@ export default function LeftRail({
         )}
       </Link>
 
-      {/* Icônes de navigation centrées verticalement */}
-      <nav className="flex-1 flex flex-col items-center justify-center gap-2 py-4 overflow-y-auto no-scrollbar">
+      {/* Icônes de navigation centrées verticalement.
+          `overflow-x-hidden` explicite : en CSS, un `overflow-y` non-visible
+          force le navigateur à calculer `overflow-x: auto`. Le rail devenait
+          alors défilable latéralement et glissait sous le doigt ou le
+          trackpad. On clôt la question ici plutôt que de compter sur le fait
+          qu'aucun enfant ne dépassera jamais. */}
+      <nav className="flex-1 flex flex-col items-center justify-center gap-2 py-4 overflow-y-auto overflow-x-hidden no-scrollbar">
         {tabs.map((t) => {
           const active = path === t.href || (path?.startsWith(t.href + '/') ?? false);
           return (
@@ -184,7 +189,7 @@ export default function LeftRail({
               key={t.href}
               href={t.href}
               aria-current={active ? 'page' : undefined}
-              className={`group relative flex flex-col items-center justify-center gap-0.5 w-16 lg:w-[4.75rem] min-h-[56px] py-1.5 px-1 rounded-2xl transition-colors ${
+              className={`relative flex flex-col items-center justify-center gap-0.5 w-16 lg:w-[4.75rem] min-h-[56px] py-1.5 px-1 rounded-2xl transition-colors ${
                 active
                   ? 'text-white shadow-sm font-semibold'
                   : 'text-ink-soft hover:text-ink hover:bg-gray-100'
@@ -194,18 +199,11 @@ export default function LeftRail({
               aria-label={t.label}
             >
               <Icon name={t.icon} size={22} />
-              {/* Libellé visible sous l'icône (tronqué si long ; texte complet
-                  via aria-label + tooltip au survol). */}
+              {/* Libellé sous l'icône, tronqué si long. Le texte complet reste
+                  accessible par l'infobulle native (`title`) et aux lecteurs
+                  d'écran (`aria-label`) — une infobulle maison en position
+                  absolue débordait du rail et le rendait défilable. */}
               <span className="text-[10px] leading-tight text-center max-w-full truncate">{t.label}</span>
-              <span
-                className="pointer-events-none absolute left-full ml-2 top-1/2 -translate-y-1/2
-                           whitespace-nowrap rounded-lg px-2 py-1 text-xs font-medium
-                           bg-ink text-white opacity-0 group-hover:opacity-100
-                           transition-opacity shadow-md z-50"
-                aria-hidden="true"
-              >
-                {t.label}
-              </span>
             </Link>
           );
         })}

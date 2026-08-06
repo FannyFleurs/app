@@ -10,6 +10,8 @@ import RegisterPicker from './RegisterPicker';
 import { type PickedCustomer } from './CustomerPickerModal';
 import dynamic from 'next/dynamic';
 import Icon from '@/components/Icon';
+import CategoryIcon, { categoryIconDef } from '@/lib/category-icons';
+import PosBackdrop from '@/components/PosBackdrop';
 import { useSchoolMode, isSchoolCustomerId } from '@/lib/school-mode';
 import { tileMetrics, type PosUiSettings } from '@/lib/settings/pos-ui';
 import { confirmThemed } from '@/lib/ui/dialog';
@@ -60,6 +62,8 @@ export interface Category {
   id: string;
   name: string;
   color: string | null;
+  /** Clé d'icône (cf. lib/category-icons). Null = tuile en aplat de couleur. */
+  icon: string | null;
   image_url: string | null;
   visible_in_pos?: boolean;
 }
@@ -1424,12 +1428,15 @@ export default function CashRegister({
           la SEULE à scroller (le bouton Encaisser du panier à droite
           reste toujours visible). */}
       <div
-        className="flex flex-col bg-white min-w-0 min-h-0 flex-1 md:flex-none overflow-hidden"
+        className="relative flex flex-col bg-white min-w-0 min-h-0 flex-1 md:flex-none overflow-hidden"
         onTouchStart={onTouchStart}
         onTouchEnd={(e) => onTouchEnd(e, 'open')}
       >
+        {/* Décor posé sur le panneau, pas dans la zone qui défile : il reste
+            en place pendant que les tuiles glissent au-dessus. */}
+        <PosBackdrop />
         <OfflineBanner />
-        <div className="flex items-center gap-2 px-3 md:px-5 h-[68px] shrink-0 border-b border-border bg-white">
+        <div className="relative flex items-center gap-2 px-3 md:px-5 h-[68px] shrink-0 border-b border-border bg-white">
           {/* Barre de recherche VISIBLE : champ dès qu'ouverte, sinon une barre
               cliquable claire (pas une simple loupe). */}
           {searchOpen ? (
@@ -1504,7 +1511,7 @@ export default function CashRegister({
           </button>
         </div>
 
-        <div className="flex-1 overflow-auto p-3 md:p-5 bg-white pb-24 md:pb-5">
+        <div className="relative flex-1 overflow-auto p-3 md:p-5 pb-24 md:pb-5">
           {showingProducts ? (
             <>
               {/* Bouton retour en haut à gauche + libellé contextuel */}
@@ -2119,7 +2126,12 @@ function CategoryGrid({
       ))}
       {uncategorizedCount > 0 && (
         <CategoryTile
-          category={{ id: 'uncategorized', name: 'Sans catégorie', color: '#F5F5F5', image_url: null, count: uncategorizedCount }}
+          category={{
+            id: 'uncategorized', name: 'Sans catégorie', color: '#F5F5F5',
+            // Le fourre-tout mérite son repère : sans lui il serait la seule
+            // tuile nue au milieu de tuiles illustrées.
+            icon: 'dots', image_url: null, count: uncategorizedCount,
+          }}
           onPick={() => onPick('uncategorized')}
           metrics={metrics}
         />
@@ -2163,11 +2175,39 @@ function TopProductTile({
 function CategoryTile({
   category: c, onPick, metrics,
 }: {
-  category: { id: string; name: string; color: string | null; image_url: string | null; count: number };
+  category: {
+    id: string; name: string; color: string | null;
+    icon?: string | null; image_url: string | null; count: number;
+  };
   onPick: () => void;
   metrics: ReturnType<typeof tileMetrics>;
 }) {
   const hasImage = !!c.image_url;
+  const iconDef = !hasImage ? categoryIconDef(c.icon) : null;
+
+  // Tuile à icône : carte claire, dessin au centre, nom dessous et un filet de
+  // la couleur de la catégorie. La couleur ne remplit plus toute la tuile —
+  // elle devient un repère, et c'est le dessin qui se reconnaît de loin.
+  if (iconDef) {
+    return (
+      <button
+        onClick={onPick}
+        className="rounded-2xl border border-border bg-surface overflow-hidden hover:shadow-md hover:border-gray-300 transition-all active:scale-[0.98] aspect-[5/3] flex flex-col items-center justify-center gap-1.5 px-3"
+      >
+        <span className="text-accent-deep">
+          <CategoryIcon name={c.icon} size={metrics.iconSize} strokeWidth={1.5} />
+        </span>
+        <span className={`${metrics.titleFontSize} font-semibold text-center text-ink leading-tight line-clamp-2`}>
+          {c.name}
+        </span>
+        <span
+          className="h-1 w-8 rounded-full"
+          style={{ background: c.color && c.color !== '#FFFFFF' ? c.color : 'var(--primary-soft)' }}
+        />
+      </button>
+    );
+  }
+
   if (hasImage) {
     return (
       <button
