@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import CustomerFormModal from '@/components/CustomerFormModal';
+import { useSchoolMode, schoolCustomers, addSchoolCustomer } from '@/lib/school-mode';
 
 export interface PickedCustomer {
   id: string;
@@ -26,6 +27,11 @@ export default function CustomerPickerModal({ onClose, onPick }: Props) {
   // Liste masquée par défaut : on ne charge/affiche les clients que lors d'une
   // recherche OU si l'on demande explicitement « Afficher la liste ».
   const [showList, setShowList] = useState(false);
+  const schoolMode = useSchoolMode();
+  // Fiches inventées pendant la démonstration : elles s'ajoutent aux vrais
+  // clients, qu'on peut toujours sélectionner puisqu'on ne fait que les lire.
+  const [demo, setDemo] = useState<PickedCustomer[]>([]);
+  useEffect(() => { if (schoolMode) setDemo(schoolCustomers()); }, [schoolMode]);
 
   useEffect(() => {
     const query = q.trim();
@@ -44,6 +50,13 @@ export default function CustomerPickerModal({ onClose, onPick }: Props) {
     }, 200);
     return () => clearTimeout(t);
   }, [q, showList]);
+
+  const needle = q.trim().toLowerCase();
+  const shown: PickedCustomer[] = [
+    ...demo.filter((c) => !needle || [c.display_name, c.phone, c.email, c.company_name]
+      .some((f) => f?.toLowerCase().includes(needle))),
+    ...results,
+  ];
 
   return (
     <>
@@ -100,13 +113,13 @@ export default function CustomerPickerModal({ onClose, onPick }: Props) {
                 )}
                 {loading ? (
                   <div className="py-8 text-center text-ink-soft text-sm">Recherche…</div>
-                ) : results.length === 0 ? (
+                ) : shown.length === 0 ? (
                   <div className="py-8 text-center text-ink-soft text-sm">
                     Aucun client. Créez-en un avec le bouton + Nouveau.
                   </div>
                 ) : (
                   <ul className="space-y-1.5">
-                {results.map((c) => (
+                {shown.map((c) => (
                   <li key={c.id}>
                     <button
                       onClick={() => onPick(c)}
@@ -133,8 +146,26 @@ export default function CustomerPickerModal({ onClose, onPick }: Props) {
       {creating && (
         <CustomerFormModal
           customer={null}
+          localOnly={schoolMode}
           onClose={() => setCreating(false)}
-          onSaved={async (id) => {
+          onSaved={async (id, draft) => {
+            // Mode école : la fiche n'a pas été enregistrée, on la garde ici
+            // le temps de la démonstration et on l'attache tout de suite.
+            if (schoolMode && draft) {
+              const created = addSchoolCustomer({
+                display_name: draft.company_name
+                  || [draft.first_name, draft.last_name].filter(Boolean).join(' ')
+                  || 'Client',
+                type: draft.type,
+                email: draft.email,
+                phone: draft.phone,
+                company_name: draft.company_name,
+                default_discount_pct: draft.default_discount_pct,
+              });
+              setDemo((cur) => [created, ...cur]);
+              onPick(created);
+              return;
+            }
             // Récupère le client créé pour le passer au parent
             const r = await fetch(`/api/customers?q=`);
             if (r.ok) {

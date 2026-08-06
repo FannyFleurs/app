@@ -56,6 +56,42 @@ export function useSchoolMode(): boolean {
   return active;
 }
 
+/**
+ * Fiche client créée pendant une démonstration.
+ *
+ * Le mode école doit pouvoir dérouler une vente de bout en bout, client
+ * compris. Enregistrer ce client pour de vrai polluerait le fichier de la
+ * boutique : on le garde donc en local, aux côtés du reste de la démo, et il
+ * disparaît avec elle. Les vrais clients, eux, restent sélectionnables — on ne
+ * fait que les lire.
+ */
+export interface SchoolCustomer {
+  id: string;
+  display_name: string;
+  type: string;
+  email: string | null;
+  phone: string | null;
+  company_name: string | null;
+  default_discount_pct: number | null;
+}
+
+const CUSTOMERS_KEY = 'customers';
+
+/** Un identifiant de démonstration se reconnaît à l'œil : rien à demander au serveur. */
+export function isSchoolCustomerId(id: string): boolean {
+  return id.startsWith('school-');
+}
+
+export function schoolCustomers(): SchoolCustomer[] {
+  return schoolStore.get<SchoolCustomer[]>(CUSTOMERS_KEY, []);
+}
+
+export function addSchoolCustomer(c: Omit<SchoolCustomer, 'id'>): SchoolCustomer {
+  const created: SchoolCustomer = { ...c, id: `school-cust-${Date.now()}` };
+  schoolStore.set(CUSTOMERS_KEY, [created, ...schoolCustomers()]);
+  return created;
+}
+
 /** Stockage local générique scoped au mode école. */
 export const schoolStore = {
   get<T>(key: string, fallback: T): T {

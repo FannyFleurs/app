@@ -27,10 +27,26 @@ export interface CustomerLike {
   billing_frequency?: 'manual' | 'monthly' | null;
 }
 
+/** Ce que le formulaire rend au parent quand il n'enregistre pas lui-même. */
+export interface CustomerDraft {
+  type: CustomerLike['type'];
+  first_name: string | null;
+  last_name: string | null;
+  company_name: string | null;
+  email: string | null;
+  phone: string | null;
+  default_discount_pct: number | null;
+}
+
 interface Props {
   customer?: CustomerLike | null;
   onClose: () => void;
-  onSaved: (id: string) => void;
+  onSaved: (id: string, draft?: CustomerDraft) => void;
+  /**
+   * Mode école : la fiche saisie est rendue au parent sans jamais toucher au
+   * fichier clients de la boutique. Une démonstration ne laisse pas de traces.
+   */
+  localOnly?: boolean;
 }
 
 const TYPE_OPTIONS: Array<{ value: CustomerLike['type']; label: string }> = [
@@ -40,7 +56,7 @@ const TYPE_OPTIONS: Array<{ value: CustomerLike['type']; label: string }> = [
   { value: 'association', label: 'Association' },
 ];
 
-export default function CustomerFormModal({ customer, onClose, onSaved }: Props) {
+export default function CustomerFormModal({ customer, onClose, onSaved, localOnly }: Props) {
   const [type, setType] = useState<CustomerLike['type']>(customer?.type ?? 'particulier');
   const [firstName, setFirstName] = useState(customer?.first_name ?? '');
   const [lastName, setLastName] = useState(customer?.last_name ?? '');
@@ -123,6 +139,14 @@ export default function CustomerFormModal({ customer, onClose, onSaved }: Props)
       payment_terms: paymentTerms || null,
       billing_frequency: billingFrequency,
     };
+    // Mode école : la fiche repart au parent sans requête. Rien n'entre dans
+    // le fichier clients de la boutique.
+    if (localOnly) {
+      setSaving(false);
+      onSaved(customer?.id ?? '', payload);
+      return;
+    }
+
     const url = customer ? `/api/customers/${customer.id}` : '/api/customers';
     const method = customer ? 'PATCH' : 'POST';
     const res = await fetch(url, {

@@ -10,7 +10,7 @@ import RegisterPicker from './RegisterPicker';
 import { type PickedCustomer } from './CustomerPickerModal';
 import dynamic from 'next/dynamic';
 import Icon from '@/components/Icon';
-import { useSchoolMode } from '@/lib/school-mode';
+import { useSchoolMode, isSchoolCustomerId } from '@/lib/school-mode';
 import { tileMetrics, type PosUiSettings } from '@/lib/settings/pos-ui';
 import { confirmThemed } from '@/lib/ui/dialog';
 
@@ -480,9 +480,11 @@ export default function CashRegister({
   useEffect(() => {
     if (!cartKey || typeof window === 'undefined') return;
     if (!restoreAttemptedRef.current) return;
-    if (saleId) localStorage.setItem(cartKey, saleId);
+    // Un panier de démonstration ne se mémorise pas comme un vrai : son
+    // identifiant ne mène nulle part côté serveur.
+    if (saleId && !schoolMode) localStorage.setItem(cartKey, saleId);
     else localStorage.removeItem(cartKey);
-  }, [cartKey, saleId]);
+  }, [cartKey, saleId, schoolMode]);
 
   const ensureSale = useCallback(async (): Promise<string | null> => {
     if (saleId) return saleId;
@@ -1090,14 +1092,20 @@ export default function CashRegister({
   async function pickCustomer(c: PickedCustomer) {
     const id = await ensureSale();
     if (!id) return;
-    const res = await fetch(`/api/sales/${id}/customer`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ customer_id: c.id }),
-    });
-    if (!res.ok) {
-      const j = await res.json().catch(() => ({}));
-      setError(j.error ?? 'Impossible d\'attacher le client');
-      return;
+    // Mode école : la vente n'existe que dans ce navigateur, le serveur ne
+    // connaît pas son identifiant — il n'y a rien à y rattacher. Le client est
+    // attaché à l'écran, avec sa remise et ses soldes : de quoi dérouler une
+    // vente de bout en bout, règlement « en compte » compris.
+    if (!schoolMode) {
+      const res = await fetch(`/api/sales/${id}/customer`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customer_id: c.id }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        setError(j.error ?? 'Impossible d\'attacher le client');
+        return;
+      }
     }
     setCustomer(c);
     setShowPicker(false);
@@ -1115,6 +1123,14 @@ export default function CashRegister({
           ? l
           : { ...l, discount_amount: autoDiscount, metadata: { ...l.metadata, auto_discount_pct: pct } };
       }));
+    }
+
+    // Une fiche inventée pour la démonstration n'a ni fidélité ni solde à
+    // aller chercher : elle n'existe que dans ce navigateur.
+    if (isSchoolCustomerId(c.id)) {
+      setLoyalty({ enabled: false, balance_euros: 0, min_redeem: 0, used: 0 });
+      setCustomerBalances({ gift_card_balance: 0, account_balance: 0, credit_notes_balance: 0 });
+      return;
     }
 
     // Fidélité + soldes complémentaires : chargés EN PARALLÈLE (indépendants) et
@@ -1145,8 +1161,11 @@ export default function CashRegister({
   }
 
   async function detachCustomer() {
-    if (!saleId) { setCustomer(null); setLoyalty({ enabled: false, balance_euros: 0, min_redeem: 0, used: 0 });
-    setCustomerBalances({ gift_card_balance: 0, account_balance: 0, credit_notes_balance: 0 }); return; }
+    // Pas de vente côté serveur (panier neuf, ou mode école) : le détachement
+    // se joue entièrement à l'écran.
+    if (!saleId || schoolMode) { setCustomer(null); setLoyalty({ enabled: false, balance_euros: 0, min_redeem: 0, used: 0 });
+    setCustomerBalances({ gift_card_balance: 0, account_balance: 0, credit_notes_balance: 0 });
+    setLines((cur) => cur.filter((l) => l.metadata?.loyalty_redemption !== true)); return; }
     const res = await fetch(`/api/sales/${saleId}/customer`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ customer_id: null }),
