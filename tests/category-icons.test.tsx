@@ -21,7 +21,7 @@ afterEach(cleanup);
 
 describe('Collection d\'icônes', () => {
   it('propose un choix substantiel, couvrant plusieurs métiers', () => {
-    expect(CATEGORY_ICONS.length).toBeGreaterThanOrEqual(100);
+    expect(CATEGORY_ICONS.length).toBeGreaterThanOrEqual(120);
     expect(CATEGORY_ICON_GROUPS.length).toBeGreaterThanOrEqual(10);
   });
 
@@ -36,11 +36,25 @@ describe('Collection d\'icônes', () => {
     expect(orphans.map((o) => `${o.key} → ${o.group}`)).toEqual([]);
   });
 
-  it('donne à chaque icône un libellé et un dessin', () => {
+  it('donne à chaque icône un libellé et un composant Lucide', () => {
     for (const i of CATEGORY_ICONS) {
       expect(i.label.trim().length).toBeGreaterThan(0);
-      expect(i.art).toBeTruthy();
+      expect(typeof i.Icon).toBe('object');
     }
+  });
+
+  it('honore les clés des anciennes icônes maison', () => {
+    // Le passage à Lucide a fondu ou écarté certains dessins. Une catégorie
+    // déjà paramétrée ne doit pas se retrouver sans icône pour autant : les
+    // anciennes clés doivent toutes retomber sur un dessin.
+    const legacy = [
+      'tulip', 'bouquet', 'orchid', 'sunflower', 'dried-flower', 'fern',
+      'plant', 'cactus', 'seedling', 'wreath', 'watering-can', 'gloves',
+      'pot', 'cushion', 'cheese', 'honey', 'spice', 'basket-food', 'bread',
+      'cupcake', 'cosmetics', 'lipstick', 'nails', 'dress', 'hat', 'aquarium',
+    ];
+    const orphans = legacy.filter((k) => categoryIconDef(k) === null);
+    expect(orphans).toEqual([]);
   });
 
   it('rend un SVG pour une clé connue', () => {
@@ -62,23 +76,25 @@ describe('Collection d\'icônes', () => {
 
 describe('Sélecteur d\'icône', () => {
   it('retrouve une icône par son libellé', () => {
-    const onChange = vi.fn();
-    render(<CategoryIconPicker value={null} onChange={onChange} />);
+    render(<CategoryIconPicker value={null} onChange={vi.fn()} />);
     fireEvent.change(screen.getByPlaceholderText(/Rechercher une icône/), {
-      target: { value: 'tulipe' },
+      target: { value: 'coiffure' },
     });
-    expect(screen.getByRole('button', { name: 'Tulipe' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Coiffure' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Cadeau' })).toBeNull();
   });
 
   it('retrouve une icône par un mot-clé absent de son nom', () => {
-    // « Boucherie » se cherche naturellement avec « viande ».
-    const onChange = vi.fn();
-    render(<CategoryIconPicker value={null} onChange={onChange} />);
-    fireEvent.change(screen.getByPlaceholderText(/Rechercher une icône/), {
-      target: { value: 'viande' },
-    });
+    // « Boucherie » se cherche naturellement avec « viande », et un fleuriste
+    // tape « tulipe » pour trouver la fleur coupée.
+    render(<CategoryIconPicker value={null} onChange={vi.fn()} />);
+    const field = screen.getByPlaceholderText(/Rechercher une icône/);
+
+    fireEvent.change(field, { target: { value: 'viande' } });
     expect(screen.getByRole('button', { name: 'Boucherie' })).toBeTruthy();
+
+    fireEvent.change(field, { target: { value: 'tulipe' } });
+    expect(screen.getByRole('button', { name: 'Fleur coupée' })).toBeTruthy();
   });
 
   it('remonte la clé choisie, et sait revenir à aucune icône', () => {
@@ -96,6 +112,16 @@ describe('Sélecteur d\'icône', () => {
     render(<CategoryIconPicker value="flower" onChange={() => {}} />);
     expect(screen.getByRole('button', { name: 'Fleur' }).getAttribute('aria-pressed')).toBe('true');
     expect(screen.getByRole('button', { name: 'Rose' }).getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it("surligne le dessin réellement affiché pour une clé héritée", () => {
+    // « bouquet » n'existe plus comme entrée propre : il pointe vers la fleur
+    // coupée. Sans quoi le libellé annoncerait une icône que rien ne montre.
+    render(<CategoryIconPicker value="bouquet" onChange={() => {}} />);
+    expect(screen.getByText('Fleur coupée', { selector: 'span' })).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: 'Fleur coupée' }).getAttribute('aria-pressed'),
+    ).toBe('true');
   });
 
   it('annonce quand rien ne correspond', () => {
