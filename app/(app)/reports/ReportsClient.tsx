@@ -126,12 +126,94 @@ const REPORTS: Array<{
   },
 ];
 
-/** Date du jour et d'il y a 30 jours, au format attendu par les champs date. */
+/**
+ * Date au format des champs `<input type="date">`, dans le fuseau de
+ * l'utilisateur. `toISOString()` ne convient pas : il bascule en UTC et
+ * décale d'un jour en début de matinée depuis la France.
+ */
+function ymd(d: Date): string {
+  const p = (v: number) => String(v).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+/** Copie décalée de n jours — sans toucher à la date d'origine. */
+function shiftDays(d: Date, days: number): Date {
+  const c = new Date(d);
+  c.setDate(c.getDate() + days);
+  return c;
+}
+
+/** Lundi de la semaine contenant `d` — la semaine française commence lundi. */
+function monday(d: Date): Date {
+  const c = new Date(d);
+  // getDay() : 0 = dimanche. On ramène dimanche à 7 pour compter depuis lundi.
+  c.setDate(c.getDate() - ((c.getDay() + 6) % 7));
+  return c;
+}
+
+/**
+ * Périodes courantes, en accès direct.
+ *
+ * Deux familles volontairement distinctes : les périodes de CALENDRIER
+ * (semaine, mois, année en cours ou précédents), qui s'alignent sur des
+ * bornes comptables, et les périodes GLISSANTES (« depuis… »), qui remontent
+ * d'une durée fixe à partir d'aujourd'hui. Comparer un mois à son précédent
+ * n'a de sens qu'avec les premières ; suivre une tendance récente, qu'avec les
+ * secondes.
+ */
+const PRESETS: Array<{ key: string; label: string; range: (today: Date) => { from: string; to: string } }> = [
+  {
+    key: 'week', label: 'Semaine en cours',
+    range: (t) => ({ from: ymd(monday(t)), to: ymd(t) }),
+  },
+  {
+    key: 'prev-week', label: 'Semaine précédente',
+    range: (t) => {
+      const start = shiftDays(monday(t), -7);
+      return { from: ymd(start), to: ymd(shiftDays(start, 6)) };
+    },
+  },
+  {
+    key: 'month', label: 'Mois en cours',
+    range: (t) => ({ from: ymd(new Date(t.getFullYear(), t.getMonth(), 1)), to: ymd(t) }),
+  },
+  {
+    key: 'prev-month', label: 'Mois précédent',
+    range: (t) => ({
+      from: ymd(new Date(t.getFullYear(), t.getMonth() - 1, 1)),
+      // Jour 0 du mois courant = dernier jour du mois précédent.
+      to: ymd(new Date(t.getFullYear(), t.getMonth(), 0)),
+    }),
+  },
+  {
+    key: 'last-7', label: 'Depuis une semaine',
+    range: (t) => ({ from: ymd(shiftDays(t, -7)), to: ymd(t) }),
+  },
+  {
+    key: 'last-30', label: 'Depuis un mois',
+    range: (t) => ({
+      from: ymd(new Date(t.getFullYear(), t.getMonth() - 1, t.getDate())),
+      to: ymd(t),
+    }),
+  },
+  {
+    key: 'year', label: 'Année en cours',
+    range: (t) => ({ from: ymd(new Date(t.getFullYear(), 0, 1)), to: ymd(t) }),
+  },
+  {
+    key: 'last-year', label: 'Depuis un an',
+    range: (t) => ({
+      from: ymd(new Date(t.getFullYear() - 1, t.getMonth(), t.getDate())),
+      to: ymd(t),
+    }),
+  },
+];
+
+const DEFAULT_PRESET = 'last-30';
+
+/** Période par défaut à l'ouverture : le mois écoulé. */
 function defaultRange(): { from: string; to: string } {
-  const today = new Date();
-  const past = new Date(today.getTime() - 29 * 86400000);
-  const fmt = (d: Date) => d.toISOString().slice(0, 10);
-  return { from: fmt(past), to: fmt(today) };
+  return PRESETS.find((p) => p.key === DEFAULT_PRESET)!.range(new Date());
 }
 
 export default function ReportsClient({ stores }: { stores: { id: string; name: string }[] }) {
@@ -177,6 +259,30 @@ export default function ReportsClient({ stores }: { stores: { id: string; name: 
   const data = loaded && loaded.report === report ? loaded.payload : null;
 
   const meta = REPORTS.find((r) => r.key === report)!;
+
+  /**
+   * Période courante correspondant aux dates affichées, s'il y en a une.
+   * Recalculée à chaque rendu plutôt que mémorisée : une saisie manuelle des
+   * dates doit éteindre la pastille, et le passage de minuit ne doit pas
+   * laisser une pastille allumée sur une période qui a glissé.
+   */
+  const activePreset = useMemo(() => {
+    const today = new Date();
+    return PRESETS.find((p) => {
+      const r = p.range(today);
+      return r.from === from && r.to === to;
+    })?.key ?? null;
+  }, [from, to]);
+
+  function applyPreset(key: string) {
+    const p = PRESETS.find((x) => x.key === key);
+    if (!p) return;
+    const r = p.range(new Date());
+    // Les deux bornes ensemble : `load` ne se déclenche qu'une fois, React
+    // regroupant les mises à jour d'un même gestionnaire.
+    setFrom(r.from);
+    setTo(r.to);
+  }
 
   /* ------------------------------------------------------------- export */
 
@@ -240,6 +346,7 @@ export default function ReportsClient({ stores }: { stores: { id: string; name: 
                   stores={[{ id: '', name: 'Toutes les boutiques' }, ...stores]}
                   value={storeId}
                   onChange={setStoreId}
+                  hideLabel
                 />
               )}
               <div className="flex items-center gap-1.5 rounded-xl border border-border bg-surface px-3 h-10">
@@ -252,6 +359,29 @@ export default function ReportsClient({ stores }: { stores: { id: string; name: 
                        className="bg-transparent text-sm outline-none" />
               </div>
             </div>
+          </div>
+
+          {/* Périodes courantes, en un clic. La période active se reconnaît à
+              sa pastille pleine — utile après une saisie manuelle, où plus
+              aucune ne correspond. */}
+          <div className="flex flex-wrap gap-2">
+            {PRESETS.map((p) => {
+              const active = p.key === activePreset;
+              return (
+                <button
+                  key={p.key}
+                  onClick={() => applyPreset(p.key)}
+                  aria-pressed={active}
+                  className={`rounded-full border px-3.5 h-9 text-sm font-medium transition-colors ${
+                    active
+                      ? 'border-accent bg-accent-soft text-accent-deep'
+                      : 'border-border bg-surface text-ink-soft hover:border-gray-300 hover:text-ink'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              );
+            })}
           </div>
 
           {/* Rappel de ce que contient le rapport */}

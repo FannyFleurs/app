@@ -280,6 +280,12 @@ select.input option {
   body[data-mode="dark"] .text-accent { color: color-mix(in srgb, var(--primary) 65%, white); }
   body[data-mode="dark"] .text-accent-deep { color: color-mix(in srgb, var(--primary) 60%, white); }
   .bg-accent-soft { background-color: var(--primary-soft); }
+  /* Bordure d'accent : sert à marquer un élément sélectionné (pastille de
+     période active des rapports) sans le remplir complètement. */
+  .border-accent { border-color: var(--primary); }
+  body[data-mode="dark"] .border-accent {
+    border-color: color-mix(in srgb, var(--primary) 60%, white);
+  }
 }
 
 /* Surcharges des utilitaires Tailwind hardcodés pour le mode sombre.

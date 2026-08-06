@@ -103,6 +103,88 @@ async function mount() {
   await act(async () => { await Promise.resolve(); });
 }
 
+/** Bornes de la dernière requête émise, telles que lues dans l'URL. */
+function lastRange(): { from: string; to: string } {
+  const url = (fetch as unknown as { mock: { calls: string[][] } }).mock.calls.at(-1)![0]!;
+  const qs = new URLSearchParams(url.split('?')[1]);
+  return { from: qs.get('from')!, to: qs.get('to')! };
+}
+
+describe('Périodes courantes', () => {
+  // Un mardi : le lundi de la semaine n'est pas le jour même, et le mois
+  // précédent a 31 jours — deux calculs qu'un jeudi ne testerait pas.
+  const TUESDAY = new Date(2026, 6, 7, 15, 30); // mardi 7 juillet 2026
+
+  beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(TUESDAY); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  async function pick(label: string) {
+    fireEvent.click(screen.getByRole('button', { name: label }));
+    await act(async () => { await Promise.resolve(); });
+  }
+
+  it('interroge la période demandée, bornes de calendrier comprises', async () => {
+    await mount();
+
+    await pick('Semaine en cours');
+    expect(lastRange()).toEqual({ from: '2026-07-06', to: '2026-07-07' });
+
+    await pick('Semaine précédente');
+    expect(lastRange()).toEqual({ from: '2026-06-29', to: '2026-07-05' });
+
+    await pick('Mois en cours');
+    expect(lastRange()).toEqual({ from: '2026-07-01', to: '2026-07-07' });
+
+    await pick('Mois précédent');
+    expect(lastRange()).toEqual({ from: '2026-06-01', to: '2026-06-30' });
+
+    await pick('Depuis une semaine');
+    expect(lastRange()).toEqual({ from: '2026-06-30', to: '2026-07-07' });
+
+    await pick('Depuis un mois');
+    expect(lastRange()).toEqual({ from: '2026-06-07', to: '2026-07-07' });
+
+    await pick('Année en cours');
+    expect(lastRange()).toEqual({ from: '2026-01-01', to: '2026-07-07' });
+
+    await pick('Depuis un an');
+    expect(lastRange()).toEqual({ from: '2025-07-07', to: '2026-07-07' });
+  });
+
+  it('signale la période active et ne la perd pas en changeant de rapport', async () => {
+    await mount();
+    await pick('Mois en cours');
+    expect(screen.getByRole('button', { name: 'Mois en cours' }).getAttribute('aria-pressed')).toBe('true');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Annulations' }));
+    await act(async () => { await Promise.resolve(); });
+
+    expect(lastRange()).toEqual({ from: '2026-07-01', to: '2026-07-07' });
+    expect(screen.getByRole('button', { name: 'Mois en cours' }).getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it("n'allume aucune période après une saisie manuelle des dates", async () => {
+    await mount();
+    await pick('Mois en cours');
+
+    const [fromInput] = document.querySelectorAll('input[type="date"]');
+    await act(async () => {
+      fireEvent.change(fromInput!, { target: { value: '2026-07-03' } });
+      await Promise.resolve();
+    });
+
+    for (const p of ['Mois en cours', 'Semaine en cours', 'Année en cours']) {
+      expect(screen.getByRole('button', { name: p }).getAttribute('aria-pressed')).toBe('false');
+    }
+  });
+
+  it('ouvre sur le mois écoulé', async () => {
+    await mount();
+    expect(lastRange()).toEqual({ from: '2026-06-07', to: '2026-07-07' });
+    expect(screen.getByRole('button', { name: 'Depuis un mois' }).getAttribute('aria-pressed')).toBe('true');
+  });
+});
+
 describe('Rapports du back-office', () => {
   it('affiche le rapport des ventes au premier rendu', async () => {
     await mount();
