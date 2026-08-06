@@ -40,6 +40,7 @@ export const SIDEBAR_ITEMS: SidebarItem[] = [
   { href: '/inventory',    label: 'Inventaire',           icon: 'closures',     group: 'Catalogue' },
   // Pilotage (en bas — pas en haut)
   { href: '/dashboard',    label: 'Tableau de bord',      icon: 'dashboard',    group: 'Pilotage' },
+  { href: '/reports',      label: 'Rapports',             icon: 'exports',      group: 'Pilotage', perm: 'settings.read', boOnly: true },
   // Système
   { href: '/settings/users', label: 'Utilisateurs',       icon: 'users',        group: 'Système',  perm: 'users.read' },
   { href: '/settings',     label: 'Paramètres',           icon: 'settings',     group: 'Système',  perm: 'settings.read', required: true },
