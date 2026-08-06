@@ -9,7 +9,13 @@ export const dynamic = 'force-dynamic';
 
 export default async function SettingsLayout({ children }: { children: React.ReactNode }) {
   const user = (await readSessionFromCookie())!;
-  const backOffice = headers().get('x-webpos-bo') === '1';
+  const h = headers();
+  const backOffice = h.get('x-webpos-bo') === '1';
+
+  // Adresse du back-office, pour y basculer depuis la caisse. Sur un vrai
+  // domaine c'est le sous-domaine bo. ; en préversion (vercel.app, localhost)
+  // il n'y a pas de sous-domaines, le chemin /bo joue ce rôle.
+  const boUrl = backOffice ? null : backOfficeUrl(h.get('host'));
 
   // Plan effectif : certaines pages sont reservees a une offre superieure.
   let plan = 'trial';
@@ -65,6 +71,16 @@ export default async function SettingsLayout({ children }: { children: React.Rea
     .filter((i) => !i.proOnly || proFeatures);
 
   return (
-    <SettingsMobileShell items={items}>{children}</SettingsMobileShell>
+    <SettingsMobileShell items={items} boUrl={boUrl}>{children}</SettingsMobileShell>
   );
+}
+
+/** Mêmes règles de sous-domaine que le middleware. */
+function backOfficeUrl(rawHost: string | null): string | null {
+  const host = (rawHost ?? '').toLowerCase().split(':')[0] ?? '';
+  if (!host) return null;
+  if (host.endsWith('.vercel.app') || host === 'localhost') return '/bo';
+  const base = ['app.', 'bo.', 'ca.', 'admin.', 'pda.', 'www.']
+    .reduce((h, sub) => (h.startsWith(sub) ? h.slice(sub.length) : h), host);
+  return `https://bo.${base}`;
 }
