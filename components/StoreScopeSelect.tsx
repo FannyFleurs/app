@@ -7,7 +7,7 @@
  * valeur sélectionnée pour scoper ses requêtes.
  */
 export default function StoreScopeSelect({
-  stores, value, onChange, hideWhenSingle = false, lockedStoreId,
+  stores, value, onChange, hideWhenSingle = false, lockedStoreId, hideLabel = false,
 }: {
   stores: { id: string; name: string }[];
   value: string;
@@ -17,6 +17,9 @@ export default function StoreScopeSelect({
    *  boutique). On affiche son nom en lecture seule, sans menu déroulant. Le
    *  choix multi-boutiques reste réservé au back-office. */
   lockedStoreId?: string | null;
+  /** Sur une barre de filtres, le libellé fait doublon : les options portent
+   *  déjà des noms de boutiques. On garde alors le seul menu déroulant. */
+  hideLabel?: boolean;
 }) {
   if (stores.length === 0) return null;
   // Poste de caisse appairé : boutique verrouillée → aucun sélecteur affiché
@@ -24,8 +27,8 @@ export default function StoreScopeSelect({
   if (lockedStoreId) return null;
   if (hideWhenSingle && stores.length === 1) return null;
   return (
-    <label className="text-sm">
-      <span className="block text-xs font-medium text-ink-soft mb-1">Boutique</span>
+    <label className="text-sm" aria-label={hideLabel ? 'Boutique' : undefined}>
+      {!hideLabel && <span className="block text-xs font-medium text-ink-soft mb-1">Boutique</span>}
       <select
         className="input h-10 min-w-[12rem]"
         value={value}
