@@ -229,6 +229,8 @@ export interface PosTileMetrics {
   priceFontSize: string;
   /** Espacement vertical entre tuiles. */
   gap: string;
+  /** Diamètre de l'icône de catégorie, en pixels — suit la taille des tuiles. */
+  iconSize: number;
 }
 
 export function tileMetrics(size: PosTileSize): PosTileMetrics {
@@ -241,6 +243,7 @@ export function tileMetrics(size: PosTileSize): PosTileMetrics {
         titleMinHeight: 'min-h-[1.75rem]',
         priceFontSize: 'text-xs',
         gap: 'gap-1.5',
+        iconSize: 24,
       };
     case 'dense':
       return {
@@ -250,6 +253,7 @@ export function tileMetrics(size: PosTileSize): PosTileMetrics {
         titleMinHeight: 'min-h-[2rem]',
         priceFontSize: 'text-sm',
         gap: 'gap-2',
+        iconSize: 28,
       };
     case 'compact':
       return {
@@ -259,6 +263,7 @@ export function tileMetrics(size: PosTileSize): PosTileMetrics {
         titleMinHeight: 'min-h-[2rem]',
         priceFontSize: 'text-sm',
         gap: 'gap-2',
+        iconSize: 32,
       };
     case 'normal':
       return {
@@ -268,6 +273,7 @@ export function tileMetrics(size: PosTileSize): PosTileMetrics {
         titleMinHeight: 'min-h-[2.5rem]',
         priceFontSize: 'text-lg',
         gap: 'gap-3',
+        iconSize: 40,
       };
     case 'large':
       return {
@@ -277,6 +283,7 @@ export function tileMetrics(size: PosTileSize): PosTileMetrics {
         titleMinHeight: 'min-h-[3rem]',
         priceFontSize: 'text-xl',
         gap: 'gap-4',
+        iconSize: 48,
       };
     case 'xl':
       return {
@@ -286,6 +293,7 @@ export function tileMetrics(size: PosTileSize): PosTileMetrics {
         titleMinHeight: 'min-h-[3.5rem]',
         priceFontSize: 'text-2xl',
         gap: 'gap-4',
+        iconSize: 56,
       };
   }
 }

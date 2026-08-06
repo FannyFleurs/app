@@ -6,11 +6,14 @@ import { getOrCreateDeviceId } from '@/lib/device';
 import PageHeader from '@/components/PageHeader';
 import EmptyState from '@/components/EmptyState';
 import Badge from '@/components/Badge';
+import CategoryIconPicker from '@/components/CategoryIconPicker';
+import CategoryIcon from '@/lib/category-icons';
 
 interface Category {
   id: string;
   name: string;
   color: string | null;
+  icon: string | null;
   image_url: string | null;
   position: number;
   visible_in_pos: boolean;
@@ -85,7 +88,7 @@ export default function CategoriesAdmin({ canEdit, backOffice = false, stores = 
     <div className="p-6 md:p-8 space-y-5">
       <PageHeader
         title="Catégories"
-        subtitle="Organisez votre catalogue. Une catégorie peut avoir une couleur ET/OU une image qui s'affichera sur la tuile en caisse."
+        subtitle="Organisez votre catalogue. Une catégorie porte une couleur, une icône ou une photo — c'est ce qui s'affiche sur sa tuile en caisse."
         actions={canEdit ? (
           <div className="flex items-center gap-2">
             {/* Sélecteur de boutique réservé au back-office : sur un poste de
@@ -119,12 +122,14 @@ export default function CategoriesAdmin({ canEdit, backOffice = false, stores = 
               onClick={() => canEdit && setEditing(c)}
               className={`card p-2.5 text-left ${canEdit ? 'hover:shadow-md hover:border-gray-300' : 'cursor-default'}`}
             >
-              {/* Tuile carrée ; sans photo, simple aplat de couleur (pas de losange). */}
-              <div className="aspect-square w-full rounded-xl overflow-hidden"
+              {/* Tuile carrée : la photo prime, puis l'icône, sinon l'aplat seul. */}
+              <div className="aspect-square w-full rounded-xl overflow-hidden grid place-items-center text-accent-deep"
                    style={{ background: c.color ?? '#F5F5F5' }}>
-                {c.image_url && (
+                {c.image_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={c.image_url} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <CategoryIcon name={c.icon} size={34} strokeWidth={1.5} />
                 )}
               </div>
               <div className="mt-2 flex items-center justify-between gap-1">
@@ -172,6 +177,7 @@ function CategoryFormModal({ category, backOffice, stores, posteStoreId, deleteS
   const [form, setForm] = useState({
     name: category?.name ?? '',
     color: category?.color ?? '#FFFFFF',
+    icon: category?.icon ?? null as string | null,
     image_url: category?.image_url ?? '',
     visible_in_pos: category?.visible_in_pos ?? true,
     store_ids: category?.store_ids ?? [],
@@ -206,6 +212,7 @@ function CategoryFormModal({ category, backOffice, stores, posteStoreId, deleteS
     const payload: Record<string, unknown> = {
       name: form.name.trim(),
       color: form.color,
+      icon: form.icon,
       image_url: form.image_url.trim() || null,
       visible_in_pos: form.visible_in_pos,
     };
@@ -251,12 +258,14 @@ function CategoryFormModal({ category, backOffice, stores, posteStoreId, deleteS
         <div className="mb-4 rounded-xl border border-border p-3 bg-white">
           <div className="text-xs uppercase tracking-wider text-ink-soft mb-2">Aperçu en caisse</div>
           <div className="card p-4 max-w-[180px]">
-            <div className="aspect-square w-full rounded-lg overflow-hidden"
+            <div className="aspect-square w-full rounded-lg overflow-hidden grid place-items-center text-accent-deep"
                  style={{ background: form.color }}>
-              {form.image_url && (
+              {form.image_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={form.image_url} alt="" className="h-full w-full object-cover"
                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+              ) : (
+                <CategoryIcon name={form.icon} size={44} strokeWidth={1.5} />
               )}
             </div>
             <div className="mt-2 text-sm font-medium">{form.name || 'Nom catégorie'}</div>
@@ -269,6 +278,18 @@ function CategoryFormModal({ category, backOffice, stores, posteStoreId, deleteS
             <input className="input mt-1" value={form.name}
                    onChange={(e) => setForm({ ...form, name: e.target.value })}
                    placeholder="ex : Saint-Valentin" />
+          </div>
+          <div>
+            <label className="text-sm font-medium text-ink-soft">Icône</label>
+            <div className="mt-1">
+              <CategoryIconPicker
+                value={form.icon}
+                onChange={(icon) => setForm({ ...form, icon })}
+              />
+            </div>
+            <p className="mt-1 text-xs text-ink-soft">
+              Affichée sur la tuile en caisse. Une photo, si vous en renseignez une, prend le dessus.
+            </p>
           </div>
           <div>
             <label className="text-sm font-medium text-ink-soft">URL de l&apos;image (optionnel)</label>
