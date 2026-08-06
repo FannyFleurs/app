@@ -33,7 +33,11 @@ export default function CategoryIconPicker({
       .filter((g) => g.items.length > 0);
   }, [needle]);
 
+  // Une catégorie peut porter une clé héritée, redirigée vers un autre dessin.
+  // C'est ce dessin-là qu'il faut montrer comme sélectionné, sinon le libellé
+  // annonce une icône que rien ne surligne dans la grille.
   const current = categoryIconDef(value);
+  const activeKey = current?.key ?? null;
 
   return (
     <div>
@@ -75,7 +79,7 @@ export default function CategoryIconPicker({
             </div>
             <div className="flex flex-wrap gap-1.5">
               {items.map((i) => {
-                const active = i.key === value;
+                const active = i.key === activeKey;
                 return (
                   <button
                     key={i.key}
