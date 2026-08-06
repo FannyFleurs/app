@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatEUR } from '@/lib/services/money';
 import { PAYMENT_LABELS } from '@/components/labels';
 import StoreScopeSelect from '@/components/StoreScopeSelect';
@@ -140,32 +140,41 @@ export default function ReportsClient({ stores }: { stores: { id: string; name: 
   const [from, setFrom] = useState(initial.from);
   const [to, setTo] = useState(initial.to);
   const [storeId, setStoreId] = useState<string>('');
-  const [data, setData] = useState<Record<string, unknown> | null>(null);
+  // Le jeu de données ne voyage jamais seul : il porte le rapport dont il
+  // provient. Chaque rapport ayant ses propres colonnes, afficher celui d'un
+  // autre ne donne pas un tableau bancal — ça casse le rendu. Étiqueter la
+  // donnée rend ce mélange impossible, y compris pendant un chargement ou
+  // quand une réponse tardive arrive après un changement d'onglet.
+  const [loaded, setLoaded] = useState<{ report: Report; payload: Record<string, unknown> } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const requestRef = useRef(0);
 
   const load = useCallback(async () => {
+    const target = report;
+    const seq = ++requestRef.current;
     setLoading(true); setError(null);
     const qs = new URLSearchParams({ from, to });
     if (storeId) qs.set('store_id', storeId);
     try {
-      const endpoint = REPORTS.find((x) => x.key === report)!.endpoint;
+      const endpoint = REPORTS.find((x) => x.key === target)!.endpoint;
       const r = await fetch(`/api/reports/${endpoint}?${qs.toString()}`, { cache: 'no-store' });
+      if (requestRef.current !== seq) return; // une demande plus récente a pris la main
       if (!r.ok) { setError('Chargement impossible.'); return; }
-      setData(await r.json());
+      const payload = await r.json() as Record<string, unknown>;
+      if (requestRef.current !== seq) return;
+      setLoaded({ report: target, payload });
     } catch {
-      setError('Réseau indisponible.');
+      if (requestRef.current === seq) setError('Réseau indisponible.');
     } finally {
-      setLoading(false);
+      if (requestRef.current === seq) setLoading(false);
     }
   }, [report, from, to, storeId]);
 
-  // Le jeu de données appartient au rapport affiché : on l'oublie au changement
-  // pour ne jamais peindre les colonnes d'un rapport avec les chiffres d'un
-  // autre pendant le chargement.
-  useEffect(() => { setData(null); }, [report]);
-
   useEffect(() => { void load(); }, [load]);
+
+  // Rendu strictement conditionné à la correspondance rapport/données.
+  const data = loaded && loaded.report === report ? loaded.payload : null;
 
   const meta = REPORTS.find((r) => r.key === report)!;
 
@@ -265,7 +274,12 @@ export default function ReportsClient({ stores }: { stores: { id: string; name: 
             </div>
 
             {error && <div className="rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
-            {loading && <p className="py-10 text-center text-sm text-ink-soft">Chargement…</p>}
+            {/* Tant que les données du rapport affiché ne sont pas là, on
+                annonce le chargement : le changement d'onglet est instantané,
+                la requête ne l'est pas. */}
+            {!error && (loading || !data) && (
+              <p className="py-10 text-center text-sm text-ink-soft">Chargement…</p>
+            )}
 
             {!loading && !error && data && (
               <>
