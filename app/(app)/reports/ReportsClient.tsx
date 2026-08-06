@@ -7,16 +7,19 @@ import StoreScopeSelect from '@/components/StoreScopeSelect';
 import Icon from '@/components/Icon';
 
 /**
- * Rapports du back-office.
+ * Rapports du back-office : six lectures d'une même période.
  *
- * Deux lectures d'une même période : le chiffre d'affaires jour par jour, et
- * le détail de ce qui s'est vendu. Les colonnes de TVA et de moyens de
- * paiement sont construites à partir des données réellement présentes sur la
- * période — une boutique qui ajoute un taux ou un mode de règlement le voit
- * apparaître sans intervention.
+ * Ce qui est entré (ventes, lignes de vente), ce qui est dû (dettes clients),
+ * ce qui est ressorti (remboursements, annulations) et ce qui reste engagé
+ * envers les clients (avoirs et bons cadeaux).
+ *
+ * Sur le rapport des ventes, les colonnes de TVA et de moyens de paiement sont
+ * construites à partir des données réellement présentes sur la période : une
+ * boutique qui ajoute un taux ou un mode de règlement le voit apparaître sans
+ * intervention.
  */
 
-type Report = 'sales' | 'lines';
+type Report = 'sales' | 'lines' | 'debts' | 'refunds' | 'cancellations' | 'vouchers';
 
 interface SalesDay {
   day: string; tickets: number;
@@ -47,18 +50,79 @@ interface LinesData {
   totals: { quantity: number; ht: number; tva: number; ttc: number; discount: number; margin: number };
 }
 
-const REPORTS: Array<{ key: Report; label: string; icon: 'dashboard' | 'products'; help: string }> = [
+interface DebtRow {
+  sale_id: string; receipt: string | null; date: string;
+  seller: string | null; customer: string | null; store: string | null;
+  ht: number; ttc: number; deferred: number; balance: number | null;
+}
+interface DebtsData {
+  lines: DebtRow[];
+  totals: { count: number; ht: number; ttc: number; deferred: number };
+}
+
+interface RefundRow {
+  id: string; date: string; number: string; receipt: string | null;
+  seller: string | null; customer: string | null; store: string | null;
+  kind: 'cancellation' | 'return'; reason: string; amount: number;
+}
+interface RefundsData {
+  lines: RefundRow[];
+  totals: { count: number; amount: number; cancellations: number; returns: number };
+}
+
+interface CancelRow {
+  id: string; date: string; cancelled_at: string | null; receipt: string | null;
+  seller: string | null; customer: string | null; store: string | null;
+  ht: number; ttc: number; reason: string | null;
+}
+interface CancelData {
+  lines: CancelRow[];
+  totals: { count: number; ht: number; ttc: number };
+}
+
+interface VoucherRow {
+  id: string; date: string; type: 'credit_note' | 'gift_card' | 'voucher';
+  reference: string; customer: string | null;
+  amount: number; remaining: number; expires_at: string | null; status: string;
+}
+interface VouchersData {
+  lines: VoucherRow[];
+  totals: { count: number; amount: number; remaining: number };
+}
+
+const VOUCHER_LABELS: Record<VoucherRow['type'], string> = {
+  credit_note: 'Avoir',
+  gift_card: 'Carte cadeau',
+  voucher: "Bon d'achat",
+};
+
+const REPORTS: Array<{
+  key: Report; label: string; icon: 'dashboard' | 'products' | 'customers' | 'loyalty' | 'invoices';
+  endpoint: string; help: string;
+}> = [
   {
-    key: 'sales',
-    label: 'Ventes',
-    icon: 'dashboard',
+    key: 'sales', label: 'Ventes', icon: 'dashboard', endpoint: 'sales',
     help: "Le chiffre d'affaires réalisé jour par jour sur la période choisie : ventilation de TVA, réductions, marge et encaissements par moyen de règlement.",
   },
   {
-    key: 'lines',
-    label: 'Lignes de vente',
-    icon: 'products',
+    key: 'lines', label: 'Lignes de vente', icon: 'products', endpoint: 'sale-lines',
     help: "Ce qui s'est vendu sur la période, article par article : quantités, chiffre d'affaires et marge.",
+  },
+  {
+    key: 'debts', label: 'Dettes clients', icon: 'customers', endpoint: 'customer-debts',
+    help: "Les ventes réglées « en compte ». Le montant du ticket dit d'où vient la dette ; le solde du client dit ce qui reste dû aujourd'hui.",
+  },
+  {
+    key: 'refunds', label: 'Remboursements', icon: 'invoices', endpoint: 'refunds',
+    help: "Tout ce qui est sorti de la caisse au profit d'un client : annulations de vente et retours de marchandise, avec leur motif.",
+  },
+  {
+    key: 'cancellations', label: 'Annulations', icon: 'invoices', endpoint: 'cancellations',
+    help: "Les ventes validées puis annulées. Une vente validée ne s'efface jamais : elle est contre-passée par un avoir.",
+  },
+  {
+    key: 'vouchers', label: 'Avoirs / Bons cadeaux', icon: 'loyalty', endpoint: 'vouchers',
+    help: "Les engagements émis envers vos clients : avoirs, cartes cadeaux et bons d'achat. Le montant restant est ce qui reste exigible.",
   },
 ];
 
@@ -76,8 +140,7 @@ export default function ReportsClient({ stores }: { stores: { id: string; name: 
   const [from, setFrom] = useState(initial.from);
   const [to, setTo] = useState(initial.to);
   const [storeId, setStoreId] = useState<string>('');
-  const [sales, setSales] = useState<SalesData | null>(null);
-  const [lines, setLines] = useState<LinesData | null>(null);
+  const [data, setData] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -86,12 +149,10 @@ export default function ReportsClient({ stores }: { stores: { id: string; name: 
     const qs = new URLSearchParams({ from, to });
     if (storeId) qs.set('store_id', storeId);
     try {
-      const path = report === 'sales' ? 'sales' : 'sale-lines';
-      const r = await fetch(`/api/reports/${path}?${qs.toString()}`, { cache: 'no-store' });
+      const endpoint = REPORTS.find((x) => x.key === report)!.endpoint;
+      const r = await fetch(`/api/reports/${endpoint}?${qs.toString()}`, { cache: 'no-store' });
       if (!r.ok) { setError('Chargement impossible.'); return; }
-      const j = await r.json();
-      if (report === 'sales') setSales(j as SalesData);
-      else setLines(j as LinesData);
+      setData(await r.json());
     } catch {
       setError('Réseau indisponible.');
     } finally {
@@ -99,45 +160,29 @@ export default function ReportsClient({ stores }: { stores: { id: string; name: 
     }
   }, [report, from, to, storeId]);
 
+  // Le jeu de données appartient au rapport affiché : on l'oublie au changement
+  // pour ne jamais peindre les colonnes d'un rapport avec les chiffres d'un
+  // autre pendant le chargement.
+  useEffect(() => { setData(null); }, [report]);
+
   useEffect(() => { void load(); }, [load]);
 
   const meta = REPORTS.find((r) => r.key === report)!;
 
   /* ------------------------------------------------------------- export */
 
+  const empty = !data || (Array.isArray((data as { lines?: unknown[] }).lines)
+    ? (data as { lines: unknown[] }).lines.length === 0
+    : ((data as { days?: unknown[] }).days?.length ?? 0) === 0);
+
   function exportCsv() {
-    const rows: string[][] = [];
-    if (report === 'sales' && sales) {
-      rows.push([
-        'Date', 'Tickets', 'Total HT', 'Total TVA', 'Total TTC',
-        ...sales.rates.flatMap((r) => [`Base HT ${r}%`, `TVA ${r}%`]),
-        'Réductions', 'Marge brute',
-        ...sales.methods.map((m) => PAYMENT_LABELS[m] ?? m),
-        'Avoirs',
-      ]);
-      for (const d of sales.days) {
-        rows.push([
-          d.day, String(d.tickets), n(d.ht), n(d.tva), n(d.ttc),
-          ...sales.rates.flatMap((r) => [n(d.vat[r]?.base_ht ?? 0), n(d.vat[r]?.tva ?? 0)]),
-          n(d.discount), n(d.margin),
-          ...sales.methods.map((m) => n(d.payments[m] ?? 0)),
-          n(d.credit_notes),
-        ]);
-      }
-    } else if (lines) {
-      rows.push(['Article', 'Référence', 'Catégorie', 'Quantité', 'Total HT', 'Total TVA', 'Total TTC', 'Réductions', 'Marge brute']);
-      for (const l of lines.lines) {
-        rows.push([
-          l.label, l.sku ?? l.barcode ?? '', l.category ?? '',
-          String(l.quantity), n(l.ht), n(l.tva), n(l.ttc), n(l.discount),
-          l.margin == null ? '' : n(l.margin),
-        ]);
-      }
-    }
+    if (!data) return;
+    const rows = csvRows(report, data);
+    if (rows.length === 0) return;
     // Point-virgule : séparateur attendu par un tableur en configuration
     // française, où la virgule est le séparateur décimal.
-    const csv = rows.map((r) => r.map(csvCell).join(';')).join('\r\n');
-    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+    const csv = rows.map((r: string[]) => r.map(csvCell).join(';')).join('\r\n');
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -213,7 +258,7 @@ export default function ReportsClient({ stores }: { stores: { id: string; name: 
             <div className="flex items-center justify-end gap-2 mb-3">
               <button onClick={() => void load()} className="btn-ghost text-sm">Actualiser</button>
               <button onClick={exportCsv} className="btn-primary text-sm inline-flex items-center gap-2"
-                      disabled={loading || (report === 'sales' ? !sales?.days.length : !lines?.lines.length)}>
+                      disabled={loading || empty}>
                 <Icon name="exports" size={16} />
                 Exporter
               </button>
@@ -222,11 +267,15 @@ export default function ReportsClient({ stores }: { stores: { id: string; name: 
             {error && <div className="rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
             {loading && <p className="py-10 text-center text-sm text-ink-soft">Chargement…</p>}
 
-            {!loading && !error && report === 'sales' && sales && (
-              <SalesTable data={sales} />
-            )}
-            {!loading && !error && report === 'lines' && lines && (
-              <LinesTable data={lines} />
+            {!loading && !error && data && (
+              <>
+                {report === 'sales' && <SalesTable data={data as unknown as SalesData} />}
+                {report === 'lines' && <LinesTable data={data as unknown as LinesData} />}
+                {report === 'debts' && <DebtsTable data={data as unknown as DebtsData} />}
+                {report === 'refunds' && <RefundsTable data={data as unknown as RefundsData} />}
+                {report === 'cancellations' && <CancelTable data={data as unknown as CancelData} />}
+                {report === 'vouchers' && <VouchersTable data={data as unknown as VouchersData} />}
+              </>
             )}
           </div>
         </div>
@@ -371,6 +420,194 @@ function LinesTable({ data }: { data: LinesData }) {
   );
 }
 
+/** Rien à afficher : même message partout, pour ne pas surprendre. */
+function Empty() {
+  return <p className="py-10 text-center text-sm text-ink-soft">Rien à afficher sur cette période.</p>;
+}
+
+function DebtsTable({ data }: { data: DebtsData }) {
+  if (data.lines.length === 0) return <Empty />;
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm border-collapse">
+        <thead>
+          <tr className="text-[11px] uppercase tracking-wider text-ink-soft">
+            <Th sticky>Date</Th><Th>Ticket</Th><Th>Vendeur</Th><Th>Client</Th><Th>Boutique</Th>
+            <Th right>Total HT</Th><Th right>Total TTC</Th>
+            <Th right>Mis en compte</Th><Th right>Solde client</Th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.lines.map((l) => (
+            <tr key={l.sale_id} className="border-t border-border hover:bg-gray-50/60">
+              <Td sticky>{frDateTime(l.date)}</Td>
+              <Td>{l.receipt ?? '—'}</Td>
+              <Td>{l.seller ?? '—'}</Td>
+              <Td>{l.customer ?? <span className="text-ink-soft">Client anonyme</span>}</Td>
+              <Td>{l.store ?? '—'}</Td>
+              <Td right>{formatEUR(l.ht)}</Td>
+              <Td right>{formatEUR(l.ttc)}</Td>
+              <Td right strong>{formatEUR(l.deferred)}</Td>
+              <Td right tone={(l.balance ?? 0) > 0 ? 'warning' : undefined}>
+                {l.balance == null ? '—' : formatEUR(l.balance)}
+              </Td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr className="border-t-2 border-ink/20 font-semibold bg-gray-50">
+            <Td sticky>Total</Td><Td>{data.totals.count} ticket(s)</Td><Td /><Td /><Td />
+            <Td right>{formatEUR(data.totals.ht)}</Td>
+            <Td right>{formatEUR(data.totals.ttc)}</Td>
+            <Td right>{formatEUR(data.totals.deferred)}</Td>
+            <Td />
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  );
+}
+
+function RefundsTable({ data }: { data: RefundsData }) {
+  if (data.lines.length === 0) return <Empty />;
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm border-collapse">
+        <thead>
+          <tr className="text-[11px] uppercase tracking-wider text-ink-soft">
+            <Th sticky>Date</Th><Th>Avoir</Th><Th>Ticket</Th><Th>Vendeur</Th>
+            <Th>Client</Th><Th>Boutique</Th><Th>Nature</Th><Th>Motif</Th><Th right>Montant</Th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.lines.map((l) => (
+            <tr key={l.id} className="border-t border-border hover:bg-gray-50/60">
+              <Td sticky>{frDateTime(l.date)}</Td>
+              <Td>{l.number}</Td>
+              <Td>{l.receipt ?? '—'}</Td>
+              <Td>{l.seller ?? '—'}</Td>
+              <Td>{l.customer ?? <span className="text-ink-soft">Client anonyme</span>}</Td>
+              <Td>{l.store ?? '—'}</Td>
+              <Td><Tag kind={l.kind} /></Td>
+              <Td><span className="text-ink-soft">{l.reason}</span></Td>
+              <Td right strong tone="warning">−{formatEUR(l.amount)}</Td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr className="border-t-2 border-ink/20 font-semibold bg-gray-50">
+            <Td sticky>Total</Td>
+            <Td>{data.totals.count}</Td><Td /><Td /><Td /><Td />
+            <Td colSpan={2}>
+              <span className="text-xs font-normal text-ink-soft">
+                dont annulations {formatEUR(data.totals.cancellations)} · retours {formatEUR(data.totals.returns)}
+              </span>
+            </Td>
+            <Td right>−{formatEUR(data.totals.amount)}</Td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  );
+}
+
+function CancelTable({ data }: { data: CancelData }) {
+  if (data.lines.length === 0) return <Empty />;
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm border-collapse">
+        <thead>
+          <tr className="text-[11px] uppercase tracking-wider text-ink-soft">
+            <Th sticky>Vente</Th><Th>Ticket</Th><Th>Annulée le</Th><Th>Vendeur</Th>
+            <Th>Client</Th><Th>Boutique</Th><Th>Motif</Th>
+            <Th right>Total HT</Th><Th right>Total TTC</Th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.lines.map((l) => (
+            <tr key={l.id} className="border-t border-border hover:bg-gray-50/60">
+              <Td sticky>{frDateTime(l.date)}</Td>
+              <Td>{l.receipt ?? '—'}</Td>
+              <Td>{l.cancelled_at ? frDateTime(l.cancelled_at) : '—'}</Td>
+              <Td>{l.seller ?? '—'}</Td>
+              <Td>{l.customer ?? <span className="text-ink-soft">Client anonyme</span>}</Td>
+              <Td>{l.store ?? '—'}</Td>
+              <Td><span className="text-ink-soft">{l.reason ?? '—'}</span></Td>
+              <Td right>{formatEUR(l.ht)}</Td>
+              <Td right strong tone="warning">{formatEUR(l.ttc)}</Td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr className="border-t-2 border-ink/20 font-semibold bg-gray-50">
+            <Td sticky>Total</Td><Td>{data.totals.count} vente(s)</Td>
+            <Td /><Td /><Td /><Td /><Td />
+            <Td right>{formatEUR(data.totals.ht)}</Td>
+            <Td right>{formatEUR(data.totals.ttc)}</Td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  );
+}
+
+function VouchersTable({ data }: { data: VouchersData }) {
+  if (data.lines.length === 0) return <Empty />;
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm border-collapse">
+        <thead>
+          <tr className="text-[11px] uppercase tracking-wider text-ink-soft">
+            <Th sticky>Date</Th><Th>Type</Th><Th>Référence</Th><Th>Client</Th>
+            <Th right>Montant émis</Th><Th right>Restant</Th><Th>Expiration</Th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.lines.map((l) => (
+            <tr key={`${l.type}-${l.id}`} className="border-t border-border hover:bg-gray-50/60">
+              <Td sticky>{frDateTime(l.date)}</Td>
+              <Td><Tag kind={l.type} /></Td>
+              <Td><span className="font-mono text-xs">{l.reference}</span></Td>
+              <Td>{l.customer ?? <span className="text-ink-soft">—</span>}</Td>
+              <Td right>{formatEUR(l.amount)}</Td>
+              <Td right strong tone={l.remaining > 0 ? 'warning' : undefined}>
+                {formatEUR(l.remaining)}
+              </Td>
+              <Td>{l.expires_at ? frDate(l.expires_at.slice(0, 10)) : '—'}</Td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr className="border-t-2 border-ink/20 font-semibold bg-gray-50">
+            <Td sticky>Total</Td><Td>{data.totals.count}</Td><Td /><Td />
+            <Td right>{formatEUR(data.totals.amount)}</Td>
+            <Td right>{formatEUR(data.totals.remaining)}</Td>
+            <Td />
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  );
+}
+
+/** Pastille de nature : la couleur porte le sens autant que le mot. */
+function Tag({ kind }: { kind: 'cancellation' | 'return' | VoucherRow['type'] }) {
+  const map: Record<string, { label: string; bg: string; fg: string }> = {
+    cancellation: { label: 'Annulation', bg: 'rgba(180,35,24,0.10)', fg: '#B42318' },
+    return: { label: 'Retour', bg: 'rgba(183,121,31,0.12)', fg: '#96581B' },
+    credit_note: { label: VOUCHER_LABELS.credit_note, bg: 'rgba(183,121,31,0.12)', fg: '#96581B' },
+    gift_card: { label: VOUCHER_LABELS.gift_card, bg: 'rgba(47,107,63,0.10)', fg: '#2F6B3F' },
+    voucher: { label: VOUCHER_LABELS.voucher, bg: 'rgba(31,94,139,0.10)', fg: '#1F5E8B' },
+  };
+  const t = map[kind]!;
+  return (
+    <span className="inline-block rounded-full px-2 py-0.5 text-xs font-medium"
+          style={{ backgroundColor: t.bg, color: t.fg }}>
+      {t.label}
+    </span>
+  );
+}
+
 /* ------------------------------------------------------------- cellules */
 
 function Th({ children, right, sticky }: {
@@ -385,12 +622,12 @@ function Th({ children, right, sticky }: {
   );
 }
 
-function Td({ children, right, strong, sticky, tone }: {
+function Td({ children, right, strong, sticky, tone, colSpan }: {
   children?: React.ReactNode; right?: boolean; strong?: boolean;
-  sticky?: boolean; tone?: 'warning';
+  sticky?: boolean; tone?: 'warning'; colSpan?: number;
 }) {
   return (
-    <td className={`px-3 py-2.5 whitespace-nowrap tabular-nums ${right ? 'text-right' : 'text-left'} ${
+    <td colSpan={colSpan} className={`px-3 py-2.5 whitespace-nowrap tabular-nums ${right ? 'text-right' : 'text-left'} ${
       strong ? 'font-semibold' : ''
     } ${tone === 'warning' ? 'text-warning' : ''} ${
       sticky ? 'sticky left-0 bg-inherit z-10 tabular-nums' : ''
@@ -402,6 +639,16 @@ function Td({ children, right, strong, sticky, tone }: {
 
 /* --------------------------------------------------------------- outils */
 
+/** Date et heure locales, format court — les rapports listent des événements. */
+function frDateTime(iso: string): string {
+  try {
+    return new Date(iso).toLocaleString('fr-FR', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
+  } catch { return iso; }
+}
+
 function frDate(iso: string): string {
   try { return new Date(`${iso}T12:00:00`).toLocaleDateString('fr-FR'); }
   catch { return iso; }
@@ -410,6 +657,90 @@ function frDate(iso: string): string {
 /** Nombre au format français, prêt pour un tableur. */
 function n(v: number): string {
   return v.toFixed(2).replace('.', ',');
+}
+
+/** Lignes CSV du rapport affiché : entêtes puis données. */
+function csvRows(report: Report, data: Record<string, unknown>): string[][] {
+  const rows: string[][] = [];
+
+  if (report === 'sales') {
+    const d = data as unknown as SalesData;
+    rows.push([
+      'Date', 'Tickets', 'Total HT', 'Total TVA', 'Total TTC',
+      ...d.rates.flatMap((r) => [`Base HT ${r}%`, `TVA ${r}%`]),
+      'Réductions', 'Marge brute',
+      ...d.methods.map((m) => PAYMENT_LABELS[m] ?? m),
+      'Avoirs',
+    ]);
+    for (const x of d.days) {
+      rows.push([
+        x.day, String(x.tickets), n(x.ht), n(x.tva), n(x.ttc),
+        ...d.rates.flatMap((r) => [n(x.vat[r]?.base_ht ?? 0), n(x.vat[r]?.tva ?? 0)]),
+        n(x.discount), n(x.margin),
+        ...d.methods.map((m) => n(x.payments[m] ?? 0)),
+        n(x.credit_notes),
+      ]);
+    }
+    return rows;
+  }
+
+  if (report === 'lines') {
+    const d = data as unknown as LinesData;
+    rows.push(['Article', 'Référence', 'Catégorie', 'Quantité', 'Total HT', 'Total TVA', 'Total TTC', 'Réductions', 'Marge brute']);
+    for (const l of d.lines) {
+      rows.push([
+        l.label, l.sku ?? l.barcode ?? '', l.category ?? '', String(l.quantity),
+        n(l.ht), n(l.tva), n(l.ttc), n(l.discount), l.margin == null ? '' : n(l.margin),
+      ]);
+    }
+    return rows;
+  }
+
+  if (report === 'debts') {
+    const d = data as unknown as DebtsData;
+    rows.push(['Date', 'Ticket', 'Vendeur', 'Client', 'Boutique', 'Total HT', 'Total TTC', 'Mis en compte', 'Solde client']);
+    for (const l of d.lines) {
+      rows.push([
+        frDateTime(l.date), l.receipt ?? '', l.seller ?? '', l.customer ?? '', l.store ?? '',
+        n(l.ht), n(l.ttc), n(l.deferred), l.balance == null ? '' : n(l.balance),
+      ]);
+    }
+    return rows;
+  }
+
+  if (report === 'refunds') {
+    const d = data as unknown as RefundsData;
+    rows.push(['Date', 'Avoir', 'Ticket', 'Vendeur', 'Client', 'Boutique', 'Nature', 'Motif', 'Montant']);
+    for (const l of d.lines) {
+      rows.push([
+        frDateTime(l.date), l.number, l.receipt ?? '', l.seller ?? '', l.customer ?? '', l.store ?? '',
+        l.kind === 'cancellation' ? 'Annulation' : 'Retour', l.reason, n(-l.amount),
+      ]);
+    }
+    return rows;
+  }
+
+  if (report === 'cancellations') {
+    const d = data as unknown as CancelData;
+    rows.push(['Vente', 'Ticket', 'Annulée le', 'Vendeur', 'Client', 'Boutique', 'Motif', 'Total HT', 'Total TTC']);
+    for (const l of d.lines) {
+      rows.push([
+        frDateTime(l.date), l.receipt ?? '', l.cancelled_at ? frDateTime(l.cancelled_at) : '',
+        l.seller ?? '', l.customer ?? '', l.store ?? '', l.reason ?? '', n(l.ht), n(l.ttc),
+      ]);
+    }
+    return rows;
+  }
+
+  const d = data as unknown as VouchersData;
+  rows.push(['Date', 'Type', 'Référence', 'Client', 'Montant émis', 'Restant', 'Expiration']);
+  for (const l of d.lines) {
+    rows.push([
+      frDateTime(l.date), VOUCHER_LABELS[l.type], l.reference, l.customer ?? '',
+      n(l.amount), n(l.remaining), l.expires_at ? frDate(l.expires_at.slice(0, 10)) : '',
+    ]);
+  }
+  return rows;
 }
 
 function csvCell(v: string): string {
