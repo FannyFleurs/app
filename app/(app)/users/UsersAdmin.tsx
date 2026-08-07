@@ -33,9 +33,14 @@ const ROLE_DESC: Record<string, string> = {
   owner: 'Tous droits, y compris paramétrage et clôtures annuelles.',
   manager: 'Caisse, produits, clôtures journalières, override prix.',
   vendeur: 'Caisse uniquement, ajout client.',
+  comptable: "Back-office à distance : exports comptables et plan de comptes. Aucun accès à la caisse, aux produits ni aux clients.",
 };
 
-const ASSIGNABLE_ROLES = ['owner', 'manager', 'vendeur'];
+/**
+ * Le comptable ferme la liste : c'est un intervenant EXTERNE, créé une fois,
+ * là où les trois autres sont l'équipe de la boutique.
+ */
+const ASSIGNABLE_ROLES = ['owner', 'manager', 'vendeur', 'comptable'];
 
 export default function UsersAdmin({ canWrite, currentUserId }: { canWrite: boolean; currentUserId: string }) {
   const [users, setUsers] = useState<User[]>([]);
@@ -162,6 +167,17 @@ function UserFormModal({ user, stores, onClose, onSaved }: {
   const [fullName, setFullName] = useState(user?.full_name ?? '');
   const [email, setEmail] = useState(user?.email ?? '');
   const [role, setRole] = useState<string>(user?.role ?? 'vendeur');
+  /**
+   * Le comptable n'est pas un membre de l'équipe : il se connecte à distance au
+   * back-office, avec email et mot de passe. Ni code PIN, ni boutique
+   * d'affichage sur l'écran de connexion de la caisse — il n'y passe jamais.
+   */
+  const isRemoteOnly = role === 'comptable';
+  useEffect(() => {
+    // Masquer la case sans la décocher laisserait une exigence de PIN
+    // invisible bloquer la création d'un comptable.
+    if (isRemoteOnly) setPinRequired(false);
+  }, [isRemoteOnly]);
   const [pin, setPin] = useState('');
   const [password, setPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
@@ -262,14 +278,19 @@ function UserFormModal({ user, stores, onClose, onSaved }: {
           </div>
           <div>
             <label className="text-sm font-medium text-ink-soft">
-              Email <span className="text-xs text-ink-soft">(optionnel — requis seulement pour la connexion back-office)</span>
+              Email{' '}
+              <span className="text-xs text-ink-soft">
+                {isRemoteOnly
+                  ? '(obligatoire — c\'est son identifiant de connexion)'
+                  : '(optionnel — requis seulement pour la connexion back-office)'}
+              </span>
             </label>
             <input type="email" className="input mt-1" value={email} onChange={(e) => setEmail(e.target.value)}
-                   placeholder="Facultatif pour un vendeur (PIN seul)" />
+                   placeholder={isRemoteOnly ? 'comptable@cabinet.fr' : 'Facultatif pour un vendeur (PIN seul)'} />
           </div>
           <div>
             <label className="text-sm font-medium text-ink-soft">Rôle</label>
-            <div className="mt-1 grid grid-cols-3 gap-1.5">
+            <div className="mt-1 grid grid-cols-2 sm:grid-cols-4 gap-1.5">
               {ASSIGNABLE_ROLES.map((r) => (
                 <button
                   key={r}
@@ -286,7 +307,7 @@ function UserFormModal({ user, stores, onClose, onSaved }: {
             <p className="mt-1 text-xs text-ink-soft">{ROLE_DESC[role]}</p>
           </div>
 
-          {stores.length > 0 && (
+          {stores.length > 0 && !isRemoteOnly && (
             <div>
               <label className="text-sm font-medium text-ink-soft">
                 Boutiques
@@ -332,7 +353,7 @@ function UserFormModal({ user, stores, onClose, onSaved }: {
             </div>
           )}
 
-          <div>
+          <div className={isRemoteOnly ? 'hidden' : ''}>
             <label className="text-sm font-medium text-ink-soft">
               Couleur d&apos;étiquette
               <span className="text-xs text-ink-soft ml-1">— pastille + avatar sur l&apos;écran de connexion</span>
@@ -405,7 +426,7 @@ function UserFormModal({ user, stores, onClose, onSaved }: {
             </p>
           </div>
 
-          <div>
+          <div className={isRemoteOnly ? 'hidden' : ''}>
             <label className="text-sm font-medium text-ink-soft">
               Code PIN (4 chiffres) {user && <span className="text-xs">— laisser vide pour ne pas changer</span>}
             </label>
@@ -435,7 +456,7 @@ function UserFormModal({ user, stores, onClose, onSaved }: {
             </div>
           </div>
 
-          <div className="pt-1 space-y-1.5">
+          <div className={`pt-1 space-y-1.5 ${isRemoteOnly ? 'hidden' : ''}`}>
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={pinRequired}
                      onChange={(e) => setPinRequired(e.target.checked)} />
