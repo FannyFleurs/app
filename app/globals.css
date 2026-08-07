@@ -286,6 +286,12 @@ select.input option {
   body[data-mode="dark"] .border-accent {
     border-color: color-mix(in srgb, var(--primary) 60%, white);
   }
+  /* Contour d'un bloc déjà rempli en `bg-accent-soft` : juste assez appuyé
+     pour dessiner l'arête sans cerner la tuile d'un trait franc. */
+  .border-accent-soft-line { border-color: color-mix(in srgb, var(--primary) 22%, transparent); }
+  body[data-mode="dark"] .border-accent-soft-line {
+    border-color: color-mix(in srgb, var(--primary) 45%, transparent);
+  }
 }
 
 /* Surcharges des utilitaires Tailwind hardcodés pour le mode sombre.

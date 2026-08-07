@@ -1817,7 +1817,18 @@ export default function CashRegister({
               <button
                 key={l.key}
                 onClick={() => setDiscountLineKey(l.key)}
-                className="w-full text-left rounded-lg border border-border px-2 py-1 bg-white hover:border-gray-300 transition-colors"
+                // Fond teinté de la couleur d'accent du poste : les articles
+                // encaissés se détachent du panneau blanc, et les commandes
+                // (croix, − / +) restent en blanc franc par-dessus, donc
+                // lisibles. La teinte vient de `--primary-soft`, donc elle
+                // suit le thème choisi dans les paramètres, mode sombre inclus.
+                //
+                // `text-ink` est posé explicitement plutôt qu'hérité : <body>
+                // porte une encre figée en clair, que la règle du mode sombre
+                // ne rattrape que sur les descendants portant la classe. Sans
+                // elle, le nom de l'article et son montant restaient sombres
+                // sur fond sombre.
+                className="w-full text-left rounded-lg border px-2 py-1 text-ink bg-accent-soft border-accent-soft-line hover:border-accent transition-colors"
                 title="Cliquer pour ajouter / modifier une remise"
               >
                 <div className="flex justify-between items-center gap-2">
