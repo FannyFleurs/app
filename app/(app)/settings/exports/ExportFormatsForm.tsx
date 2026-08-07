@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { CORE_FORMAT, OPTIONAL_FORMATS } from '@/lib/settings/export-formats';
 
 export default function ExportFormatsForm({ initial, canEdit }: {
@@ -41,6 +42,14 @@ export default function ExportFormatsForm({ initial, canEdit }: {
           Ce que propose l&apos;écran « Exports comptables ». Un seul format sert au
           quotidien ; les autres restent disponibles à la demande.
         </p>
+        {/* On règle ici, on exporte là-bas : le dire évite de chercher. */}
+        <Link href="/exports" className="mt-2 inline-flex items-center gap-1.5 text-sm text-accent-deep hover:underline">
+          Aller aux exports comptables
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="m9 6 6 6-6 6" />
+          </svg>
+        </Link>
       </div>
 
       {/* Le format de base est montré, non décochable : son absence de case
