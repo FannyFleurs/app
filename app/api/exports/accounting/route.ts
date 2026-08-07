@@ -10,6 +10,7 @@ import {
   mergeAccountingAccounts,
   type AccountingAccounts,
 } from '@/lib/settings/accounting';
+import { groupByAccount, type SalesAccountRule } from '@/lib/services/accounting-mapping';
 
 async function loadAccounts(orgId: string): Promise<AccountingAccounts> {
   const { rows } = await query<{ value: Partial<AccountingAccounts> }>(
@@ -38,7 +39,13 @@ export async function GET() {
 const schema = z.object({
   period_start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   period_end:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  format:       z.enum(['sales_csv', 'entries_csv', 'json', 'fec_like']),
+  format:       z.enum(['sales_csv', 'entries_csv', 'json', 'fec_like', 'accounts_csv']),
+  /**
+   * Boutiques retenues. Vide ou absent = toutes — le comptable d'une
+   * organisation mono-boutique n'a rien à cocher, et celui d'un groupe peut
+   * sortir un seul établissement ou plusieurs d'un coup.
+   */
+  store_ids:    z.array(z.string().uuid()).optional(),
 });
 
 /**
@@ -52,6 +59,11 @@ export async function POST(req: Request) {
   const parsed = await parseJson(req, schema);
   if ('response' in parsed) return parsed.response;
   const { period_start, period_end, format } = parsed.data;
+  const storeIds = parsed.data.store_ids ?? [];
+  // Filtre appliqué en SQL plutôt qu'après coup : sur une année de ventes, la
+  // différence n'est pas cosmétique.
+  const storeFilter = storeIds.length ? ' AND s.store_id = ANY($4::uuid[])' : '';
+  const storeArgs: unknown[] = storeIds.length ? [storeIds] : [];
 
   if (period_end < period_start) return jsonError('INVALID_PERIOD', 400);
 
@@ -78,8 +90,9 @@ export async function POST(req: Request) {
         WHERE s.organization_id = $1
           AND s.status = 'validated'
           AND s.validated_at::date BETWEEN $2::date AND $3::date
+          ${storeFilter}
         ORDER BY s.validated_at`,
-      [g.user.organizationId, period_start, period_end],
+      [g.user.organizationId, period_start, period_end, ...storeArgs],
     );
     const header = ['Numéro', 'Date', 'Vendeur', 'Client', 'Total HT', 'TVA', 'Remises', 'Total TTC'];
     const lines = [header.join(';')].concat(sales.rows.map((s) => [
@@ -110,9 +123,10 @@ export async function POST(req: Request) {
         WHERE s.organization_id = $1
           AND s.status = 'validated'
           AND s.validated_at::date BETWEEN $2::date AND $3::date
+          ${storeFilter}
         GROUP BY s.validated_at::date
         ORDER BY day`,
-      [g.user.organizationId, period_start, period_end],
+      [g.user.organizationId, period_start, period_end, ...storeArgs],
     );
     const accts = await loadAccounts(g.user.organizationId);
     const header = ['Date', 'Compte', 'Libellé', 'Débit', 'Crédit'];
@@ -129,18 +143,83 @@ export async function POST(req: Request) {
       out.push([d, accts.bank,    'Banque — CB',           card.toFixed(2), '0.00']);
     }
     content = '﻿' + [header.join(';')].concat(out.map((r) => r.join(';'))).join('\n');
+  } else if (format === 'accounts_csv') {
+    // Ventilation par compte de ventes : famille × taux × boutique, telle que
+    // le comptable la relit dans son grand livre.
+    const lines = await query<{
+      store_id: string | null; store_name: string | null;
+      category_id: string | null; category_name: string | null;
+      vat_rate: string; ht: string; tva: string; ttc: string;
+    }>(
+      `SELECT s.store_id,
+              st.name AS store_name,
+              p.category_id,
+              c.name AS category_name,
+              sl.tax_rate::text AS vat_rate,
+              SUM(sl.line_ht)::text  AS ht,
+              SUM(sl.line_tva)::text AS tva,
+              SUM(sl.line_ttc)::text AS ttc
+         FROM sale_lines sl
+         JOIN sales s ON s.id = sl.sale_id
+         LEFT JOIN products p ON p.id = sl.product_id
+         LEFT JOIN product_categories c ON c.id = p.category_id
+         LEFT JOIN stores st ON st.id = s.store_id
+        WHERE s.organization_id = $1
+          AND s.status = 'validated'
+          AND s.validated_at::date BETWEEN $2::date AND $3::date
+          ${storeFilter}
+        GROUP BY s.store_id, st.name, p.category_id, c.name, sl.tax_rate
+        ORDER BY st.name NULLS FIRST, c.name NULLS FIRST, sl.tax_rate`,
+      [g.user.organizationId, period_start, period_end, ...storeArgs],
+    );
+
+    const rules = await query<SalesAccountRule>(
+      `SELECT id, store_id, category_id, vat_rate::float8 AS vat_rate,
+              account_code, account_label
+         FROM accounting_sales_accounts
+        WHERE organization_id = $1`,
+      [g.user.organizationId],
+    );
+    const accts = await loadAccounts(g.user.organizationId);
+
+    const totals = groupByAccount(
+      lines.rows.map((r) => ({
+        store_id: r.store_id, store_name: r.store_name,
+        category_id: r.category_id, category_name: r.category_name,
+        vat_rate: Number(r.vat_rate),
+        ht: Number(r.ht), tva: Number(r.tva), ttc: Number(r.ttc),
+      })),
+      rules.rows,
+      { code: accts.sales, label: 'Ventes' },
+    );
+
+    const header = ['Compte', 'Libellé', 'Montant HT', 'TVA', 'Montant TTC', 'Paramétré'];
+    const out = totals.map((t) => [
+      t.account_code,
+      t.account_label,
+      t.ht.toFixed(2), t.tva.toFixed(2), t.ttc.toFixed(2),
+      // Colonne franche plutôt qu'un silence : une ligne « non » signale un
+      // croisement qui n'a pas encore de compte, donc un paramétrage à compléter.
+      t.fallback ? 'non' : 'oui',
+    ]);
+    const tot = totals.reduce((a, t) => ({
+      ht: a.ht + t.ht, tva: a.tva + t.tva, ttc: a.ttc + t.ttc,
+    }), { ht: 0, tva: 0, ttc: 0 });
+    out.push(['', 'TOTAL', tot.ht.toFixed(2), tot.tva.toFixed(2), tot.ttc.toFixed(2), '']);
+    content = '\ufeff' + [header.join(';')].concat(out.map((r) => r.join(';'))).join('\n');
   } else if (format === 'fec_like') {
     // Format pseudo-FEC : JournalCode|EcritureNum|EcritureDate|CompteNum|CompteLib|PieceRef|PieceDate|EcritureLib|Debit|Credit
     const sales = await query<{
       receipt_number: string; validated_at: Date;
       total_ttc: string; total_tva: string;
     }>(
-      `SELECT receipt_number, validated_at, total_ttc::text, total_tva::text
-         FROM sales
-        WHERE organization_id = $1 AND status = 'validated'
-          AND validated_at::date BETWEEN $2::date AND $3::date
-        ORDER BY validated_at`,
-      [g.user.organizationId, period_start, period_end],
+      `SELECT s.receipt_number, s.validated_at, s.total_ttc::text, s.total_tva::text
+         FROM sales s
+        WHERE s.organization_id = $1 AND s.status = 'validated'
+          AND s.validated_at::date BETWEEN $2::date AND $3::date
+          ${storeFilter}
+        ORDER BY s.validated_at`,
+      [g.user.organizationId, period_start, period_end, ...storeArgs],
     );
     const header = [
       'JournalCode', 'EcritureNum', 'EcritureDate', 'CompteNum', 'CompteLib',
@@ -176,9 +255,10 @@ export async function POST(req: Request) {
         WHERE s.organization_id = $1
           AND s.status = 'validated'
           AND s.validated_at::date BETWEEN $2::date AND $3::date
+          ${storeFilter}
         GROUP BY s.id
         ORDER BY s.validated_at`,
-      [g.user.organizationId, period_start, period_end],
+      [g.user.organizationId, period_start, period_end, ...storeArgs],
     );
     content = JSON.stringify({
       period: { start: period_start, end: period_end },
