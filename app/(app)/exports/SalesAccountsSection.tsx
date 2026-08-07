@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import PageHeader from '@/components/PageHeader';
 import EmptyState from '@/components/EmptyState';
 import { confirmThemed } from '@/lib/ui/dialog';
 import { formatRate } from '@/lib/services/accounting-mapping';
@@ -33,7 +32,7 @@ interface Ref { id: string; name: string }
 
 const TOUTES = '';
 
-export default function AccountingAccountsAdmin({ canEdit }: { canEdit: boolean }) {
+export default function SalesAccountsSection({ canEdit }: { canEdit: boolean }) {
   const [rows, setRows] = useState<Row[]>([]);
   const [stores, setStores] = useState<Ref[]>([]);
   const [categories, setCategories] = useState<Ref[]>([]);
@@ -72,12 +71,18 @@ export default function AccountingAccountsAdmin({ canEdit }: { canEdit: boolean 
   }
 
   return (
-    <div className="p-6 md:p-8 space-y-5">
-      <PageHeader
-        title="Comptes de ventes"
-        subtitle="Le compte comptable de chaque famille de produit, par taux de TVA et par boutique. C'est cette ventilation que reprend l'export « Ventes par compte »."
-        actions={canEdit ? (
-          <div className="flex items-center gap-2">
+    <section className="space-y-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold tracking-tight">Comptes de ventes</h2>
+          <p className="mt-1 text-sm text-ink-soft max-w-2xl">
+            Le compte de chaque famille de produit, par taux de TVA et par boutique.
+            C&apos;est cette ventilation que reprend l&apos;export « Ventes par compte » ;
+            ce qui n&apos;a pas de règle retombe sur le plan comptable global ci-dessus.
+          </p>
+        </div>
+        {canEdit && (
+          <div className="flex items-center gap-2 shrink-0">
             {stores.length > 1 && (
               <select className="input h-10 text-sm" value={filterStore}
                       onChange={(e) => setFilterStore(e.target.value)}>
@@ -87,8 +92,8 @@ export default function AccountingAccountsAdmin({ canEdit }: { canEdit: boolean 
             )}
             <button className="btn-primary" onClick={() => setEditing(null)}>+ Nouveau compte</button>
           </div>
-        ) : null}
-      />
+        )}
+      </div>
 
       {error && <div className="rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
 
@@ -146,7 +151,7 @@ export default function AccountingAccountsAdmin({ canEdit }: { canEdit: boolean 
           onSaved={() => { setEditing(undefined); void reload(); }}
         />
       )}
-    </div>
+    </section>
   );
 }
 

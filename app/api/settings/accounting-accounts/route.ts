@@ -10,9 +10,9 @@ export const dynamic = 'force-dynamic';
 /**
  * Comptes de ventes par famille, taux de TVA et boutique.
  *
- * Lecture ouverte au comptable (`settings.read` le couvre) : il doit pouvoir
- * vérifier le paramétrage avant d'exporter. L'écriture reste au propriétaire —
- * un plan de comptes se décide, il ne se corrige pas à la volée depuis un poste.
+ * Lecture ET écriture ouvertes au comptable : c'est lui qui connaît les
+ * numéros de son plan comptable, et devoir passer par le commerçant à chaque
+ * famille ajoutée n'aurait aucun sens.
  */
 
 const schema = z.object({
@@ -52,7 +52,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const g = await requirePermission('settings.write');
+  const g = await requirePermission('accounting.write');
   if ('response' in g) return g.response;
   const parsed = await parseJson(req, schema);
   if ('response' in parsed) return parsed.response;

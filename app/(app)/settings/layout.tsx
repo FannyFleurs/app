@@ -62,7 +62,6 @@ export default async function SettingsLayout({ children }: { children: React.Rea
     { href: '/settings/company',          label: 'Société & boutiques',   icon: 'settings' as const,     perm: 'settings.read' as const,    boOnly: true,  proOnly: false },
     { href: '/settings/subscription',     label: 'Abonnement',            icon: 'invoices' as const,     perm: 'settings.read' as const,    boOnly: false, proOnly: false },
     { href: '/settings/exports',          label: 'Exports comptables',    icon: 'exports' as const,      perm: 'fiscal.export' as const,    boOnly: false, proOnly: false },
-    { href: '/settings/accounting-accounts', label: 'Comptes de ventes',  icon: 'exports' as const,      perm: 'accounting.read' as const,  boOnly: false, proOnly: false },
     { href: '/settings/fiscal',           label: 'Conformité fiscale',    icon: 'fiscal' as const,       perm: 'fiscal.audit' as const,     boOnly: false, proOnly: false },
   ];
   const allowed = await Promise.all(rawItems.map((i) => userCan(user, i.perm)));

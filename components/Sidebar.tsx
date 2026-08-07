@@ -50,7 +50,6 @@ export const SIDEBAR_ITEMS: SidebarItem[] = [
   // `settings.read`, il ne voit plus l'entrée « Paramètres » et n'aurait aucun
   // chemin vers la comptabilité depuis le back-office.
   { href: '/exports',      label: 'Exports comptables',   icon: 'exports',      group: 'Pilotage', perm: 'fiscal.export',   boOnly: true },
-  { href: '/settings/accounting-accounts', label: 'Comptes de ventes', icon: 'exports', group: 'Pilotage', perm: 'accounting.read', boOnly: true },
   // Système
   { href: '/settings/users', label: 'Utilisateurs',       icon: 'users',        group: 'Système',  perm: 'users.read' },
   { href: '/settings',     label: 'Paramètres',           icon: 'settings',     group: 'Système',  perm: 'settings.read', required: true },

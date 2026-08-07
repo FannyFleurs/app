@@ -17,7 +17,7 @@ const schema = z.object({
 });
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
-  const g = await requirePermission('settings.write');
+  const g = await requirePermission('accounting.write');
   if ('response' in g) return g.response;
   const parsed = await parseJson(req, schema);
   if ('response' in parsed) return parsed.response;
@@ -50,7 +50,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 }
 
 export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
-  const g = await requirePermission('settings.write');
+  const g = await requirePermission('accounting.write');
   if ('response' in g) return g.response;
   const { rowCount } = await query(
     `DELETE FROM accounting_sales_accounts WHERE id = $1 AND organization_id = $2`,

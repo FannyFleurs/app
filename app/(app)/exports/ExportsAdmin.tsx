@@ -75,7 +75,7 @@ export default function ExportsAdmin() {
   }
 
   return (
-    <div className="p-6 md:p-8 space-y-5 max-w-5xl">
+    <div className="space-y-5">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Exports comptables</h1>
         <p className="mt-1 text-sm text-ink-soft">
@@ -262,10 +262,11 @@ function AccountsEditor() {
     <div className="card p-5">
       <div className="flex items-start justify-between gap-3 mb-2">
         <div>
-          <h2 className="font-semibold">Plan comptable</h2>
+          <h2 className="font-semibold">Plan comptable global</h2>
           <p className="mt-1 text-sm text-ink-soft">
-            Codes utilisés dans les écritures et FEC-like. Ajustez-les pour
-            coller au plan comptable de votre expert-comptable.
+            Comptes de repli : ils servent aux écritures agrégées et au FEC-like,
+            et à tout ce qui n&apos;a pas de règle dans « Comptes de ventes »
+            ci-dessous.
           </p>
         </div>
       </div>

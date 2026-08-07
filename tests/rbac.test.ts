@@ -13,6 +13,9 @@ describe('RBAC', () => {
     // pas le catalogue, pas les réglages de la boutique.
     expect(hasPermission('comptable', 'fiscal.export')).toBe(true);
     expect(hasPermission('comptable', 'accounting.read')).toBe(true);
+    // Il RENSEIGNE lui-même son plan de comptes : c'est lui qui connaît les
+    // numéros, et passer par le commerçant à chaque famille n'aurait aucun sens.
+    expect(hasPermission('comptable', 'accounting.write')).toBe(true);
     expect(hasPermission('comptable', 'fiscal.audit')).toBe(true);
 
     expect(hasPermission('comptable', 'pos.use')).toBe(false);
