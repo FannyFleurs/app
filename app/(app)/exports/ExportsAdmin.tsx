@@ -49,8 +49,11 @@ export default function ExportsAdmin() {
     setLoading(false);
   }
   useEffect(() => { void reload(); }, []);
+  // Route comptable : /api/stores exige `settings.read`, que le comptable n'a
+  // pas — la liste revenait vide et le choix des boutiques disparaissait de
+  // l'écran de celui à qui il sert le plus.
   useEffect(() => {
-    void fetch('/api/stores')
+    void fetch('/api/accounting/references')
       .then((r) => (r.ok ? r.json() : { stores: [] }))
       .then((j) => setStores(j.stores ?? []))
       .catch(() => setStores([]));

@@ -21,6 +21,14 @@ const STORES = [
 ];
 const CATEGORIES = [{ id: 'c1', name: 'Plantes vertes' }];
 
+/** Deux croisements vendus : l'un couvert par une règle, l'autre non. */
+const CROSSINGS = [
+  { store_id: 's2', store_name: 'Fanny Fleurs Mortagne', category_id: 'c1',
+    category_name: 'Plantes vertes', vat_rate: 20, ht: 200, account_code: null },
+  { store_id: 's1', store_name: 'Fanny Fleurs Alençon', category_id: 'c1',
+    category_name: 'Plantes vertes', vat_rate: 10, ht: 50, account_code: '70731200' },
+];
+
 let posted: Array<{ url: string; body: Record<string, unknown> }> = [];
 
 beforeEach(() => {
@@ -32,6 +40,9 @@ beforeEach(() => {
     }
     if (url.startsWith('/api/accounting/references')) {
       return { ok: true, json: async () => ({ stores: STORES, categories: CATEGORIES }) } as unknown as Response;
+    }
+    if (url.startsWith('/api/accounting/coverage')) {
+      return { ok: true, json: async () => ({ crossings: CROSSINGS }) } as unknown as Response;
     }
     if (url.startsWith('/api/settings/accounting-accounts')) {
       return { ok: true, json: async () => ({ accounts: [] }) } as unknown as Response;
@@ -101,6 +112,14 @@ describe('Comptes de ventes — formulaire', () => {
     expect(screen.queryByText('Compte de TVA collectée')).toBeNull();
   });
 
+  it('ne pré-remplit rien sur un « Nouveau compte » ordinaire', async () => {
+    // Le formulaire ouvert depuis un croisement garde son pré-remplissage tant
+    // qu'il est ouvert ; celui ouvert « à blanc » ne doit pas en hériter.
+    await ouvrirFormulaire();
+    expect((champ('Boutique') as HTMLSelectElement).value).toBe('');
+    expect((champ('Libellé') as HTMLInputElement).value).toBe('');
+  });
+
   it('n\'enregistre pas un compte de TVA saisi puis abandonné', async () => {
     // La case fait foi : si elle est décochée, ce qu'elle masque ne part pas.
     await ouvrirFormulaire();
@@ -115,5 +134,52 @@ describe('Comptes de ventes — formulaire', () => {
     fireEvent.click(screen.getByText('Créer'));
     await waitFor(() => expect(posted).toHaveLength(1));
     expect(posted[0]!.body).toMatchObject({ vat_account_code: null, vat_account_label: null });
+  });
+});
+
+describe('Croisements vendus sans compte', () => {
+  it('ne liste que ceux qui n\'ont pas de règle', async () => {
+    render(<SalesAccountsSection canEdit />);
+    await waitFor(() => screen.getByText(/croisement sans compte/));
+    // Le croisement déjà couvert n'a rien à faire dans une liste de manques.
+    expect(screen.getByText('1 croisement sans compte · 1 déjà couvert')).toBeTruthy();
+    // Une seule ligne, celle du croisement non couvert. (Les noms de boutique
+    // apparaissent aussi dans les filtres : on lit donc le tableau.)
+    const lignes = [...document.querySelectorAll('tbody tr')]
+      .map((tr) => [...tr.querySelectorAll('td')].map((td) => td.textContent));
+    expect(lignes).toEqual([
+      ['Plantes vertes', '20 %', 'Fanny Fleurs Mortagne', '200.00 €', 'Créer le compte'],
+    ]);
+  });
+
+  it('ouvre le formulaire pré-rempli sur le croisement', async () => {
+    render(<SalesAccountsSection canEdit />);
+    await waitFor(() => screen.getByText('Créer le compte'));
+    fireEvent.click(screen.getByText('Créer le compte'));
+    await waitFor(() => screen.getByText('Nouveau compte'));
+
+    expect((champ('Boutique') as HTMLSelectElement).value).toBe('s2');
+    expect((champ('Famille de produit') as HTMLSelectElement).value).toBe('c1');
+    expect((champ('Taux de TVA (%)') as HTMLInputElement).value).toBe('20');
+    // Le libellé suit la convention du plan comptable ; le numéro, lui, ne
+    // s'invente pas et reste à saisir.
+    expect((champ('Libellé') as HTMLInputElement).value)
+      .toBe('PLANTES VERTES 20% FANNY FLEURS MORTAGNE');
+    expect((champ('N° de compte') as HTMLInputElement).value).toBe('');
+  });
+
+  it('félicite plutôt que d\'afficher une liste vide', async () => {
+    (fetch as unknown as { mockImplementation: (f: unknown) => void }).mockImplementation(
+      async (url: string) => {
+        if (url.startsWith('/api/accounting/coverage')) {
+          return { ok: true, json: async () => ({ crossings: [CROSSINGS[1]] }) } as unknown as Response;
+        }
+        if (url.startsWith('/api/accounting/references')) {
+          return { ok: true, json: async () => ({ stores: STORES, categories: CATEGORIES }) } as unknown as Response;
+        }
+        return { ok: true, json: async () => ({ accounts: [] }) } as unknown as Response;
+      });
+    render(<SalesAccountsSection canEdit />);
+    await waitFor(() => screen.getByText(/ont tous un compte/));
   });
 });

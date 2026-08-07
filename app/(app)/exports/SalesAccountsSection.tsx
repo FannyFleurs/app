@@ -30,7 +30,27 @@ interface Row {
 
 interface Ref { id: string; name: string }
 
+/** Croisement réellement vendu, et le compte qui lui est appliqué — ou rien. */
+interface Crossing {
+  store_id: string | null;
+  store_name: string | null;
+  category_id: string | null;
+  category_name: string | null;
+  vat_rate: number;
+  ht: number;
+  account_code: string | null;
+}
+
 const TOUTES = '';
+
+/** Valeurs pré-remplies quand on crée le compte d'un croisement précis. */
+type Preset = Pick<Row, 'store_id' | 'category_id' | 'vat_rate' | 'account_label'>;
+
+/** Premier jour du mois courant, au format ISO. */
+function debutDuMois(): string {
+  const t = new Date().toISOString().slice(0, 10);
+  return t.slice(0, 8) + '01';
+}
 
 export default function SalesAccountsSection({ canEdit }: { canEdit: boolean }) {
   const [rows, setRows] = useState<Row[]>([]);
@@ -40,6 +60,10 @@ export default function SalesAccountsSection({ canEdit }: { canEdit: boolean }) 
   const [error, setError] = useState<string | null>(null);
   const [filterStore, setFilterStore] = useState('');
   const [editing, setEditing] = useState<Row | null | undefined>(undefined);
+  const [preset, setPreset] = useState<Preset | null>(null);
+  const [crossings, setCrossings] = useState<Crossing[] | null>(null);
+  const [from, setFrom] = useState(debutDuMois);
+  const [to, setTo] = useState(() => new Date().toISOString().slice(0, 10));
 
   async function reload() {
     setLoading(true);
@@ -58,6 +82,34 @@ export default function SalesAccountsSection({ canEdit }: { canEdit: boolean }) 
     setLoading(false);
   }
   useEffect(() => { void reload(); }, []);
+
+  /** Ce qui a été vendu sur la période, et ce qui n'a toujours pas de compte. */
+  async function reloadCoverage() {
+    const r = await fetch(`/api/accounting/coverage?from=${from}&to=${to}`)
+      .then((x) => (x.ok ? x.json() : { crossings: [] }))
+      .catch(() => ({ crossings: [] }));
+    setCrossings(r.crossings ?? []);
+  }
+  useEffect(() => { void reloadCoverage(); }, [from, to]);
+
+  const manquants = (crossings ?? []).filter((c) => !c.account_code);
+  const couverts = (crossings ?? []).length - manquants.length;
+
+  /**
+   * Ouvre le formulaire pré-rempli sur un croisement. Le libellé suit la
+   * convention du plan comptable — « PLANTES 10% PLANTE VERTE » —, le numéro
+   * de compte reste à saisir : lui, personne ne peut le deviner.
+   */
+  function creerPour(c: Crossing) {
+    setPreset({
+      store_id: c.store_id,
+      category_id: c.category_id,
+      vat_rate: c.vat_rate,
+      account_label: [c.category_name ?? 'SANS FAMILLE', `${formatRate(c.vat_rate)}%`, c.store_name ?? '']
+        .filter(Boolean).join(' ').toUpperCase(),
+    });
+    setEditing(null);
+  }
 
   const visible = filterStore
     // Une règle « toutes boutiques » concerne aussi la boutique filtrée : la
@@ -94,12 +146,86 @@ export default function SalesAccountsSection({ canEdit }: { canEdit: boolean }) 
                 {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             )}
-            <button className="btn-primary" onClick={() => setEditing(null)}>+ Nouveau compte</button>
+            <button className="btn-primary" onClick={() => { setPreset(null); setEditing(null); }}>
+              + Nouveau compte
+            </button>
           </div>
         )}
       </div>
 
       {error && <div className="rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
+
+      {/* Ce qui a été vendu sans compte : sans cette liste, on ne découvre les
+          croisements manquants qu'en relisant le CSV exporté ligne à ligne. */}
+      <div className="card p-4 space-y-3">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h3 className="font-semibold">Croisements vendus sans compte</h3>
+            <p className="mt-0.5 text-sm text-ink-soft max-w-2xl">
+              Chacun produira une ligne au compte de ventes global dans l&apos;export.
+              Créez-lui un compte pour qu&apos;il sorte sous le vôtre.
+            </p>
+          </div>
+          <div className="flex items-end gap-2">
+            <div>
+              <label className="text-[11px] font-medium text-ink-soft">Du</label>
+              <input type="date" className="input h-10 text-sm mt-0.5" value={from} max={to}
+                     onChange={(e) => setFrom(e.target.value)} />
+            </div>
+            <div>
+              <label className="text-[11px] font-medium text-ink-soft">Au</label>
+              <input type="date" className="input h-10 text-sm mt-0.5" value={to} min={from}
+                     onChange={(e) => setTo(e.target.value)} />
+            </div>
+          </div>
+        </div>
+
+        {crossings === null ? (
+          <div className="text-sm text-ink-soft">Chargement…</div>
+        ) : crossings.length === 0 ? (
+          <div className="text-sm text-ink-soft">Aucune vente sur cette période.</div>
+        ) : manquants.length === 0 ? (
+          <div className="rounded-xl bg-success/10 px-3 py-2 text-sm text-success">
+            ✓ Les {couverts} croisements vendus sur la période ont tous un compte.
+          </div>
+        ) : (
+          <>
+            <div className="text-sm text-ink-soft">
+              {manquants.length} croisement{manquants.length > 1 ? 's' : ''} sans compte
+              {couverts > 0 && <> · {couverts} déjà couvert{couverts > 1 ? 's' : ''}</>}
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr className="text-[11px] uppercase tracking-wider text-ink-soft border-b border-border">
+                    <Th>Famille</Th><Th>Taux</Th><Th>Boutique</Th><Th>CA HT</Th><Th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {manquants.map((c) => (
+                    <tr key={`${c.store_id}|${c.category_id}|${c.vat_rate}`}
+                        className="border-b border-border last:border-0">
+                      <Td>{c.category_name ?? <span className="text-ink-soft italic">Sans famille</span>}</Td>
+                      <Td>{formatRate(c.vat_rate)} %</Td>
+                      <Td>{c.store_name ?? '—'}</Td>
+                      <Td><span className="tabular-nums">{c.ht.toFixed(2)} €</span></Td>
+                      <Td>
+                        {canEdit && (
+                          <div className="flex justify-end">
+                            <button className="btn-soft text-xs h-8 px-3" onClick={() => creerPour(c)}>
+                              Créer le compte
+                            </button>
+                          </div>
+                        )}
+                      </Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </div>
 
       {loading ? (
         <div className="text-ink-soft text-sm">Chargement…</div>
@@ -108,7 +234,7 @@ export default function SalesAccountsSection({ canEdit }: { canEdit: boolean }) 
           icon="◊"
           title="Aucun compte paramétré"
           description="Sans règle, tout est regroupé sur le compte de ventes global. Ajoutez un compte par famille pour obtenir la ventilation attendue par votre comptable."
-          action={canEdit ? <button className="btn-primary" onClick={() => setEditing(null)}>+ Créer le premier</button> : undefined}
+          action={canEdit ? <button className="btn-primary" onClick={() => { setPreset(null); setEditing(null); }}>+ Créer le premier</button> : undefined}
         />
       ) : (
         <div className="card overflow-x-auto">
@@ -149,10 +275,14 @@ export default function SalesAccountsSection({ canEdit }: { canEdit: boolean }) 
       {editing !== undefined && (
         <AccountForm
           row={editing}
+          preset={preset}
           stores={stores}
           categories={categories}
-          onClose={() => setEditing(undefined)}
-          onSaved={() => { setEditing(undefined); void reload(); }}
+          onClose={() => { setEditing(undefined); setPreset(null); }}
+          onSaved={() => {
+            setEditing(undefined); setPreset(null);
+            void reload(); void reloadCoverage();
+          }}
         />
       )}
     </section>
@@ -169,19 +299,22 @@ function Td({ children }: { children?: React.ReactNode }) {
   return <td className="px-3 py-2.5 align-middle">{children}</td>;
 }
 
-function AccountForm({ row, stores, categories, onClose, onSaved }: {
+function AccountForm({ row, preset, stores, categories, onClose, onSaved }: {
   row: Row | null;
+  /** Croisement de départ, quand on crée le compte d'une ligne manquante. */
+  preset?: Preset | null;
   stores: Ref[];
   categories: Ref[];
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const base = row ?? preset ?? null;
   const [form, setForm] = useState({
-    store_id: row?.store_id ?? TOUTES,
-    category_id: row?.category_id ?? TOUTES,
-    vat_rate: row?.vat_rate === null || row === null ? '' : String(row.vat_rate),
+    store_id: base?.store_id ?? TOUTES,
+    category_id: base?.category_id ?? TOUTES,
+    vat_rate: base?.vat_rate == null ? '' : String(base.vat_rate),
     account_code: row?.account_code ?? '',
-    account_label: row?.account_label ?? '',
+    account_label: base?.account_label ?? '',
     vat_account_code: row?.vat_account_code ?? '',
     vat_account_label: row?.vat_account_label ?? '',
   });
