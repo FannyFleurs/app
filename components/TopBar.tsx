@@ -7,6 +7,7 @@ import type { Role, Permission } from '@/lib/auth/rbac';
 import { HEADER_TABS_DEFAULT, HEADER_TABS_MAX } from '@/lib/settings/pos-ui';
 import Icon from './Icon';
 import { useBrand } from './BrandMark';
+import { activeNavHref } from '@/lib/nav/active';
 
 export interface TopBarUser {
   fullName: string;
@@ -46,6 +47,8 @@ export default function TopBar({
     .filter((i) => !i.perm || permissions.has(i.perm))
     .filter((i) => i.required || !hiddenPaths.includes(i.href));
 
+  const activeHref = activeNavHref(path, tabs.map((t) => t.href));
+
   const firstName = user.fullName.split(/\s+/)[0] ?? user.fullName;
 
   return (
@@ -75,7 +78,7 @@ export default function TopBar({
           le layout). */}
       <nav className="hidden md:flex items-center justify-start gap-1 px-2 overflow-x-auto no-scrollbar flex-1 min-w-0">
         {tabs.map((t) => {
-          const active = path === t.href || path?.startsWith(t.href + '/');
+          const active = t.href === activeHref;
           return (
             <Link
               key={t.href}

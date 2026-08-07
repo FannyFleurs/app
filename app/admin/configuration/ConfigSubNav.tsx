@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { activeNavHref } from '@/lib/nav/active';
 
 const TABS = [
   { href: '/admin/configuration', label: 'Marque & logos' },
@@ -11,14 +12,13 @@ const TABS = [
 
 export default function ConfigSubNav() {
   const pathname = usePathname();
+  // L'onglet racine ne doit pas rester actif sur les sous-pages : c'est
+  // l'onglet le plus profond qui l'emporte.
+  const activeHref = activeNavHref(pathname, TABS.map((t) => t.href));
   return (
     <nav className="flex flex-wrap gap-1 border-b border-border mb-5">
       {TABS.map((t) => {
-        // L'onglet racine ne doit s'activer que sur l'URL exacte, sinon il
-        // reste actif sur les sous-pages.
-        const active = t.href === '/admin/configuration'
-          ? pathname === '/admin/configuration'
-          : pathname?.startsWith(t.href);
+        const active = t.href === activeHref;
         return (
           <Link
             key={t.href}

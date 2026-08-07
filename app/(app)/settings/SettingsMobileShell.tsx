@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import SettingsSidebar, { type Item } from './SettingsSidebar';
+import { activeNavHref } from '@/lib/nav/active';
 
 interface Props {
   items: Item[];
@@ -22,7 +23,8 @@ interface Props {
 export default function SettingsMobileShell({ items, boUrl, children }: Props) {
   const path = usePathname();
   const isRoot = path === '/settings' || path === '/settings/';
-  const active = items.find((i) => path === i.href || path.startsWith(i.href + '/'));
+  const activeHref = activeNavHref(path, items.map((i) => i.href));
+  const active = items.find((i) => i.href === activeHref);
 
   return (
     <div className="flex flex-col md:h-full md:overflow-hidden">
