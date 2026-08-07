@@ -23,6 +23,8 @@ interface Row {
   vat_rate: number | null;
   account_code: string;
   account_label: string;
+  vat_account_code: string | null;
+  vat_account_label: string | null;
   store_name: string | null;
   category_name: string | null;
 }
@@ -104,7 +106,7 @@ export default function AccountingAccountsAdmin({ canEdit }: { canEdit: boolean 
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="text-[11px] uppercase tracking-wider text-ink-soft border-b border-border">
-                <Th>Compte</Th><Th>Libellé</Th><Th>Boutique</Th><Th>Famille</Th><Th>TVA</Th><Th />
+                <Th>Compte ventes</Th><Th>Libellé</Th><Th>Compte TVA</Th><Th>Boutique</Th><Th>Famille</Th><Th>Taux</Th><Th />
               </tr>
             </thead>
             <tbody>
@@ -112,6 +114,11 @@ export default function AccountingAccountsAdmin({ canEdit }: { canEdit: boolean 
                 <tr key={r.id} className="border-b border-border last:border-0 hover:bg-gray-50/60">
                   <Td><span className="font-mono">{r.account_code}</span></Td>
                   <Td>{r.account_label}</Td>
+                  <Td>
+                    {r.vat_account_code
+                      ? <span className="font-mono">{r.vat_account_code}</span>
+                      : <span className="text-ink-soft italic">Compte global</span>}
+                  </Td>
                   <Td>{r.store_name ?? <Toutes />}</Td>
                   <Td>{r.category_name ?? <Toutes />}</Td>
                   <Td>{r.vat_rate === null ? <Toutes /> : `${formatRate(r.vat_rate)} %`}</Td>
@@ -166,6 +173,8 @@ function AccountForm({ row, stores, categories, onClose, onSaved }: {
     vat_rate: row?.vat_rate === null || row === null ? '' : String(row.vat_rate),
     account_code: row?.account_code ?? '',
     account_label: row?.account_label ?? '',
+    vat_account_code: row?.vat_account_code ?? '',
+    vat_account_label: row?.vat_account_label ?? '',
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -178,6 +187,8 @@ function AccountForm({ row, stores, categories, onClose, onSaved }: {
       vat_rate: form.vat_rate.trim() === '' ? null : Number(form.vat_rate.replace(',', '.')),
       account_code: form.account_code.trim(),
       account_label: form.account_label.trim(),
+      vat_account_code: form.vat_account_code.trim() || null,
+      vat_account_label: form.vat_account_label.trim() || null,
     };
     const res = row
       ? await fetch(`/api/settings/accounting-accounts/${row.id}`, {
@@ -208,6 +219,8 @@ function AccountForm({ row, stores, categories, onClose, onSaved }: {
         <p className="text-sm text-ink-soft">
           Laissez un critère sur « Toutes » pour qu&apos;il ne restreigne pas la règle.
           Entre deux règles applicables, c&apos;est la plus précise qui l&apos;emporte.
+          Le compte de ventes reçoit le HT ; le compte de TVA, la taxe. Laissez ce
+          dernier vide pour retomber sur le compte global du taux.
         </p>
 
         <div className="grid grid-cols-2 gap-3">
@@ -225,6 +238,16 @@ function AccountForm({ row, stores, categories, onClose, onSaved }: {
             <input className="input" value={form.account_label}
                    onChange={(e) => setForm({ ...form, account_label: e.target.value })}
                    placeholder="PLANTES 10% PLANTES VERTE" />
+          </Field>
+          <Field label="Compte de TVA collectée">
+            <input className="input font-mono" value={form.vat_account_code}
+                   onChange={(e) => setForm({ ...form, vat_account_code: e.target.value })}
+                   placeholder="Compte global du taux" />
+          </Field>
+          <Field label="Libellé du compte de TVA">
+            <input className="input" value={form.vat_account_label}
+                   onChange={(e) => setForm({ ...form, vat_account_label: e.target.value })}
+                   placeholder="TVA collectée 10 %" />
           </Field>
           <Field label="Boutique">
             <select className="input" value={form.store_id}

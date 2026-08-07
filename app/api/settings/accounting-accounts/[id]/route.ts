@@ -12,6 +12,8 @@ const schema = z.object({
   vat_rate: z.number().min(0).max(100).nullable().optional(),
   account_code: z.string().trim().min(1).max(20).optional(),
   account_label: z.string().trim().min(1).max(120).optional(),
+  vat_account_code: z.string().trim().max(20).nullable().optional(),
+  vat_account_label: z.string().trim().max(120).nullable().optional(),
 });
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {

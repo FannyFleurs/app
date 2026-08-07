@@ -18,13 +18,18 @@ export interface SidebarItem {
   boOnly?: boolean;
 }
 
+/**
+ * Toute entrée porte une permission. Une entrée sans permission est visible de
+ * TOUS les rôles — ce qui passait inaperçu tant qu'aucun rôle n'était vraiment
+ * restreint, et faisait apparaître Stock ou Factures au comptable externe.
+ */
 export const SIDEBAR_ITEMS: SidebarItem[] = [
   // Vente — Caisse en premier
   { href: '/caisse',       label: 'Caisse',               icon: 'pos',          group: 'Vente',    perm: 'pos.use', required: true },
   { href: '/ma-journee',   label: 'Ma journée',           icon: 'my-day',       group: 'Vente',    perm: 'pos.use' },
-  { href: '/orders',       label: 'Commandes',            icon: 'orders',       group: 'Vente' },
+  { href: '/orders',       label: 'Commandes',            icon: 'orders',       group: 'Vente',    perm: 'pos.use' },
   { href: '/atelier',      label: 'Écran atelier',        icon: 'sparkle',      group: 'Vente',    perm: 'pos.use' },
-  { href: '/invoices',     label: 'Factures',             icon: 'invoices',     group: 'Vente' },
+  { href: '/invoices',     label: 'Factures',             icon: 'invoices',     group: 'Vente',    perm: 'customers.read' },
   { href: '/billing',      label: 'Facturation',          icon: 'invoices',     group: 'Vente',    perm: 'customers.read', boOnly: true },
   { href: '/vouchers',     label: 'Avoirs & cartes cadeaux', icon: 'loyalty',    group: 'Vente',    perm: 'pos.use' },
   // Relation
@@ -35,12 +40,17 @@ export const SIDEBAR_ITEMS: SidebarItem[] = [
   { href: '/labels',       label: 'Étiquettes',           icon: 'print',        group: 'Catalogue',perm: 'products.read' },
   { href: '/categories',   label: 'Catégories',           icon: 'categories',   group: 'Catalogue',perm: 'products.read' },
   { href: '/suppliers',    label: 'Fournisseurs',         icon: 'truck',        group: 'Catalogue',perm: 'products.read' },
-  { href: '/stock',        label: 'Stock',                icon: 'stock',        group: 'Catalogue' },
-  { href: '/stock/transfer', label: 'Transfert stock',    icon: 'transfer',     group: 'Catalogue' },
-  { href: '/inventory',    label: 'Inventaire',           icon: 'closures',     group: 'Catalogue' },
+  { href: '/stock',        label: 'Stock',                icon: 'stock',        group: 'Catalogue',perm: 'products.read' },
+  { href: '/stock/transfer', label: 'Transfert stock',    icon: 'transfer',     group: 'Catalogue',perm: 'stock.adjust' },
+  { href: '/inventory',    label: 'Inventaire',           icon: 'closures',     group: 'Catalogue',perm: 'stock.adjust' },
   // Pilotage (en bas — pas en haut)
-  { href: '/dashboard',    label: 'Tableau de bord',      icon: 'dashboard',    group: 'Pilotage' },
+  { href: '/dashboard',    label: 'Tableau de bord',      icon: 'dashboard',    group: 'Pilotage', perm: 'settings.read' },
   { href: '/reports',      label: 'Rapports',             icon: 'exports',      group: 'Pilotage', perm: 'settings.read', boOnly: true },
+  // Entrées du comptable externe. Elles doivent exister ICI : n'ayant plus
+  // `settings.read`, il ne voit plus l'entrée « Paramètres » et n'aurait aucun
+  // chemin vers la comptabilité depuis le back-office.
+  { href: '/exports',      label: 'Exports comptables',   icon: 'exports',      group: 'Pilotage', perm: 'fiscal.export',   boOnly: true },
+  { href: '/settings/accounting-accounts', label: 'Comptes de ventes', icon: 'exports', group: 'Pilotage', perm: 'accounting.read', boOnly: true },
   // Système
   { href: '/settings/users', label: 'Utilisateurs',       icon: 'users',        group: 'Système',  perm: 'users.read' },
   { href: '/settings',     label: 'Paramètres',           icon: 'settings',     group: 'Système',  perm: 'settings.read', required: true },
