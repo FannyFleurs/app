@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { computeLabelLayout, estimateWidthMm } from '@/lib/services/label-layout';
-import { LABEL_DEFAULTS, LABEL_SIZE_PRESETS, type LabelSettings } from '@/lib/settings/label';
+import { LABEL_DEFAULTS, LABEL_SIZE_PRESETS, mergeLabelDefaults, type LabelSettings } from '@/lib/settings/label';
 import { type LabelProduct } from '@/lib/services/label-print-core';
 
 /**
@@ -127,7 +127,7 @@ describe('Tenue dans les bords', () => {
   it('réserve une marge de sécurité, plus large en bas', () => {
     for (const f of LABEL_SIZE_PRESETS) {
       const r = computeLabelLayout(LONG, settings({ width_mm: f.w, height_mm: f.h }));
-      expect(r.marginMm).toBeGreaterThanOrEqual(1.4);
+      expect(r.marginMm).toBeGreaterThanOrEqual(1.2);
       // Le média avance vers le bas : l'erreur de calage s'y cumule, et c'est
       // là qu'on perdait les chiffres du code-barres à l'impression.
       expect(r.marginBottomMm).toBeGreaterThanOrEqual(3);
@@ -186,5 +186,52 @@ describe('Prix remisé', () => {
     const { blocks } = computeLabelLayout(p, settings({ show_discount: false }));
     expect(blocks.some((b) => b.kind === 'price-old')).toBe(false);
     expect(blocks.find((b) => b.kind === 'price')!.lines[0]).toContain('6,90');
+  });
+});
+
+describe('Calage de l\'imprimante', () => {
+  it("ne s'applique pas tant que l'appelant ne le demande pas", () => {
+    // L'aperçu appelle le moteur SANS calage : il montre la mise en page cible,
+    // pas la correction appliquée à la machine. Seul le rendu thermique la
+    // passe en argument.
+    const sans = computeLabelLayout(SHORT, settings({ print_offset_y_mm: -5 }));
+    const neutre = computeLabelLayout(SHORT, settings({ print_offset_y_mm: 0 }));
+    expect(sans.blocks.map((b) => b.yMm)).toEqual(neutre.blocks.map((b) => b.yMm));
+  });
+
+  it('remonte le contenu sans jamais le faire sortir de l\'étiquette', () => {
+    const neutre = computeLabelLayout(SHORT, settings({ width_mm: 50, height_mm: 50 }));
+    const remonte = computeLabelLayout(SHORT, settings({ width_mm: 50, height_mm: 50 }), -5);
+
+    // Le contenu se tasse vers le haut…
+    expect(remonte.marginMm).toBeLessThan(neutre.marginMm);
+    expect(remonte.marginBottomMm).toBeGreaterThan(neutre.marginBottomMm);
+    // …sans jamais franchir le bord : une translation, elle, aurait rogné.
+    for (const b of remonte.blocks) {
+      expect.soft(b.yMm).toBeGreaterThanOrEqual(0);
+      const bas = b.yMm + b.hMm + (b.kind === 'barcode' ? b.fontMm * 1.25 : 0);
+      expect.soft(bas).toBeLessThanOrEqual(50);
+    }
+    // Le dernier trait d'encre remonte bien d'à peu près la valeur demandée.
+    const dernier = (r: typeof neutre) => Math.max(...r.blocks.map(
+      (b) => b.yMm + b.hMm + (b.kind === 'barcode' ? b.fontMm * 1.25 : 0)));
+    expect(dernier(neutre) - dernier(remonte)).toBeGreaterThan(3.5);
+  });
+
+  it('borne le calage à une valeur qui reste une compensation', () => {
+    expect(mergeLabelDefaults({ print_offset_y_mm: -80 }).print_offset_y_mm).toBe(-15);
+    expect(mergeLabelDefaults({ print_offset_y_mm: 80 }).print_offset_y_mm).toBe(15);
+    expect(mergeLabelDefaults({}).print_offset_y_mm).toBe(0);
+    // Une valeur absente ou aberrante ne doit pas décaler l'impression.
+    expect(mergeLabelDefaults({ print_offset_y_mm: NaN }).print_offset_y_mm).toBe(0);
+  });
+});
+
+describe('Marge haute', () => {
+  it('reste serrée pour laisser la place au contenu', () => {
+    for (const f of LABEL_SIZE_PRESETS) {
+      const r = computeLabelLayout(SHORT, settings({ width_mm: f.w, height_mm: f.h }));
+      expect.soft(r.marginMm, `${f.w}×${f.h}`).toBeLessThanOrEqual(2);
+    }
   });
 });

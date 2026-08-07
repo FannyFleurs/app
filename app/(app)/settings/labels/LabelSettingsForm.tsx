@@ -100,6 +100,32 @@ export default function LabelSettingsForm({ initial, canEdit }: {
                    onChange={(v) => set('show_discount', v)} />
           </div>
 
+          {/* Calage machine — distinct de la mise en page */}
+          <div className="card p-5 space-y-3">
+            <h2 className="font-semibold">Calage de l&apos;imprimante</h2>
+            <p className="text-sm text-ink-soft">
+              Si l&apos;impression tombe trop bas sur l&apos;étiquette — marge haute
+              excessive et bas rogné — mesure le décalage sur une étiquette sortie et
+              saisis-le en négatif pour remonter le contenu d&apos;autant.
+              Ce réglage ne concerne que l&apos;impression : l&apos;aperçu montre le
+              résultat attendu une fois le calage juste.
+            </p>
+            <label className="text-sm inline-flex items-end gap-3">
+              <span>
+                <span className="block text-xs font-medium text-ink-soft mb-1">
+                  Décalage vertical (mm)
+                </span>
+                <input type="number" step={0.5} min={-15} max={15}
+                       className="input h-10 w-28 tabular-nums" value={form.print_offset_y_mm}
+                       disabled={!canEdit}
+                       onChange={(e) => set('print_offset_y_mm', Number(e.target.value) || 0)} />
+              </span>
+              <span className="pb-2 text-xs text-ink-soft">
+                négatif = vers le haut
+              </span>
+            </label>
+          </div>
+
           {/* Composition : ordre fixe, force relative réglable */}
           <div className="card p-5 space-y-3">
             <h2 className="font-semibold">Disposition</h2>

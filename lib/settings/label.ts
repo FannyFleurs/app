@@ -41,6 +41,19 @@ export interface LabelSettings {
   show_sku: boolean;
   /** Disposition (position + taille) de chaque élément (éditeur d'étiquette). */
   layout: LabelLayout;
+  /**
+   * Calage vertical de l'impression, en millimètres (négatif = vers le haut).
+   *
+   * Compense le décalage MÉCANIQUE de l'imprimante : selon le réglage du
+   * capteur de gap et l'usure de l'entraînement, une même image peut se poser
+   * quelques millimètres plus bas sur l'étiquette, laissant une marge haute
+   * excessive et rognant le bas. Aucun logiciel ne peut le deviner — il se
+   * mesure sur une étiquette imprimée, d'où ce réglage.
+   *
+   * N'affecte QUE l'impression thermique : l'aperçu montre la mise en page
+   * telle qu'elle doit tomber sur l'étiquette une fois le calage juste.
+   */
+  print_offset_y_mm: number;
 }
 
 export const LABEL_LAYOUT_DEFAULT: LabelLayout = {
@@ -59,12 +72,20 @@ export const LABEL_DEFAULTS: LabelSettings = {
   show_discount: true,
   show_sku: false,
   layout: LABEL_LAYOUT_DEFAULT,
+  print_offset_y_mm: 0,
 };
 
 function clampMm(v: unknown, fallback: number): number {
   const n = typeof v === 'number' ? v : Number(v);
   if (!Number.isFinite(n)) return fallback;
   return Math.min(200, Math.max(10, Math.round(n)));
+}
+
+/** Calage borné : au-delà de ±15 mm on ne compense plus, on casse. */
+function clampOffset(v: unknown, fallback: number): number {
+  const n = typeof v === 'number' ? v : Number(v);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(15, Math.max(-15, Math.round(n * 10) / 10));
 }
 
 function clamp01(v: unknown, fallback: number): number {
@@ -100,5 +121,6 @@ export function mergeLabelDefaults(partial: Partial<LabelSettings> | null | unde
     show_discount: partial.show_discount ?? LABEL_DEFAULTS.show_discount,
     show_sku: partial.show_sku ?? LABEL_DEFAULTS.show_sku,
     layout: mergeLayout(partial.layout),
+    print_offset_y_mm: clampOffset(partial.print_offset_y_mm, LABEL_DEFAULTS.print_offset_y_mm),
   };
 }

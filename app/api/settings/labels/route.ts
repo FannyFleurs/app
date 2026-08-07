@@ -22,6 +22,8 @@ const schema = z.object({
   layout: z.object({
     name: elLayout, price: elLayout, barcode: elLayout, sku: elLayout,
   }).optional(),
+  /** Calage vertical de l'impression, en mm (négatif = remonte le contenu). */
+  print_offset_y_mm: z.number().min(-15).max(15).optional(),
 });
 
 export async function GET() {

@@ -26,8 +26,14 @@ import { type LabelProduct, discountedPrice } from './label-print-core';
  * étiquette deux fois plus petite donne le même dessin, deux fois plus petit.
  */
 
-/** Marge de sécurité minimale, en mm, en haut et sur les côtés. */
-const MIN_MARGIN_MM = 1.4;
+/**
+ * Marge minimale, en mm, en haut et sur les côtés.
+ *
+ * Volontairement serrée : sur une étiquette de quelques centimètres, chaque
+ * millimètre rendu au contenu est du texte plus gros. Le bord de fuite, lui,
+ * a sa propre marge (MIN_BOTTOM_MM) — c'est le seul qui court un risque.
+ */
+const MIN_MARGIN_MM = 1.2;
 
 /**
  * Marge BASSE minimale, nettement plus généreuse.
@@ -173,15 +179,29 @@ function fitText(
 /** Poids de chaque bande dans la hauteur disponible. */
 const WEIGHTS = { name: 1.00, sku: 0.30, price: 1.30, barcode: 1.20 };
 
-export function computeLabelLayout(p: LabelProduct, s: LabelSettings): LabelLayoutResult {
+/**
+ * @param shiftMm Compensation du calage de l'imprimante, en mm (négatif =
+ *   remonte le contenu). Elle n'est PAS une translation : on ne peut pas
+ *   pousser du contenu au-dessus du bord de l'image, ça le rognerait. On
+ *   resserre donc la marge haute d'autant et on rend la place à la marge
+ *   basse — le contenu se tasse vers le haut et, une fois posé plus bas par
+ *   la machine, retombe au bon endroit sur l'étiquette.
+ *   Réservé au rendu thermique : l'aperçu montre la mise en page cible.
+ */
+export function computeLabelLayout(p: LabelProduct, s: LabelSettings, shiftMm = 0): LabelLayoutResult {
   const W = Math.max(10, s.width_mm || 50);
   const H = Math.max(10, s.height_mm || 30);
   // Marge proportionnelle, jamais sous le seuil de sécurité : elle absorbe la
   // dérive d'entraînement du média, qui décale l'impression de quelques
   // dixièmes de millimètre d'une étiquette à l'autre.
-  const margin = Math.max(MIN_MARGIN_MM, Math.min(W, H) * 0.05);
-  const marginBottom = Math.max(MIN_BOTTOM_MM, H * 0.09);
-  const usableW = Math.max(4, W - margin * 2);
+  const baseMargin = Math.max(MIN_MARGIN_MM, Math.min(W, H) * 0.03);
+  const baseBottom = Math.max(MIN_BOTTOM_MM, H * 0.09);
+  // Le calage se traduit en marges : ce qu'on retire en haut, on l'ajoute en
+  // bas. Un filet de 0,4 mm reste réservé en haut — coller le texte au bord
+  // n'apporte rien et le premier dixième de millimètre est rarement net.
+  const margin = Math.max(0.4, baseMargin + shiftMm);
+  const marginBottom = Math.max(MIN_BOTTOM_MM, baseBottom - shiftMm);
+  const usableW = Math.max(4, W - baseMargin * 2);
   const usableH = Math.max(4, H - margin - marginBottom);
 
   const hasName = !!(s.show_name && p.name);
@@ -215,6 +235,7 @@ export function computeLabelLayout(p: LabelProduct, s: LabelSettings): LabelLayo
 
   // Facteur d'emphase par élément, réglable dans le paramétrage. Borné : il
   // module la hiérarchie, il ne doit pas pouvoir faire déborder un bloc.
+  const xLeft = baseMargin;
   const emph = (k: 'name' | 'price' | 'barcode' | 'sku') =>
     Math.min(1.8, Math.max(0.5, s.layout?.[k]?.size ?? 1));
 
@@ -228,7 +249,7 @@ export function computeLabelLayout(p: LabelProduct, s: LabelSettings): LabelLayo
     const used = fit.lines.length * fit.fontMm * LINE_HEIGHT;
     blocks.push({
       kind: 'name', lines: fit.lines,
-      xMm: margin, yMm: y, wMm: usableW, hMm: used,
+      xMm: xLeft, yMm: y, wMm: usableW, hMm: used,
       fontMm: fit.fontMm, bold: true,
     });
     // Une respiration sous le nom, proportionnelle à sa taille : sans elle il
@@ -248,7 +269,7 @@ export function computeLabelLayout(p: LabelProduct, s: LabelSettings): LabelLayo
     const used = Math.max(lineH, Math.min(h, lineH * 1.2));
     blocks.push({
       kind: 'sku', lines: fit.lines,
-      xMm: margin, yMm: y, wMm: usableW, hMm: fit.fontMm * LINE_HEIGHT,
+      xMm: xLeft, yMm: y, wMm: usableW, hMm: fit.fontMm * LINE_HEIGHT,
       fontMm: fit.fontMm, bold: false,
     });
     y += used;
@@ -263,7 +284,7 @@ export function computeLabelLayout(p: LabelProduct, s: LabelSettings): LabelLayo
       const oldFit = fitText(formatEUR(p.sale_price_ttc), usableW, oldH, false, 1, Math.min(oldH, usableH * 0.11));
       blocks.push({
         kind: 'price-old', lines: oldFit.lines,
-        xMm: margin, yMm: y, wMm: usableW, hMm: oldFit.fontMm * LINE_HEIGHT,
+        xMm: xLeft, yMm: y, wMm: usableW, hMm: oldFit.fontMm * LINE_HEIGHT,
         fontMm: oldFit.fontMm, bold: false, strike: true,
       });
     }
@@ -275,7 +296,7 @@ export function computeLabelLayout(p: LabelProduct, s: LabelSettings): LabelLayo
       kind: 'price', lines: fit.lines,
       // Centré dans sa bande. Calé en haut, il laissait sous lui un vide que
       // l'œil lit comme « le prix est trop haut, le code-barres trop bas ».
-      xMm: margin, yMm: y + oldH + Math.max(0, (mainH - used) / 2),
+      xMm: xLeft, yMm: y + oldH + Math.max(0, (mainH - used) / 2),
       wMm: usableW, hMm: used,
       fontMm: fit.fontMm, bold: true,
     });
@@ -296,7 +317,7 @@ export function computeLabelLayout(p: LabelProduct, s: LabelSettings): LabelLayo
     const used = barsH + digitsMm * 1.25;
     blocks.push({
       kind: 'barcode', lines: [],
-      xMm: margin + (usableW - barsW) / 2,
+      xMm: xLeft + (usableW - barsW) / 2,
       // Centré lui aussi : le coller en haut de sa bande le décollait du prix
       // sans pour autant l'éloigner du bord de fuite.
       yMm: y + Math.max(0, (h - used) / 2),

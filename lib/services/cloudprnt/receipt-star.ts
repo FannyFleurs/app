@@ -59,7 +59,8 @@ async function ensureReceiptFont(PImage: any): Promise<void> {
   if (_receiptFontReady) return;
   const path = await import('node:path');
   const dir = path.join(process.cwd(), 'assets', 'fonts');
-  PImage.registerFont(path.join(dir, 'BricolageGrotesque-Bold.ttf'), 'ReceiptBold').loadSync();
+  // Arimo (métriques Arial) : voir label-render pour la raison du changement.
+  PImage.registerFont(path.join(dir, 'Arimo-Bold.ttf'), 'ReceiptBold').loadSync();
   _receiptFontReady = true;
 }
 
