@@ -86,8 +86,8 @@ export default function ExportsAdmin() {
         </p>
       </div>
 
-      <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="card p-5">
+      <section>
+        <div className="card p-5 max-w-2xl">
           <h2 className="font-semibold">Nouvel export</h2>
           <p className="mt-1 text-sm text-ink-soft">
             Sélectionnez une période et un format. Chaque export est signé (SHA-256) et tracé dans l&apos;audit.
@@ -154,8 +154,6 @@ export default function ExportsAdmin() {
             L&apos;export FEC-like est fourni à titre informatif et ne remplace pas le FEC produit par votre comptable.
           </p>
         </div>
-
-        <AccountsEditor />
       </section>
 
       <section>
@@ -202,109 +200,6 @@ export default function ExportsAdmin() {
           </div>
         )}
       </section>
-    </div>
-  );
-}
-
-/**
- * Editeur du plan comptable de l'organisation.
- * Chaque compte est un code numerique / alphanumerique libre —
- * l'utilisateur (ou son comptable) les cale sur son propre plan.
- */
-interface Accounts {
-  sales: string; tva_20: string; tva_10: string; tva_55: string; tva_21: string;
-  clients: string; cash: string; bank: string; discounts: string;
-}
-const ACCOUNT_ROWS: Array<{ key: keyof Accounts; label: string; hint?: string }> = [
-  { key: 'sales',     label: 'Ventes de marchandises',   hint: 'Compte de produit — encaissement HT' },
-  { key: 'tva_20',    label: 'TVA collectée 20 %' },
-  { key: 'tva_10',    label: 'TVA collectée 10 %' },
-  { key: 'tva_55',    label: 'TVA collectée 5,5 %' },
-  { key: 'tva_21',    label: 'TVA collectée 2,1 %' },
-  { key: 'clients',   label: 'Clients (créances)',        hint: 'Utilisé pour les factures en attente de paiement' },
-  { key: 'cash',      label: 'Caisse — espèces' },
-  { key: 'bank',      label: 'Banque (CB, virement, chèque)' },
-  { key: 'discounts', label: 'Remises accordées' },
-];
-
-function AccountsEditor() {
-  const [accts, setAccts] = useState<Accounts | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    void (async () => {
-      const r = await fetch('/api/settings/accounting');
-      if (r.ok) setAccts((await r.json()).accounts);
-    })();
-  }, []);
-
-  function patch<K extends keyof Accounts>(k: K, v: Accounts[K]) {
-    setAccts((cur) => cur ? { ...cur, [k]: v } : cur);
-  }
-
-  async function submit() {
-    if (!accts) return;
-    setSaving(true); setSaved(false); setError(null);
-    const r = await fetch('/api/settings/accounting', {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(accts),
-    });
-    setSaving(false);
-    if (!r.ok) {
-      const j = await r.json().catch(() => ({}));
-      setError(j.message ?? j.error ?? 'Erreur');
-      return;
-    }
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
-  }
-
-  return (
-    <div className="card p-5">
-      <div className="flex items-start justify-between gap-3 mb-2">
-        <div>
-          <h2 className="font-semibold">Plan comptable global</h2>
-          <p className="mt-1 text-sm text-ink-soft">
-            Comptes de repli : ils servent aux écritures agrégées et au FEC-like,
-            et à tout ce qui n&apos;a pas de règle dans « Comptes de ventes »
-            ci-dessous.
-          </p>
-        </div>
-      </div>
-
-      <ul className="mt-3 space-y-2">
-        {accts ? ACCOUNT_ROWS.map((row) => (
-          <li key={row.key} className="flex items-center gap-3 border-b border-border/60 pb-2 last:border-0">
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium">{row.label}</div>
-              {row.hint && (
-                <div className="text-[11px] text-ink-soft">{row.hint}</div>
-              )}
-            </div>
-            <input
-              className="input h-10 w-32 font-mono text-sm text-right"
-              value={accts[row.key]}
-              maxLength={20}
-              onChange={(e) => patch(row.key, e.target.value.replace(/[^A-Za-z0-9]/g, ''))}
-            />
-          </li>
-        )) : (
-          <li className="text-sm text-ink-soft">Chargement…</li>
-        )}
-      </ul>
-
-      {error && <div className="mt-3 rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
-      {saved && <div className="mt-3 rounded-xl bg-success/10 px-3 py-2 text-sm text-success">✓ Plan comptable enregistré</div>}
-
-      <button
-        onClick={() => void submit()}
-        disabled={!accts || saving}
-        className="btn-primary mt-4"
-      >
-        {saving ? 'Enregistrement…' : 'Enregistrer le plan comptable'}
-      </button>
     </div>
   );
 }

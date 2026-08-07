@@ -9,10 +9,16 @@ import {
   ACCOUNTING_ACCOUNTS_KEY,
   mergeAccountingAccounts,
   type AccountingAccounts,
-  tvaAccountForRate,
 } from '@/lib/settings/accounting';
 import { groupByAccount, formatRate, type SalesAccountRule } from '@/lib/services/accounting-mapping';
 
+/**
+ * Comptes des écritures agrégées (Écritures comptables, FEC-like) : ventes du
+ * jour, TVA, caisse, banque. Ils n'ont rien à voir avec les comptes de ventes
+ * par famille — aucune règle famille × taux × boutique ne dit sur quel compte
+ * va l'encaissement espèces — et ne servent donc jamais de repli à ces
+ * derniers : l'export « Ventes par compte » n'invente aucun numéro.
+ */
 async function loadAccounts(orgId: string): Promise<AccountingAccounts> {
   const { rows } = await query<{ value: Partial<AccountingAccounts> }>(
     `SELECT value FROM settings WHERE organization_id = $1 AND key = $2`,
@@ -181,8 +187,6 @@ export async function POST(req: Request) {
         WHERE organization_id = $1`,
       [g.user.organizationId],
     );
-    const accts = await loadAccounts(g.user.organizationId);
-
     const totals = groupByAccount(
       lines.rows.map((r) => ({
         store_id: r.store_id, store_name: r.store_name,
@@ -191,18 +195,17 @@ export async function POST(req: Request) {
         ht: Number(r.ht), tva: Number(r.tva), ttc: Number(r.ttc),
       })),
       rules.rows,
-      { code: accts.sales, label: 'Ventes' },
     );
 
     // Deux natures dans le même fichier : le HT au crédit du compte de ventes,
     // la TVA au crédit du compte de TVA. C'est la ventilation qu'un comptable
     // saisit ; les fournir séparément l'obligerait à recroiser deux exports.
     const header = ['Nature', 'Compte', 'Libellé', 'Taux', 'Montant', 'Paramétré'];
+    // Le numéro reste vide quand rien n'a été paramétré : aucun compte n'est
+    // inventé, et la colonne « Paramétré » dit lesquels restent à renseigner.
     const out: string[][] = totals.map((t) => [
       'Ventes', t.account_code, t.account_label,
       `${formatRate(t.vat_rate)}%`, t.ht.toFixed(2),
-      // Colonne franche plutôt qu'un silence : « non » signale un croisement
-      // sans compte, donc un paramétrage à compléter.
       t.fallback ? 'non' : 'oui',
     ]);
 
@@ -210,7 +213,8 @@ export async function POST(req: Request) {
     // compte de TVA, et le comptable attend une ligne par compte, pas par famille.
     const vatByAccount = new Map<string, { code: string; label: string; rate: number; amount: number; mapped: boolean }>();
     for (const t of totals) {
-      const code = t.vat_account_code || tvaAccountForRate(accts, t.vat_rate);
+      // Même règle que pour les ventes : pas de compte paramétré, pas de numéro.
+      const code = t.vat_account_code || '';
       const label = t.vat_account_label || `TVA collectée ${formatRate(t.vat_rate)} %`;
       const key = `${code}|${label}`;
       const cur = vatByAccount.get(key)
