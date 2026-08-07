@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import Icon, { type IconName } from '@/components/Icon';
+import { activeNavHref } from '@/lib/nav/active';
 
 export type SettingsGroup = 'ticket' | 'labels';
 
@@ -23,7 +24,8 @@ const GROUPS: Record<SettingsGroup, { label: string; icon: IconName }> = {
 
 export default function SettingsSidebar({ items }: { items: Item[] }) {
   const path = usePathname();
-  const isActive = (href: string) => path === href || path.startsWith(href + '/');
+  const activeHref = activeNavHref(path, items.map((i) => i.href));
+  const isActive = (href: string) => href === activeHref;
 
   // Une entrée par dossier, insérée à la position de son premier réglage :
   // l'ordre général du menu reste celui défini par la page.

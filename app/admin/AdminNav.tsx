@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { activeNavHref } from '@/lib/nav/active';
 
 const ITEMS = [
   { href: '/admin', label: 'Dashboard' },
@@ -14,11 +15,13 @@ const ITEMS = [
 
 export default function AdminNav() {
   const pathname = usePathname();
+  // Une seule entrée active : la plus profonde. « Dashboard » (/admin) n'a
+  // ainsi plus besoin d'une exception écrite à la main.
+  const activeHref = activeNavHref(pathname, ITEMS.map((i) => i.href));
   return (
     <nav className="flex flex-col gap-0.5 px-2">
       {ITEMS.map((it) => {
-        const active =
-          it.href === '/admin' ? pathname === '/admin' : pathname?.startsWith(it.href);
+        const active = it.href === activeHref;
         return (
           <Link
             key={it.href}

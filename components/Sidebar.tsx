@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import type { Role } from '@/lib/auth/rbac';
 import { hasPermission, type Permission } from '@/lib/auth/rbac';
 import Icon, { type IconName } from './Icon';
+import { activeNavHref } from '@/lib/nav/active';
 
 export interface SidebarItem {
   href: string;
@@ -63,6 +64,7 @@ export default function Sidebar({
   const path = usePathname();
   const visible = SIDEBAR_ITEMS.filter((i) => !i.perm || hasPermission(role, i.perm))
     .filter((i) => i.required || !hiddenPaths.includes(i.href));
+  const activeHref = activeNavHref(path, visible.map((i) => i.href));
 
   return (
     <nav className="px-2 pt-2 pb-6 space-y-3">
@@ -76,7 +78,7 @@ export default function Sidebar({
             </div>
             <div className="space-y-0.5">
               {items.map((i) => {
-                const active = path === i.href || path.startsWith(i.href + '/');
+                const active = i.href === activeHref;
                 return (
                   <Link
                     key={i.href}

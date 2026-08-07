@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { SIDEBAR_ITEMS, type SidebarItem } from './Sidebar';
 import type { Role, Permission } from '@/lib/auth/rbac';
 import { HEADER_TABS_DEFAULT, HEADER_TABS_MAX } from '@/lib/settings/pos-ui';
+import { activeNavHref } from '@/lib/nav/active';
 import Icon from './Icon';
 import { useBrand } from './BrandMark';
 
@@ -56,6 +57,10 @@ export default function LeftRail({
     .filter((i) => i.href !== '/caisse')
     .filter((i) => !i.perm || permissions.has(i.perm));
 
+  // Une seule entrée allumée à la fois, calculée sur la liste affichée.
+  const boActive = activeNavHref(path, boItems.map((i) => i.href));
+  const tabActive = activeNavHref(path, tabs.map((t) => t.href));
+
   const initials = user.fullName
     .split(/\s+/)
     .map((s) => s[0] ?? '')
@@ -100,7 +105,7 @@ export default function LeftRail({
                 </div>
                 <div className="space-y-0.5">
                   {items.map((i) => {
-                    const active = path === i.href || (path?.startsWith(i.href + '/') ?? false);
+                    const active = i.href === boActive;
                     return (
                       <Link
                         key={i.href}
@@ -183,7 +188,7 @@ export default function LeftRail({
           qu'aucun enfant ne dépassera jamais. */}
       <nav className="flex-1 flex flex-col items-center justify-center gap-2 py-4 overflow-y-auto overflow-x-hidden no-scrollbar">
         {tabs.map((t) => {
-          const active = path === t.href || (path?.startsWith(t.href + '/') ?? false);
+          const active = t.href === tabActive;
           return (
             <Link
               key={t.href}
