@@ -16,6 +16,7 @@ interface ExportItem {
 }
 
 const FORMATS = [
+  { value: 'accounts_csv', label: 'Ventes par compte — CSV' },
   { value: 'sales_csv',   label: 'Ventes — CSV' },
   { value: 'entries_csv', label: 'Écritures comptables — CSV' },
   { value: 'fec_like',    label: 'FEC-like (informatif)' },
@@ -31,7 +32,11 @@ export default function ExportsAdmin() {
   const firstOfMonth = today.slice(0, 8) + '01';
   const [from, setFrom] = useState(firstOfMonth);
   const [to, setTo]     = useState(today);
-  const [format, setFormat] = useState<typeof FORMATS[number]['value']>('sales_csv');
+  const [format, setFormat] = useState<typeof FORMATS[number]['value']>('accounts_csv');
+  const [stores, setStores] = useState<{ id: string; name: string }[]>([]);
+  // Vide = toutes les boutiques. Le comptable d'un groupe peut en sortir une
+  // seule ou plusieurs d'un coup, sans avoir à relancer un export par boutique.
+  const [storeIds, setStoreIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [list, setList] = useState<ExportItem[]>([]);
@@ -44,12 +49,18 @@ export default function ExportsAdmin() {
     setLoading(false);
   }
   useEffect(() => { void reload(); }, []);
+  useEffect(() => {
+    void fetch('/api/stores')
+      .then((r) => (r.ok ? r.json() : { stores: [] }))
+      .then((j) => setStores(j.stores ?? []))
+      .catch(() => setStores([]));
+  }, []);
 
   async function generate() {
     setBusy(true); setError(null);
     const r = await fetch('/api/exports/accounting', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ period_start: from, period_end: to, format }),
+      body: JSON.stringify({ period_start: from, period_end: to, format, store_ids: storeIds }),
     });
     setBusy(false);
     if (!r.ok) {
@@ -96,6 +107,41 @@ export default function ExportsAdmin() {
                 {FORMATS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
               </select>
             </div>
+            {stores.length > 1 && (
+              <div className="col-span-2">
+                <label className="text-xs font-medium text-ink-soft">Boutiques</label>
+                <div className="mt-1 flex flex-wrap gap-1.5">
+                  {/* Aucune cochée = toutes : c'est le cas courant, il ne doit
+                      demander aucun geste. */}
+                  <button type="button"
+                    onClick={() => setStoreIds([])}
+                    aria-pressed={storeIds.length === 0}
+                    className={`rounded-full border px-3 h-9 text-sm transition-colors ${
+                      storeIds.length === 0
+                        ? 'border-accent bg-accent-soft text-accent-deep font-medium'
+                        : 'border-border bg-surface text-ink-soft hover:text-ink'
+                    }`}>
+                    Toutes
+                  </button>
+                  {stores.map((st) => {
+                    const on = storeIds.includes(st.id);
+                    return (
+                      <button key={st.id} type="button"
+                        onClick={() => setStoreIds((cur) =>
+                          on ? cur.filter((x) => x !== st.id) : [...cur, st.id])}
+                        aria-pressed={on}
+                        className={`rounded-full border px-3 h-9 text-sm transition-colors ${
+                          on
+                            ? 'border-accent bg-accent-soft text-accent-deep font-medium'
+                            : 'border-border bg-surface text-ink-soft hover:text-ink'
+                        }`}>
+                        {st.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
           {error && <div className="mt-3 rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
           <button onClick={() => void generate()} disabled={busy} className="btn-primary mt-4 w-full">
