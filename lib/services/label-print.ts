@@ -68,8 +68,15 @@ export function buildLabelsDocument(
       return Array.from({ length: n }, () => html);
     })
     .join('');
+  // Fenêtre d'impression ouverte sur about:blank : sans URL absolue, le
+  // navigateur ne saurait pas où chercher la police.
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Étiquettes</title>
 <style>
+@font-face { font-family: 'LabelPrint'; font-weight: 400;
+  src: url('${origin}/fonts/BricolageGrotesque-Regular.ttf') format('truetype'); }
+@font-face { font-family: 'LabelPrint'; font-weight: 700;
+  src: url('${origin}/fonts/BricolageGrotesque-Bold.ttf') format('truetype'); }
 @page { size: ${w}mm ${h}mm; margin: 0; }
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
@@ -77,7 +84,7 @@ html, body { margin: 0; padding: 0; }
   position: relative;
   width: ${w}mm; height: ${h}mm;
   page-break-after: always; overflow: hidden;
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: LabelPrint, Arial, Helvetica, sans-serif;
 }
 .label:last-child { page-break-after: auto; }
 /* Chaque bloc est posé aux coordonnées calculées par le moteur de mise en

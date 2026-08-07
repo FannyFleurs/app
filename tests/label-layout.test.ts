@@ -117,18 +117,32 @@ describe('Tenue dans les bords', () => {
             expect.soft(b.xMm + b.wMm, nom).toBeLessThanOrEqual(r.widthMm - r.marginMm + 0.01);
             expect.soft(b.yMm, nom).toBeGreaterThanOrEqual(r.marginMm - 0.01);
             const bas = b.kind === 'barcode' ? bottom(b) + b.fontMm * 1.25 : bottom(b);
-            expect.soft(bas, nom).toBeLessThanOrEqual(r.heightMm - r.marginMm + 0.01);
+            expect.soft(bas, nom).toBeLessThanOrEqual(r.heightMm - r.marginBottomMm + 0.01);
           }
         }
       }
     }
   });
 
-  it('réserve une marge de sécurité sur les quatre bords', () => {
+  it('réserve une marge de sécurité, plus large en bas', () => {
     for (const f of LABEL_SIZE_PRESETS) {
       const r = computeLabelLayout(LONG, settings({ width_mm: f.w, height_mm: f.h }));
-      // Absorbe la dérive d'entraînement du média entre deux étiquettes.
       expect(r.marginMm).toBeGreaterThanOrEqual(1.4);
+      // Le média avance vers le bas : l'erreur de calage s'y cumule, et c'est
+      // là qu'on perdait les chiffres du code-barres à l'impression.
+      expect(r.marginBottomMm).toBeGreaterThanOrEqual(3);
+      expect(r.marginBottomMm).toBeGreaterThan(r.marginMm);
+    }
+  });
+
+  it('éloigne les chiffres du code-barres du bord de fuite', () => {
+    for (const f of LABEL_SIZE_PRESETS) {
+      const r = computeLabelLayout(SHORT, settings({ width_mm: f.w, height_mm: f.h }));
+      const bc = r.blocks.find((b) => b.kind === 'barcode')!;
+      const basChiffres = bc.yMm + bc.hMm + bc.fontMm * 1.25;
+      // Au moins 3 mm sous le dernier trait d'encre : de quoi encaisser le
+      // décalage d'entraînement constaté sur les étiquettes imprimées.
+      expect.soft(f.h - basChiffres, `${f.w}×${f.h}`).toBeGreaterThanOrEqual(3);
     }
   });
 
