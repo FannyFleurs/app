@@ -43,14 +43,18 @@ export default function SalesAccountsSection({ canEdit }: { canEdit: boolean }) 
 
   async function reload() {
     setLoading(true);
-    const [a, s, c] = await Promise.all([
+    // Les boutiques et les familles viennent d'une route comptable dédiée :
+    // /api/stores et /api/categories exigent des permissions que le comptable
+    // externe n'a pas, et ses listes déroulantes restaient donc vides.
+    const [a, refs] = await Promise.all([
       fetch('/api/settings/accounting-accounts').then((r) => (r.ok ? r.json() : { accounts: [] })),
-      fetch('/api/stores').then((r) => (r.ok ? r.json() : { stores: [] })).catch(() => ({ stores: [] })),
-      fetch('/api/categories').then((r) => (r.ok ? r.json() : { categories: [] })).catch(() => ({ categories: [] })),
+      fetch('/api/accounting/references')
+        .then((r) => (r.ok ? r.json() : { stores: [], categories: [] }))
+        .catch(() => ({ stores: [], categories: [] })),
     ]);
     setRows(a.accounts ?? []);
-    setStores((s.stores ?? []).map((x: Ref) => ({ id: x.id, name: x.name })));
-    setCategories((c.categories ?? []).map((x: Ref) => ({ id: x.id, name: x.name })));
+    setStores((refs.stores ?? []).map((x: Ref) => ({ id: x.id, name: x.name })));
+    setCategories((refs.categories ?? []).map((x: Ref) => ({ id: x.id, name: x.name })));
     setLoading(false);
   }
   useEffect(() => { void reload(); }, []);
@@ -183,6 +187,13 @@ function AccountForm({ row, stores, categories, onClose, onSaved }: {
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Le compte de TVA est l'exception, pas la règle : la plupart des comptes de
+  // ventes se contentent du compte global du taux. On ne montre les deux champs
+  // qu'à qui en veut un — et on les rouvre d'office sur une règle qui en porte
+  // déjà un, pour qu'il reste modifiable.
+  const [withVat, setWithVat] = useState(
+    !!(row?.vat_account_code || row?.vat_account_label),
+  );
 
   async function submit() {
     setSaving(true); setError(null);
@@ -192,8 +203,10 @@ function AccountForm({ row, stores, categories, onClose, onSaved }: {
       vat_rate: form.vat_rate.trim() === '' ? null : Number(form.vat_rate.replace(',', '.')),
       account_code: form.account_code.trim(),
       account_label: form.account_label.trim(),
-      vat_account_code: form.vat_account_code.trim() || null,
-      vat_account_label: form.vat_account_label.trim() || null,
+      // Case décochée = pas de compte de TVA, même si les champs gardaient une
+      // saisie abandonnée : c'est la case qui fait foi, pas ce qu'elle masque.
+      vat_account_code: withVat ? form.vat_account_code.trim() || null : null,
+      vat_account_label: withVat ? form.vat_account_label.trim() || null : null,
     };
     const res = row
       ? await fetch(`/api/settings/accounting-accounts/${row.id}`, {
@@ -224,8 +237,8 @@ function AccountForm({ row, stores, categories, onClose, onSaved }: {
         <p className="text-sm text-ink-soft">
           Laissez un critère sur « Toutes » pour qu&apos;il ne restreigne pas la règle.
           Entre deux règles applicables, c&apos;est la plus précise qui l&apos;emporte.
-          Le compte de ventes reçoit le HT ; le compte de TVA, la taxe. Laissez ce
-          dernier vide pour retomber sur le compte global du taux.
+          Le compte de ventes reçoit le HT ; la taxe part sur le compte global du
+          taux, sauf si vous en indiquez un ici.
         </p>
 
         <div className="grid grid-cols-2 gap-3">
@@ -244,16 +257,6 @@ function AccountForm({ row, stores, categories, onClose, onSaved }: {
                    onChange={(e) => setForm({ ...form, account_label: e.target.value })}
                    placeholder="PLANTES 10% PLANTES VERTE" />
           </Field>
-          <Field label="Compte de TVA collectée">
-            <input className="input font-mono" value={form.vat_account_code}
-                   onChange={(e) => setForm({ ...form, vat_account_code: e.target.value })}
-                   placeholder="Compte global du taux" />
-          </Field>
-          <Field label="Libellé du compte de TVA">
-            <input className="input" value={form.vat_account_label}
-                   onChange={(e) => setForm({ ...form, vat_account_label: e.target.value })}
-                   placeholder="TVA collectée 10 %" />
-          </Field>
           <Field label="Boutique">
             <select className="input" value={form.store_id}
                     onChange={(e) => setForm({ ...form, store_id: e.target.value })}>
@@ -268,6 +271,29 @@ function AccountForm({ row, stores, categories, onClose, onSaved }: {
               {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </Field>
+
+          <div className="col-span-2 pt-1">
+            <label className="flex items-center gap-2.5 text-sm font-medium cursor-pointer select-none">
+              <input type="checkbox" className="h-4 w-4 accent-[var(--primary)]"
+                     checked={withVat} onChange={(e) => setWithVat(e.target.checked)} />
+              Ajouter un compte de TVA collectée
+            </label>
+          </div>
+
+          {withVat && (
+            <>
+              <Field label="Compte de TVA collectée">
+                <input className="input font-mono" value={form.vat_account_code}
+                       onChange={(e) => setForm({ ...form, vat_account_code: e.target.value })}
+                       placeholder="44571200" />
+              </Field>
+              <Field label="Libellé du compte de TVA">
+                <input className="input" value={form.vat_account_label}
+                       onChange={(e) => setForm({ ...form, vat_account_label: e.target.value })}
+                       placeholder="TVA collectée 10 %" />
+              </Field>
+            </>
+          )}
         </div>
 
         {error && <div className="rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
