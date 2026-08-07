@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Badge from '@/components/Badge';
 import EmptyState from '@/components/EmptyState';
+import { ALL_FORMATS, CORE_FORMAT, availableFormats } from '@/lib/settings/export-formats';
 
 interface ExportItem {
   id: string;
@@ -15,16 +16,10 @@ interface ExportItem {
   generated_by: string;
 }
 
-const FORMATS = [
-  { value: 'accounts_csv', label: 'Ventes par compte — CSV' },
-  { value: 'sales_csv',   label: 'Ventes — CSV' },
-  { value: 'entries_csv', label: 'Écritures comptables — CSV' },
-  { value: 'fec_like',    label: 'FEC-like (informatif)' },
-  { value: 'json',        label: 'JSON détaillé' },
-] as const;
-
+// L'historique peut contenir des exports d'un format depuis désactivé : son
+// libellé doit rester lisible, sinon une vieille ligne devient une énigme.
 const FORMAT_LABEL: Record<string, string> = Object.fromEntries(
-  FORMATS.map((f) => [f.value, f.label]),
+  ALL_FORMATS.map((f) => [f.value, f.label]),
 );
 
 export default function ExportsAdmin() {
@@ -32,7 +27,10 @@ export default function ExportsAdmin() {
   const firstOfMonth = today.slice(0, 8) + '01';
   const [from, setFrom] = useState(firstOfMonth);
   const [to, setTo]     = useState(today);
-  const [format, setFormat] = useState<typeof FORMATS[number]['value']>('accounts_csv');
+  const [format, setFormat] = useState<string>(CORE_FORMAT.value);
+  // Formats proposés : le format de base, plus ceux activés dans
+  // Paramètres → Formats d'export.
+  const [formats, setFormats] = useState(() => availableFormats(null));
   const [stores, setStores] = useState<{ id: string; name: string }[]>([]);
   // Vide = toutes les boutiques. Le comptable d'un groupe peut en sortir une
   // seule ou plusieurs d'un coup, sans avoir à relancer un export par boutique.
@@ -52,6 +50,17 @@ export default function ExportsAdmin() {
   // Route comptable : /api/stores exige `settings.read`, que le comptable n'a
   // pas — la liste revenait vide et le choix des boutiques disparaissait de
   // l'écran de celui à qui il sert le plus.
+  useEffect(() => {
+    void fetch('/api/settings/export-formats')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        const next = availableFormats(j);
+        setFormats(next);
+        // Un format désactivé entre-temps ne doit pas rester sélectionné.
+        setFormat((cur) => next.some((f) => f.value === cur) ? cur : CORE_FORMAT.value);
+      })
+      .catch(() => { /* on garde le seul format de base */ });
+  }, []);
   useEffect(() => {
     void fetch('/api/accounting/references')
       .then((r) => (r.ok ? r.json() : { stores: [] }))
@@ -103,13 +112,22 @@ export default function ExportsAdmin() {
               <input type="date" className="input mt-1" value={to} min={from} max={today}
                      onChange={(e) => setTo(e.target.value)} />
             </div>
-            <div className="col-span-2">
-              <label className="text-xs font-medium text-ink-soft">Format</label>
-              <select className="input mt-1" value={format}
-                      onChange={(e) => setFormat(e.target.value as typeof format)}>
-                {FORMATS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
-              </select>
-            </div>
+            {/* Un seul format proposé : le menu déroulant n'aurait rien à
+                choisir, on annonce simplement ce qui va sortir. */}
+            {formats.length > 1 ? (
+              <div className="col-span-2">
+                <label className="text-xs font-medium text-ink-soft">Format</label>
+                <select className="input mt-1" value={format}
+                        onChange={(e) => setFormat(e.target.value)}>
+                  {formats.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+                </select>
+              </div>
+            ) : (
+              <div className="col-span-2">
+                <label className="text-xs font-medium text-ink-soft">Format</label>
+                <div className="mt-1 text-sm font-medium">{CORE_FORMAT.label}</div>
+              </div>
+            )}
             {stores.length > 1 && (
               <div className="col-span-2">
                 <label className="text-xs font-medium text-ink-soft">Boutiques</label>
@@ -150,9 +168,11 @@ export default function ExportsAdmin() {
           <button onClick={() => void generate()} disabled={busy} className="btn-primary mt-4 w-full">
             {busy ? 'Génération…' : 'Générer & télécharger'}
           </button>
-          <p className="mt-2 text-xs text-ink-soft">
-            L&apos;export FEC-like est fourni à titre informatif et ne remplace pas le FEC produit par votre comptable.
-          </p>
+          {formats.some((f) => f.value === 'fec_like') && (
+            <p className="mt-2 text-xs text-ink-soft">
+              L&apos;export FEC-like est fourni à titre informatif et ne remplace pas le FEC produit par votre comptable.
+            </p>
+          )}
         </div>
       </section>
 
