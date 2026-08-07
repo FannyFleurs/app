@@ -1,17 +1,18 @@
 'use client';
 
 import { useState } from 'react';
-import { formatEUR } from '@/lib/services/money';
-import { ean13Svg } from '@/lib/services/barcode';
 import { LABEL_SIZE_PRESETS, type LabelSettings } from '@/lib/settings/label';
-import LabelEditor from './LabelEditor';
+import { type LabelProduct } from '@/lib/services/label-print-core';
+import LabelEditor, { LabelPreview } from './LabelEditor';
 
-const SAMPLE = {
-  name: 'Bouquet de roses',
+const SAMPLE: LabelProduct = {
+  // Nom volontairement long : c'est le cas qui posait problème à l'impression.
+  name: 'Bouquet de roses parfumées grand modèle',
   sku: 'ROSE-01',
   barcode: '3401234567890',
   sale_price_ttc: 24.9,
-  discountPct: 10,
+  discount_type: 'percent',
+  discount_value: 10,
 };
 
 export default function LabelSettingsForm({ initial, canEdit }: {
@@ -43,11 +44,6 @@ export default function LabelSettingsForm({ initial, canEdit }: {
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   }
-
-  const disc = form.show_discount
-    ? Math.round(SAMPLE.sale_price_ttc * (1 - SAMPLE.discountPct / 100) * 100) / 100
-    : null;
-  const svg = ean13Svg(SAMPLE.barcode, { module: 2, height: 50 });
 
   return (
     <div className="p-6 md:p-8 max-w-3xl space-y-5">
@@ -104,9 +100,9 @@ export default function LabelSettingsForm({ initial, canEdit }: {
                    onChange={(v) => set('show_discount', v)} />
           </div>
 
-          {/* Éditeur : placement & taille des éléments (drag-and-drop) */}
+          {/* Composition : ordre fixe, force relative réglable */}
           <div className="card p-5 space-y-3">
-            <h2 className="font-semibold">Disposition (glisser-déposer)</h2>
+            <h2 className="font-semibold">Disposition</h2>
             <LabelEditor
               settings={form}
               canEdit={canEdit}
@@ -123,31 +119,17 @@ export default function LabelSettingsForm({ initial, canEdit }: {
           )}
         </div>
 
-        {/* Aperçu */}
+        {/* Aperçu — même moteur de mise en page que l'impression. Cet encart
+            avait sa propre composition, qui ne ressemblait ni au rendu
+            thermique ni au repli PDF : trois dessins pour une seule étiquette. */}
         <div className="lg:sticky lg:top-4 self-start">
           <div className="text-xs uppercase tracking-widest text-ink-soft font-semibold mb-2">Aperçu</div>
           <div className="rounded-2xl border border-border bg-white p-4 grid place-items-center">
-            <div
-              className="border border-dashed border-border p-2 flex flex-col items-center justify-between text-center overflow-hidden"
-              style={{ width: `${form.width_mm * 3}px`, height: `${form.height_mm * 3}px` }}
-            >
-              {form.show_name && <div className="font-semibold leading-tight text-sm line-clamp-2">{SAMPLE.name}</div>}
-              {form.show_sku && <div className="font-mono text-[10px] text-ink-soft">{SAMPLE.sku}</div>}
-              {form.show_barcode && (
-                <div className="w-full flex-1 min-h-0 flex items-center justify-center"
-                     dangerouslySetInnerHTML={{ __html: svg ?? '' }} />
-              )}
-              {form.show_price && (
-                <div className="font-bold text-base whitespace-nowrap">
-                  {disc != null && (
-                    <span className="line-through text-ink-soft font-normal text-xs mr-1">{formatEUR(SAMPLE.sale_price_ttc)}</span>
-                  )}
-                  {formatEUR(disc ?? SAMPLE.sale_price_ttc)}
-                </div>
-              )}
-            </div>
+            <LabelPreview settings={form} product={SAMPLE} widthPx={220} />
           </div>
-          <p className="mt-2 text-xs text-ink-soft">Exemple à l&apos;échelle du format choisi.</p>
+          <p className="mt-2 text-xs text-ink-soft">
+            Exemple à l&apos;échelle du format choisi. C&apos;est ce qui sera imprimé.
+          </p>
         </div>
       </div>
     </div>

@@ -1,23 +1,112 @@
 'use client';
 
-import { useRef, useState } from 'react';
-import { formatEUR } from '@/lib/services/money';
 import { ean13Svg } from '@/lib/services/barcode';
+import { computeLabelLayout, barcodeSvgSize, type LabelBlock } from '@/lib/services/label-layout';
+import { type LabelProduct } from '@/lib/services/label-print-core';
 import {
   type LabelSettings, type LabelLayout, type LabelElementKey,
   LABEL_LAYOUT_DEFAULT,
 } from '@/lib/settings/label';
 
-const SAMPLE = { name: 'Bouquet de roses', sku: 'ROSE-01', barcode: '3401234567890', price: 24.9 };
+/**
+ * Aperçu du rendu d'étiquette + réglage de l'emphase de chaque élément.
+ *
+ * L'aperçu n'imite plus l'impression : il affiche le résultat du MÊME moteur
+ * de mise en page, à l'échelle. Ce qui est montré ici est ce qui sortira de
+ * l'imprimante.
+ *
+ * Le placement libre a disparu, et c'est le fond du correctif : positionner
+ * chaque élément à un point de l'étiquette empêche par construction de lui
+ * donner une largeur, donc d'y faire tenir un nom sur deux lignes, et ne
+ * survit pas à un changement de format. La composition est désormais fixe —
+ * nom en haut, prix au centre, code-barres en bas — et seule la force
+ * relative de chaque élément reste réglable.
+ */
 
-const ELEMENTS: { key: LabelElementKey; label: string; basePt: number; shown: (s: LabelSettings) => boolean }[] = [
-  { key: 'name', label: 'Nom', basePt: 30, shown: (s) => s.show_name },
-  { key: 'price', label: 'Prix', basePt: 54, shown: (s) => s.show_price },
-  { key: 'barcode', label: 'Code-barres', basePt: 0, shown: (s) => s.show_barcode },
-  { key: 'sku', label: 'Référence', basePt: 13, shown: (s) => s.show_sku },
+const SAMPLE: LabelProduct = {
+  // Nom volontairement long : c'est le cas qui posait problème.
+  name: 'Cache-pot céramique émaillée blanc',
+  sku: '231/13',
+  barcode: '4002477692883',
+  sale_price_ttc: 6.9,
+};
+
+const ELEMENTS: { key: LabelElementKey; label: string; hint: string; shown: (s: LabelSettings) => boolean }[] = [
+  { key: 'name', label: 'Nom', hint: 'En haut, sur 3 lignes au plus', shown: (s) => s.show_name },
+  { key: 'sku', label: 'Référence', hint: 'Sous le nom', shown: (s) => s.show_sku },
+  { key: 'price', label: 'Prix', hint: 'Au centre', shown: (s) => s.show_price },
+  { key: 'barcode', label: 'Code-barres', hint: 'En bas', shown: (s) => s.show_barcode },
 ];
 
-function clamp01(v: number) { return Math.min(1, Math.max(0, v)); }
+/** Aperçu fidèle : une boîte au ratio du format, remplie par le moteur. */
+export function LabelPreview({ settings, product = SAMPLE, widthPx = 340 }: {
+  settings: LabelSettings;
+  product?: LabelProduct;
+  widthPx?: number;
+}) {
+  const layout = computeLabelLayout(product, settings);
+  // Un seul facteur d'échelle : px par millimètre. Tout en découle.
+  const k = widthPx / layout.widthMm;
+  const mm = (v: number) => `${v * k}px`;
+
+  return (
+    <div
+      className="relative bg-white border border-border rounded-md shadow-inner shrink-0 overflow-hidden"
+      style={{ width: widthPx, height: layout.heightMm * k }}
+    >
+      {layout.blocks.map((b, i) => {
+        const base: React.CSSProperties = {
+          position: 'absolute',
+          left: mm(b.xMm), top: mm(b.yMm), width: mm(b.wMm),
+          textAlign: 'center', color: '#000',
+          // Même famille que le document imprimé : la police de l'interface
+          // est ~17 % plus large, elle recoupait les lignes et faisait
+          // déborder le nom sur le prix dans l'aperçu seulement.
+          fontFamily: 'Arial, Helvetica, sans-serif',
+        };
+        if (b.kind === 'barcode') {
+          const bcSvg = product.barcode ? ean13Svg(product.barcode, barcodeSvgSize(b as LabelBlock)) : null;
+          return (
+            <div
+              key={i}
+              style={{ ...base, height: mm(b.hMm + b.fontMm * 1.25), display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              {bcSvg ? (
+                <span
+                  style={{ width: '100%', height: '100%', display: 'block' }}
+                  // eslint-disable-next-line react/no-danger
+                  dangerouslySetInnerHTML={{
+                    __html: bcSvg.replace('<svg', '<svg preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;display:block"'),
+                  }}
+                />
+              ) : (
+                <span style={{ fontSize: mm(b.fontMm * 1.6), fontFamily: 'monospace', color: '#999' }}>
+                  — pas de code-barres —
+                </span>
+              )}
+            </div>
+          );
+        }
+        return (
+          <div
+            key={i}
+            style={{
+              ...base,
+              fontSize: mm(b.fontMm),
+              lineHeight: mm(b.fontMm * 1.12),
+              fontWeight: b.bold ? 700 : 400,
+              textDecoration: b.strike ? 'line-through' : undefined,
+            }}
+          >
+            {/* Le découpage des lignes appartient au moteur : on interdit au
+                navigateur d'en refaire un autre. */}
+            {b.lines.map((l, j) => <div key={j} style={{ whiteSpace: 'nowrap' }}>{l}</div>)}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 export default function LabelEditor({ settings, onChange, canEdit }: {
   settings: LabelSettings;
@@ -25,125 +114,50 @@ export default function LabelEditor({ settings, onChange, canEdit }: {
   canEdit: boolean;
 }) {
   const layout = settings.layout;
-  const boxRef = useRef<HTMLDivElement>(null);
-  const [selected, setSelected] = useState<LabelElementKey | null>(null);
-
-  // Zone d'aperçu : respecte le ratio de l'étiquette, largeur max ~340 px.
-  const ratio = (settings.width_mm || 51) / (settings.height_mm || 51);
-  const boxW = 340;
-  const boxH = Math.round(boxW / ratio);
-  const pxPerLabelPx = boxW / ((settings.width_mm || 51) * 8); // px éditeur / px impression
-
-  function startDrag(e: React.PointerEvent, key: LabelElementKey) {
-    if (!canEdit) return;
-    e.preventDefault();
-    setSelected(key);
-    const rect = boxRef.current!.getBoundingClientRect();
-    const move = (ev: PointerEvent) => {
-      const x = clamp01((ev.clientX - rect.left) / rect.width);
-      const y = clamp01((ev.clientY - rect.top) / rect.height);
-      onChange({ ...layout, [key]: { ...layout[key], x, y } });
-    };
-    const up = () => {
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', up);
-    };
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', up);
-  }
 
   function setSize(key: LabelElementKey, size: number) {
     onChange({ ...layout, [key]: { ...layout[key], size } });
   }
 
-  const disc = settings.show_discount ? Math.round(SAMPLE.price * 0.9 * 100) / 100 : null;
-  const bcSvg = ean13Svg(SAMPLE.barcode, { module: 2, height: 40 });
-
-  function renderContent(key: LabelElementKey) {
-    const el = layout[key];
-    const fpx = (pt: number) => Math.round(pt * el.size * pxPerLabelPx * 1.33);
-    switch (key) {
-      case 'name':
-        return <span style={{ fontSize: fpx(30), fontWeight: 700, whiteSpace: 'nowrap' }}>{SAMPLE.name}</span>;
-      case 'sku':
-        return <span style={{ fontSize: fpx(13), whiteSpace: 'nowrap' }}>{SAMPLE.sku}</span>;
-      case 'price':
-        return (
-          <div style={{ textAlign: 'center', whiteSpace: 'nowrap', lineHeight: 1 }}>
-            {disc != null && <div style={{ fontSize: fpx(15) }}>au lieu de {formatEUR(SAMPLE.price)}</div>}
-            <div style={{ fontSize: fpx(disc != null ? 54 : 56), fontWeight: 700 }}>{formatEUR(disc ?? SAMPLE.price)}</div>
-          </div>
-        );
-      case 'barcode':
-        return (
-          <div
-            style={{ width: Math.round(180 * el.size * pxPerLabelPx * 4) }}
-            // eslint-disable-next-line react/no-danger
-            dangerouslySetInnerHTML={{ __html: (bcSvg ?? '').replace('<svg', '<svg style="width:100%;height:auto;display:block"') }}
-          />
-        );
-    }
-  }
-
   return (
     <div className="space-y-3">
       <div className="flex items-start gap-5 flex-wrap">
-        {/* Zone étiquette */}
-        <div
-          ref={boxRef}
-          className="relative bg-white border border-border rounded-lg shadow-inner shrink-0 select-none touch-none overflow-hidden"
-          style={{ width: boxW, height: boxH }}
-          onPointerDown={() => setSelected(null)}
-        >
-          {ELEMENTS.filter((e) => e.shown(settings)).map((e) => {
-            const el = layout[e.key];
-            const isSel = selected === e.key;
-            return (
-              <div
-                key={e.key}
-                onPointerDown={(ev) => { ev.stopPropagation(); startDrag(ev, e.key); }}
-                className={`absolute cursor-move flex items-center justify-center ${isSel ? 'outline outline-2 outline-primary' : 'hover:outline hover:outline-1 hover:outline-border'}`}
-                style={{
-                  left: `${el.x * 100}%`, top: `${el.y * 100}%`,
-                  transform: 'translate(-50%, -50%)', padding: 2,
-                }}
-                title={e.label}
-              >
-                {renderContent(e.key)}
-              </div>
-            );
-          })}
+        <div className="shrink-0">
+          <LabelPreview settings={settings} />
+          <div className="mt-1.5 text-[11px] text-ink-soft text-center tabular-nums">
+            {settings.width_mm} × {settings.height_mm} mm · aperçu à l&apos;échelle
+          </div>
         </div>
 
-        {/* Panneau de réglage de l'élément sélectionné */}
-        <div className="flex-1 min-w-[220px] space-y-3">
+        <div className="flex-1 min-w-[240px] space-y-3">
           <p className="text-sm text-ink-soft">
-            Glisse chaque élément pour le placer. Sélectionne-le pour ajuster sa taille.
+            La composition est fixe — nom en haut, prix au centre, code-barres en bas —
+            et s&apos;adapte au format : le même dessin, à la taille de l&apos;étiquette.
+            Ajuste ci-dessous la force de chaque élément.
           </p>
           {ELEMENTS.filter((e) => e.shown(settings)).map((e) => {
             const el = layout[e.key];
-            const isSel = selected === e.key;
             return (
-              <button
-                key={e.key}
-                onClick={() => setSelected(e.key)}
-                className={`w-full text-left rounded-xl border px-3 py-2 ${isSel ? 'border-primary bg-primary-soft/40' : 'border-border'}`}
-              >
+              <div key={e.key} className="rounded-xl border border-border px-3 py-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">{e.label}</span>
-                  <span className="text-xs text-ink-soft">×{el.size.toFixed(1)}</span>
+                  <div>
+                    <span className="text-sm font-medium">{e.label}</span>
+                    <span className="ml-2 text-[11px] text-ink-soft">{e.hint}</span>
+                  </div>
+                  <span className="text-xs text-ink-soft tabular-nums">×{el.size.toFixed(1)}</span>
                 </div>
-                {isSel && canEdit && (
-                  <div className="mt-2 flex items-center gap-2" onClick={(ev) => ev.stopPropagation()}>
+                {canEdit && (
+                  <div className="mt-2 flex items-center gap-2">
                     <span className="text-xs text-ink-soft">Taille</span>
                     <input
-                      type="range" min={0.4} max={2.5} step={0.1} value={el.size}
+                      type="range" min={0.5} max={1.8} step={0.1} value={el.size}
                       onChange={(ev) => setSize(e.key, Number(ev.target.value))}
                       className="flex-1"
+                      aria-label={`Taille — ${e.label}`}
                     />
                   </div>
                 )}
-              </button>
+              </div>
             );
           })}
           {canEdit && (
@@ -151,7 +165,7 @@ export default function LabelEditor({ settings, onChange, canEdit }: {
               className="btn-ghost text-sm text-ink-soft"
               onClick={() => onChange({ ...LABEL_LAYOUT_DEFAULT })}
             >
-              ↺ Réinitialiser la disposition
+              ↺ Réinitialiser
             </button>
           )}
         </div>
