@@ -26,8 +26,20 @@ import { type LabelProduct, discountedPrice } from './label-print-core';
  * étiquette deux fois plus petite donne le même dessin, deux fois plus petit.
  */
 
-/** Marge de sécurité minimale, en mm, sur les quatre bords. */
+/** Marge de sécurité minimale, en mm, en haut et sur les côtés. */
 const MIN_MARGIN_MM = 1.4;
+
+/**
+ * Marge BASSE minimale, nettement plus généreuse.
+ *
+ * L'entraînement du média se fait vers le bas : toute erreur de calage se
+ * cumule donc sur le bord de fuite, et c'est là — et seulement là — que le
+ * contenu se fait rogner. Constaté sur étiquettes imprimées : les chiffres du
+ * code-barres, dernier élément posé, disparaissaient alors que l'image envoyée
+ * les contenait bien, à 2 mm du bord. On leur donne de quoi encaisser le
+ * décalage plutôt que de compter sur un calage parfait.
+ */
+const MIN_BOTTOM_MM = 3;
 
 /**
  * Hauteur de police minimale (em) sous laquelle une imprimante thermique
@@ -64,7 +76,10 @@ export interface LabelBlock {
 export interface LabelLayoutResult {
   widthMm: number;
   heightMm: number;
+  /** Marge haute et latérale. */
   marginMm: number;
+  /** Marge basse — volontairement plus large (cf. MIN_BOTTOM_MM). */
+  marginBottomMm: number;
   blocks: LabelBlock[];
 }
 
@@ -165,8 +180,9 @@ export function computeLabelLayout(p: LabelProduct, s: LabelSettings): LabelLayo
   // dérive d'entraînement du média, qui décale l'impression de quelques
   // dixièmes de millimètre d'une étiquette à l'autre.
   const margin = Math.max(MIN_MARGIN_MM, Math.min(W, H) * 0.05);
+  const marginBottom = Math.max(MIN_BOTTOM_MM, H * 0.09);
   const usableW = Math.max(4, W - margin * 2);
-  const usableH = Math.max(4, H - margin * 2);
+  const usableH = Math.max(4, H - margin - marginBottom);
 
   const hasName = !!(s.show_name && p.name);
   const hasSku = !!(s.show_sku && p.sku);
@@ -254,9 +270,13 @@ export function computeLabelLayout(p: LabelProduct, s: LabelSettings): LabelLayo
     const mainH = h - oldH;
     const text = formatEUR(disc ?? p.sale_price_ttc);
     const fit = fitText(text, usableW, mainH, true, 1, Math.min(mainH * 0.92, usableH * 0.42) * emph('price'));
+    const used = fit.fontMm * LINE_HEIGHT;
     blocks.push({
       kind: 'price', lines: fit.lines,
-      xMm: margin, yMm: y + oldH, wMm: usableW, hMm: fit.fontMm * LINE_HEIGHT,
+      // Centré dans sa bande. Calé en haut, il laissait sous lui un vide que
+      // l'œil lit comme « le prix est trop haut, le code-barres trop bas ».
+      xMm: margin, yMm: y + oldH + Math.max(0, (mainH - used) / 2),
+      wMm: usableW, hMm: used,
       fontMm: fit.fontMm, bold: true,
     });
     y += h;
@@ -273,15 +293,19 @@ export function computeLabelLayout(p: LabelProduct, s: LabelSettings): LabelLayo
     // symbole complet dépasse la bande de la hauteur qu'on croyait garder.
     const barsH = Math.max(3, h - digitsMm * 1.25 - 0.3);
     const barsW = Math.min(usableW, usableW * emph('barcode'));
+    const used = barsH + digitsMm * 1.25;
     blocks.push({
       kind: 'barcode', lines: [],
-      xMm: margin + (usableW - barsW) / 2, yMm: y,
+      xMm: margin + (usableW - barsW) / 2,
+      // Centré lui aussi : le coller en haut de sa bande le décollait du prix
+      // sans pour autant l'éloigner du bord de fuite.
+      yMm: y + Math.max(0, (h - used) / 2),
       wMm: barsW, hMm: barsH, fontMm: digitsMm, bold: false,
     });
     y += h;
   }
 
-  return { widthMm: W, heightMm: H, marginMm: margin, blocks };
+  return { widthMm: W, heightMm: H, marginMm: margin, marginBottomMm: marginBottom, blocks };
 }
 
 /**

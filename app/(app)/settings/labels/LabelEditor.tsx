@@ -59,10 +59,11 @@ export function LabelPreview({ settings, product = SAMPLE, widthPx = 340 }: {
           position: 'absolute',
           left: mm(b.xMm), top: mm(b.yMm), width: mm(b.wMm),
           textAlign: 'center', color: '#000',
-          // Même famille que le document imprimé : la police de l'interface
-          // est ~17 % plus large, elle recoupait les lignes et faisait
-          // déborder le nom sur le prix dans l'aperçu seulement.
-          fontFamily: 'Arial, Helvetica, sans-serif',
+          // La police RÉELLEMENT imprimée (cf. @font-face LabelPrint dans
+          // globals.css), pas celle de l'interface : cette dernière est ~17 %
+          // plus large, elle recoupait les lignes déjà découpées par le moteur
+          // et ne donnait pas la même allure que l'étiquette sortie.
+          fontFamily: 'LabelPrint, Arial, Helvetica, sans-serif',
         };
         if (b.kind === 'barcode') {
           const bcSvg = product.barcode ? ean13Svg(product.barcode, barcodeSvgSize(b as LabelBlock)) : null;
