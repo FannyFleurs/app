@@ -46,6 +46,13 @@ export const PERMISSIONS = {
    * alors qu'un comptable externe ne doit voir que la comptabilité.
    */
   'accounting.read': ['super_admin', 'owner', 'comptable'],
+  /**
+   * Écriture du plan de comptes. Accordée AU COMPTABLE : c'est lui qui connaît
+   * les numéros de son plan, et le faire passer par le commerçant pour chaque
+   * ajout de famille n'aurait aucun sens. Distincte de `settings.write`, qui
+   * ouvrirait tous les réglages de la boutique.
+   */
+  'accounting.write': ['super_admin', 'owner', 'comptable'],
   // Utilisateurs
   'users.read': ['super_admin', 'owner'],
   'users.write': ['super_admin', 'owner'],
