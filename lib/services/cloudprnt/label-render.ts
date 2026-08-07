@@ -37,8 +37,13 @@ async function ensureDeps() {
   if (!bwip) { const m = await import('bwip-js/node'); bwip = m.default ?? m; }
   if (!fontsReady) {
     const dir = path.join(process.cwd(), 'assets', 'fonts');
-    PImageMod.registerFont(path.join(dir, 'BricolageGrotesque-Bold.ttf'), 'LabelBold').loadSync();
-    PImageMod.registerFont(path.join(dir, 'BricolageGrotesque-Regular.ttf'), 'LabelReg').loadSync();
+    // Arimo : métriques identiques à Arial, licence Apache 2.0.
+    // La police précédente (Bricolage Grotesque) laissait des entailles
+    // BLANCHES là où les tracés d'une lettre se recouvrent — le rastériseur
+    // remplit ces zones en règle pair/impair. Visible à l'œil nu sur les
+    // étiquettes imprimées, et sans rapport avec la mise en page.
+    PImageMod.registerFont(path.join(dir, 'Arimo-Bold.ttf'), 'LabelBold').loadSync();
+    PImageMod.registerFont(path.join(dir, 'Arimo-Regular.ttf'), 'LabelReg').loadSync();
     fontsReady = true;
   }
 }
@@ -70,7 +75,10 @@ async function drawLabel(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ctx: any, W: number, offsetY: number, contentH: number, p: LabelProduct, s: LabelSettings,
 ) {
-  const layout = computeLabelLayout(p, s);
+  // Le calage de l'imprimante entre dans le CALCUL de la mise en page, pas
+  // dans un décalage de pixels : translater l'image rognerait le haut, alors
+  // que resserrer les marges tasse le contenu sans rien perdre.
+  const layout = computeLabelLayout(p, s, s.print_offset_y_mm ?? 0);
   // Le moteur raisonne sur le format demandé ; la case réellement disponible
   // peut différer d'un pixel ou deux (largeur arrondie au multiple de 8 exigé
   // par le raster). On projette donc plutôt que de supposer.
@@ -79,11 +87,13 @@ async function drawLabel(
   const toPxX = (mm: number) => mm * DPMM * kx;
   const toPxY = (mm: number) => mm * DPMM * ky;
 
+  const top = offsetY;
+
   ctx.fillStyle = '#000000';
 
   for (const b of layout.blocks) {
     if (b.kind === 'barcode') {
-      await drawBarcode(ctx, b, p, toPxX, toPxY, offsetY);
+      await drawBarcode(ctx, b, p, toPxX, toPxY, top);
       continue;
     }
     const fontPx = Math.max(6, Math.round(toPxY(b.fontMm)));
@@ -93,7 +103,7 @@ async function drawLabel(
     b.lines.forEach((line, i) => {
       // Ligne de base = haut de la ligne + hauteur de capitale : le texte
       // s'appuie sur le haut de sa boîte, ce qui rend les bandes prévisibles.
-      const baseline = offsetY + toPxY(b.yMm) + i * lineH + fontPx * CAP_RATIO;
+      const baseline = top + toPxY(b.yMm) + i * lineH + fontPx * CAP_RATIO;
       const w = drawCenteredLine(ctx, line, boxX, boxW, baseline, fontPx, b.bold);
       if (b.strike) {
         const y = Math.round(baseline - fontPx * CAP_RATIO * 0.42);

@@ -2,22 +2,21 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Police des étiquettes imprimées.
-   La même que celle embarquée côté serveur pour le rendu thermique
-   (assets/fonts). Sans elle, l'aperçu s'affichait dans une autre grotesque et
-   ne ressemblait pas au résultat : c'est la première chose qu'on remarque en
-   comparant l'écran et l'étiquette. Le navigateur ne la télécharge que si un
-   texte l'utilise — c'est-à-dire uniquement sur les écrans d'aperçu.
-   Bricolage Grotesque, SIL Open Font License (voir /fonts/BricolageGrotesque-OFL.txt). */
+/* Police des étiquettes imprimées, servie au navigateur pour que l'aperçu
+   montre exactement ce qui sortira.
+   Arimo : métriques identiques à Arial — mêmes largeurs, donc mêmes retours à
+   la ligne — sous licence Apache 2.0, donc redistribuable, ce qu'Arial n'est
+   pas. Le navigateur ne la télécharge que si un texte l'utilise, c'est-à-dire
+   uniquement sur les écrans d'aperçu. Licence : /fonts/Arimo-LICENSE.txt */
 @font-face {
   font-family: 'LabelPrint';
-  src: url('/fonts/BricolageGrotesque-Regular.ttf') format('truetype');
+  src: url('/fonts/Arimo-Regular.ttf') format('truetype');
   font-weight: 400;
   font-display: swap;
 }
 @font-face {
   font-family: 'LabelPrint';
-  src: url('/fonts/BricolageGrotesque-Bold.ttf') format('truetype');
+  src: url('/fonts/Arimo-Bold.ttf') format('truetype');
   font-weight: 700;
   font-display: swap;
 }

@@ -74,9 +74,9 @@ export function buildLabelsDocument(
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Étiquettes</title>
 <style>
 @font-face { font-family: 'LabelPrint'; font-weight: 400;
-  src: url('${origin}/fonts/BricolageGrotesque-Regular.ttf') format('truetype'); }
+  src: url('${origin}/fonts/Arimo-Regular.ttf') format('truetype'); }
 @font-face { font-family: 'LabelPrint'; font-weight: 700;
-  src: url('${origin}/fonts/BricolageGrotesque-Bold.ttf') format('truetype'); }
+  src: url('${origin}/fonts/Arimo-Bold.ttf') format('truetype'); }
 @page { size: ${w}mm ${h}mm; margin: 0; }
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
@@ -84,7 +84,7 @@ html, body { margin: 0; padding: 0; }
   position: relative;
   width: ${w}mm; height: ${h}mm;
   page-break-after: always; overflow: hidden;
-  font-family: LabelPrint, Arial, Helvetica, sans-serif;
+  font-family: LabelPrint, Arial, Helvetica, sans-serif;  /* LabelPrint = Arimo, métriques Arial */
 }
 .label:last-child { page-break-after: auto; }
 /* Chaque bloc est posé aux coordonnées calculées par le moteur de mise en
