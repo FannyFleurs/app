@@ -39,6 +39,15 @@ body[data-mode="dark"] {
   --border: #2E3239;
   --topbar-bg: #0A0D11;
   --topbar-user-bg: #06080B;
+
+  /* Encre de <body> elle-même.
+     Indispensable, et pas redondant avec la règle `.text-ink` plus bas : cette
+     dernière est un sélecteur de DESCENDANT, elle ne s'applique donc pas à
+     <body>, qui porte pourtant la classe. <body> conservait ainsi l'encre du
+     mode clair, et tout élément se contentant d'hériter — c'est-à-dire la
+     grande majorité des titres, libellés et montants — s'affichait sombre sur
+     fond sombre. */
+  color: var(--ink);
 }
 
 @keyframes fadeIn {
@@ -85,9 +94,19 @@ body[data-theme="teal"]       { --primary: #0E7490; --primary-deep: #0B5B70; --p
 body[data-theme="bordeaux"]   { --primary: #7B2D3A; --primary-deep: #5D2029; --primary-soft: #F3E4E7; }
 body[data-theme="lavender"]   { --primary: #6D5D9C; --primary-deep: #524879; --primary-soft: #ECE9F4; }
 
-/* En dark mode, les versions "soft" sont assombries pour rester lisibles */
+/* Variantes d'accent propres au mode sombre.
+   Ce bloc DOIT rester après les `body[data-theme=…]` ci-dessus : à spécificité
+   égale, c'est la dernière règle qui gagne. Placé plus haut, il serait
+   silencieusement écrasé par la palette du thème. */
 body[data-mode="dark"] {
+  /* Les versions « soft » sont assombries pour rester des fonds. */
   --primary-soft: color-mix(in srgb, var(--primary) 18%, #1A1D22);
+  /* La version « deep » est pensée pour du texte sur fond clair : sur fond
+     sombre elle disparaît. On l'éclaircit à la source plutôt que page par page
+     — elle est surtout consommée en style inline. Jamais utilisée comme fond
+     dans l'application (seulement dans le PDA, qui n'a pas de mode sombre),
+     donc l'éclaircir ne casse aucun contraste inverse. */
+  --primary-deep: color-mix(in srgb, var(--primary) 58%, white);
 }
 
 html, body {
@@ -300,11 +319,29 @@ select.input option {
 body[data-mode="dark"] {
   /* Fonds */
   & .bg-white   { background-color: var(--surface) !important; }
+  /* `surface` est une couleur littérale du thème Tailwind (#FFFFFF), pas une
+     variable : sans cette ligne, `bg-surface` restait un aplat blanc franc au
+     milieu d'une interface sombre — la barre d'actions des réglages, par
+     exemple. Ce n'est pas un défaut de contraste (le texte y reste lisible),
+     donc l'audit ne le signalait pas ; ça se voit à l'œil. */
+  & .bg-surface { background-color: var(--surface) !important; }
   & .bg-gray-50 { background-color: var(--muted) !important; }
+  /* Les gris 100 à 300 servent de fonds « appuyés » (blocs de code, pastilles,
+     séparateurs pleins). Non rattrapés, ils restaient clairs sous du texte
+     devenu clair. On les échelonne pour garder leur hiérarchie relative. */
+  & .bg-gray-100 { background-color: var(--muted) !important; }
+  & .bg-gray-200 { background-color: color-mix(in srgb, var(--muted) 70%, white) !important; }
+  & .bg-gray-300 { background-color: color-mix(in srgb, var(--muted) 55%, white) !important; }
   & .bg-bg      { background-color: var(--bg) !important; }
   /* Textes */
   & .text-ink       { color: var(--ink) !important; }
   & .text-ink-soft  { color: var(--ink-soft) !important; }
+  /* Couleurs sémantiques : leurs valeurs sont choisies pour ressortir sur du
+     blanc et virent au sombre-sur-sombre ici. On les éclaircit en gardant leur
+     teinte, seul porteur du sens (rouge = erreur, vert = succès). */
+  & .text-danger    { color: color-mix(in srgb, #B42318 45%, white) !important; }
+  & .text-success   { color: color-mix(in srgb, #2F6B3F 42%, white) !important; }
+  & .text-warning   { color: color-mix(in srgb, #B7791F 45%, white) !important; }
   /* Bordures */
   & .border-border    { border-color: var(--border) !important; }
   & .divide-border    > * + * { border-color: var(--border) !important; }
