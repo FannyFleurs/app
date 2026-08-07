@@ -134,7 +134,7 @@ export default function SalesAccountsSection({ canEdit }: { canEdit: boolean }) 
           <p className="mt-1 text-sm text-ink-soft max-w-2xl">
             Le compte de chaque famille de produit, par taux de TVA et par boutique.
             C&apos;est cette ventilation que reprend l&apos;export « Ventes par compte » ;
-            ce qui n&apos;a pas de règle retombe sur le plan comptable global ci-dessus.
+            un croisement sans règle y sort sans numéro de compte, à renseigner.
           </p>
         </div>
         {canEdit && (
@@ -162,7 +162,7 @@ export default function SalesAccountsSection({ canEdit }: { canEdit: boolean }) 
           <div>
             <h3 className="font-semibold">Croisements vendus sans compte</h3>
             <p className="mt-0.5 text-sm text-ink-soft max-w-2xl">
-              Chacun produira une ligne au compte de ventes global dans l&apos;export.
+              Chacun produira dans l&apos;export une ligne sans numéro de compte.
               Créez-lui un compte pour qu&apos;il sorte sous le vôtre.
             </p>
           </div>
@@ -252,7 +252,7 @@ export default function SalesAccountsSection({ canEdit }: { canEdit: boolean }) 
                   <Td>
                     {r.vat_account_code
                       ? <span className="font-mono">{r.vat_account_code}</span>
-                      : <span className="text-ink-soft italic">Compte global</span>}
+                      : <span className="text-ink-soft italic">Aucun</span>}
                   </Td>
                   <Td>{r.store_name ?? <Toutes />}</Td>
                   <Td>{r.category_name ?? <Toutes />}</Td>
@@ -370,8 +370,8 @@ function AccountForm({ row, preset, stores, categories, onClose, onSaved }: {
         <p className="text-sm text-ink-soft">
           Laissez un critère sur « Toutes » pour qu&apos;il ne restreigne pas la règle.
           Entre deux règles applicables, c&apos;est la plus précise qui l&apos;emporte.
-          Le compte de ventes reçoit le HT ; la taxe part sur le compte global du
-          taux, sauf si vous en indiquez un ici.
+          Le compte de ventes reçoit le HT ; la taxe part sur le compte de TVA si
+          vous en indiquez un.
         </p>
 
         <div className="grid grid-cols-2 gap-3">

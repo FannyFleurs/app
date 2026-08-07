@@ -86,9 +86,15 @@ export interface SalesAmount {
 }
 
 export interface AccountTotal extends SalesAmount {
+  /** Vide tant qu'aucune règle ne couvre le croisement — voir `fallback`. */
   account_code: string;
   account_label: string;
-  /** Lignes sans règle : rattachées au compte global, signalées comme telles. */
+  /**
+   * Aucune règle ne couvrait ces lignes. Leur numéro de compte reste vide :
+   * en inventer un (un « compte de ventes global ») revenait à ranger sous un
+   * numéro plausible ce que personne n'avait décidé, et le comptable ne
+   * distinguait plus ce qu'il avait paramétré de ce qu'il subissait.
+   */
   fallback: boolean;
   /** Compte de TVA de la règle, si elle en porte un. */
   vat_account_code: string | null;
@@ -104,16 +110,14 @@ export interface AccountTotal extends SalesAmount {
 export function groupByAccount(
   lines: Array<SalesLineScope & SalesAmount & { category_name?: string | null; store_name?: string | null }>,
   rules: SalesAccountRule[],
-  fallbackAccount: { code: string; label: string },
 ): AccountTotal[] {
   const byKey = new Map<string, AccountTotal>();
   for (const l of lines) {
     const rule = resolveSalesAccount(rules, l);
-    const code = rule?.account_code ?? fallbackAccount.code;
-    // Le libellé de repli nomme le croisement resté sans règle : le comptable
-    // voit ainsi CE qui manque, au lieu d'un fourre-tout muet.
+    const code = rule?.account_code ?? '';
+    // Le libellé nomme le croisement resté sans règle : le comptable voit ainsi
+    // CE qui manque, au lieu d'un fourre-tout muet.
     const label = rule?.account_label ?? [
-      fallbackAccount.label,
       l.category_name ?? 'Sans famille',
       `${formatRate(l.vat_rate)} %`,
       l.store_name ?? null,

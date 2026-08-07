@@ -97,7 +97,7 @@ describe('Regroupement par compte', () => {
       regle({ account_code: '70731200', account_label: 'PLANTES 10%', category_id: PLANTES, vat_rate: 10 }),
       regle({ account_code: '70762000', account_label: 'BOUGIES 20%', category_id: BOUGIES, vat_rate: 20 }),
     ];
-    const totaux = groupByAccount(lignes, rules, { code: '707000', label: 'Ventes' });
+    const totaux = groupByAccount(lignes, rules);
     expect(totaux).toHaveLength(2);
     const plantes = totaux.find((t) => t.account_code === '70731200')!;
     expect(plantes).toMatchObject({ ht: 150, tva: 15, ttc: 165, fallback: false });
@@ -108,17 +108,20 @@ describe('Regroupement par compte', () => {
       regle({ account_code: '70762000', category_id: BOUGIES, vat_rate: 20 }),
       regle({ account_code: '70731200', category_id: PLANTES, vat_rate: 10 }),
     ];
-    expect(groupByAccount(lignes, rules, { code: '707000', label: 'Ventes' })
+    expect(groupByAccount(lignes, rules)
       .map((t) => t.account_code)).toEqual(['70731200', '70762000']);
   });
 
-  it('signale les croisements sans règle au lieu de les fondre en silence', () => {
-    // Une ligne non paramétrée doit rester repérable : c'est ce qui dit au
-    // comptable qu'il manque un compte, plutôt que de gonfler un fourre-tout.
-    const totaux = groupByAccount(lignes, [], { code: '707000', label: 'Ventes' });
+  it('n\'invente aucun numéro de compte', () => {
+    // Il n'y a plus de « compte de ventes global » : un croisement non
+    // paramétré sort sans numéro, nommé, et signalé comme à renseigner.
+    // Lui donner un numéro plausible revenait à ranger sous une décision que
+    // personne n'avait prise.
+    const totaux = groupByAccount(lignes, []);
     expect(totaux.every((t) => t.fallback)).toBe(true);
-    expect(totaux.map((t) => t.account_label)).toContain('Ventes · Plantes · 10 % · Plante Verte');
-    // Les croisements distincts ne se mélangent pas sous le compte de repli.
+    expect(totaux.every((t) => t.account_code === '')).toBe(true);
+    expect(totaux.map((t) => t.account_label)).toContain('Plantes · 10 % · Plante Verte');
+    // Les croisements distincts ne se fondent pas les uns dans les autres.
     expect(totaux).toHaveLength(2);
   });
 
@@ -127,8 +130,8 @@ describe('Regroupement par compte', () => {
       Math.round(ts.reduce((a, t) => a + t.ttc, 0) * 100) / 100;
     const avec = groupByAccount(lignes, [
       regle({ account_code: '70731200', category_id: PLANTES, vat_rate: 10 }),
-    ], { code: '707000', label: 'Ventes' });
-    const sans = groupByAccount(lignes, [], { code: '707000', label: 'Ventes' });
+    ]);
+    const sans = groupByAccount(lignes, []);
     expect(somme(avec)).toBe(213);
     expect(somme(sans)).toBe(213);
   });
