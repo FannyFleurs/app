@@ -61,8 +61,10 @@ export default async function SettingsLayout({ children }: { children: React.Rea
     { href: '/settings/users',            label: 'Gestion utilisateurs',  icon: 'users' as const,        perm: 'users.read' as const,       boOnly: false, proOnly: false },
     { href: '/settings/company',          label: 'Société & boutiques',   icon: 'settings' as const,     perm: 'settings.read' as const,    boOnly: true,  proOnly: false },
     { href: '/settings/subscription',     label: 'Abonnement',            icon: 'invoices' as const,     perm: 'settings.read' as const,    boOnly: false, proOnly: false },
-    // Réglage des formats, pas l'écran d'export (Pilotage → Exports
-    // comptables) : c'est une décision du commerçant, pas du comptable.
+    // Deux entrées voisines et distinctes : on VA aux exports, on RÈGLE les
+    // formats. Le raccourci vers l'écran d'export est là parce qu'on l'y a
+    // longtemps trouvé — le renommer sans le remplacer revenait à le cacher.
+    { href: '/exports',                   label: 'Exports comptables',    icon: 'exports' as const,      perm: 'fiscal.export' as const,    boOnly: true,  proOnly: false },
     { href: '/settings/exports',          label: 'Formats d\'export',      icon: 'exports' as const,      perm: 'settings.write' as const,   boOnly: false, proOnly: false },
     { href: '/settings/fiscal',           label: 'Conformité fiscale',    icon: 'fiscal' as const,       perm: 'fiscal.audit' as const,     boOnly: false, proOnly: false },
   ];
