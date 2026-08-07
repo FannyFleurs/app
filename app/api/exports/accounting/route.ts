@@ -9,8 +9,9 @@ import {
   ACCOUNTING_ACCOUNTS_KEY,
   mergeAccountingAccounts,
   type AccountingAccounts,
+  tvaAccountForRate,
 } from '@/lib/settings/accounting';
-import { groupByAccount, type SalesAccountRule } from '@/lib/services/accounting-mapping';
+import { groupByAccount, formatRate, type SalesAccountRule } from '@/lib/services/accounting-mapping';
 
 async function loadAccounts(orgId: string): Promise<AccountingAccounts> {
   const { rows } = await query<{ value: Partial<AccountingAccounts> }>(
@@ -175,7 +176,7 @@ export async function POST(req: Request) {
 
     const rules = await query<SalesAccountRule>(
       `SELECT id, store_id, category_id, vat_rate::float8 AS vat_rate,
-              account_code, account_label
+              account_code, account_label, vat_account_code, vat_account_label
          FROM accounting_sales_accounts
         WHERE organization_id = $1`,
       [g.user.organizationId],
@@ -193,19 +194,43 @@ export async function POST(req: Request) {
       { code: accts.sales, label: 'Ventes' },
     );
 
-    const header = ['Compte', 'Libellé', 'Montant HT', 'TVA', 'Montant TTC', 'Paramétré'];
-    const out = totals.map((t) => [
-      t.account_code,
-      t.account_label,
-      t.ht.toFixed(2), t.tva.toFixed(2), t.ttc.toFixed(2),
-      // Colonne franche plutôt qu'un silence : une ligne « non » signale un
-      // croisement qui n'a pas encore de compte, donc un paramétrage à compléter.
+    // Deux natures dans le même fichier : le HT au crédit du compte de ventes,
+    // la TVA au crédit du compte de TVA. C'est la ventilation qu'un comptable
+    // saisit ; les fournir séparément l'obligerait à recroiser deux exports.
+    const header = ['Nature', 'Compte', 'Libellé', 'Taux', 'Montant', 'Paramétré'];
+    const out: string[][] = totals.map((t) => [
+      'Ventes', t.account_code, t.account_label,
+      `${formatRate(t.vat_rate)}%`, t.ht.toFixed(2),
+      // Colonne franche plutôt qu'un silence : « non » signale un croisement
+      // sans compte, donc un paramétrage à compléter.
       t.fallback ? 'non' : 'oui',
     ]);
+
+    // TVA regroupée par compte : plusieurs familles partagent souvent le même
+    // compte de TVA, et le comptable attend une ligne par compte, pas par famille.
+    const vatByAccount = new Map<string, { code: string; label: string; rate: number; amount: number; mapped: boolean }>();
+    for (const t of totals) {
+      const code = t.vat_account_code || tvaAccountForRate(accts, t.vat_rate);
+      const label = t.vat_account_label || `TVA collectée ${formatRate(t.vat_rate)} %`;
+      const key = `${code}|${label}`;
+      const cur = vatByAccount.get(key)
+        ?? { code, label, rate: t.vat_rate, amount: 0, mapped: !!t.vat_account_code };
+      cur.amount += t.tva;
+      vatByAccount.set(key, cur);
+    }
+    for (const v of [...vatByAccount.values()].sort((a, b) => a.code.localeCompare(b.code))) {
+      out.push(['TVA collectée', v.code, v.label,
+        `${formatRate(v.rate)}%`, (Math.round(v.amount * 100) / 100).toFixed(2),
+        v.mapped ? 'oui' : 'non']);
+    }
+
     const tot = totals.reduce((a, t) => ({
       ht: a.ht + t.ht, tva: a.tva + t.tva, ttc: a.ttc + t.ttc,
     }), { ht: 0, tva: 0, ttc: 0 });
-    out.push(['', 'TOTAL', tot.ht.toFixed(2), tot.tva.toFixed(2), tot.ttc.toFixed(2), '']);
+    out.push([]);
+    out.push(['TOTAL', '', 'Total HT', '', tot.ht.toFixed(2), '']);
+    out.push(['TOTAL', '', 'Total TVA', '', tot.tva.toFixed(2), '']);
+    out.push(['TOTAL', '', 'Total TTC', '', tot.ttc.toFixed(2), '']);
     content = '\ufeff' + [header.join(';')].concat(out.map((r) => r.join(';'))).join('\n');
   } else if (format === 'fec_like') {
     // Format pseudo-FEC : JournalCode|EcritureNum|EcritureDate|CompteNum|CompteLib|PieceRef|PieceDate|EcritureLib|Debit|Credit

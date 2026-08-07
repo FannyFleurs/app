@@ -21,6 +21,8 @@ const schema = z.object({
   vat_rate: z.number().min(0).max(100).nullable().optional(),
   account_code: z.string().trim().min(1).max(20),
   account_label: z.string().trim().min(1).max(120),
+  vat_account_code: z.string().trim().max(20).nullable().optional(),
+  vat_account_label: z.string().trim().max(120).nullable().optional(),
 });
 
 /** Ligne enrichie des noms, pour que l'écran n'ait pas à les rechercher. */
@@ -30,13 +32,14 @@ export interface SalesAccountRow extends SalesAccountRule {
 }
 
 export async function GET() {
-  const g = await requirePermission('settings.read');
+  const g = await requirePermission('accounting.read');
   if ('response' in g) return g.response;
 
   const { rows } = await query<SalesAccountRow>(
     `SELECT a.id, a.store_id, a.category_id,
             a.vat_rate::float8 AS vat_rate,
             a.account_code, a.account_label,
+            a.vat_account_code, a.vat_account_label,
             st.name AS store_name, c.name AS category_name
        FROM accounting_sales_accounts a
        LEFT JOIN stores st ON st.id = a.store_id
@@ -58,11 +61,13 @@ export async function POST(req: Request) {
   try {
     const { rows } = await query<{ id: string }>(
       `INSERT INTO accounting_sales_accounts
-         (organization_id, store_id, category_id, vat_rate, account_code, account_label)
-       VALUES ($1, $2, $3, $4, $5, $6)
+         (organization_id, store_id, category_id, vat_rate,
+          account_code, account_label, vat_account_code, vat_account_label)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING id`,
       [g.user.organizationId, a.store_id ?? null, a.category_id ?? null,
-       a.vat_rate ?? null, a.account_code, a.account_label],
+       a.vat_rate ?? null, a.account_code, a.account_label,
+       a.vat_account_code || null, a.vat_account_label || null],
     );
     return NextResponse.json({ id: rows[0]!.id });
   } catch (e) {

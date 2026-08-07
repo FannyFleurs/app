@@ -19,14 +19,14 @@ export const PERMISSIONS = {
   'pos.void_validated_sale': [], // jamais directement : passage par avoir uniquement
   'pos.settings.write': ['super_admin', 'owner', 'manager'],
   // Produits
-  'products.read': ['super_admin', 'owner', 'manager', 'vendeur', 'comptable', 'lecture_seule', 'support_technique'],
+  'products.read': ['super_admin', 'owner', 'manager', 'vendeur', 'lecture_seule', 'support_technique'],
   'products.write': ['super_admin', 'owner', 'manager'],
   // Catégories
   'categories.write': ['super_admin', 'owner', 'manager'],
   // Stock
   'stock.adjust': ['super_admin', 'owner', 'manager'],
   // Clients
-  'customers.read': ['super_admin', 'owner', 'manager', 'vendeur', 'comptable', 'lecture_seule'],
+  'customers.read': ['super_admin', 'owner', 'manager', 'vendeur', 'lecture_seule'],
   'customers.write': ['super_admin', 'owner', 'manager', 'vendeur'],
   'customers.anonymize': ['super_admin', 'owner'],
   // Factures
@@ -40,11 +40,17 @@ export const PERMISSIONS = {
   'fiscal.audit': ['super_admin', 'owner', 'comptable'],
   'fiscal.archive': ['super_admin', 'owner'],
   'fiscal.export': ['super_admin', 'owner', 'comptable'],
+  /**
+   * Plan de comptes de ventes. Permission dédiée, et non `settings.read` :
+   * cette dernière ouvre TOUS les réglages (TVA, ticket, fidélité, société…),
+   * alors qu'un comptable externe ne doit voir que la comptabilité.
+   */
+  'accounting.read': ['super_admin', 'owner', 'comptable'],
   // Utilisateurs
   'users.read': ['super_admin', 'owner'],
   'users.write': ['super_admin', 'owner'],
   // Paramètres
-  'settings.read': ['super_admin', 'owner', 'manager', 'comptable'],
+  'settings.read': ['super_admin', 'owner', 'manager'],
   'settings.write': ['super_admin', 'owner'],
 } satisfies Record<string, readonly Role[]>;
 

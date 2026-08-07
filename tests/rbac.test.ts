@@ -7,9 +7,27 @@ describe('RBAC', () => {
     expect(hasPermission('vendeur', 'pos.override_price')).toBe(false);
     expect(hasPermission('vendeur', 'products.write')).toBe(false);
   });
-  it('comptable a accès lecture seule au CRM mais pas à la caisse', () => {
-    expect(hasPermission('comptable', 'customers.read')).toBe(true);
+  it('comptable : la comptabilité, et rien d\'autre', () => {
+    // Intervenant EXTERNE, connecté à distance au back-office. Il lui faut de
+    // quoi exporter et vérifier le plan de comptes — pas le fichier clients,
+    // pas le catalogue, pas les réglages de la boutique.
+    expect(hasPermission('comptable', 'fiscal.export')).toBe(true);
+    expect(hasPermission('comptable', 'accounting.read')).toBe(true);
+    expect(hasPermission('comptable', 'fiscal.audit')).toBe(true);
+
     expect(hasPermission('comptable', 'pos.use')).toBe(false);
+    expect(hasPermission('comptable', 'customers.read')).toBe(false);
+    expect(hasPermission('comptable', 'products.read')).toBe(false);
+    expect(hasPermission('comptable', 'settings.read')).toBe(false);
+    expect(hasPermission('comptable', 'settings.write')).toBe(false);
+  });
+
+  it('toute entrée de navigation porte une permission', async () => {
+    // Une entrée sans permission est visible de TOUS les rôles : c'est ainsi
+    // que Stock et Factures apparaissaient au comptable externe.
+    const { SIDEBAR_ITEMS } = await import('@/components/Sidebar');
+    const sans = SIDEBAR_ITEMS.filter((i) => !i.perm).map((i) => i.href);
+    expect(sans).toEqual([]);
   });
   it('aucun rôle ne peut supprimer une vente validée', () => {
     expect(PERMISSIONS['pos.void_validated_sale']).toEqual([]);

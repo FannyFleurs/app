@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
  */
 export default async function AccountingAccountsPage() {
   const user = (await readSessionFromCookie())!;
-  if (!(await userCan(user, 'settings.read'))) {
+  if (!(await userCan(user, 'accounting.read'))) {
     return <div className="p-8">Accès refusé.</div>;
   }
   return <AccountingAccountsAdmin canEdit={await userCan(user, 'settings.write')} />;
