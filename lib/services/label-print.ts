@@ -1,51 +1,53 @@
 import { ean13Svg } from './barcode';
-import { formatEUR, round2 } from './money';
 import { type LabelSettings, LABEL_DEFAULTS } from '@/lib/settings/label';
+import { computeLabelLayout, barcodeSvgSize } from './label-layout';
+import { type LabelProduct, discountedPrice } from './label-print-core';
 
-export interface LabelProduct {
-  name: string;
-  sku?: string | null;
-  barcode: string | null;
-  sale_price_ttc: number;
-  discount_type?: 'percent' | 'amount' | null;
-  discount_value?: number | null;
-}
-
-/** Prix remisé (ou null si aucune remise valide). */
-export function discountedPrice(p: LabelProduct): number | null {
-  if (!p.discount_type || !p.discount_value || p.discount_value <= 0) return null;
-  const raw = p.discount_type === 'percent'
-    ? p.sale_price_ttc * (1 - p.discount_value / 100)
-    : p.sale_price_ttc - p.discount_value;
-  const v = round2(Math.max(0, raw));
-  return v < p.sale_price_ttc ? v : null;
-}
+export { discountedPrice };
+export type { LabelProduct };
 
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 }
 
-/** HTML d'UNE étiquette selon les éléments activés dans les réglages. */
+/**
+ * HTML d'UNE étiquette, positionné en millimètres à partir du MÊME moteur de
+ * mise en page que l'impression thermique.
+ *
+ * L'ancien HTML avait sa propre mise en page (flexbox, tailles en points fixes)
+ * : le repli navigateur ne ressemblait donc pas à ce que sortait l'imprimante,
+ * et ne suivait pas non plus le format de l'étiquette. Ici il n'y a plus qu'un
+ * seul calcul, et le HTML se contente de le poser.
+ */
 export function oneLabelHtml(p: LabelProduct, s: LabelSettings): string {
+  const layout = computeLabelLayout(p, s);
   const parts: string[] = [];
-  if (s.show_name) parts.push(`<div class="name">${escapeHtml(p.name)}</div>`);
-  if (s.show_sku && p.sku) parts.push(`<div class="sku">${escapeHtml(p.sku)}</div>`);
-  if (s.show_barcode) {
-    const svg = p.barcode ? ean13Svg(p.barcode, { module: 2, height: 50 }) : null;
-    parts.push(svg
-      ? `<div class="bc">${svg}</div>`
-      : (p.barcode
-          ? `<div class="bcnum">${escapeHtml(p.barcode)}</div>`
-          : `<div class="bcnum" style="color:#999">— pas de code-barres —</div>`));
+
+  for (const b of layout.blocks) {
+    const box = `left:${b.xMm}mm;top:${b.yMm}mm;width:${b.wMm}mm;`;
+    if (b.kind === 'barcode') {
+      const svg = p.barcode ? ean13Svg(p.barcode, barcodeSvgSize(b)) : null;
+      const inner = svg
+        ? svg.replace('<svg', '<svg preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;display:block"')
+        : `<span style="font-family:monospace;font-size:${b.fontMm * 1.6}mm">${escapeHtml(p.barcode ?? '—')}</span>`;
+      const totalH = b.hMm + b.fontMm * 1.25;
+      parts.push(`<div class="b" style="${box}height:${totalH}mm;display:flex;align-items:center;justify-content:center">${inner}</div>`);
+      continue;
+    }
+    const style = [
+      box,
+      `font-size:${b.fontMm}mm`,
+      `line-height:${b.fontMm * 1.12}mm`,
+      b.bold ? 'font-weight:700' : 'font-weight:400',
+      b.strike ? 'text-decoration:line-through' : '',
+    ].filter(Boolean).join(';');
+    // Une ligne par <div> en `nowrap` : le découpage vient du moteur, le
+    // navigateur ne doit pas en refaire un autre avec ses propres métriques.
+    const lines = b.lines.map((l) => `<div>${escapeHtml(l)}</div>`).join('');
+    parts.push(`<div class="b" style="${style}">${lines}</div>`);
   }
-  if (s.show_price) {
-    const disc = s.show_discount ? discountedPrice(p) : null;
-    const priceHtml = disc != null
-      ? `<span class="old">${formatEUR(p.sale_price_ttc)}</span><span class="new">${formatEUR(disc)}</span>`
-      : `<span class="new">${formatEUR(p.sale_price_ttc)}</span>`;
-    parts.push(`<div class="price">${priceHtml}</div>`);
-  }
+
   return `<div class="label">${parts.join('')}</div>`;
 }
 
@@ -72,21 +74,16 @@ export function buildLabelsDocument(
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
 .label {
-  width: ${w}mm; height: ${h}mm; padding: 1.5mm;
+  position: relative;
+  width: ${w}mm; height: ${h}mm;
   page-break-after: always; overflow: hidden;
-  display: flex; flex-direction: column; align-items: center; justify-content: space-between;
-  font-family: Arial, Helvetica, sans-serif; text-align: center;
+  font-family: Arial, Helvetica, sans-serif;
 }
 .label:last-child { page-break-after: auto; }
-.name { font-size: 9pt; font-weight: 600; line-height: 1.05; width: 100%;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.sku { font-family: monospace; font-size: 7pt; color: #555; }
-.bc { width: 100%; flex: 1; display: flex; align-items: center; justify-content: center; min-height: 0; }
-.bc svg { width: 100%; height: 100%; object-fit: contain; }
-.bcnum { font-family: monospace; font-size: 10pt; }
-.price { font-size: 13pt; font-weight: 700; white-space: nowrap; }
-.old { text-decoration: line-through; color: #666; font-weight: 400; font-size: 9pt; margin-right: 4px; }
-.new { }
+/* Chaque bloc est posé aux coordonnées calculées par le moteur de mise en
+   page : aucune règle de flux ne peut le déplacer. */
+.b { position: absolute; text-align: center; }
+.b > div { white-space: nowrap; }
 </style></head>
 <body onload="window.print()" onafterprint="window.close()">${labels}</body></html>`;
 }
