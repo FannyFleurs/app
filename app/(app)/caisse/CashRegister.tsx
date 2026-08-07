@@ -1823,11 +1823,10 @@ export default function CashRegister({
                 // lisibles. La teinte vient de `--primary-soft`, donc elle
                 // suit le thème choisi dans les paramètres, mode sombre inclus.
                 //
-                // `text-ink` est posé explicitement plutôt qu'hérité : <body>
-                // porte une encre figée en clair, que la règle du mode sombre
-                // ne rattrape que sur les descendants portant la classe. Sans
-                // elle, le nom de l'article et son montant restaient sombres
-                // sur fond sombre.
+                // `text-ink` explicite plutôt qu'hérité. L'héritage suffirait
+                // désormais — <body> suit l'encre du mode sombre depuis la
+                // correction globale — mais l'affirmer ici coûte une classe et
+                // rend la tuile indépendante de cette mécanique.
                 className="w-full text-left rounded-lg border px-2 py-1 text-ink bg-accent-soft border-accent-soft-line hover:border-accent transition-colors"
                 title="Cliquer pour ajouter / modifier une remise"
               >
