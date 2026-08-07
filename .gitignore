@@ -9,7 +9,10 @@ dist/
 .DS_Store
 .vscode/
 .idea/
-coverage/
+# Rapport de couverture des tests, à la racine. Ancré : sans le « / » initial,
+# la règle attrape n'importe quel dossier « coverage » du projet — elle a déjà
+# fait disparaître une route d'API sans un mot.
+/coverage/
 *.tsbuildinfo
 next-env.d.ts
 /data/
