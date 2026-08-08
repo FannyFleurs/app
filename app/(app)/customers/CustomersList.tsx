@@ -183,7 +183,7 @@ export default function CustomersList({ customers: initialCustomers, total, canW
             était une troisième colonne de 240 px, qui prenait autant de place
             que sept mots et rognait d'autant le contenu — elle est passée en
             onglets au-dessus de la fiche. */}
-        <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[320px_1fr] md:overflow-hidden">
+        <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[minmax(240px,1fr)_3fr] md:overflow-hidden">
         {/* COLONNE 1 — Liste clients */}
         <aside className="border-r border-border bg-white flex flex-col overflow-hidden">
           <div className="p-3 space-y-2 border-b border-border">

@@ -132,7 +132,7 @@ export default function StockAdmin({ canAdjust, stores, lockedStoreId }: { canAd
           </label>
         )}
       </div>
-      <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[260px_1fr] md:overflow-hidden">
+      <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[minmax(240px,1fr)_3fr] md:overflow-hidden">
       {/* SIDEBAR */}
       <aside className="border-r border-border bg-white overflow-y-auto">
         <div className="p-3 space-y-4">

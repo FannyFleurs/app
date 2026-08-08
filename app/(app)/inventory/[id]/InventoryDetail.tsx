@@ -164,7 +164,7 @@ export default function InventoryDetail({ inventoryId }: { inventoryId: string }
   }
 
   return (
-    <div className="p-6 md:p-8 max-w-6xl print:p-0 print:max-w-none">
+    <div className="p-4 md:p-6 lg:p-8 w-full print:p-0">
       <div className="flex items-start justify-between gap-4 mb-5 print:hidden">
         <div>
           <Link href="/inventory" className="text-sm text-ink-soft hover:text-ink">← Inventaires</Link>
@@ -253,8 +253,10 @@ export default function InventoryDetail({ inventoryId }: { inventoryId: string }
             : 'Aucune ligne à afficher.'}
         </div>
       ) : (
-        <div className="card overflow-hidden">
-          <table className="w-full text-sm">
+        // Défilement plutôt que coupe : en `overflow-hidden`, les dernières
+        // colonnes disparaissaient sans recours sur téléphone.
+        <div className="card overflow-x-auto">
+          <table className="w-full text-sm min-w-[34rem]">
             <thead className="bg-white text-ink-soft text-xs uppercase border-b border-border">
               <tr>
                 <th className="text-left px-3 py-3">Produit</th>
