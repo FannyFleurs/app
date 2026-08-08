@@ -28,10 +28,26 @@ interface Inv {
   scope_type: 'total' | 'category' | 'supplier'; scope_ids: string[];
   status: string; created_at: string; line_count: number;
 }
-interface Line {
+export interface Line {
   id: string; product_id: string; product_name: string;
   sku: string | null; barcode: string | null;
   counted_qty: string;
+}
+
+/**
+ * Remonte en tête la ligne qui vient d'être comptée, avec sa nouvelle
+ * quantité.
+ *
+ * Le dernier article scanné est celui que l'opérateur vérifie du regard juste
+ * après avoir bipé. Mis à jour en place, il restait à son rang alphabétique —
+ * donc souvent hors écran, et le contrôle du comptage devenait impossible sans
+ * faire défiler la liste.
+ */
+export function hoistCounted(lines: Line[], id: string, countedQty: string): Line[] {
+  const i = lines.findIndex((x) => x.id === id);
+  if (i < 0) return lines;
+  const maj = { ...lines[i]!, counted_qty: countedQty };
+  return [maj, ...lines.slice(0, i), ...lines.slice(i + 1)];
 }
 
 /** Réponse d'erreur du scan, traduite pour l'opérateur. */
@@ -115,8 +131,7 @@ export default function PdaInventory({ station, onHome, notify }: {
       }
       const l = j.line as { id: string; counted_qty: string; product_name: string };
       setLines((cur) => {
-        const i = cur.findIndex((x) => x.id === l.id);
-        if (i < 0) {
+        if (!cur.some((x) => x.id === l.id)) {
           // Inventaire général : un article absent du pré-remplissage est
           // ajouté par le scan. Sur un inventaire par catégorie ou par
           // fournisseur, le serveur refuse en amont (PRODUCT_OUT_OF_SCOPE).
@@ -125,9 +140,7 @@ export default function PdaInventory({ station, onHome, notify }: {
             sku: null, barcode: null, counted_qty: l.counted_qty,
           }, ...cur];
         }
-        const next = [...cur];
-        next[i] = { ...next[i]!, counted_qty: l.counted_qty };
-        return next;
+        return hoistCounted(cur, l.id, l.counted_qty);
       });
       setMessage({ text: `✓ ${l.product_name} — ${Number(l.counted_qty)} compté(s)`, tone: 'ok' });
     } finally {
@@ -163,7 +176,8 @@ export default function PdaInventory({ station, onHome, notify }: {
         body: JSON.stringify({ counted_qty: qty }),
       });
       if (r.ok) {
-        setLines((cur) => cur.map((x) => (x.id === edit.id ? { ...x, counted_qty: String(qty) } : x)));
+        // Même règle qu'au scan : la ligne qu'on vient de corriger remonte.
+        setLines((cur) => hoistCounted(cur, edit.id, String(qty)));
         setMessage({ text: `✓ ${edit.product_name} — ${qty} compté(s)`, tone: 'ok' });
         setEdit(null);
         setTimeout(focusField, 30);

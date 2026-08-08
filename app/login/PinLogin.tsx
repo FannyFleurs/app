@@ -14,15 +14,14 @@ interface User {
   color?: string | null;
 }
 
-const ROLE_LABELS: Record<string, string> = {
-  super_admin: 'Super Admin',
-  owner: 'Admin',
-  manager: 'Responsable',
-  vendeur: 'Vendeur',
-  comptable: 'Comptable',
-  lecture_seule: 'Lecture seule',
-  support_technique: 'Support',
-};
+/**
+ * Prénom seul : la liste sert à SE reconnaître, entre collègues qui se
+ * tutoient. « Marie Lefèvre · Responsable » est l'identité administrative
+ * d'un compte, pas la façon dont on se désigne dans un magasin.
+ */
+function firstName(fullName: string): string {
+  return (fullName ?? '').trim().split(/\s+/)[0] || fullName || '—';
+}
 
 // Palette pour les barres verticales colorées à gauche de chaque tuile utilisateur.
 // Hash stable du nom → couleur, pour qu'un même utilisateur garde toujours sa couleur.
@@ -257,11 +256,14 @@ export default function PinLogin() {
                   >
                     {(u.full_name?.[0] ?? '?').toUpperCase()}
                   </div>
+                  {/* Le prénom seul. Le poste occupé et l'absence de PIN
+                      n'aident personne à se reconnaître dans la liste, et
+                      annoncer qui n'a pas de PIN sur un écran face au
+                      magasin, c'est désigner le compte le plus facile à
+                      prendre. */}
                   <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-base lg:text-lg truncate leading-tight">{u.full_name}</div>
-                    <div className="text-sm text-ink-soft mt-0.5">
-                      {ROLE_LABELS[u.role] ?? u.role}
-                      {!u.has_pin && <span className="text-warning ml-1">· sans PIN</span>}
+                    <div className="font-semibold text-base lg:text-lg truncate leading-tight">
+                      {firstName(u.full_name)}
                     </div>
                   </div>
                   {isSelected && (
@@ -378,7 +380,7 @@ npm run user:test</pre>
           ) : (
             <div className="w-full max-w-sm">
               <h1 className="text-2xl font-semibold tracking-tight text-center">Entrez votre code</h1>
-              <div className="mt-1 text-sm text-ink-soft text-center">{selected.full_name}</div>
+              <div className="mt-1 text-sm text-ink-soft text-center">{firstName(selected.full_name)}</div>
 
               {/* Pastilles PIN — 4 cases visuelles */}
               <div className="mt-6 grid grid-cols-4 gap-3 max-w-[260px] mx-auto">
