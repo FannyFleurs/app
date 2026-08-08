@@ -19,8 +19,10 @@ export const dynamic = 'force-dynamic';
 export default async function EcranPage() {
   const user = await readSessionFromCookie();
   // Connexion par email + mot de passe, comme le back-office. Sur le
-  // sous-domaine ecran., le middleware sert /bo/login.
-  if (!user) redirect('/bo/login');
+  // sous-domaine ecran., le middleware sert /bo/login ; `from` lui dit de
+  // s'annoncer comme l'écran, y compris en préversion où il n'y a pas de
+  // sous-domaine pour le lui apprendre.
+  if (!user) redirect('/bo/login?from=ecran');
 
   if (!(await userCan(user, 'pos.use'))) {
     return (
