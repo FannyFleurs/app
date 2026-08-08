@@ -21,6 +21,9 @@ export const dynamic = 'force-dynamic';
  *
  * Si aucun tenant n'est présent, on renvoie une liste vide avec
  * `tenant_required: true`.
+ *
+ * Le comptable est écarté : son accès est distant et se fait à l'email, il n'a
+ * ni PIN ni raison de figurer sur la caisse d'une boutique.
  */
 export async function GET(req: Request) {
   const session = await readSessionFromCookie();
@@ -119,6 +122,7 @@ export async function GET(req: Request) {
          FROM users u
         WHERE u.is_active = TRUE
           AND COALESCE(u.is_service, FALSE) = FALSE
+          AND u.role <> 'comptable'
           AND u.organization_id = $1
           ${storeFilter}
         ORDER BY u.full_name`,
@@ -134,7 +138,8 @@ export async function GET(req: Request) {
                 (u.pin_code_hash IS NOT NULL) AS has_pin,
                 COALESCE(u.pin_required, TRUE) AS pin_required, u.color
            FROM users u
-          WHERE u.is_active = TRUE AND u.organization_id = $1
+          WHERE u.is_active = TRUE AND u.role <> 'comptable'
+            AND u.organization_id = $1
             ${storeFilter}
           ORDER BY u.full_name`,
         storeParams,
@@ -150,6 +155,7 @@ export async function GET(req: Request) {
            FROM users u
           WHERE u.is_active = TRUE
             AND COALESCE(u.is_service, FALSE) = FALSE
+            AND u.role <> 'comptable'
             AND u.organization_id = $1
             ${storeFilter}
           ORDER BY u.full_name`,
@@ -161,7 +167,7 @@ export async function GET(req: Request) {
       const { rows } = await query(
         `SELECT id, full_name, role, FALSE AS has_pin, TRUE AS pin_required
            FROM users
-          WHERE is_active = TRUE AND organization_id = $1
+          WHERE is_active = TRUE AND role <> 'comptable' AND organization_id = $1
           ORDER BY full_name`,
         [tenantId],
       );
@@ -177,7 +183,7 @@ export async function GET(req: Request) {
                 (pin_code_hash IS NOT NULL) AS has_pin,
                 TRUE AS pin_required
            FROM users
-          WHERE is_active = TRUE AND organization_id = $1
+          WHERE is_active = TRUE AND role <> 'comptable' AND organization_id = $1
           ORDER BY full_name`,
         [tenantId],
       );

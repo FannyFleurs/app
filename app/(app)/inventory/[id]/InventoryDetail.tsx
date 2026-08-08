@@ -155,8 +155,14 @@ export default function InventoryDetail({ inventoryId }: { inventoryId: string }
     if (r.ok) await reload();
   }
 
+  /**
+   * Le PDF est rendu par le serveur, pas capturé à l'écran : `window.print()`
+   * imprimait la page telle quelle — champs de saisie compris, colonnes
+   * coupées à la largeur du navigateur, sans reprise d'en-tête d'une page à
+   * l'autre. Ici c'est un vrai document, paginé, qu'on peut archiver.
+   */
   function printReview() {
-    window.print();
+    window.open(`/api/inventories/${inventoryId}/discrepancies-pdf`, '_blank');
   }
 
   if (loading || !inv) {
@@ -347,7 +353,7 @@ export default function InventoryDetail({ inventoryId }: { inventoryId: string }
               onClick={printReview}
               className="btn-soft h-12 text-base font-semibold px-6"
             >
-              🖨 Imprimer les écarts
+              🖨 Écarts en PDF
             </button>
             <button
               onClick={() => void finalize()}

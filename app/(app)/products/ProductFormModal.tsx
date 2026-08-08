@@ -6,6 +6,7 @@ import { generateEan13 } from '@/lib/services/ean';
 import { getOrCreateDeviceId } from '@/lib/device';
 import ProductHistory from './ProductHistory';
 import ProductStock from './ProductStock';
+import ProductMovement from './ProductMovement';
 import LabelPrintModal from './LabelPrintModal';
 
 interface Product {
@@ -140,7 +141,7 @@ export default function ProductFormModal({
   });
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [tab, setTab] = useState<'details' | 'stock' | 'history'>('details');
+  const [tab, setTab] = useState<'details' | 'stock' | 'movement' | 'history'>('details');
   const [showLabel, setShowLabel] = useState(false);
 
   // Création rapide en ligne (catégorie / fournisseur inexistant).
@@ -309,7 +310,7 @@ export default function ProductFormModal({
             produit déjà créé). */}
         {product && (
           <div className="mb-4 flex gap-1 border-b border-border">
-            {(['details', 'stock', 'history'] as const).map((t) => (
+            {(['details', 'stock', 'movement', 'history'] as const).map((t) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
@@ -319,7 +320,10 @@ export default function ProductFormModal({
                     : 'border-transparent text-ink-soft hover:text-ink'
                 }`}
               >
-                {t === 'details' ? 'Détails' : t === 'stock' ? 'Stock' : 'Historique'}
+                {t === 'details' ? 'Détails'
+                  : t === 'stock' ? 'Stock'
+                  : t === 'movement' ? 'Mouvement de stock'
+                  : 'Historique'}
               </button>
             ))}
           </div>
@@ -329,6 +333,14 @@ export default function ProductFormModal({
           <ProductHistory productId={product.id} />
         ) : tab === 'stock' && product ? (
           <ProductStock productId={product.id} storeId={posteStoreOverride ?? undefined} />
+        ) : tab === 'movement' && product ? (
+          <ProductMovement
+            productId={product.id}
+            productName={form.name || product.name}
+            sku={form.sku || null}
+            storeId={posteStoreId ?? undefined}
+            stores={stores}
+          />
         ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label="Nom" full>
