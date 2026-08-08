@@ -94,13 +94,67 @@ export default function AllPagesOverlay({ role, hiddenPaths, permissions, backOf
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-6 sm:px-10 py-8 sm:py-10 bg-white">
+      {/* Fond gris sur mobile : ce sont les cartes blanches qui portent les
+          entrées, et il faut qu'elles se détachent. Sur grand écran la grille
+          de tuiles reste sur fond blanc, comme avant. */}
+      <div className="flex-1 overflow-y-auto px-4 sm:px-10 py-6 sm:py-10 bg-bg sm:bg-white">
         <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-ink">Toutes les pages</h1>
         <p className="mt-1 text-sm text-ink-soft">
           Sélectionnez une section. Échap ou ✕ pour revenir.
         </p>
 
-        <div className="mt-6 space-y-6">
+        {/* MOBILE — liste groupée : sur un téléphone tenu d'une main, une
+            grille de vignettes carrées oblige à viser ; une ligne pleine
+            largeur se lit et se touche sans effort. */}
+        <div className="mt-5 space-y-6 sm:hidden">
+          {GROUP_ORDER.map((group) => {
+            const items = visible.filter((i) => i.group === group);
+            if (items.length === 0) return null;
+            return (
+              <section key={group}>
+                <h2 className="px-1 pb-2 text-sm font-medium text-accent-deep">{group}</h2>
+                <div className="rounded-2xl bg-white border border-border overflow-hidden divide-y divide-border/70">
+                  {items.map((item) => (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={onClose}
+                      className="flex items-center gap-3 px-3.5 py-3.5 active:bg-gray-50"
+                    >
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-accent-soft text-accent-deep">
+                        <Icon name={item.icon} size={19} />
+                      </span>
+                      <span className="flex-1 min-w-0 font-medium text-ink truncate">{item.label}</span>
+                      <Chevron />
+                    </Link>
+                  ))}
+                </div>
+              </section>
+            );
+          })}
+
+          <section>
+            <h2 className="px-1 pb-2 text-sm font-medium text-accent-deep">Outils</h2>
+            <div className="rounded-2xl bg-white border border-border overflow-hidden">
+              <button
+                onClick={toggleSchool}
+                className="w-full flex items-center gap-3 px-3.5 py-3.5 text-left active:bg-gray-50"
+              >
+                <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${
+                  schoolActive ? 'bg-warning text-white' : 'bg-accent-soft text-accent-deep'
+                }`}>
+                  <Icon name="sparkle" size={19} />
+                </span>
+                <span className="flex-1 min-w-0 font-medium text-ink truncate">
+                  Mode école{schoolActive ? ' · actif' : ''}
+                </span>
+                <Chevron />
+              </button>
+            </div>
+          </section>
+        </div>
+
+        <div className="mt-6 space-y-6 hidden sm:block">
           {GROUP_ORDER.map((group) => {
             const items = visible.filter((i) => i.group === group);
             if (items.length === 0) return null;
@@ -136,7 +190,7 @@ export default function AllPagesOverlay({ role, hiddenPaths, permissions, backOf
         {/* Outils transverses (mode école) : place tout en bas car
             rarement utilisé et pouvant induire en erreur si a proximite
             des vraies pages metier. */}
-        <section className="mt-10 pt-6 border-t border-border">
+        <section className="mt-10 pt-6 border-t border-border hidden sm:block">
           <div className="text-[10px] uppercase tracking-widest text-ink-soft font-semibold mb-2">
             Outils
           </div>
@@ -165,5 +219,16 @@ export default function AllPagesOverlay({ role, hiddenPaths, permissions, backOf
         </section>
       </div>
     </div>
+  );
+}
+
+/** Chevron de fin de ligne : il dit qu'on ouvre une page, pas qu'on coche. */
+function Chevron() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"
+         className="shrink-0 text-ink-soft/50" aria-hidden="true">
+      <path d="m9 6 6 6-6 6" />
+    </svg>
   );
 }
