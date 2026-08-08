@@ -112,7 +112,12 @@ function Clock() {
   );
 }
 
-export default function AtelierScreen({ stores, lockedStoreId }: { stores: { id: string; name: string }[]; lockedStoreId?: string | null }) {
+export default function AtelierScreen({ stores, lockedStoreId, onChangeStore }: {
+  stores: { id: string; name: string }[];
+  lockedStoreId?: string | null;
+  /** Fourni quand l'écran est rattaché à une boutique et peut en changer. */
+  onChangeStore?: () => void;
+}) {
   const [items, setItems] = useState<AtelierItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
@@ -194,12 +199,24 @@ export default function AtelierScreen({ stores, lockedStoreId }: { stores: { id:
     <div className="fixed inset-0 z-40 overflow-y-auto bg-bg pt-safe pb-safe" style={{ fontSize: textSize }}>
       <Clock />
 
-      {/* Barre du haut : boutique + retour */}
+      {/* Barre du haut : boutique rattachée. Plus de retour vers la caisse —
+          cet écran vit seul sur son sous-domaine, il n'y a nulle part où
+          revenir. */}
       <div className="flex items-center gap-2 px-3 py-2">
-        <a href="/caisse" className="rounded-full border border-border bg-white px-3 py-1.5 text-xs text-ink-soft hover:text-ink">
-          ‹ Caisse
-        </a>
         <span className="font-semibold text-sm">Écran atelier</span>
+        {lockedStoreId && (
+          <>
+            <span className="text-sm text-ink-soft truncate">
+              · {stores.find((s) => s.id === lockedStoreId)?.name ?? ''}
+            </span>
+            {onChangeStore && (
+              <button onClick={onChangeStore}
+                      className="rounded-full border border-border bg-white px-3 py-1.5 text-xs text-ink-soft hover:text-ink shrink-0">
+                Changer de boutique
+              </button>
+            )}
+          </>
+        )}
         {!lockedStoreId && stores.length > 1 && (
           <select
             className="input h-8 w-auto text-xs ml-1"

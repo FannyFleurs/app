@@ -29,7 +29,9 @@ export const SIDEBAR_ITEMS: SidebarItem[] = [
   { href: '/caisse',       label: 'Caisse',               icon: 'pos',          group: 'Vente',    perm: 'pos.use', required: true },
   { href: '/ma-journee',   label: 'Ma journée',           icon: 'my-day',       group: 'Vente',    perm: 'pos.use' },
   { href: '/orders',       label: 'Commandes',            icon: 'orders',       group: 'Vente',    perm: 'pos.use' },
-  { href: '/atelier',      label: 'Écran atelier',        icon: 'sparkle',      group: 'Vente',    perm: 'pos.use' },
+  // Pas d'entrée « Écran atelier » : c'est une application à part, sur le
+  // sous-domaine ecran., posée sur une tablette murale et rattachée à sa
+  // boutique une fois pour toutes. On ne l'ouvre pas depuis une autre page.
   { href: '/invoices',     label: 'Factures',             icon: 'invoices',     group: 'Vente',    perm: 'customers.read' },
   { href: '/billing',      label: 'Facturation',          icon: 'invoices',     group: 'Vente',    perm: 'customers.read', boOnly: true },
   { href: '/vouchers',     label: 'Avoirs & cartes cadeaux', icon: 'loyalty',    group: 'Vente',    perm: 'pos.use' },

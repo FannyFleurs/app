@@ -1,0 +1,30 @@
+{
+  "name": "Écran atelier",
+  "short_name": "Atelier",
+  "description": "Commandes et livraisons à préparer, affichées en atelier",
+  "start_url": "/ecran",
+  "scope": "/ecran",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#FFFFFF",
+  "theme_color": "#556B3E",
+  "lang": "fr",
+  "categories": [
+    "business",
+    "productivity"
+  ],
+  "icons": [
+    {
+      "src": "/api/brand/icon?size=192",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/api/brand/icon?size=512",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
