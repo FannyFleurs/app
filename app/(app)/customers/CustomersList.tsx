@@ -63,8 +63,10 @@ const TABS: Array<{ key: Tab; label: string }> = [
   { key: 'dashboard',    label: 'Dashboard' },
   { key: 'informations', label: 'Informations' },
   { key: 'commentaires', label: 'Commentaires' },
-  { key: 'tickets',      label: 'Liste des tickets' },
-  { key: 'achats',       label: 'Liste des achats' },
+  // Intitulés courts : « Liste des » se répétait d'un onglet à l'autre sans
+  // rien distinguer, et poussait le dernier onglet hors de la barre.
+  { key: 'tickets',      label: 'Tickets' },
+  { key: 'achats',       label: 'Achats' },
   { key: 'fidelite',     label: 'Fidélité' },
   { key: 'bons-achats',  label: 'Bons d\'achats' },
 ];
@@ -177,7 +179,11 @@ export default function CustomersList({ customers: initialCustomers, total, canW
             }
           />
         </div>
-        <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[320px_240px_1fr] md:overflow-hidden">
+        {/* Deux colonnes : la liste, et la fiche. La navigation de la fiche
+            était une troisième colonne de 240 px, qui prenait autant de place
+            que sept mots et rognait d'autant le contenu — elle est passée en
+            onglets au-dessus de la fiche. */}
+        <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[320px_1fr] md:overflow-hidden">
         {/* COLONNE 1 — Liste clients */}
         <aside className="border-r border-border bg-white flex flex-col overflow-hidden">
           <div className="p-3 space-y-2 border-b border-border">
@@ -244,35 +250,7 @@ export default function CustomersList({ customers: initialCustomers, total, canW
           </div>
         </aside>
 
-        {/* COLONNE 2 — Sous-navigation client */}
-        <nav className="border-r border-border bg-white overflow-y-auto">
-          {!selectedId ? (
-            <div className="p-6 text-center text-ink-soft text-sm">
-              Sélectionnez un client.
-            </div>
-          ) : (
-            <div className="p-3 space-y-0.5">
-              {TABS.map((t) => {
-                const active = t.key === tab;
-                return (
-                  <button
-                    key={t.key}
-                    onClick={() => setTab(t.key)}
-                    className={`w-full text-left rounded-xl px-4 py-2.5 text-sm font-medium transition-colors ${
-                      active
-                        ? 'bg-accent-soft text-accent-deep'
-                        : 'text-ink-soft hover:text-ink hover:bg-gray-50'
-                    }`}
-                  >
-                    {t.label}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </nav>
-
-        {/* COLONNE 3 — Contenu */}
+        {/* COLONNE 2 — Fiche client */}
         <main className="overflow-y-auto bg-white">
           {!selectedId ? (
             <div className="h-full grid place-items-center p-10">
@@ -287,6 +265,7 @@ export default function CustomersList({ customers: initialCustomers, total, canW
           ) : (
             <CustomerDetailContent
               tab={tab}
+              onTabChange={setTab}
               detail={detail}
               canWrite={canWrite}
               onEdit={() => setEditing(detail.customer as unknown as CustomerLike)}
@@ -319,8 +298,9 @@ export default function CustomersList({ customers: initialCustomers, total, canW
   );
 }
 
-function CustomerDetailContent({ tab, detail, canWrite, onEdit, onReload }: {
-  tab: Tab; detail: CustomerDetail; canWrite: boolean; onEdit: () => void; onReload: () => void;
+function CustomerDetailContent({ tab, onTabChange, detail, canWrite, onEdit, onReload }: {
+  tab: Tab; onTabChange: (t: Tab) => void;
+  detail: CustomerDetail; canWrite: boolean; onEdit: () => void; onReload: () => void;
 }) {
   const c = detail.customer;
   const display = c.company_name || [c.first_name, c.last_name].filter(Boolean).join(' ') || 'Client';
@@ -355,26 +335,54 @@ function CustomerDetailContent({ tab, detail, canWrite, onEdit, onReload }: {
   const [settleOpen, setSettleOpen] = useState(false);
 
   return (
-    <div className="p-6 space-y-5">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h2 className="text-xl font-semibold tracking-tight">{display}</h2>
-          <div className="text-sm text-ink-soft mt-0.5">
-            {lastVisit
-              ? <>Dernière visite le {new Date(lastVisit).toLocaleDateString('fr-FR')}</>
-              : <>Client depuis le {new Date(c.created_at).toLocaleDateString('fr-FR')}</>
-            }
+    <div className="pb-6">
+      {/* Identité et onglets collés en haut : sur les listes longues (tickets,
+          achats), on garde sous les yeux de qui l'on parle et par où passer. */}
+      <div className="sticky top-0 z-10 bg-white border-b border-border">
+        <div className="px-4 sm:px-6 pt-5 pb-3 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-xl font-semibold tracking-tight truncate">{display}</h2>
+            <div className="text-sm text-ink-soft mt-0.5">
+              {lastVisit
+                ? <>Dernière visite le {new Date(lastVisit).toLocaleDateString('fr-FR')}</>
+                : <>Client depuis le {new Date(c.created_at).toLocaleDateString('fr-FR')}</>
+              }
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {canWrite && (
+              <button onClick={onEdit} className="btn-primary text-sm whitespace-nowrap">
+                Modifier client
+              </button>
+            )}
           </div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {canWrite && (
-            <button onClick={onEdit} className="btn-primary text-sm">
-              Modifier client
-            </button>
-          )}
+        {/* Onglets défilables plutôt que repliés : sept intitulés ne tiennent
+            pas sur une tablette, et un menu « … » cacherait la moitié de la
+            fiche derrière un clic de plus. */}
+        <div className="px-4 sm:px-6 flex gap-1 overflow-x-auto no-scrollbar" role="tablist">
+          {TABS.map((t) => {
+            const active = t.key === tab;
+            return (
+              <button
+                key={t.key}
+                role="tab"
+                aria-selected={active}
+                onClick={() => onTabChange(t.key)}
+                className={`relative shrink-0 whitespace-nowrap px-2.5 lg:px-3 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${
+                  active
+                    ? 'border-accent text-accent-deep'
+                    : 'border-transparent text-ink-soft hover:text-ink'
+                }`}
+              >
+                {t.label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
+      <div className="px-4 sm:px-6 pt-5 space-y-5">
       {tab === 'dashboard' && (
         <div className="space-y-3">
           {accountDue > 0 && (
@@ -390,7 +398,9 @@ function CustomerDetailContent({ tab, detail, canWrite, onEdit, onReload }: {
               )}
             </div>
           )}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {/* La fiche a gagné la largeur de l'ancienne colonne de menu : les
+              chiffres s'y rangent en trois ou quatre au lieu de deux. */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-3">
             <Tile value={formatEUR(totalTtc)}                       label="Total des achats" />
             <Tile value={formatEUR(accountDue)}                     label="Montant dû (en compte)"
                   tone={accountDue > 0 ? 'danger' : undefined} />
@@ -484,6 +494,7 @@ function CustomerDetailContent({ tab, detail, canWrite, onEdit, onReload }: {
           l&apos;onglet <span className="font-medium text-ink">Fidélité</span>.
         </div>
       )}
+      </div>
     </div>
   );
 }
