@@ -7,6 +7,7 @@ import { NextResponse, type NextRequest } from 'next/server';
  *   app.hellopos.fr    -> caisse (POS)
  *   bo.hellopos.fr     -> back-office (email + mot de passe)
  *   ca.hellopos.fr     -> suivi du CA en direct
+ *   ecran.hellopos.fr  -> écran atelier (email + mot de passe, mural)
  *   admin.hellopos.fr  -> console super-admin SaaS
  *
  * Sur un VRAI domaine (pas *.vercel.app), le routing est STRICT :
@@ -21,7 +22,7 @@ import { NextResponse, type NextRequest } from 'next/server';
  *   - /site      affiche la vitrine
  */
 const BO_COOKIE = 'webpos_bo';
-const KNOWN_SUBS = ['app.', 'bo.', 'ca.', 'admin.', 'pda.', 'www.'];
+const KNOWN_SUBS = ['app.', 'bo.', 'ca.', 'admin.', 'pda.', 'ecran.', 'www.'];
 
 function isVercelPreview(host: string): boolean {
   return host.endsWith('.vercel.app') || host === 'localhost' || host.startsWith('localhost:');
@@ -71,6 +72,23 @@ export function middleware(req: NextRequest) {
     if (pathname === '/login') return NextResponse.next();
     if (pathname === '/pda' || pathname.startsWith('/pda/')) return NextResponse.next();
     url.pathname = '/pda';
+    return NextResponse.rewrite(url);
+  }
+
+  // -------- ecran. -> écran atelier (tablette murale)
+  // Sous-domaine mono-usage : tout est réécrit vers /ecran, sauf la connexion,
+  // qui se fait à l'email de l'organisation — donc le formulaire du
+  // back-office, jamais le login PIN de la caisse.
+  if (host.startsWith('ecran.')) {
+    if (pathname === '/login' || pathname === '/bo/login') {
+      if (pathname !== '/bo/login') {
+        url.pathname = '/bo/login';
+        return NextResponse.rewrite(url);
+      }
+      return NextResponse.next();
+    }
+    if (pathname === '/ecran' || pathname.startsWith('/ecran/')) return NextResponse.next();
+    url.pathname = '/ecran';
     return NextResponse.rewrite(url);
   }
 
