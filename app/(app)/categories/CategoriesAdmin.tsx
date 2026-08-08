@@ -99,7 +99,7 @@ export default function CategoriesAdmin({ canEdit, backOffice = false, stores = 
                 {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             )}
-            <button className="btn-primary" onClick={() => setEditing(null)}>+ Nouvelle catégorie</button>
+            <button className="btn-primary whitespace-nowrap" onClick={() => setEditing(null)}>+ Nouvelle catégorie</button>
           </div>
         ) : null}
       />
@@ -114,37 +114,55 @@ export default function CategoriesAdmin({ canEdit, backOffice = false, stores = 
           action={canEdit ? <button className="btn-primary" onClick={() => setEditing(null)}>+ Créer la première</button> : undefined}
         />
       ) : (
-        // Deux fois plus de colonnes = tuiles ~50 % plus petites.
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3">
-          {visibleItems.map((c) => (
-            <button
-              key={c.id}
-              onClick={() => canEdit && setEditing(c)}
-              className={`card p-2.5 text-left ${canEdit ? 'hover:shadow-md hover:border-gray-300' : 'cursor-default'}`}
-            >
-              {/* Tuile carrée : la photo prime, puis l'icône, sinon l'aplat seul. */}
-              <div className="aspect-square w-full rounded-xl overflow-hidden grid place-items-center text-accent-deep"
-                   style={{ background: c.color ?? '#F5F5F5' }}>
-                {c.image_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={c.image_url} alt="" className="h-full w-full object-cover" />
-                ) : (
-                  <CategoryIcon name={c.icon} size={34} strokeWidth={1.5} />
-                )}
-              </div>
-              <div className="mt-2 flex items-center justify-between gap-1">
-                <div className="font-medium text-sm truncate">{c.name}</div>
-                {c.visible_in_pos ? <Badge tone="soft">Caisse</Badge> : <Badge tone="neutral">Masquée</Badge>}
-              </div>
-              {backOffice && c.store_ids.length > 0 && (
-                <div className="mt-1 text-[10px] text-ink-soft truncate">
-                  🏪 {c.store_ids.length === 1
-                    ? (stores.find((s) => s.id === c.store_ids[0])?.name ?? '1 boutique')
-                    : `${c.store_ids.length} boutiques`}
-                </div>
-              )}
-            </button>
-          ))}
+        // Vue liste : une grille de tuiles carrées oblige à balayer en deux
+        // dimensions pour retrouver un nom, alors qu'on cherche presque
+        // toujours par le nom. La vignette reste — c'est elle qu'on reconnaît
+        // en caisse — mais elle accompagne la ligne au lieu de la commander.
+        <div className="card overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-ink-soft text-[10px] uppercase tracking-widest border-b border-border">
+              <tr>
+                <th className="text-left px-4 py-3 font-semibold" colSpan={2}>Catégorie</th>
+                <th className="text-left px-4 py-3 font-semibold">Caisse</th>
+                {backOffice && <th className="text-left px-4 py-3 font-semibold">Boutiques</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {visibleItems.map((c) => (
+                <tr
+                  key={c.id}
+                  onClick={() => canEdit && setEditing(c)}
+                  className={`border-t border-border ${canEdit ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+                >
+                  <td className="pl-4 py-2.5 w-[52px]">
+                    {/* Vignette : la photo prime, puis l'icône, sinon l'aplat. */}
+                    <div className="h-10 w-10 rounded-xl overflow-hidden grid place-items-center text-accent-deep shrink-0"
+                         style={{ background: c.color ?? '#F5F5F5' }}>
+                      {c.image_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={c.image_url} alt="" className="h-full w-full object-cover" />
+                      ) : (
+                        <CategoryIcon name={c.icon} size={22} strokeWidth={1.5} />
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2.5 font-medium">{c.name}</td>
+                  <td className="px-4 py-2.5">
+                    {c.visible_in_pos ? <Badge tone="soft">Visible</Badge> : <Badge tone="neutral">Masquée</Badge>}
+                  </td>
+                  {backOffice && (
+                    <td className="px-4 py-2.5 text-ink-soft">
+                      {c.store_ids.length === 0
+                        ? 'Toutes'
+                        : c.store_ids.length === 1
+                          ? (stores.find((s) => s.id === c.store_ids[0])?.name ?? '1 boutique')
+                          : `${c.store_ids.length} boutiques`}
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 

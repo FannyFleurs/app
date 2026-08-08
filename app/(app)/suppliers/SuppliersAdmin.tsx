@@ -43,7 +43,7 @@ export default function SuppliersAdmin({ canEdit }: { canEdit: boolean }) {
         title="Fournisseurs"
         subtitle="Gérez vos fournisseurs. Chaque article peut être rattaché à un fournisseur."
         actions={canEdit ? (
-          <button className="btn-primary" onClick={() => setEditing(null)}>+ Nouveau fournisseur</button>
+          <button className="btn-primary whitespace-nowrap" onClick={() => setEditing(null)}>+ Nouveau fournisseur</button>
         ) : null}
       />
 
@@ -66,27 +66,40 @@ export default function SuppliersAdmin({ canEdit }: { canEdit: boolean }) {
           action={canEdit ? <button className="btn-primary" onClick={() => setEditing(null)}>+ Créer le premier</button> : undefined}
         />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {filtered.map((s) => (
-            <button
-              key={s.id}
-              onClick={() => canEdit && setEditing(s)}
-              className={`card p-4 text-left ${canEdit ? 'hover:shadow-md hover:border-gray-300' : 'cursor-default'}`}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <div className="font-medium truncate">{s.name}</div>
-                {s.product_count != null && s.product_count > 0 && (
-                  <Badge tone="soft">{s.product_count} article{s.product_count > 1 ? 's' : ''}</Badge>
-                )}
-              </div>
-              <div className="mt-1 text-sm text-ink-soft space-y-0.5">
-                {s.contact_name && <div className="truncate">{s.contact_name}</div>}
-                {s.phone && <div className="truncate">{s.phone}</div>}
-                {s.email && <div className="truncate">{s.email}</div>}
-                {!s.contact_name && !s.phone && !s.email && <div className="italic">—</div>}
-              </div>
-            </button>
-          ))}
+        // Vue liste : contact, téléphone et courriel empilés dans une tuile se
+        // lisent fournisseur par fournisseur ; en colonnes, on les compare
+        // d'un coup d'œil et l'on repère les fiches incomplètes.
+        <div className="card overflow-x-auto">
+          <table className="w-full text-sm min-w-[40rem]">
+            <thead className="text-ink-soft text-[10px] uppercase tracking-widest border-b border-border">
+              <tr>
+                <th className="text-left px-4 py-3 font-semibold">Fournisseur</th>
+                <th className="text-left px-4 py-3 font-semibold">Contact</th>
+                <th className="text-left px-4 py-3 font-semibold">Téléphone</th>
+                <th className="text-left px-4 py-3 font-semibold">Email</th>
+                <th className="text-right px-4 py-3 font-semibold">Articles</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((s) => (
+                <tr
+                  key={s.id}
+                  onClick={() => canEdit && setEditing(s)}
+                  className={`border-t border-border ${canEdit ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+                >
+                  <td className="px-4 py-2.5 font-medium">{s.name}</td>
+                  <td className="px-4 py-2.5 text-ink-soft">{s.contact_name || <Vide />}</td>
+                  <td className="px-4 py-2.5 text-ink-soft whitespace-nowrap">{s.phone || <Vide />}</td>
+                  <td className="px-4 py-2.5 text-ink-soft">{s.email || <Vide />}</td>
+                  <td className="px-4 py-2.5 text-right">
+                    {s.product_count != null && s.product_count > 0
+                      ? <Badge tone="soft">{s.product_count}</Badge>
+                      : <Vide />}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 
@@ -223,4 +236,9 @@ function Field({ label, children, full }: { label: string; children: React.React
       <div className="mt-1">{children}</div>
     </div>
   );
+}
+
+/** Champ non renseigné : un tiret discret plutôt qu'une case vide. */
+function Vide() {
+  return <span className="text-ink-soft/60">—</span>;
 }
