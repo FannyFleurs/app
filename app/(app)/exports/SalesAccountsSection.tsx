@@ -138,15 +138,22 @@ export default function SalesAccountsSection({ canEdit }: { canEdit: boolean }) 
           </p>
         </div>
         {canEdit && (
-          <div className="flex items-center gap-2 shrink-0">
+          // Sur téléphone la ligne prend toute la largeur et c'est le filtre
+          // qui cède la place ; le bouton, lui, garde sa taille. Sans cela il
+          // se coupait en « + Nouveau / compte » sur deux lignes, et une fois
+          // le libellé insécable il débordait de l'écran par la droite.
+          <div className="flex items-center gap-2 w-full sm:w-auto sm:shrink-0">
             {stores.length > 1 && (
-              <select className="input h-10 text-sm" value={filterStore}
+              // `.input` vaut width:100% : sans largeur explicite, le filtre
+              // s'octroyait toute la ligne et chassait le bouton hors du cadre.
+              <select className="input h-10 text-sm min-w-0 flex-1 sm:flex-none sm:w-56" value={filterStore}
                       onChange={(e) => setFilterStore(e.target.value)}>
                 <option value="">Toutes les boutiques</option>
                 {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             )}
-            <button className="btn-primary" onClick={() => { setPreset(null); setEditing(null); }}>
+            <button className="btn-primary whitespace-nowrap shrink-0"
+                    onClick={() => { setPreset(null); setEditing(null); }}>
               + Nouveau compte
             </button>
           </div>
