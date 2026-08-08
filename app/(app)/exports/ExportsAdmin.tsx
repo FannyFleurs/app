@@ -96,12 +96,14 @@ export default function ExportsAdmin() {
       </div>
 
       <section>
-        <div className="card p-5 max-w-2xl">
+        <div className="card p-4 sm:p-5">
           <h2 className="font-semibold">Nouvel export</h2>
           <p className="mt-1 text-sm text-ink-soft">
             Sélectionnez une période et un format. Chaque export est signé (SHA-256) et tracé dans l&apos;audit.
           </p>
-          <div className="mt-4 grid grid-cols-2 gap-3">
+          {/* Les trois champs s'alignent sur une ligne dès qu'il y a la place,
+              et se replient l'un sous l'autre sur téléphone. */}
+          <div className="mt-4 grid grid-cols-2 lg:grid-cols-3 gap-3">
             <div>
               <label className="text-xs font-medium text-ink-soft">Du</label>
               <input type="date" className="input mt-1" value={from} max={to}
@@ -115,7 +117,7 @@ export default function ExportsAdmin() {
             {/* Un seul format proposé : le menu déroulant n'aurait rien à
                 choisir, on annonce simplement ce qui va sortir. */}
             {formats.length > 1 ? (
-              <div className="col-span-2">
+              <div className="col-span-2 lg:col-span-1">
                 <label className="text-xs font-medium text-ink-soft">Format</label>
                 <select className="input mt-1" value={format}
                         onChange={(e) => setFormat(e.target.value)}>
@@ -123,13 +125,13 @@ export default function ExportsAdmin() {
                 </select>
               </div>
             ) : (
-              <div className="col-span-2">
+              <div className="col-span-2 lg:col-span-1">
                 <label className="text-xs font-medium text-ink-soft">Format</label>
                 <div className="mt-1 text-sm font-medium">{CORE_FORMAT.label}</div>
               </div>
             )}
             {stores.length > 1 && (
-              <div className="col-span-2">
+              <div className="col-span-2 lg:col-span-3">
                 <label className="text-xs font-medium text-ink-soft">Boutiques</label>
                 <div className="mt-1 flex flex-wrap gap-1.5">
                   {/* Aucune cochée = toutes : c'est le cas courant, il ne doit
@@ -165,7 +167,7 @@ export default function ExportsAdmin() {
             )}
           </div>
           {error && <div className="mt-3 rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
-          <button onClick={() => void generate()} disabled={busy} className="btn-primary mt-4 w-full">
+          <button onClick={() => void generate()} disabled={busy} className="btn-primary mt-4 w-full sm:w-auto sm:px-8">
             {busy ? 'Génération…' : 'Générer & télécharger'}
           </button>
           {formats.some((f) => f.value === 'fec_like') && (
@@ -183,8 +185,10 @@ export default function ExportsAdmin() {
         ) : list.length === 0 ? (
           <EmptyState icon="◇" title="Aucun export généré" />
         ) : (
-          <div className="card overflow-hidden">
-            <table className="w-full text-sm">
+          // `overflow-hidden` coupait net les six colonnes sur téléphone :
+          // « Télécharger » devenait inatteignable. On laisse défiler.
+          <div className="card overflow-x-auto">
+            <table className="w-full text-sm min-w-[48rem]">
               <thead className="text-ink-soft text-[10px] uppercase tracking-widest border-b border-border">
                 <tr>
                   <th className="text-left px-4 py-3 font-semibold">Période</th>
@@ -199,10 +203,10 @@ export default function ExportsAdmin() {
               <tbody>
                 {list.map((e) => (
                   <tr key={e.id} className="border-t border-border">
-                    <td className="px-4 py-3">{e.period_start} → {e.period_end}</td>
-                    <td className="px-4 py-3"><Badge tone="neutral">{FORMAT_LABEL[e.format] ?? e.format}</Badge></td>
+                    <td className="px-4 py-3 whitespace-nowrap">{e.period_start} → {e.period_end}</td>
+                    <td className="px-4 py-3 whitespace-nowrap"><Badge tone="neutral">{FORMAT_LABEL[e.format] ?? e.format}</Badge></td>
                     <td className="px-4 py-3 text-right text-ink-soft">{formatBytes(Number(e.size_bytes))}</td>
-                    <td className="px-4 py-3 text-ink-soft">{e.generated_by}</td>
+                    <td className="px-4 py-3 text-ink-soft whitespace-nowrap">{e.generated_by}</td>
                     <td className="px-4 py-3 font-mono text-xs text-ink-soft">{e.sha256.slice(0, 16)}…</td>
                     <td className="px-4 py-3 text-ink-soft text-xs">
                       {new Date(e.created_at).toLocaleString('fr-FR')}
