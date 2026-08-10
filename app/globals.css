@@ -23,29 +23,34 @@
 
 :root {
   color-scheme: light;
-  /* Palette du thème (couleur d'accent), surchargée par data-theme sur <body> */
-  --primary: #5c6f5d;
-  --primary-deep: #3F5430;
-  --primary-soft: #EFF4EA;
+  /* ------------------------------------------------------------------ */
+  /* Palette HelloPos : vert profond #013E37 + jaune doux #FFEFB3.       */
+  /* Le vert porte les surfaces pleines (rail, boutons, en-têtes) ; le   */
+  /* jaune signale ce qui est actif ou mis en avant. Un thème choisi     */
+  /* dans les réglages (data-theme) ne redéfinit QUE ces trois           */
+  /* variables — les neutres ci-dessous restent la base de la marque.    */
+  /* ------------------------------------------------------------------ */
+  --primary: #013E37;
+  --primary-deep: #012B26;
+  --primary-soft: #FFEFB3;
 
-  /* Palette neutre — surchargée par data-mode="dark".
-     --bg : blanc cassé très léger, neutre (pas beige). Les cartes/surfaces
-     restent en blanc pur (--surface) pour ressortir. */
-  --bg: #ECEEF1;
+  /* Neutres chauds — surchargés par data-mode="dark". Le fond tire très
+     légèrement vers l'ivoire pour que les cartes blanches se détachent
+     sans qu'on ait besoin d'ombres. */
+  --bg: #F8F6F0;
   --surface: #FFFFFF;
-  --muted: #F5F5F5;
-  --ink: #1F2A24;
-  /* Texte secondaire : assombri pour rester ≥ 4.5:1 (WCAG AA) sur le fond
-     blanc cassé (#ECEEF1) comme sur le blanc pur. */
-  --ink-soft: #565A5F;
-  --border: #E1E2E6;
-  /* Vert dédié au TEXTE (assez foncé pour ≥ 4.5:1 sur fond clair). Distinct du
-     vert d'accent (--primary) réservé aux fonds/boutons. */
-  --accent-text: #3B4F2C;
+  --muted: #F3F1EA;
+  --ink: #14211D;
+  /* Texte secondaire : ≥ 4.5:1 (WCAG AA) sur l'ivoire comme sur le blanc. */
+  --ink-soft: #5A625E;
+  --border: #E7E3D8;
+  /* Vert dédié au TEXTE. Identique à --primary : à #013E37 il dépasse déjà
+     largement le 4.5:1 sur fond clair, inutile de le foncer davantage. */
+  --accent-text: #013E37;
 
-  /* Barre de navigation supérieure (foncée façon application POS) */
-  --topbar-bg: #1F2A24;
-  --topbar-user-bg: #18211C;
+  /* Barre de navigation supérieure : le vert de marque, pleine surface. */
+  --topbar-bg: #013E37;
+  --topbar-user-bg: #012B26;
 }
 
 body[data-mode="dark"] {
@@ -101,6 +106,7 @@ body[data-mode="dark"] {
 .size-original .text-3xl  { font-size: 30px; line-height: 36px; }
 .size-original .text-4xl  { font-size: 36px; line-height: 40px; }
 
+body[data-theme="hellopos"]   { --primary: #013E37; --primary-deep: #012B26; --primary-soft: #FFEFB3; }
 body[data-theme="sage"]       { --primary: #5C6F5D; --primary-deep: #45543F; --primary-soft: #EDF1ED; }
 body[data-theme="charcoal"]   { --primary: #2A2F33; --primary-deep: #15191C; --primary-soft: #EEEEF0; }
 body[data-theme="navy"]       { --primary: #1F3A5F; --primary-deep: #15294A; --primary-soft: #E6EDF6; }

@@ -10,7 +10,7 @@
 export const POS_TILE_SIZES = ['mini', 'dense', 'compact', 'normal', 'large', 'xl'] as const;
 export type PosTileSize = (typeof POS_TILE_SIZES)[number];
 
-export const POS_THEME_COLORS = ['sage', 'charcoal', 'navy', 'terracotta', 'rose', 'amber', 'plum', 'emerald', 'teal', 'bordeaux', 'lavender'] as const;
+export const POS_THEME_COLORS = ['hellopos', 'sage', 'charcoal', 'navy', 'terracotta', 'rose', 'amber', 'plum', 'emerald', 'teal', 'bordeaux', 'lavender'] as const;
 export type PosThemeColor = (typeof POS_THEME_COLORS)[number];
 
 /**
@@ -160,7 +160,7 @@ export const POS_UI_KEY = 'pos_ui';
 
 export const POS_UI_DEFAULTS: PosUiSettings = {
   tile_size: 'normal',
-  theme_color: 'sage',
+  theme_color: 'hellopos',
   color_scheme: 'light',
   show_product_image: true,
   show_category_badge: true,
@@ -198,6 +198,9 @@ export const POS_UI_DEFAULTS: PosUiSettings = {
 };
 
 export const POS_THEME_COLOR_VALUES: Record<PosThemeColor, { label: string; main: string; deep: string; soft: string }> = {
+  // Couleurs de la marque : c'est le thème par défaut, les autres restent
+  // proposés à qui veut habiller sa caisse autrement.
+  hellopos:   { label: 'HelloPos',   main: '#013E37', deep: '#012B26', soft: '#FFEFB3' },
   sage:       { label: 'Sauge',      main: '#5C6F5D', deep: '#45543F', soft: '#EDF1ED' },
   charcoal:   { label: 'Anthracite', main: '#2A2F33', deep: '#15191C', soft: '#EEEEF0' },
   navy:       { label: 'Bleu nuit',  main: '#1F3A5F', deep: '#15294A', soft: '#E6EDF6' },

@@ -271,8 +271,10 @@ export default function MaJourneeClient() {
           </div>
         ) : (
           <>
-            {/* Total TTC mis en avant + indicateur journée fermée */}
-            <div className="px-5 py-6 text-center">
+            {/* Total TTC mis en avant : aplat jaune de la marque. C'est le
+                chiffre qu'on vient chercher en ouvrant l'écran — il doit se
+                lire depuis l'autre bout du comptoir. */}
+            <div className="px-5 py-6 text-center rounded-2xl mx-3 mt-3 bg-accent-soft">
               <div className="inline-flex items-center gap-1 text-xs text-ink-soft">
                 <Icon name="dashboard" size={14} /> CA TTC
               </div>
