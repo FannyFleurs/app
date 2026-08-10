@@ -89,8 +89,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <AppShell
       user={{ id: user.id, fullName: user.fullName, role: user.role, email: user.email }}
-      themeColor={ui.theme_color}
-      colorScheme={ui.color_scheme}
       hiddenPaths={ui.hidden_sidebar_paths ?? []}
       autoLogoutMode={ui.auto_logout_mode}
       autoLogoutMinutes={ui.auto_logout_minutes}

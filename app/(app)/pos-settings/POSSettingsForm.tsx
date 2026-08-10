@@ -6,12 +6,7 @@ import { useRouter } from 'next/navigation';
 import {
   POS_TILE_SIZES,
   POS_TILE_SIZE_LABELS,
-  POS_THEME_COLORS,
-  POS_THEME_COLOR_VALUES,
-  getDeviceThemeColor,
-  setDeviceThemeColor,
   POS_UI_DEFAULTS,
-  COLOR_SCHEMES,
   HEADER_TABS_DEFAULT,
   HEADER_TABS_MAX,
   tileMetrics,
@@ -36,29 +31,9 @@ export default function POSSettingsForm({ initial, canWrite }: Props) {
   const firstRender = useRef(true);
   const lastSaved = useRef<PosUiSettings>(initial);
 
-  // Couleur d'accent : préférence DU POSTE (mémorisée sur cet appareil), pas de
-  // l'organisation. Chaque caisse peut donc avoir sa propre couleur.
-  const [deviceTheme, setDeviceTheme] = useState<PosUiSettings['theme_color']>(initial.theme_color);
-  useEffect(() => {
-    setDeviceTheme(getDeviceThemeColor(initial.theme_color));
-  }, [initial.theme_color]);
-  useEffect(() => {
-    document.body.setAttribute('data-theme', deviceTheme);
-  }, [deviceTheme]);
-
-  function selectTheme(color: PosUiSettings['theme_color']) {
-    if (!canWrite) return;
-    setDeviceTheme(color);
-    setDeviceThemeColor(color); // localStorage + événement live pour l'AppShell
-  }
-  useEffect(() => {
-    let mode: 'light' | 'dark' = 'light';
-    if (settings.color_scheme === 'dark') mode = 'dark';
-    else if (settings.color_scheme === 'system') {
-      mode = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-    }
-    document.body.setAttribute('data-mode', mode);
-  }, [settings.color_scheme]);
+  // Plus de choix d'apparence ici : HelloPos a un seul habillage, clair, posé
+  // par l'AppShell. Une caisse à la couleur d'un poste et une autre à celle du
+  // voisin, ce n'était plus une préférence mais une divergence.
 
   // Auto-save (debounce 400ms) à chaque changement.
   useEffect(() => {
@@ -113,61 +88,6 @@ export default function POSSettingsForm({ initial, canWrite }: Props) {
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
       {/* Colonne gauche : sections de réglages */}
       <div className="lg:col-span-2 space-y-5">
-        <Section
-          title="Mode d'affichage"
-          description="Clair, sombre, ou suit le mode du système."
-        >
-          <div className="grid grid-cols-3 gap-3">
-            {COLOR_SCHEMES.map((scheme) => {
-              const active = settings.color_scheme === scheme;
-              const label = scheme === 'light' ? 'Clair' : scheme === 'dark' ? 'Sombre' : 'Système';
-              return (
-                <button
-                  key={scheme}
-                  type="button"
-                  disabled={!canWrite}
-                  onClick={() => patch('color_scheme', scheme)}
-                  className={`rounded-2xl border p-4 transition-all
-                    ${active ? 'border-ink ring-2 ring-offset-1' : 'border-border hover:border-gray-300'}
-                    ${!canWrite ? 'opacity-60 cursor-not-allowed' : ''}`}
-                >
-                  <div className="text-2xl mb-1">{scheme === 'light' ? '☀' : scheme === 'dark' ? '☾' : '✦'}</div>
-                  <div className="font-medium text-sm">{label}</div>
-                </button>
-              );
-            })}
-          </div>
-        </Section>
-
-        <Section
-          title="Couleur des boutons"
-          description="Couleur principale de cette caisse — mémorisée sur ce poste. Chaque poste peut avoir sa propre couleur."
-        >
-          <div className="grid grid-cols-3 md:grid-cols-7 gap-3">
-            {POS_THEME_COLORS.map((color) => {
-              const meta = POS_THEME_COLOR_VALUES[color];
-              const active = deviceTheme === color;
-              return (
-                <button
-                  key={color}
-                  type="button"
-                  disabled={!canWrite}
-                  onClick={() => selectTheme(color)}
-                  className={`relative rounded-2xl border p-3 transition-all flex flex-col items-center gap-2
-                    ${active ? 'border-ink ring-2 ring-offset-1' : 'border-border hover:border-gray-300'}
-                    ${!canWrite ? 'opacity-60 cursor-not-allowed' : ''}`}
-                  style={{ ['--tw-ring-color' as string]: meta.main }}
-                  title={meta.label}
-                >
-                  <div className="h-10 w-10 rounded-full shadow-sm" style={{ background: meta.main }} />
-                  <span className="text-xs font-medium leading-tight text-center">{meta.label}</span>
-                  {active && <span className="absolute top-1.5 right-2 text-xs">✓</span>}
-                </button>
-              );
-            })}
-          </div>
-        </Section>
-
         <Section
           title="Apparence des tuiles produit"
           description="Taille des cartes affichées sur la grille produits de la caisse."

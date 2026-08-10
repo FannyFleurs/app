@@ -10,7 +10,7 @@ import PaidOrderNotifier from './PaidOrderNotifier';
 import SchoolModeBanner from './SchoolModeBanner';
 import SessionKeepAlive from './SessionKeepAlive';
 import type { Role, Permission } from '@/lib/auth/rbac';
-import { BRAND_THEME, POS_THEME_COLOR_VALUES, getDeviceThemeColor, type PosThemeColor, type ColorScheme, type AutoLogoutMode } from '@/lib/settings/pos-ui';
+import { BRAND_THEME, POS_THEME_COLOR_VALUES, type AutoLogoutMode } from '@/lib/settings/pos-ui';
 
 interface User { id: string; fullName: string; role: Role; email: string }
 
@@ -23,8 +23,6 @@ export interface SubscriptionInfo {
 
 interface Props {
   user: User;
-  themeColor: PosThemeColor;
-  colorScheme: ColorScheme;
   hiddenPaths: string[];
   autoLogoutMode: AutoLogoutMode;
   autoLogoutMinutes: number;
@@ -40,7 +38,7 @@ interface Props {
 }
 
 export default function AppShell({
-  user, themeColor, colorScheme, hiddenPaths, autoLogoutMode, autoLogoutMinutes, headerTabs,
+  user, hiddenPaths, autoLogoutMode, autoLogoutMinutes, headerTabs,
   subscription, permissions, backOffice = false, children,
 }: Props) {
   const permSet = new Set(permissions);
@@ -51,29 +49,19 @@ export default function AppShell({
   // Couleur d'accent effective : celle choisie AU POSTE (localStorage) prime
   // sur celle de l'organisation. Se met à jour en direct quand le poste change
   // sa couleur (événement) ou depuis un autre onglet (storage).
-  const [effectiveTheme, setEffectiveTheme] = useState<PosThemeColor>(themeColor);
-  useEffect(() => {
-    const resolve = () => setEffectiveTheme(getDeviceThemeColor(themeColor));
-    resolve();
-    window.addEventListener('webpos-theme-change', resolve);
-    window.addEventListener('storage', resolve);
-    return () => {
-      window.removeEventListener('webpos-theme-change', resolve);
-      window.removeEventListener('storage', resolve);
-    };
-  }, [themeColor]);
-
   /**
-   * Le back-office porte TOUJOURS les couleurs de la marque.
+   * Un seul habillage : celui de la marque, en clair.
    *
-   * La couleur d'accent choisie dans « Paramètres caisse » habille la caisse
-   * — c'est là qu'un commerçant veut son ambiance. Elle s'appliquait aussi au
-   * back-office, si bien qu'une organisation ayant choisi un thème autrefois
-   * n'a jamais vu le vert HelloPos : son ancien choix, enregistré, l'emportait
-   * sur la marque.
+   * La couleur d'accent et le mode sombre étaient réglables par poste. Deux
+   * caisses côte à côte pouvaient afficher deux verts différents, et chaque
+   * écran ajouté devait être vérifié dans quatre combinaisons. HelloPos a
+   * maintenant une identité, elle ne se négocie plus poste par poste.
    */
-  const appliedTheme = backOffice ? BRAND_THEME : effectiveTheme;
-  useEffect(() => { document.body.setAttribute('data-theme', appliedTheme); }, [appliedTheme]);
+  const appliedTheme = BRAND_THEME;
+  useEffect(() => {
+    document.body.setAttribute('data-theme', appliedTheme);
+    document.body.setAttribute('data-mode', 'light');
+  }, [appliedTheme]);
 
   // Le rail gauche reste visible sous l'overlay « Toutes les pages ». Si
   // l'utilisateur clique un item du rail, la route change : on referme alors
@@ -90,7 +78,7 @@ export default function AppShell({
   // coloré disparaissait à la 1re navigation et ne revenait jamais. On
   // ré-affirme donc la couleur d'accent après chaque navigation.
   useEffect(() => {
-    const hex = POS_THEME_COLOR_VALUES[appliedTheme]?.main ?? '#FFFFFF';
+    const hex = POS_THEME_COLOR_VALUES[BRAND_THEME]?.main ?? '#FFFFFF';
     let meta = document.querySelector('meta[name="theme-color"]') as HTMLMetaElement | null;
     if (!meta) {
       meta = document.createElement('meta');
@@ -98,24 +86,7 @@ export default function AppShell({
       document.head.appendChild(meta);
     }
     meta.content = hex;
-  }, [effectiveTheme, pathname]);
-
-  useEffect(() => {
-    function applyMode() {
-      let mode: 'light' | 'dark' = 'light';
-      if (colorScheme === 'dark') mode = 'dark';
-      else if (colorScheme === 'system') {
-        mode = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-      }
-      document.body.setAttribute('data-mode', mode);
-    }
-    applyMode();
-    if (colorScheme === 'system') {
-      const mq = window.matchMedia('(prefers-color-scheme: dark)');
-      mq.addEventListener('change', applyMode);
-      return () => mq.removeEventListener('change', applyMode);
-    }
-  }, [colorScheme]);
+  }, [pathname]);
 
   async function logout() {
     await fetch('/api/auth/logout', { method: 'POST' });
