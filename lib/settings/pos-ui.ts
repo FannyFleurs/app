@@ -10,6 +10,9 @@
 export const POS_TILE_SIZES = ['mini', 'dense', 'compact', 'normal', 'large', 'xl'] as const;
 export type PosTileSize = (typeof POS_TILE_SIZES)[number];
 
+/** Thème de la marque : imposé partout où l'on gère (back-office, PDA, CA, admin). */
+export const BRAND_THEME = 'hellopos' as const;
+
 export const POS_THEME_COLORS = ['hellopos', 'sage', 'charcoal', 'navy', 'terracotta', 'rose', 'amber', 'plum', 'emerald', 'teal', 'bordeaux', 'lavender'] as const;
 export type PosThemeColor = (typeof POS_THEME_COLORS)[number];
 

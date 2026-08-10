@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
-  POS_THEME_COLORS, POS_THEME_COLOR_VALUES, POS_UI_DEFAULTS,
+  BRAND_THEME, POS_THEME_COLORS, POS_THEME_COLOR_VALUES, POS_UI_DEFAULTS,
 } from '@/lib/settings/pos-ui';
 
 /**
@@ -52,5 +52,22 @@ describe('Palette de marque', () => {
       expect(css).toMatch(new RegExp(`${nomCss}:\\s*${valeur}`, 'i'));
       expect(tw.toUpperCase()).toContain(valeur);
     }
+  });
+
+  it('s\'impose au back-office quel que soit le thème enregistré', () => {
+    // Une organisation ayant choisi un thème autrefois ne voyait jamais les
+    // couleurs de la marque : son choix, enregistré, l'emportait. Le back-office
+    // porte désormais la marque ; le thème choisi habille la caisse.
+    expect(BRAND_THEME).toBe('hellopos');
+    const brandDansAppShell = readFileSync('components/AppShell.tsx', 'utf8');
+    expect(brandDansAppShell).toMatch(/backOffice \? BRAND_THEME : effectiveTheme/);
+  });
+
+  it('garde un jaune reconnaissable en mode sombre', () => {
+    // La règle générale dérivait le « soft » en un vert terne : le jaune, qui
+    // EST la marque, disparaissait. On le remet en texte d'accent.
+    const i = css.indexOf('body[data-theme="hellopos"][data-mode="dark"]');
+    expect(i).toBeGreaterThan(css.indexOf('--primary-soft: color-mix'));
+    expect(css.slice(i, i + 260)).toMatch(/--accent-text:\s*#FFEFB3/i);
   });
 });
