@@ -201,7 +201,7 @@ export default function MaJourneeClient() {
   });
 
   return (
-    <div className="flex flex-col md:h-full md:overflow-hidden min-h-full">
+    <div className="flex flex-col md:h-[calc(100%-1.5rem)] md:m-3 md:overflow-hidden md:rounded-2xl md:border md:border-border bg-surface min-h-full">
       <div className="px-4 md:px-6 pt-3 md:pt-4 pb-3 shrink-0 border-b border-border">
         <PageHeader
           title="Ma journée"

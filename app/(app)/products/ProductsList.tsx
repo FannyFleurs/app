@@ -224,7 +224,7 @@ export default function ProductsList({
   const activeId = editing && 'id' in editing ? editing.id : null;
 
   return (
-    <div className="flex flex-col md:h-full md:overflow-hidden">
+    <div className="flex flex-col md:h-[calc(100%-1.5rem)] md:m-3 md:overflow-hidden md:rounded-2xl md:border md:border-border bg-surface">
       <div className="px-4 md:px-8 pt-6 md:pt-8 pb-4 shrink-0 border-b border-border">
         <PageHeader
           title="Produits"
