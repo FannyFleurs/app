@@ -59,3 +59,16 @@ describe('Entrée de menu active', () => {
     expect(activeNavHref('/settings/users', hrefs)).toBe('/settings/users');
   });
 });
+
+describe('Périmètre des entrées', () => {
+  it('garde « Ma journée » hors du back-office', () => {
+    // Elle suit une caisse ouverte sur un poste : à distance il n'y a pas de
+    // journée à tenir, c'est le tableau de bord qui répond.
+    const maJournee = SIDEBAR_ITEMS.find((i) => i.href === '/ma-journee');
+    expect(maJournee?.appOnly).toBe(true);
+
+    const auBO = SIDEBAR_ITEMS.filter((i) => !i.appOnly).map((i) => i.href);
+    expect(auBO).not.toContain('/ma-journee');
+    expect(auBO).toContain('/dashboard');
+  });
+});

@@ -5,12 +5,17 @@ interface Props {
   actions?: React.ReactNode;
 }
 
+/**
+ * En-tête de page compact : le titre situe, il n'a pas à occuper le tiers
+ * supérieur de l'écran. Le sous-titre passe sur la même ligne que le titre
+ * dès qu'il y a la place — c'est une ligne de hauteur gagnée sur chaque page.
+ */
 export default function PageHeader({ title, subtitle, badge, actions }: Props) {
   return (
-    <header className="flex flex-wrap items-end justify-between gap-3 pb-1">
+    <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
       <div>
         <div className="flex items-center gap-2">
-          <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+          <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
           {badge && (
             <span
               className={
@@ -25,7 +30,7 @@ export default function PageHeader({ title, subtitle, badge, actions }: Props) {
             </span>
           )}
         </div>
-        {subtitle && <p className="mt-1 text-sm text-ink-soft max-w-2xl">{subtitle}</p>}
+        {subtitle && <p className="mt-0.5 text-[13px] leading-snug text-ink-soft max-w-2xl">{subtitle}</p>}
       </div>
       {actions && <div className="flex items-center gap-2">{actions}</div>}
     </header>

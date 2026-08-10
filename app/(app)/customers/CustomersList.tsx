@@ -158,7 +158,7 @@ export default function CustomersList({ customers: initialCustomers, total, canW
   return (
     <>
       <div className="flex flex-col md:h-full md:overflow-hidden">
-        <div className="px-6 md:px-8 pt-6 md:pt-8 pb-4 shrink-0 border-b border-border">
+        <div className="px-4 md:px-6 pt-3 md:pt-4 pb-3 shrink-0 border-b border-border">
           <PageHeader
             title="Comptes clients"
             subtitle="Fiches clients, fidélité et historique d'achat."

@@ -55,6 +55,7 @@ export default function AllPagesOverlay({ role, hiddenPaths, permissions, backOf
   void role; // gardé dans la signature pour compat future
   const visible = SIDEBAR_ITEMS
     .filter((i) => backOffice || !i.boOnly)
+    .filter((i) => !backOffice || !i.appOnly)
     .filter((i) => !i.perm || permissions.has(i.perm))
     .filter((i) => i.required || !hiddenPaths.includes(i.href));
 
