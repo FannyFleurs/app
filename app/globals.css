@@ -145,6 +145,16 @@ body[data-theme="hellopos"][data-mode="dark"] {
   --accent-text: #FFEFB3;
 }
 
+/* Hauteur d'application : exactement la fenêtre VISIBLE.
+   `100vh` compte la barre d'adresse repliée des navigateurs mobiles — la
+   coque dépassait donc de l'écran et la page se mettait à défiler, alors
+   qu'une caisse doit rester fixe. `100dvh` suit la hauteur réellement
+   affichée ; `100vh` reste en repli pour les navigateurs qui l'ignorent. */
+.h-app {
+  height: 100vh;
+  height: 100dvh;
+}
+
 html, body {
   height: 100%;
   background: var(--bg);
