@@ -11,7 +11,6 @@ import { type PickedCustomer } from './CustomerPickerModal';
 import dynamic from 'next/dynamic';
 import Icon from '@/components/Icon';
 import CategoryIcon, { categoryIconDef } from '@/lib/category-icons';
-import PosBackdrop from '@/components/PosBackdrop';
 import { useSchoolMode, isSchoolCustomerId } from '@/lib/school-mode';
 import { tileMetrics, type PosUiSettings } from '@/lib/settings/pos-ui';
 import { confirmThemed } from '@/lib/ui/dialog';
@@ -1432,9 +1431,6 @@ export default function CashRegister({
         onTouchStart={onTouchStart}
         onTouchEnd={(e) => onTouchEnd(e, 'open')}
       >
-        {/* Décor posé sur le panneau, pas dans la zone qui défile : il reste
-            en place pendant que les tuiles glissent au-dessus. */}
-        <PosBackdrop />
         <OfflineBanner />
         <div className="relative flex items-center gap-2 px-3 md:px-5 h-[68px] shrink-0 border-b border-border bg-white">
           {/* Barre de recherche VISIBLE : champ dès qu'ouverte, sinon une barre

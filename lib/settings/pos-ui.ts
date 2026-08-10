@@ -20,21 +20,8 @@ export type PosThemeColor = (typeof POS_THEME_COLORS)[number];
  * Couleur d'accent choisie AU POSTE (par appareil), mémorisée en localStorage.
  * Prime sur la couleur de l'organisation : chaque caisse peut avoir la sienne.
  */
-export const THEME_LOCAL_KEY = 'webpos_theme_color';
-
-export function getDeviceThemeColor(fallback: PosThemeColor): PosThemeColor {
-  if (typeof window === 'undefined') return fallback;
-  try {
-    const v = window.localStorage.getItem(THEME_LOCAL_KEY);
-    return v && (POS_THEME_COLORS as readonly string[]).includes(v) ? (v as PosThemeColor) : fallback;
-  } catch { return fallback; }
-}
-
-export function setDeviceThemeColor(color: PosThemeColor): void {
-  if (typeof window === 'undefined') return;
-  try { window.localStorage.setItem(THEME_LOCAL_KEY, color); } catch { /* stockage indisponible */ }
-  window.dispatchEvent(new Event('webpos-theme-change'));
-}
+// Plus de couleur d'accent par poste : l'habillage est celui de la marque.
+// Un réglage enregistré autrefois n'a plus d'effet — on ne le lit plus.
 
 export const OPENING_FLOAT_MODES = ['manual', 'fixed', 'previous_close'] as const;
 export type OpeningFloatMode = (typeof OPENING_FLOAT_MODES)[number];

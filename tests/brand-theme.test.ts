@@ -54,20 +54,22 @@ describe('Palette de marque', () => {
     }
   });
 
-  it('s\'impose au back-office quel que soit le thème enregistré', () => {
-    // Une organisation ayant choisi un thème autrefois ne voyait jamais les
-    // couleurs de la marque : son choix, enregistré, l'emportait. Le back-office
-    // porte désormais la marque ; le thème choisi habille la caisse.
+  it('s\'applique partout, sans réglage possible', () => {
+    // L'habillage était réglable par poste : deux caisses côte à côte pouvaient
+    // afficher deux verts différents, et chaque écran ajouté demandait d'être
+    // vérifié en clair ET en sombre. Il n'y a plus qu'un thème, clair.
     expect(BRAND_THEME).toBe('hellopos');
-    const brandDansAppShell = readFileSync('components/AppShell.tsx', 'utf8');
-    expect(brandDansAppShell).toMatch(/backOffice \? BRAND_THEME : effectiveTheme/);
+    const shell = readFileSync('components/AppShell.tsx', 'utf8');
+    expect(shell).toMatch(/const appliedTheme = BRAND_THEME;/);
+    expect(shell).toMatch(/setAttribute\('data-mode', 'light'\)/);
+    // Plus aucun code ne repose le mode d'après une préférence.
+    expect(shell).not.toMatch(/prefers-color-scheme/);
   });
 
-  it('garde un jaune reconnaissable en mode sombre', () => {
-    // La règle générale dérivait le « soft » en un vert terne : le jaune, qui
-    // EST la marque, disparaissait. On le remet en texte d'accent.
-    const i = css.indexOf('body[data-theme="hellopos"][data-mode="dark"]');
-    expect(i).toBeGreaterThan(css.indexOf('--primary-soft: color-mix'));
-    expect(css.slice(i, i + 260)).toMatch(/--accent-text:\s*#FFEFB3/i);
+  it('ne propose plus de personnalisation dans les réglages', () => {
+    const reglages = readFileSync('app/(app)/pos-settings/POSSettingsForm.tsx', 'utf8');
+    expect(reglages).not.toMatch(/Mode d'affichage/);
+    expect(reglages).not.toMatch(/Couleur des boutons/);
+    expect(reglages).not.toMatch(/POS_THEME_COLORS/);
   });
 });
