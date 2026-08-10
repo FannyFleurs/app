@@ -2,6 +2,7 @@ import { cookies } from 'next/headers';
 import { readSessionFromCookie } from '@/lib/auth/session';
 import { query } from '@/lib/db/client';
 import CashRegister from './CashRegister';
+import NoZoom from '@/components/NoZoom';
 import { userCan } from '@/lib/auth/permissions';
 import Link from 'next/link';
 import {
@@ -122,7 +123,12 @@ export default async function CaissePage() {
   }
 
   return (
-    <CashRegister
+    <>
+      {/* Verrou de zoom monté au niveau de la PAGE : la caisse a plusieurs
+          écrans avant la grille (choix du poste, ouverture de caisse), et le
+          poser plus bas les laissait tous zoomables. */}
+      <NoZoom />
+      <CashRegister
       stores={stores.rows}
       registers={registers.rows}
       taxRates={taxRates.rows.map((t) => ({ ...t, rate: Number(t.rate) }))}
@@ -131,6 +137,7 @@ export default async function CaissePage() {
       posUi={posSettings}
       deferredOrdersEnabled={screenDelivery.enabled}
       initial={initial}
-    />
+      />
+    </>
   );
 }

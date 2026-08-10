@@ -127,7 +127,7 @@ export default function AppShell({
   }, [autoLogoutMode]);
 
   return (
-    <div className="h-screen overflow-hidden flex flex-col bg-bg pt-safe pl-safe pr-safe pb-safe">
+    <div className="h-app overflow-hidden flex flex-col bg-bg pt-safe pl-safe pr-safe pb-safe">
       <SessionKeepAlive />
       <SchoolModeBanner />
       <div className="flex-1 flex flex-row overflow-hidden min-h-0">
