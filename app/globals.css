@@ -134,6 +134,17 @@ body[data-mode="dark"] {
   --primary-deep: color-mix(in srgb, var(--primary) 58%, white);
 }
 
+/* Le jaune de la marque ne se dérive pas : c'est lui qu'on reconnaît.
+   En mode sombre, la règle générale ci-dessus le transformait en un vert
+   terne — on le remet, assombri juste ce qu'il faut pour servir de fond, et
+   on garde le jaune franc pour le texte d'accent. Déclaré APRÈS le bloc
+   sombre : à spécificité égale, c'est le dernier qui gagne. */
+body[data-theme="hellopos"][data-mode="dark"] {
+  --primary-soft: #3B3316;
+  --primary-deep: #FFEFB3;
+  --accent-text: #FFEFB3;
+}
+
 html, body {
   height: 100%;
   background: var(--bg);

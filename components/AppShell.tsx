@@ -10,7 +10,7 @@ import PaidOrderNotifier from './PaidOrderNotifier';
 import SchoolModeBanner from './SchoolModeBanner';
 import SessionKeepAlive from './SessionKeepAlive';
 import type { Role, Permission } from '@/lib/auth/rbac';
-import { POS_THEME_COLOR_VALUES, getDeviceThemeColor, type PosThemeColor, type ColorScheme, type AutoLogoutMode } from '@/lib/settings/pos-ui';
+import { BRAND_THEME, POS_THEME_COLOR_VALUES, getDeviceThemeColor, type PosThemeColor, type ColorScheme, type AutoLogoutMode } from '@/lib/settings/pos-ui';
 
 interface User { id: string; fullName: string; role: Role; email: string }
 
@@ -63,7 +63,17 @@ export default function AppShell({
     };
   }, [themeColor]);
 
-  useEffect(() => { document.body.setAttribute('data-theme', effectiveTheme); }, [effectiveTheme]);
+  /**
+   * Le back-office porte TOUJOURS les couleurs de la marque.
+   *
+   * La couleur d'accent choisie dans « Paramètres caisse » habille la caisse
+   * — c'est là qu'un commerçant veut son ambiance. Elle s'appliquait aussi au
+   * back-office, si bien qu'une organisation ayant choisi un thème autrefois
+   * n'a jamais vu le vert HelloPos : son ancien choix, enregistré, l'emportait
+   * sur la marque.
+   */
+  const appliedTheme = backOffice ? BRAND_THEME : effectiveTheme;
+  useEffect(() => { document.body.setAttribute('data-theme', appliedTheme); }, [appliedTheme]);
 
   // Le rail gauche reste visible sous l'overlay « Toutes les pages ». Si
   // l'utilisateur clique un item du rail, la route change : on referme alors
@@ -80,7 +90,7 @@ export default function AppShell({
   // coloré disparaissait à la 1re navigation et ne revenait jamais. On
   // ré-affirme donc la couleur d'accent après chaque navigation.
   useEffect(() => {
-    const hex = POS_THEME_COLOR_VALUES[effectiveTheme]?.main ?? '#FFFFFF';
+    const hex = POS_THEME_COLOR_VALUES[appliedTheme]?.main ?? '#FFFFFF';
     let meta = document.querySelector('meta[name="theme-color"]') as HTMLMetaElement | null;
     if (!meta) {
       meta = document.createElement('meta');
