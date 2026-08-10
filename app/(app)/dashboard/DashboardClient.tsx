@@ -8,7 +8,7 @@ import PageHeader from '@/components/PageHeader';
 
 interface Store { id: string; name: string }
 type Mode = 'ttc' | 'ht';
-type Period = 'week' | 'month' | 'prev_month' | 'year' | 'custom';
+type Period = 'today' | 'week' | 'month' | 'prev_month' | 'year' | 'custom';
 
 const PAYMENT_COLORS: Record<string, string> = {
   card: '#c2703d', cash: '#22c55e', gift_card: '#3b82f6', transfer: '#f59e0b',
@@ -19,6 +19,10 @@ function iso(d: Date) { return d.toISOString().slice(0, 10); }
 
 function periodRange(p: Period, cf: string, ct: string): { from: string; to: string } {
   const now = new Date();
+  // Journée en cours : la comparaison du tableau de bord se fait d'une année
+  // sur l'autre, un intervalle d'un seul jour ne demande donc aucun traitement
+  // particulier — il se compare au même jour l'an dernier.
+  if (p === 'today') { return { from: iso(now), to: iso(now) }; }
   if (p === 'week') { const w = new Date(now); w.setDate(w.getDate() - 6); return { from: iso(w), to: iso(now) }; }
   if (p === 'month') { return { from: iso(new Date(now.getFullYear(), now.getMonth(), 1)), to: iso(now) }; }
   if (p === 'prev_month') {
@@ -32,7 +36,10 @@ function periodRange(p: Period, cf: string, ct: string): { from: string; to: str
 
 export default function DashboardClient({ firstName, stores, lockedStoreId }: { firstName: string; stores: Store[]; lockedStoreId?: string | null }) {
   const [mode, setMode] = useState<Mode>('ttc');
-  const [period, setPeriod] = useState<Period>('month');
+  // Vue d'ouverture : la journée en cours. C'est la question qu'on se pose en
+  // ouvrant le tableau de bord — « où en est-on aujourd'hui ? » —, pas le
+  // cumul du mois.
+  const [period, setPeriod] = useState<Period>('today');
   const today = iso(new Date());
   const [cf, setCf] = useState(today);
   const [ct, setCt] = useState(today);
@@ -93,6 +100,7 @@ export default function DashboardClient({ firstName, stores, lockedStoreId }: { 
       {/* Filtres période + boutique */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
+          {pill('today', 'Aujourd\'hui')}
           {pill('week', '7 jours')}
           {pill('month', 'Ce mois')}
           {pill('prev_month', 'Mois dernier')}
