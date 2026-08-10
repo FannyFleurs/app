@@ -121,7 +121,7 @@ export default function StockAdmin({ canAdjust, stores, lockedStoreId }: { canAd
   }, {} as Record<string, typeof NAV>);
 
   return (
-    <div className="flex flex-col md:h-full md:overflow-hidden">
+    <div className="flex flex-col md:h-[calc(100%-1.5rem)] md:m-3 md:overflow-hidden md:rounded-2xl md:border md:border-border bg-surface">
       <div className="px-4 md:px-6 pt-3 md:pt-4 pb-3 shrink-0 flex items-start justify-between gap-3 flex-wrap">
         <PageHeader title="Stock" subtitle="Valeur du stock, mouvements et inventaires, par boutique." />
         {!lockedStoreId && stores.length > 1 && (

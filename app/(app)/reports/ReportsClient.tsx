@@ -309,7 +309,7 @@ export default function ReportsClient({ stores }: { stores: { id: string; name: 
   /* -------------------------------------------------------------- rendu */
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-[220px_1fr] md:h-full md:overflow-hidden">
+    <div className="grid grid-cols-1 md:grid-cols-[220px_1fr] md:h-[calc(100%-1.5rem)] md:m-3 md:overflow-hidden md:rounded-2xl md:border md:border-border bg-surface">
       {/* Sous-navigation des rapports */}
       <aside className="border-r border-border bg-surface md:overflow-y-auto">
         <div className="px-5 py-4 border-b border-border">
