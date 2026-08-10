@@ -70,7 +70,13 @@ export default function LeftRail({
 
   if (backOffice) {
     return (
-      <aside className="hidden md:flex flex-col shrink-0 w-60 lg:w-64 bg-white border-r border-border h-full">
+      // Rail plein vert : c'est lui qui pose l'identité de l'écran. Le blanc
+      // était neutre au point de disparaître, et l'élément actif — seul aplat
+      // de couleur — se confondait avec un bouton.
+      <aside
+        className="hidden md:flex flex-col shrink-0 w-60 lg:w-64 h-full text-white/85"
+        style={{ backgroundColor: 'var(--primary)' }}
+      >
         {/* Logo + titre back-office */}
         <Link
           href="/dashboard"
@@ -81,16 +87,17 @@ export default function LeftRail({
             // eslint-disable-next-line @next/next/no-img-element
             <img src={brand.bo_logo_url || brand.logo_url} alt={brand.brand_name} className="h-10 w-auto max-w-[140px] object-contain shrink-0" />
           ) : (
+            // Pastille jaune : un aplat vert sur un rail vert ne se voit pas.
             <span
-              className="grid h-10 w-10 place-items-center rounded-2xl text-white font-semibold text-lg shrink-0"
-              style={{ backgroundColor: 'var(--primary)' }}
+              className="grid h-10 w-10 place-items-center rounded-2xl font-semibold text-lg shrink-0"
+              style={{ backgroundColor: 'var(--primary-soft)', color: 'var(--primary)' }}
             >
               {(brand.brand_name || 'H').charAt(0)}
             </span>
           )}
           <div className="min-w-0">
-            <div className="text-sm font-semibold leading-tight truncate">Back-office</div>
-            <div className="text-[11px] text-ink-soft leading-tight truncate">Gestion à distance</div>
+            <div className="text-sm font-semibold leading-tight truncate text-white">Back-office</div>
+            <div className="text-[11px] leading-tight truncate text-white/55">Gestion à distance</div>
           </div>
         </Link>
 
@@ -100,7 +107,7 @@ export default function LeftRail({
             if (items.length === 0) return null;
             return (
               <div key={g} className="px-2">
-                <div className="px-3 mb-1 text-[10px] uppercase tracking-widest text-ink-soft/60 font-semibold">
+                <div className="px-3 mb-1 text-[10px] uppercase tracking-widest text-white/45 font-semibold">
                   {g}
                 </div>
                 <div className="space-y-0.5">
@@ -110,12 +117,14 @@ export default function LeftRail({
                       <Link
                         key={i.href}
                         href={i.href}
+                        // Actif = pastille jaune, texte vert : le seul endroit
+                        // clair du rail, on le trouve sans le chercher.
                         className={`flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
-                          active
-                            ? 'text-white shadow-sm'
-                            : 'text-ink-soft hover:bg-gray-50 hover:text-ink'
+                          active ? '' : 'text-white/75 hover:bg-white/10 hover:text-white'
                         }`}
-                        style={active ? { backgroundColor: 'var(--primary)' } : undefined}
+                        style={active
+                          ? { backgroundColor: 'var(--primary-soft)', color: 'var(--primary)' }
+                          : undefined}
                       >
                         <Icon name={i.icon} size={20} />
                         <span className="truncate">{i.label}</span>
@@ -128,21 +137,21 @@ export default function LeftRail({
           })}
         </nav>
 
-        <div className="border-t border-border px-2 py-3 space-y-1.5 shrink-0">
+        <div className="border-t border-white/15 px-2 py-3 space-y-1.5 shrink-0">
           <button
             onClick={onLogout}
-            className="w-full flex items-center gap-2 rounded-xl px-3 py-2 hover:bg-gray-50 text-sm text-left"
+            className="w-full flex items-center gap-2 rounded-xl px-3 py-2 hover:bg-white/10 text-sm text-left transition-colors"
             title={`${user.fullName} — se déconnecter`}
           >
             <span
-              className="grid h-8 w-8 place-items-center rounded-full text-white font-semibold text-xs shrink-0"
-              style={{ backgroundColor: 'var(--primary)' }}
+              className="grid h-8 w-8 place-items-center rounded-full font-semibold text-xs shrink-0"
+              style={{ backgroundColor: 'var(--primary-soft)', color: 'var(--primary)' }}
             >
               {initials}
             </span>
             <div className="min-w-0">
-              <div className="truncate font-medium">{user.fullName}</div>
-              <div className="truncate text-[11px] text-ink-soft">Se déconnecter</div>
+              <div className="truncate font-medium text-white">{user.fullName}</div>
+              <div className="truncate text-[11px] text-white/55">Se déconnecter</div>
             </div>
           </button>
         </div>

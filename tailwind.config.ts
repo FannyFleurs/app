@@ -10,11 +10,16 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        bg: '#FFFFFF',
+        // Neutres de la marque HelloPos. Volontairement en dur et non en
+        // `var(--…)` : les variantes d'opacité de Tailwind (`border-border/60`,
+        // `text-ink-soft/60`…) ne savent pas décomposer une variable CSS et
+        // rendraient ces couleurs transparentes. Les mêmes valeurs sont
+        // définies en variables dans globals.css pour le CSS manuscrit.
+        bg: '#F8F6F0',
         surface: '#FFFFFF',
         ink: {
-          DEFAULT: '#1F2A24',
-          soft: '#6B6F73',
+          DEFAULT: '#14211D',
+          soft: '#5A625E',
         },
         // sage gardé pour compat ascendante (anciennes refs), mappé sur l'accent CSS var
         sage: {
@@ -26,7 +31,7 @@ const config: Config = {
         danger: '#B42318',
         warning: '#B7791F',
         success: '#2F6B3F',
-        border: '#E7E7EA',
+        border: '#E7E3D8',
       },
       fontFamily: {
         sans: ['ui-sans-serif', 'system-ui', '-apple-system', 'Inter', 'sans-serif'],
