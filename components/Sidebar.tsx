@@ -17,6 +17,8 @@ export interface SidebarItem {
   required?: boolean;
   /** Si true, l'item n'apparaît que dans le back-office (sous-domaine bo.). */
   boOnly?: boolean;
+  /** Si true, l'item n'apparaît QUE dans l'application (caisse), pas au BO. */
+  appOnly?: boolean;
 }
 
 /**
@@ -27,7 +29,9 @@ export interface SidebarItem {
 export const SIDEBAR_ITEMS: SidebarItem[] = [
   // Vente — Caisse en premier
   { href: '/caisse',       label: 'Caisse',               icon: 'pos',          group: 'Vente',    perm: 'pos.use', required: true },
-  { href: '/ma-journee',   label: 'Ma journée',           icon: 'my-day',       group: 'Vente',    perm: 'pos.use' },
+  // « Ma journée » suit une caisse ouverte sur un poste : à distance, il n'y a
+  // pas de journée à tenir, c'est le tableau de bord qui répond.
+  { href: '/ma-journee',   label: 'Ma journée',           icon: 'my-day',       group: 'Vente',    perm: 'pos.use', appOnly: true },
   { href: '/orders',       label: 'Commandes',            icon: 'orders',       group: 'Vente',    perm: 'pos.use' },
   // Pas d'entrée « Écran atelier » : c'est une application à part, sur le
   // sous-domaine ecran., posée sur une tablette murale et rattachée à sa
