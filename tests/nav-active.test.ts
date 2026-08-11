@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { activeNavHref } from '@/lib/nav/active';
 import { SIDEBAR_ITEMS } from '@/components/Sidebar';
 
@@ -76,5 +77,20 @@ describe('Périmètre des entrées', () => {
     // On imprime sur l'imprimante reliée au poste : la page n'a pas de sens
     // depuis un back-office à distance.
     expect(SIDEBAR_ITEMS.find((i) => i.href === '/labels')?.appOnly).toBe(true);
+  });
+});
+
+describe('Écran des permissions', () => {
+  it('nomme en français chaque permission et chaque domaine', () => {
+    // Une permission ajoutée au code sans intitulé s'affichait telle quelle :
+    // « ACCOUNTING » et « accounting.read » en plein écran français.
+    const src = readFileSync('app/(app)/settings/permissions/RolePermissionsAdmin.tsx', 'utf8');
+    const rbac = readFileSync('lib/auth/rbac.ts', 'utf8');
+    const perms = [...new Set([...rbac.matchAll(/'([a-z_]+\.[a-z_.]+)'/g)].map((m) => m[1]!))]
+      .filter((p) => /^(pos|products|categories|stock|customers|invoices|closures|fiscal|users|settings|accounting)\./.test(p));
+    for (const perm of perms) expect(src, perm).toContain(`'${perm}':`);
+    for (const domaine of new Set(perms.map((p) => p.split('.')[0]!))) {
+      expect(src, domaine).toMatch(new RegExp(`^\\s*${domaine}: '`, 'm'));
+    }
   });
 });
