@@ -170,7 +170,7 @@ export default function InventoryDetail({ inventoryId }: { inventoryId: string }
   }
 
   return (
-    <div className="p-4 md:p-6 lg:p-8 w-full print:p-0">
+    <div className="p-6 md:p-8 w-full print:p-0">
       <div className="flex items-start justify-between gap-4 mb-5 print:hidden">
         <div>
           <Link href="/inventory" className="text-sm text-ink-soft hover:text-ink">← Inventaires</Link>

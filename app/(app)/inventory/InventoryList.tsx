@@ -46,7 +46,7 @@ export default function InventoryList({ defaultStoreId: _defaultStoreId }: { def
   }, []);
 
   return (
-    <div className="p-4 md:p-6 lg:p-8 space-y-5 w-full">
+    <div className="p-6 md:p-8 space-y-5 w-full">
       <PageHeader
         title="Inventaires"
         subtitle="Sessions de comptage — total, par catégorie ou par fournisseur."

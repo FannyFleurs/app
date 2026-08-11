@@ -12,7 +12,11 @@ interface Props {
  */
 export default function PageHeader({ title, subtitle, badge, actions }: Props) {
   return (
-    <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+    // `items-start` et non `items-center` : un bloc d'actions plus haut que le
+    // titre (des champs de date en 40 px face à un titre de 28) recentrait le
+    // titre vers le bas, et il ne démarrait plus à la même hauteur que sur les
+    // pages sans actions.
+    <header className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
       <div>
         <div className="flex items-center gap-2">
           <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
