@@ -71,4 +71,10 @@ describe('Périmètre des entrées', () => {
     expect(auBO).not.toContain('/ma-journee');
     expect(auBO).toContain('/dashboard');
   });
+
+  it('garde « Étiquettes » hors du back-office', () => {
+    // On imprime sur l'imprimante reliée au poste : la page n'a pas de sens
+    // depuis un back-office à distance.
+    expect(SIDEBAR_ITEMS.find((i) => i.href === '/labels')?.appOnly).toBe(true);
+  });
 });
