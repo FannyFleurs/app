@@ -21,9 +21,16 @@ const ROLE_LABELS: Record<string, string> = {
   support_technique: 'Support',
 };
 
-// Regroupe les permissions par "domaine" (préfixe avant le premier point).
+/**
+ * Regroupe les permissions par domaine (le préfixe avant le premier point).
+ *
+ * Tout domaine absent de cette table s'affichait tel quel — « ACCOUNTING » en
+ * capitales anglaises au milieu d'un écran français. Une permission ajoutée au
+ * code doit donc être nommée ICI aussi.
+ */
 const PERMISSION_GROUPS: Record<string, string> = {
   pos: 'Caisse',
+  accounting: 'Comptabilité',
   products: 'Produits',
   categories: 'Catégories',
   stock: 'Stock',
@@ -35,7 +42,11 @@ const PERMISSION_GROUPS: Record<string, string> = {
   settings: 'Paramètres',
 };
 
+/** Intitulé lisible de chaque permission. Sans entrée ici, c'est le nom
+ *  technique qui s'affiche à l'utilisateur. */
 const PERMISSION_LABELS: Record<string, string> = {
+  'accounting.read': 'Voir le plan de comptes',
+  'accounting.write': 'Modifier le plan de comptes',
   'pos.use': 'Accéder à la caisse',
   'pos.override_price': 'Forcer un prix libre',
   'pos.discount_line': 'Remise sur ligne',
@@ -124,8 +135,19 @@ export default function RolePermissionsAdmin() {
     }
   }
 
+  const roleLabel = ROLE_LABELS[selectedRole] ?? selectedRole;
+
   return (
     <div className="space-y-4">
+      {/* Un écran de droits ne se devine pas : on dit en une phrase ce qu'on
+          règle, et ce qui se passe quand on touche à un interrupteur. */}
+      <p className="text-sm text-ink-soft max-w-3xl">
+        Chaque rôle dispose de droits par défaut, adaptés au métier. Vous pouvez les
+        ajuster ici pour VOTRE boutique : l&apos;interrupteur autorise ou refuse
+        l&apos;action à tous les utilisateurs qui portent ce rôle. Une ligne modifiée
+        est signalée, et la flèche ↺ la ramène à sa valeur par défaut.
+      </p>
+
       {error && (
         <div className="rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>
       )}
@@ -149,6 +171,10 @@ export default function RolePermissionsAdmin() {
         </div>
       </div>
 
+      <div className="text-sm">
+        Droits du rôle <span className="font-semibold">{roleLabel}</span>
+      </div>
+
       {/* Matrice par domaine */}
       {Array.from(grouped.entries()).map(([dom, perms]) => (
         <section key={dom} className="card overflow-hidden">
@@ -169,10 +195,9 @@ export default function RolePermissionsAdmin() {
                       {PERMISSION_LABELS[p.permission] ?? p.permission}
                     </div>
                     <div className="text-xs text-ink-soft mt-0.5 flex items-center gap-2 flex-wrap">
-                      <code className="text-[10px] bg-gray-50 px-1.5 py-0.5 rounded">{p.permission}</code>
-                      <span>défaut : {p.default ? '✓ autorisé' : '✗ refusé'}</span>
+                      <span>Par défaut : {p.default ? 'autorisé' : 'refusé'}</span>
                       {isOverride && (
-                        <span className="text-accent-deep">· override</span>
+                        <span className="text-accent-deep font-medium">· modifié pour ce rôle</span>
                       )}
                     </div>
                   </div>
@@ -191,7 +216,7 @@ export default function RolePermissionsAdmin() {
                       <button
                         onClick={() => void setOverride(selectedRole, p.permission, null)}
                         className="text-xs text-ink-soft hover:text-ink"
-                        title="Revenir au défaut"
+                        title="Revenir à la valeur par défaut"
                       >
                         ↺
                       </button>
