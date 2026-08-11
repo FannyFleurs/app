@@ -4,15 +4,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Station } from './PdaApp';
 import { useScanField } from './scan';
 import {
-  Screen, Header, Tabs, ScanField, QtyPad, ActionBar, Toast, InfoRow, IconChevron,
+  Screen, Header, Tabs, ScanField, QtyStepper, ActionBar, Toast, InfoRow, IconChevron,
 } from './ui';
 
 /**
  * Inventaire — phase de COMPTAGE.
  *
  * L'inventaire est créé sur la caisse (général, par catégorie ou par
- * fournisseur) ; le comptage se fait ici, puis « Clôturer l'inventaire »
- * bascule en pointage : les écarts se valident ensuite sur la caisse.
+ * fournisseur) ; le comptage se fait ici, en plusieurs passages si besoin —
+ * « Envoyer le comptage » revient à la liste sans rien figer. Le pointage des
+ * écarts et la clôture se font sur la caisse ou le back-office.
  *
  * Comptage à l'aveugle : la quantité théorique n'est volontairement pas
  * affichée, pour ne pas influencer le compteur. L'écart n'a de sens qu'une
@@ -187,27 +188,21 @@ export default function PdaInventory({ station, onHome, notify }: {
     } finally { setBusy(false); }
   }
 
-  /* ------------------------------------------------------------ clôture */
+  /* -------------------------------------------------- envoi du comptage */
 
-  async function close() {
+  /**
+   * Le comptage est déjà enregistré au fil des scans : ce bouton ne « clôture »
+   * rien, il termine la session de comptage et revient à la liste.
+   *
+   * L'inventaire reste ouvert : on repasse dans une réserve, on complète un
+   * rayon oublié, on y revient autant de fois qu'il le faut. La clôture — le
+   * pointage des écarts, puis les mouvements de stock — se fait au calme sur
+   * la caisse ou le back-office, pas au bout d'une douchette.
+   */
+  function sendCount() {
     if (!current) return;
-    const label = current.label;
-    setBusy(true);
-    try {
-      const r = await fetch(`/api/inventories/${current.id}/review`, { method: 'POST' });
-      if (r.ok) {
-        notify(`Comptage « ${label} » clôturé. Écarts disponibles sur la caisse.`);
-        back();
-      } else {
-        const j = await r.json().catch(() => ({}));
-        setMessage({
-          text: j.error === 'INVENTORY_NOT_IN_PROGRESS'
-            ? "Cet inventaire n'est plus en comptage."
-            : 'Échec de la clôture.',
-          tone: 'error',
-        });
-      }
-    } finally { setBusy(false); }
+    notify(`Comptage « ${current.label} » envoyé. Vous pouvez y revenir à tout moment.`);
+    back();
   }
 
   /* ------------------------------------------------------------ dérivés */
@@ -354,25 +349,24 @@ export default function PdaInventory({ station, onHome, notify }: {
 
       <ActionBar>
         <button
-          onClick={() => void close()}
+          onClick={sendCount}
           disabled={busy || counted.length === 0}
           className="btn-primary h-14 w-full text-base font-semibold disabled:opacity-40"
         >
-          {busy ? '…' : "Clôturer l'inventaire"}
+          {busy ? '…' : 'Envoyer le comptage'}
         </button>
+        <p className="mt-2 text-center text-[11px] text-ink-soft">
+          L&apos;inventaire reste ouvert : revenez-y autant de fois que nécessaire.
+          La clôture se fait sur la caisse ou le back-office.
+        </p>
       </ActionBar>
 
       {edit && (
-        <QtyPad
+        <QtyStepper
           title={edit.product_name}
           subtitle="Quantité comptée"
           value={editValue}
-          onKey={(k) => setEditValue((cur) => {
-            if (k === 'C') return '';
-            if (k === '⌫') return cur.slice(0, -1);
-            const next = (cur + k).replace(/^0+(?=\d)/, '');
-            return next.length > 5 ? cur : next;
-          })}
+          onChange={setEditValue}
           onCancel={() => { setEdit(null); setTimeout(focusField, 30); }}
           onSave={() => void saveEdit()}
         />

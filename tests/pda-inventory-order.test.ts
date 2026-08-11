@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { hoistCounted, type Line } from '@/app/pda/PdaInventory';
 
 /**
@@ -45,5 +46,36 @@ describe('Comptage PDA — ordre de la liste', () => {
     const avant = JSON.stringify(LISTE);
     hoistCounted(LISTE, 'a', '9');
     expect(JSON.stringify(LISTE)).toBe(avant);
+  });
+});
+
+/**
+ * Le PDA compte, il ne clôture pas.
+ *
+ * Un comptage se fait rarement d'une traite : on passe en réserve, on revient
+ * sur un rayon oublié. Le bouton fermait l'inventaire au premier envoi, sans
+ * retour possible — et depuis la douchette, personne ne pouvait le rouvrir.
+ */
+describe('Comptage PDA — envoi sans clôture', () => {
+  const src = readFileSync('app/pda/PdaInventory.tsx', 'utf8');
+
+  it('envoie le comptage au lieu de clôturer', () => {
+    expect(src).toContain("'Envoyer le comptage'");
+    expect(src).not.toMatch(/Clôturer l['’]inventaire/);
+  });
+
+  it('ne bascule plus l\'inventaire en pointage', () => {
+    // Le passage en pointage est irréversible : il doit rester déclenché
+    // depuis la caisse ou le back-office, jamais depuis le PDA.
+    expect(src).not.toMatch(/inventories\/\$\{[^}]+\}\/review/);
+  });
+
+  it('règle la quantité avec + / − et un champ, sans pavé numérique', () => {
+    expect(src).toContain('QtyStepper');
+    expect(src).not.toContain('QtyPad');
+    const ui = readFileSync('app/pda/ui.tsx', 'utf8');
+    expect(ui).toContain('aria-label="Retirer un"');
+    expect(ui).toContain('aria-label="Ajouter un"');
+    expect(ui).toContain('inputMode="numeric"');
   });
 });
