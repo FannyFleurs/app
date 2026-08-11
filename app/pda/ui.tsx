@@ -287,7 +287,61 @@ export function Toast({ message, tone = 'ok' }: { message: string; tone?: 'ok' |
   );
 }
 
-/** Pavé numérique de saisie d'une quantité. */
+/**
+ * Réglage d'une quantité comptée : deux boutons et un champ.
+ *
+ * Le pavé numérique complet obligeait à composer le nombre chiffre par chiffre,
+ * alors qu'un comptage se corrige presque toujours d'une unité — on vient de
+ * scanner, on a compté un de plus. « − » et « + » couvrent ce geste ; le champ
+ * reste là pour saisir une quantité connue d'un coup, sans passer par douze
+ * appuis.
+ */
+export function QtyStepper({ title, subtitle, value, onChange, onCancel, onSave }: {
+  title: string;
+  subtitle?: string;
+  value: string;
+  onChange: (v: string) => void;
+  onCancel: () => void;
+  onSave: () => void;
+}) {
+  const n = Math.max(0, parseInt(value || '0', 10) || 0);
+  const set = (v: number) => onChange(String(Math.max(0, Math.min(99999, v))));
+  return (
+    <div className="fixed inset-0 z-[70] flex flex-col justify-end bg-ink/40" onClick={onCancel}>
+      <div className="bg-surface rounded-t-2xl p-4" onClick={(e) => e.stopPropagation()}
+           style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}>
+        <div className="font-semibold leading-tight truncate">{title}</div>
+        {subtitle && <div className="text-xs text-ink-soft">{subtitle}</div>}
+        <div className="mt-3 flex items-center gap-3">
+          <button onClick={() => set(n - 1)} disabled={n === 0} aria-label="Retirer un"
+                  className="h-16 w-16 shrink-0 rounded-2xl bg-gray-100 text-3xl font-semibold disabled:opacity-40">
+            −
+          </button>
+          {/* `inputMode numeric` : le clavier du PDA s'ouvre sur les chiffres,
+              et l'on garde la saisie directe d'une quantité connue. */}
+          <input
+            type="text" inputMode="numeric" pattern="[0-9]*"
+            value={value}
+            onChange={(e) => onChange(e.target.value.replace(/\D/g, '').slice(0, 5))}
+            onFocus={(e) => e.target.select()}
+            className="flex-1 min-w-0 h-16 rounded-2xl border border-border bg-white text-center text-3xl font-semibold tabular-nums"
+            aria-label="Quantité comptée"
+          />
+          <button onClick={() => set(n + 1)} aria-label="Ajouter un"
+                  className="h-16 w-16 shrink-0 rounded-2xl bg-gray-100 text-3xl font-semibold">
+            +
+          </button>
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <button onClick={onCancel} className="btn-soft h-12">Annuler</button>
+          <button onClick={onSave} className="btn-primary h-12">Enregistrer</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Pavé numérique de saisie d'une quantité (étiquettes, mouvements de stock). */
 export function QtyPad({ title, subtitle, value, onKey, onCancel, onSave }: {
   title: string;
   subtitle?: string;
