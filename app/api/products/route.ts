@@ -259,6 +259,7 @@ export async function GET(req: Request) {
   const { rows } = await query(
     `SELECT p.id, p.name, p.short_description, p.sku, p.barcode, ${extraBarcodesCol}, p.image_url, p.unit,
             p.sale_price_ttc, p.purchase_price_ht, p.price_is_free,
+            p.track_stock,
             p.category_id, p.visible_in_pos, p.is_active,
             ${topCol},
             ${ndCol},
