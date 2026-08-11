@@ -59,7 +59,7 @@ export default function ProductFormModal({
   taxRates: { id: string; code: string; rate: number; label: string; is_default: boolean }[];
   categories: { id: string; name: string }[];
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (savedId?: string) => void;
   /** true = panneau intégré (page Produits), false = modale superposée. */
   inline?: boolean;
   /** true = back-office : sélection multi-boutiques. Sinon l'article est
@@ -142,6 +142,7 @@ export default function ProductFormModal({
   });
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
   const [tab, setTab] = useState<'details' | 'stock' | 'movement' | 'history'>('details');
   const [showLabel, setShowLabel] = useState(false);
 
@@ -273,10 +274,11 @@ export default function ProductFormModal({
     // Photo prise depuis l'appareil : enregistrée via l'endpoint dédié (la
     // data URL compressée dépasse la limite du POST produit). Retrait pris en
     // charge (image_url vidée) si une photo existante a été retirée.
+    let nouvelId: string | undefined;
+    if (!product) { try { nouvelId = (await res.json()).id as string; } catch { /* ignore */ } }
     const photoRemoved = !photo && !existingPhoto && !!product?.image_url;
     if (photo || photoRemoved) {
-      let id = product?.id;
-      if (!id) { try { id = (await res.json()).id as string; } catch { /* ignore */ } }
+      const id = product?.id ?? nouvelId;
       if (id) {
         await fetch(`/api/products/${id}/photo`, {
           method: 'PATCH', headers: { 'Content-Type': 'application/json' },
@@ -285,8 +287,15 @@ export default function ProductFormModal({
       }
     }
     setSaving(false);
-    onSaved();
+    setSavedAt(Date.now());
+    onSaved(nouvelId ?? product?.id);
   }
+
+  useEffect(() => {
+    if (savedAt === null) return;
+    const t = setTimeout(() => setSavedAt(null), 2500);
+    return () => clearTimeout(t);
+  }, [savedAt]);
 
   function onPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -724,8 +733,11 @@ export default function ProductFormModal({
                 </button>
               )}
             </div>
-            <div className="flex gap-2">
-              <button onClick={onClose} className="btn-ghost">Annuler</button>
+            <div className="flex items-center gap-2">
+              {savedAt !== null && (
+                <span className="text-sm text-success font-medium">✓ Enregistré</span>
+              )}
+              <button onClick={onClose} className="btn-ghost">Fermer</button>
               <button disabled={saving || !form.name.trim()} onClick={() => void submit()} className="btn-primary">
                 {saving ? 'Enregistrement…' : (product ? 'Enregistrer' : 'Créer')}
               </button>
