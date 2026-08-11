@@ -1,20 +1,20 @@
 /**
- * Règle « produit suivi en stock ».
+ * Règle « article suivi en stock ».
  *
- * Un mouvement de stock (vente / retour / etc.) n'est tracé QUE pour un produit
- * physique revendable, c'est-à-dire :
- *   - qui possède un code-barres (EAN) renseigné, ET
- *   - qui n'appartient pas à la catégorie « Livraison » (services de livraison).
+ * C'est désormais un choix explicite du commerçant : la case « Gérer le stock »
+ * de la fiche article (`products.track_stock`).
  *
- * Les cartes cadeaux (vendues comme moyen de paiement, sans code-barres) et les
- * services n'ayant pas d'EAN sont donc exclus de fait.
+ * Auparavant la caisse décidait seule — un article était suivi s'il avait un
+ * code-barres et n'était pas dans la catégorie « Livraison ». Cette règle ne
+ * figurait nulle part dans l'interface : impossible de la lire depuis la fiche,
+ * impossible de la contredire. Un bouquet composé au comptoir n'était jamais
+ * décompté, un article étiqueté l'était toujours.
  *
- * `STOCK_TRACKED_SQL` est un fragment SQL réutilisable côté serveur et dans le
- * script de rattrapage. Il suppose les alias de table :
- *   p = products
- *   c = product_categories (via LEFT JOIN c ON c.id = p.category_id)
+ * Décochée, la case ne se contente pas de masquer le stock : AUCUN mouvement
+ * n'est écrit — donc pas de quantité négative à traîner sur un article qu'on ne
+ * compte pas.
+ *
+ * `STOCK_TRACKED_SQL` est un fragment SQL réutilisable, qui suppose l'alias
+ * `p` pour la table `products`.
  */
-export const STOCK_TRACKED_SQL = `(
-  p.barcode IS NOT NULL AND btrim(p.barcode) <> ''
-  AND COALESCE(lower(btrim(c.name)), '') <> 'livraison'
-)`;
+export const STOCK_TRACKED_SQL = 'p.track_stock';

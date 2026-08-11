@@ -13,7 +13,7 @@ interface Product {
   id: string; name: string; short_description: string | null;
   sku: string | null; barcode: string | null;
   extra_barcodes?: string[] | null;
-  sale_price_ttc: number; price_is_free: boolean;
+  sale_price_ttc: number; price_is_free: boolean; track_stock?: boolean;
   purchase_price_ht?: number | null;
   transport_cost_ht?: number | null;
   tax_rate_id: string; category_id: string | null;
@@ -124,6 +124,7 @@ export default function ProductFormModal({
     purchase_price_ht: product?.purchase_price_ht != null ? String(product.purchase_price_ht) : '',
     transport_cost_ht: product?.transport_cost_ht != null ? String(product.transport_cost_ht) : '',
     price_is_free: product?.price_is_free ?? false,
+    track_stock: product?.track_stock ?? false,
     tax_rate_id: product?.tax_rate_id ?? (defaultTax?.id ?? ''),
     category_id: product?.category_id ?? '',
     supplier_id: product?.supplier_id ?? '',
@@ -225,6 +226,7 @@ export default function ProductFormModal({
       purchase_price_ht: parseAmount(form.purchase_price_ht) > 0 ? parseAmount(form.purchase_price_ht) : null,
       transport_cost_ht: form.transport_cost_ht.trim() ? parseAmount(form.transport_cost_ht) : null,
       price_is_free: form.price_is_free,
+      track_stock: form.track_stock,
       tax_rate_id: form.tax_rate_id,
       category_id: form.category_id || null,
       supplier_id: form.supplier_id || null,
@@ -560,6 +562,8 @@ export default function ProductFormModal({
           </Field>
           <Field label="Options" full>
             <div className="grid grid-cols-2 gap-y-1.5 gap-x-4 mt-2">
+              <Check label="Gérer le stock" checked={form.track_stock}
+                     onChange={(v) => setForm({ ...form, track_stock: v })} />
               <Check label="Prix libre (bouquet)" checked={form.price_is_free}
                      onChange={(v) => setForm({ ...form, price_is_free: v, sale_price_ttc: v ? '' : form.sale_price_ttc })} />
               <Check label="Top produit (épinglé en grille)" checked={form.is_top_product}
@@ -569,6 +573,11 @@ export default function ProductFormModal({
               <Check label="Actif" checked={form.is_active}
                      onChange={(v) => setForm({ ...form, is_active: v })} />
             </div>
+            <p className="mt-2 text-xs text-ink-soft">
+              {form.track_stock
+                ? 'Chaque vente en caisse décompte cet article, et chaque retour le recrédite. Les inventaires et les alertes de réassort le prennent en compte.'
+                : 'Cet article se vend sans être décompté : aucun mouvement de stock, donc aucune quantité négative à corriger. À réserver à ce qui n\'a pas de stock à tenir — bouquet composé au comptoir, prestation, carte cadeau.'}
+            </p>
             {form.is_top_product && (
               <p className="mt-2 text-xs text-ink-soft">
                 Les produits Top sont affichés en première ligne de la grille catégories
