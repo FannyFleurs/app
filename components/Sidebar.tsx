@@ -44,7 +44,9 @@ export const SIDEBAR_ITEMS: SidebarItem[] = [
   // Catalogue
   { href: '/products',     label: 'Produits',             icon: 'products',     group: 'Catalogue',perm: 'products.read' },
   { href: '/pricing',      label: 'Gestion de prix',      icon: 'products',     group: 'Catalogue',perm: 'products.write', boOnly: true },
-  { href: '/labels',       label: 'Étiquettes',           icon: 'print',        group: 'Catalogue',perm: 'products.read' },
+  // Les étiquettes s'impriment depuis le poste, sur l'imprimante qui y est
+  // reliée : la page n'a rien à faire dans un back-office à distance.
+  { href: '/labels',       label: 'Étiquettes',           icon: 'print',        group: 'Catalogue',perm: 'products.read', appOnly: true },
   { href: '/categories',   label: 'Catégories',           icon: 'categories',   group: 'Catalogue',perm: 'products.read' },
   { href: '/suppliers',    label: 'Fournisseurs',         icon: 'truck',        group: 'Catalogue',perm: 'products.read' },
   { href: '/stock',        label: 'Stock',                icon: 'stock',        group: 'Catalogue',perm: 'products.read' },

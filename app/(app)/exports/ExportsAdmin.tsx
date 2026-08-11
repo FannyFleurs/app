@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Badge from '@/components/Badge';
 import EmptyState from '@/components/EmptyState';
+import PageHeader from '@/components/PageHeader';
 import { ALL_FORMATS, CORE_FORMAT, availableFormats } from '@/lib/settings/export-formats';
 
 interface ExportItem {
@@ -88,12 +89,10 @@ export default function ExportsAdmin() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Exports comptables</h1>
-        <p className="mt-1 text-sm text-ink-soft">
-          Générez des paquets pour votre expert-comptable : ventes, TVA collectée, paiements, écritures.
-        </p>
-      </div>
+      <PageHeader
+        title="Exports comptables"
+        subtitle="Générez des paquets pour votre expert-comptable : ventes, TVA collectée, paiements, écritures."
+      />
 
       <section>
         <div className="card p-4 sm:p-5">

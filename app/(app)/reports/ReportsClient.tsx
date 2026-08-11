@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatEUR } from '@/lib/services/money';
 import { PAYMENT_LABELS } from '@/components/labels';
 import StoreScopeSelect from '@/components/StoreScopeSelect';
+import PageHeader from '@/components/PageHeader';
 import Icon from '@/components/Icon';
 
 /**
@@ -336,30 +337,32 @@ export default function ReportsClient({ stores }: { stores: { id: string; name: 
       </aside>
 
       <main className="md:overflow-y-auto">
-        <div className="p-4 md:p-6 space-y-4">
-          {/* En-tête : titre + période */}
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h1 className="text-2xl font-semibold tracking-tight">{meta.label}</h1>
-            <div className="flex flex-wrap items-center gap-2">
-              {stores.length > 1 && (
-                <StoreScopeSelect
-                  stores={[{ id: '', name: 'Toutes les boutiques' }, ...stores]}
-                  value={storeId}
-                  onChange={setStoreId}
-                  hideLabel
-                />
-              )}
-              <div className="flex items-center gap-1.5 rounded-xl border border-border bg-surface px-3 h-10">
-                <input type="date" value={from} max={to}
-                       onChange={(e) => setFrom(e.target.value)}
-                       className="bg-transparent text-sm outline-none" />
-                <span className="text-ink-soft text-sm">→</span>
-                <input type="date" value={to} min={from}
-                       onChange={(e) => setTo(e.target.value)}
-                       className="bg-transparent text-sm outline-none" />
+        <div className="p-6 md:p-8 space-y-5">
+          {/* En-tête : titre + période, même structure que les autres pages. */}
+          <PageHeader
+            title={meta.label}
+            actions={
+              <div className="flex flex-wrap items-center gap-2">
+                {stores.length > 1 && (
+                  <StoreScopeSelect
+                    stores={[{ id: '', name: 'Toutes les boutiques' }, ...stores]}
+                    value={storeId}
+                    onChange={setStoreId}
+                    hideLabel
+                  />
+                )}
+                <div className="flex items-center gap-1.5 rounded-xl border border-border bg-surface px-3 h-10">
+                  <input type="date" value={from} max={to}
+                         onChange={(e) => setFrom(e.target.value)}
+                         className="bg-transparent text-sm outline-none" />
+                  <span className="text-ink-soft text-sm">→</span>
+                  <input type="date" value={to} min={from}
+                         onChange={(e) => setTo(e.target.value)}
+                         className="bg-transparent text-sm outline-none" />
+                </div>
               </div>
-            </div>
-          </div>
+            }
+          />
 
           {/* Périodes courantes, en un clic. La période active se reconnaît à
               sa pastille pleine — utile après une saisie manuelle, où plus

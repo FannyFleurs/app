@@ -1,5 +1,7 @@
 'use client';
 
+import PageHeader from '@/components/PageHeader';
+
 import { useState } from 'react';
 import GiftCardsAdmin from '../gift-cards/GiftCardsAdmin';
 import CreditNotesList from '../credit-notes/CreditNotesList';
@@ -14,10 +16,10 @@ export default function VouchersAdmin() {
   return (
     <div className="h-full overflow-y-auto">
       <div className="px-6 md:px-8 pt-6 md:pt-8">
-        <h1 className="text-2xl font-semibold tracking-tight">Avoirs &amp; Cartes cadeaux</h1>
-        <p className="mt-1 text-sm text-ink-soft">
-          Gérez vos cartes cadeaux émises et les avoirs (remboursements différés).
-        </p>
+        <PageHeader
+          title="Avoirs &amp; cartes cadeaux"
+          subtitle="Gérez vos cartes cadeaux émises et les avoirs (remboursements différés)."
+        />
         <div className="mt-5 flex gap-1 border-b border-border">
           <TabButton active={tab === 'gift_cards'}    onClick={() => setTab('gift_cards')}>
             Cartes cadeaux
