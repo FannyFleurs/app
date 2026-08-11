@@ -112,8 +112,11 @@ export default function ProductsList({
       })) as Product[];
       setProducts(mapped);
       writeProductsCache(cacheKey, mapped);
+      setLoading(false);
+      return mapped;
     }
     setLoading(false);
+    return null;
   }
   useEffect(() => {
     // Hors BO : on attend de connaître la boutique du poste avant de charger.
@@ -445,7 +448,19 @@ export default function ProductsList({
                 inline
                 backOffice={backOffice}
                 onClose={() => setEditing(undefined)}
-                onSaved={() => { setEditing(undefined); void reload(); }}
+                // La fiche RESTE ouverte après enregistrement : on enchaîne
+                // souvent plusieurs corrections sur le même article, et la
+                // refermer obligeait à le retrouver dans la liste à chaque fois.
+                // On la recharge avec les valeurs revenues du serveur, pour ne
+                // pas laisser croire qu'un champ refusé a été accepté.
+                onSaved={(savedId) => {
+                  void reload().then((liste) => {
+                    if (!liste) return;
+                    const id = savedId ?? editing?.id;
+                    const frais = liste.find((p) => p.id === id);
+                    if (frais) setEditing(frais);
+                  });
+                }}
               />
             </>
           ) : (
