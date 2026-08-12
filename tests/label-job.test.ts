@@ -4,7 +4,8 @@ import {
   buildLabelsStarPrnt, buildTestLabelsStarPrnt,
   LABEL_PITCH_MM, PRINTABLE_HEIGHT_MM, MAX_LABELS_PER_JOB,
 } from '@/lib/services/cloudprnt/starprnt';
-import { renderSingleLabelBitmap } from '@/lib/services/cloudprnt/label-render';
+import { renderSingleLabelBitmap, bitmapToPngBuffer } from '@/lib/services/cloudprnt/label-render';
+import { buildLabelsMarkup, buildTestLabelsMarkup } from '@/lib/services/cloudprnt/markup';
 import { LABEL_DEFAULTS } from '@/lib/settings/label';
 
 /**
@@ -127,5 +128,81 @@ describe('Lot de réglage', () => {
     const rendu = readFileSync('lib/services/cloudprnt/label-render.ts', 'utf8');
     expect(rendu).toMatch(/export async function renderTestLabelBitmap/);
     expect(rendu).not.toMatch(/renderTestLabelBitmap[\s\S]{0,900}drawBarcode/);
+  });
+});
+
+describe('Star Document Markup', () => {
+  const MEDIA = { ...LABEL_DEFAULTS, width_mm: 50, height_mm: PRINTABLE_HEIGHT_MM };
+
+  it('intercale le recalage marque noire ENTRE les étiquettes seulement', async () => {
+    // Un feed après la dernière image ferait avancer deux fois avant la coupe.
+    const markup = await buildLabelsMarkup([PRODUIT, PRODUIT, PRODUIT], MEDIA);
+    const lignes = markup.split('\n');
+    expect(lignes).toHaveLength(6);
+    expect(lignes[0]).toMatch(/^\[image: url "data:image\/png;base64,/);
+    expect(lignes[1]).toBe('[feed: black-mark]\\');
+    expect(lignes[3]).toBe('[feed: black-mark]\\');
+    expect(lignes[5]).toBe('[cut]');
+    expect((markup.match(/\[feed: black-mark\]/g) ?? [])).toHaveLength(2);
+    expect((markup.match(/\[cut\]/g) ?? [])).toHaveLength(1);
+  });
+
+  it('n\'insère aucun feed pour une étiquette seule', async () => {
+    const markup = await buildLabelsMarkup([PRODUIT], MEDIA);
+    expect(markup).not.toContain('[feed:');
+    expect(markup.split('\n')).toHaveLength(2);
+  });
+
+  it('protège la Data URL par des guillemets', async () => {
+    // Sans guillemets, le « ; » de « image/png;base64 » serait lu comme un
+    // séparateur de paramètres et le document deviendrait invalide.
+    const markup = await buildLabelsMarkup([PRODUIT], MEDIA);
+    expect(markup).toMatch(/\[image: url "data:image\/png;base64,[A-Za-z0-9+/=]+"\]\\$/m);
+  });
+
+  it('échappe le saut de ligne qui suit chaque image', async () => {
+    // Sans le « \ » final, chaque étiquette gagnerait une ligne blanche.
+    const markup = await buildLabelsMarkup([PRODUIT, PRODUIT], MEDIA);
+    for (const l of markup.split('\n').filter((x) => x.startsWith('[image:'))) {
+      expect(l.endsWith('\\')).toBe(true);
+    }
+  });
+
+  it('produit un vrai PNG par étiquette', async () => {
+    const bmp = await renderSingleLabelBitmap(PRODUIT, MEDIA);
+    const png = await bitmapToPngBuffer(bmp);
+    // Signature PNG : 89 50 4E 47.
+    expect(png.subarray(0, 4).toString('hex')).toBe('89504e47');
+    expect(png.length).toBeGreaterThan(500);
+  });
+
+  it('numérote le lot de réglage sans code-barres', async () => {
+    const markup = await buildTestLabelsMarkup(5, MEDIA);
+    expect((markup.match(/\[image:/g) ?? [])).toHaveLength(5);
+    expect((markup.match(/\[feed: black-mark\]/g) ?? [])).toHaveLength(4);
+    expect((markup.match(/\[cut\]/g) ?? [])).toHaveLength(1);
+  });
+});
+
+describe('Conversion CPUtil', () => {
+  const src = readFileSync('lib/services/cloudprnt/cputil.ts', 'utf8');
+
+  it('appelle CPUtil avec la syntaxe documentée', () => {
+    // cputil [options] decode <type MIME> <entrée> <sortie>, « - » = stdout.
+    expect(src).toMatch(/'printarea', String\(printAreaDots\), 'decode', 'application\/vnd\.star\.starprnt'/);
+    expect(src).toMatch(/entree, '-'/);
+  });
+
+  it('n\'écrit que le .stm sur disque, dans /tmp', () => {
+    // Seul répertoire inscriptible d'une lambda ; les PNG restent en mémoire.
+    expect(src).toMatch(/os\.tmpdir\(\)/);
+    expect(src).toMatch(/\.stm/);
+    expect(src).toMatch(/unlink\(entree\)/);
+  });
+
+  it('dit clairement pourquoi il échoue, et journalise stderr', () => {
+    expect(src).toContain('CputilError');
+    expect(src).toMatch(/buffer vide/);
+    expect(src).toMatch(/console\.error\('\[cputil\] échec'/);
   });
 });

@@ -1,6 +1,8 @@
 import { type LabelSettings } from '@/lib/settings/label';
 import { type LabelProduct } from '@/lib/services/label-print';
 import { renderSingleLabelBitmap, renderTestLabelBitmap } from '@/lib/services/cloudprnt/label-render';
+import { buildLabelsMarkup, buildTestLabelsMarkup } from '@/lib/services/cloudprnt/markup';
+import { convertMarkupToStarPrnt, cputilDisponible, cputilPath } from '@/lib/services/cloudprnt/cputil';
 
 /**
  * Job StarPRNT (`application/vnd.star.starprnt`) pour l'imprimante d'étiquettes
@@ -90,32 +92,63 @@ function mediaImprimable(settings: LabelSettings): LabelSettings {
 }
 
 /**
- * Trace hexadécimale du job, sur demande (`LABEL_JOB_HEXDUMP=1`).
- *
- * Sert à vérifier d'un coup d'œil qu'un lot de 3 contient bien
- * image/coupe × 3 et non image+image+image/coupe.
+ * Largeur de la zone d'impression, en points : 50 mm à 203 dpi.
+ * Doit rester cohérente avec la largeur du bitmap rendu.
  */
-function traceHex(buf: Buffer, etiquettes: number): void {
+const PRINT_AREA_DOTS = 400;
+
+/** Trace de fabrication du job, sans jamais publier les Data URL. */
+function traceJob(etiquettes: number, markupLen: number, octets: number, moteur: string): void {
   if (process.env.LABEL_JOB_HEXDUMP !== '1') return;
-  const coupes = (buf.toString('hex').match(/1b6400/g) ?? []).length;
   // eslint-disable-next-line no-console
-  console.log(`[label-job] ${etiquettes} étiquette(s) · ${buf.length} octets · ${coupes} coupe(s)`);
-  // eslint-disable-next-line no-console
-  console.log(buf.toString('hex').match(/.{1,2}/g)?.join(' '));
+  console.log(`[label-job] ${moteur} · ${etiquettes} étiquette(s) · markup ${markupLen} car. · ${octets} octets`);
 }
 
+/**
+ * Job d'un lot d'étiquettes.
+ *
+ * Chemin nominal : un document Star Document Markup — une image par
+ * étiquette, `[feed: black-mark]` entre deux, une seule `[cut]` à la fin —
+ * converti en StarPRNT par CPUtil. Le recalage entre deux étiquettes est fait
+ * par le capteur de marque noire, jamais par une avance calculée ici.
+ *
+ * Repli : tant que le binaire CPUtil n'est pas déposé dans `bin/cputil/`, on
+ * encode directement (une image, une coupe, par étiquette). Ce repli imprime,
+ * mais sans le recalage sur la marque — il n'est là que pour ne pas arrêter la
+ * boutique, et il le dit dans les journaux.
+ */
 export async function buildLabelsStarPrnt(
   entries: Array<{ product: LabelProduct; qty: number }>,
   settings: LabelSettings,
+): Promise<Buffer> {
+  const media = mediaImprimable(settings);
+  const flat = aplatir(entries);
+  if (flat.length === 0) throw new Error('Aucune étiquette à imprimer.');
+
+  if (await cputilDisponible()) {
+    const markup = await buildLabelsMarkup(flat, media);
+    const out = await convertMarkupToStarPrnt(markup, PRINT_AREA_DOTS);
+    traceJob(flat.length, markup.length, out.length, 'markup+cputil');
+    return out;
+  }
+
+  // eslint-disable-next-line no-console
+  console.warn(
+    `[label-job] CPUtil absent (${cputilPath()}) : repli sur l'encodage direct, `
+    + 'sans recalage sur la marque noire entre deux étiquettes.',
+  );
+  return encoderDirect(flat, media);
+}
+
+/** Repli : une image, une coupe, par étiquette, sans passer par le Markup. */
+async function encoderDirect(
+  flat: LabelProduct[], media: LabelSettings,
 ): Promise<Buffer> {
   const mod = await import('star-prnt-encoder');
   const StarPrntEncoder = mod.default;
 
   const enc = new StarPrntEncoder({});
   enc.initialize();
-
-  const media = mediaImprimable(settings);
-  const flat = aplatir(entries);
 
   for (const product of flat) {
     const bmp = await renderSingleLabelBitmap(product, media);
@@ -129,7 +162,7 @@ export async function buildLabelsStarPrnt(
   }
 
   const out = Buffer.from(enc.encode());
-  traceHex(out, flat.length);
+  traceJob(flat.length, 0, out.length, 'starprnt-encoder');
   return out;
 }
 
@@ -146,14 +179,20 @@ export async function buildTestLabelsStarPrnt(
   count: number,
   settings: LabelSettings,
 ): Promise<Buffer> {
-  const mod = await import('star-prnt-encoder');
-  const StarPrntEncoder = mod.default;
-
-  const enc = new StarPrntEncoder({});
-  enc.initialize();
-
   const media = mediaImprimable(settings);
   const n = Math.max(1, Math.min(MAX_LABELS_PER_JOB, Math.round(count || 0)));
+
+  if (await cputilDisponible()) {
+    const markup = await buildTestLabelsMarkup(n, media);
+    const out = await convertMarkupToStarPrnt(markup, PRINT_AREA_DOTS);
+    traceJob(n, markup.length, out.length, 'markup+cputil');
+    return out;
+  }
+
+  const mod = await import('star-prnt-encoder');
+  const StarPrntEncoder = mod.default;
+  const enc = new StarPrntEncoder({});
+  enc.initialize();
 
   for (let i = 1; i <= n; i++) {
     const bmp = await renderTestLabelBitmap(`TEST ${String(i).padStart(2, '0')}`, media);
@@ -167,7 +206,7 @@ export async function buildTestLabelsStarPrnt(
   }
 
   const out = Buffer.from(enc.encode());
-  traceHex(out, n);
+  traceJob(n, 0, out.length, 'starprnt-encoder');
   return out;
 }
 

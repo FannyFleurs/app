@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { Readable } from 'node:stream';
+import { PassThrough, Readable } from 'node:stream';
 import { isValidEan13 } from '@/lib/services/ean';
 import { type LabelSettings } from '@/lib/settings/label';
 import { type LabelProduct } from '@/lib/services/label-print-core';
@@ -49,6 +49,27 @@ async function ensureDeps() {
 }
 
 export interface LabelBitmap { data: Uint8Array; width: number; height: number; }
+
+/**
+ * Encode un bitmap RGBA en PNG, en mémoire.
+ *
+ * Star Document Markup embarque les images en Data URL : il faut donc un PNG,
+ * pas un tableau de pixels. Rien n'est écrit sur disque — la fonction tourne
+ * dans une lambda Vercel, dont le seul répertoire inscriptible est /tmp et
+ * qu'on garde pour le fichier .stm.
+ */
+export async function bitmapToPngBuffer(bmp: LabelBitmap): Promise<Buffer> {
+  await ensureDeps();
+  const PImage = PImageMod;
+  const img = PImage.make(bmp.width, bmp.height);
+  (img as { data: Uint8Array }).data.set(bmp.data);
+
+  const morceaux: Buffer[] = [];
+  const flux = new PassThrough();
+  flux.on('data', (c: Buffer) => morceaux.push(c));
+  await PImage.encodePNGToStream(img, flux);
+  return Buffer.concat(morceaux);
+}
 
 /**
  * Trace une ligne centrée dans la boîte, en resserrant la police si la mesure

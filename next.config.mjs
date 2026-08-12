@@ -19,7 +19,10 @@ const nextConfig = {
     // pas seul. On force leur inclusion dans les fonctions API (Next 14.2 :
     // sous experimental).
     outputFileTracingIncludes: {
-      '/api/**/*': ['./assets/fonts/**'],
+      // Polices du rendu étiquettes + binaire CPUtil (conversion Star Document
+      // Markup → StarPRNT) : tous deux lus depuis process.cwd() à l'exécution,
+      // Next ne les trace pas seul.
+      '/api/**/*': ['./assets/fonts/**', './bin/cputil/**/*'],
     },
   },
   async headers() {
