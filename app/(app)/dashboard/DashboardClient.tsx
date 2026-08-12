@@ -3,17 +3,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { formatEUR } from '@/lib/services/money';
 import type { DashboardData } from '@/lib/analytics/dashboard';
-import { LineCompare, Bars, StackedBar } from '@/components/analytics/charts';
+import { LineCompare, Bars } from '@/components/analytics/charts';
+import { AnneauPaiements, EtatVide, COULEURS_PAIEMENT } from '@/components/analytics/hellopos';
+import Icon, { type IconName } from '@/components/Icon';
 import PageHeader from '@/components/PageHeader';
 
 interface Store { id: string; name: string }
 type Mode = 'ttc' | 'ht';
 type Period = 'today' | 'week' | 'month' | 'prev_month' | 'year' | 'custom';
-
-const PAYMENT_COLORS: Record<string, string> = {
-  card: '#c2703d', cash: '#22c55e', gift_card: '#3b82f6', transfer: '#f59e0b',
-  check: '#8b5cf6', credit_note: '#14b8a6', deferred: '#64748b', other: '#94a3b8',
-};
 
 function iso(d: Date) { return d.toISOString().slice(0, 10); }
 
@@ -126,24 +123,26 @@ export default function DashboardClient({ firstName, stores, lockedStoreId }: { 
         </div>
       )}
 
-      {/* KPI tiles */}
-      <section className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-        <Kpi label={`Chiffre d'affaires ${suffix}`}
+      {/* Les six chiffres de la période, dans les tuiles de « Ma journée » :
+          pastille, libellé, chiffre, comparaison. La première est pleine —
+          c'est le chiffre qu'on vient chercher. */}
+      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <Kpi icone="card" pleine label={`Chiffre d'affaires ${suffix}`}
              value={cur ? formatEUR(ht ? cur.ca_ht : cur.ca_ttc) : '—'}
              delta={delta(cur && (ht ? cur.ca_ht : cur.ca_ttc), prev && (ht ? prev.ca_ht : prev.ca_ttc))} />
-        <Kpi label={`Ticket moyen ${suffix}`}
+        <Kpi icone="stock" label={`Ticket moyen ${suffix}`}
              value={cur ? formatEUR(ht ? cur.avg_ht : cur.avg_ttc) : '—'}
              delta={delta(cur && (ht ? cur.avg_ht : cur.avg_ttc), prev && (ht ? prev.avg_ht : prev.avg_ttc))} />
-        <Kpi label="Nombre de tickets"
+        <Kpi icone="invoices" label="Nombre de tickets"
              value={cur ? String(cur.tickets) : '—'}
              delta={delta(cur?.tickets, prev?.tickets)} />
-        <Kpi label="Nombre de clients"
+        <Kpi icone="customers" label="Nombre de clients"
              value={cur ? String(cur.customers) : '—'}
              delta={delta(cur?.customers, prev?.customers)} />
-        <Kpi label="Marge"
+        <Kpi icone="star" label="Marge"
              value={cur ? formatEUR(cur.marge) : '—'}
              delta={delta(cur?.marge, prev?.marge)} />
-        <Kpi label="TVA collectée"
+        <Kpi icone="fiscal" label="TVA collectée"
              value={cur ? formatEUR(cur.tva) : '—'}
              delta={delta(cur?.tva, prev?.tva)} />
       </section>
@@ -181,12 +180,20 @@ export default function DashboardClient({ firstName, stores, lockedStoreId }: { 
         </Card>
       </section>
 
-      {/* Moyens de paiement & mode de vente */}
+      {/* Moyens de paiement & TVA */}
       <section className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        <Card title="Moyens de paiement">
-          {data && <StackedBar slices={data.payments.map((p) => ({
-            label: p.label, value: p.amount, color: PAYMENT_COLORS[p.method] ?? '#94a3b8',
-          }))} />}
+        <Card title="Répartition des ventes">
+          {data && (data.payments.length > 0 ? (
+            <AnneauPaiements parts={data.payments.map((p, i) => ({
+              label: p.label, montant: p.amount,
+              couleur: COULEURS_PAIEMENT[i % COULEURS_PAIEMENT.length]!,
+            }))} />
+          ) : (
+            <div className="py-8">
+              <EtatVide icone="graph" titre="Aucun encaissement"
+                        texte="Aucun règlement enregistré sur cette période." />
+            </div>
+          ))}
         </Card>
         {/* La TVA était calculée par l'API et jetée : la page n'en montrait que
             le total. Le détail par taux est ce qu'on recopie sur la
@@ -230,26 +237,51 @@ function delta(cur?: number, prev?: number): Delta {
   return { kind: 'pct', pct: Math.abs(pct), up: cur >= prev };
 }
 
-function Kpi({ label, value, delta }: { label: string; value: string; delta: Delta }) {
+/**
+ * Tuile d'indicateur, dans la présentation de « Ma journée » : pastille à
+ * gauche, libellé, chiffre, comparaison en dessous.
+ *
+ * La comparaison est la ligne de note. Elle garde sa couleur — vert si ça
+ * monte, rouge si ça descend —, contrairement au comptoir qui la laisse en
+ * gris : ici l'écran sert justement à lire une évolution.
+ */
+function Kpi({ icone, label, value, delta, pleine }: {
+  icone: IconName; label: string; value: string; delta: Delta; pleine?: boolean;
+}) {
   return (
-    <div className="card p-5">
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex-1 text-xs uppercase tracking-wider text-ink-soft">{label}</div>
-        {delta?.kind === 'pct' && (
-          <span className={`shrink-0 text-xs font-medium tabular-nums ${delta.up ? 'text-success' : 'text-danger'}`}>
-            {delta.up ? '↑' : '↓'} {delta.pct.toFixed(0)}%
-          </span>
-        )}
-        {delta?.kind === 'sans-base' && (
-          <span
-            className="shrink-0 text-xs font-medium text-ink-soft"
-            title="Rien à comparer : la période équivalente de l'an dernier est vide."
-          >
-            —
-          </span>
-        )}
+    <div className="card p-4 flex items-center gap-3">
+      <span
+        className={`h-11 w-11 shrink-0 rounded-full grid place-items-center ${
+          pleine ? 'text-white' : 'bg-muted text-accent-deep'
+        }`}
+        style={pleine ? { backgroundColor: 'var(--primary)' } : undefined}
+      >
+        <Icon name={icone} size={20} />
+      </span>
+      {/* flex-1 : sans lui la colonne se fait écraser par la pastille et le
+          montant se coupe dès qu'on descend sous le grand écran. */}
+      <div className="min-w-0 flex-1">
+        <div className="text-xs text-ink-soft truncate">{label}</div>
+        <div className="text-xl font-semibold tracking-tight tabular-nums truncate" title={value}>
+          {value}
+        </div>
+        <div className="text-[11px] truncate">
+          {delta?.kind === 'pct' && (
+            <span className={`font-medium tabular-nums ${delta.up ? 'text-success' : 'text-danger'}`}>
+              {delta.up ? '↑' : '↓'} {delta.pct.toFixed(0)}% vs l&apos;an dernier
+            </span>
+          )}
+          {delta?.kind === 'sans-base' && (
+            <span
+              className="text-ink-soft"
+              title="Rien à comparer : la période équivalente de l'an dernier est vide."
+            >
+              — rien à comparer
+            </span>
+          )}
+          {delta === null && <span className="text-ink-soft">&nbsp;</span>}
+        </div>
       </div>
-      <div className="mt-2 text-3xl font-semibold tracking-tight tabular-nums">{value}</div>
     </div>
   );
 }
@@ -262,12 +294,15 @@ function Kpi({ label, value, delta }: { label: string; value: string; delta: Del
  */
 function TvaCard({ rows, total }: { rows: DashboardData['tva']; total: number }) {
   return (
-    <div className="card p-5">
-      <div className="text-sm text-ink-soft">TVA collectée</div>
+    <section className="card p-5">
+      <h2 className="font-semibold">TVA collectée</h2>
       <div className="mt-0.5 text-2xl font-semibold tracking-tight tabular-nums">{formatEUR(total)}</div>
       <div className="mt-3">
         {rows.length === 0 ? (
-          <p className="text-sm text-ink-soft">Aucune vente sur la période.</p>
+          <div className="py-8">
+            <EtatVide icone="doc" titre="Aucune donnée"
+                      texte="Aucune vente à déclarer pour cette période." />
+          </div>
         ) : (
           <table className="w-full text-sm">
             <thead className="text-ink-soft text-xs uppercase tracking-wider">
@@ -291,17 +326,18 @@ function TvaCard({ rows, total }: { rows: DashboardData['tva']; total: number })
           </table>
         )}
       </div>
-    </div>
+    </section>
   );
 }
 
+/** Carte de graphique : titre en gras, chiffre de tête, dessin. */
 function Card({ title, value, children }: { title: string; value?: string; children: React.ReactNode }) {
   return (
-    <div className="card p-5">
-      <div className="text-sm text-ink-soft">{title}</div>
+    <section className="card p-5">
+      <h2 className="font-semibold">{title}</h2>
       {value && <div className="mt-0.5 text-2xl font-semibold tracking-tight tabular-nums">{value}</div>}
       <div className="mt-3">{children}</div>
-    </div>
+    </section>
   );
 }
 
@@ -311,10 +347,13 @@ function ProductTable({ title, rows, ht }: {
   ht: boolean;
 }) {
   return (
-    <div className="card p-5">
-      <div className="text-sm text-ink-soft mb-3">{title}</div>
+    <section className="card p-5">
+      <h2 className="font-semibold mb-3">{title}</h2>
       {rows.length === 0 ? (
-        <p className="text-sm text-ink-soft">Aucune vente sur la période.</p>
+        <div className="py-8">
+          <EtatVide icone="tag" titre="Aucune donnée"
+                    texte="Aucune vente par produit pour cette période." />
+        </div>
       ) : (
         <table className="w-full text-sm">
           <thead className="text-ink-soft text-xs uppercase tracking-wider">
@@ -335,6 +374,6 @@ function ProductTable({ title, rows, ht }: {
           </tbody>
         </table>
       )}
-    </div>
+    </section>
   );
 }

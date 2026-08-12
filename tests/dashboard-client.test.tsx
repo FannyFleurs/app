@@ -69,11 +69,12 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
  * La tuile d'indicateur portant ce libellé.
  *
  * Le libellé apparaît deux fois sur la page — sur la tuile ET sur le titre du
- * graphique correspondant. Seule la tuile écrit son libellé en capitales, ce
- * qui la distingue sans dépendre de l'ordre des cartes.
+ * graphique correspondant. Le titre de carte est un `h2`, le libellé de tuile
+ * un simple `div` : c'est ce qui les sépare, sans dépendre de l'ordre des
+ * cartes ni d'une classe de style.
  */
 function tuileKpi(label: string): HTMLElement {
-  const el = screen.getAllByText(label).find((d) => d.className.includes('uppercase'));
+  const el = screen.getAllByText(label).find((d) => d.tagName === 'DIV');
   if (!el) throw new Error(`Aucune tuile « ${label} »`);
   return el.closest('.card') as HTMLElement;
 }
@@ -116,7 +117,7 @@ describe('Évolution sur la période comparée', () => {
     await mount(payload(KPI_VIDE));
     const tuile = tuileKpi("Chiffre d'affaires TTC");
     expect(within(tuile).getByTitle(/Rien à comparer/)).toBeTruthy();
-    expect(within(tuile).getByText('—')).toBeTruthy();
+    expect(within(tuile).getByText(/rien à comparer/i)).toBeTruthy();
   });
 
   it('calcule le pourcentage dès qu\'il y a une base', async () => {
