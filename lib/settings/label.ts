@@ -31,20 +31,6 @@ export interface LabelSettings {
   /** Dimensions de l'étiquette en millimètres. */
   width_mm: number;
   height_mm: number;
-  /**
-   * Écart entre deux étiquettes, en millimètres.
-   *
-   * Un lot est imprimé en UNE image continue : chaque étiquette occupe une
-   * case au pas physique du média, soit hauteur + écart. Si cet écart ne
-   * correspond pas au rouleau, le décalage s'accumule d'étiquette en
-   * étiquette et le lot part de travers.
-   *
-   *  - papier prédécoupé : l'écart est le blanc entre deux étiquettes (3 mm
-   *    sur le rouleau d'origine) ;
-   *  - papier à marque noire : le pas EST la hauteur d'étiquette, donc 0 —
-   *    ou la marge de sécurité qu'on veut garder au-dessus de la marque.
-   */
-  gap_mm: number;
   /** Éléments imprimés sur l'étiquette. */
   show_name: boolean;
   show_barcode: boolean;
@@ -90,7 +76,6 @@ export const LABEL_LAYOUT_DEFAULT: LabelLayout = {
 export const LABEL_DEFAULTS: LabelSettings = {
   width_mm: 50,
   height_mm: 30,
-  gap_mm: 3,
   show_name: true,
   show_barcode: true,
   show_price: true,
@@ -105,13 +90,6 @@ function clampMm(v: unknown, fallback: number): number {
   const n = typeof v === 'number' ? v : Number(v);
   if (!Number.isFinite(n)) return fallback;
   return Math.min(200, Math.max(10, Math.round(n)));
-}
-
-/** Écart entre étiquettes : 0 admis (papier à marque noire, pas = hauteur). */
-function clampGap(v: unknown, fallback: number): number {
-  const n = typeof v === 'number' ? v : Number(v);
-  if (!Number.isFinite(n)) return fallback;
-  return Math.min(20, Math.max(0, Math.round(n * 10) / 10));
 }
 
 /** Calage borné : au-delà de ±15 mm on ne compense plus, on casse. */
@@ -148,7 +126,6 @@ export function mergeLabelDefaults(partial: Partial<LabelSettings> | null | unde
   return {
     width_mm: clampMm(partial.width_mm, LABEL_DEFAULTS.width_mm),
     height_mm: clampMm(partial.height_mm, LABEL_DEFAULTS.height_mm),
-    gap_mm: clampGap(partial.gap_mm, LABEL_DEFAULTS.gap_mm),
     show_name: partial.show_name ?? LABEL_DEFAULTS.show_name,
     show_barcode: partial.show_barcode ?? LABEL_DEFAULTS.show_barcode,
     show_price: partial.show_price ?? LABEL_DEFAULTS.show_price,

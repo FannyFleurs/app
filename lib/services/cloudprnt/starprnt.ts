@@ -1,12 +1,11 @@
 import { type LabelSettings } from '@/lib/settings/label';
 import { type LabelProduct } from '@/lib/services/label-print';
-import { renderLabelSheetBitmap } from '@/lib/services/cloudprnt/label-render';
+import { renderLabelBitmap } from '@/lib/services/cloudprnt/label-render';
 
 /**
  * Génère un job StarPRNT (`application/vnd.star.starprnt`) où chaque étiquette
  * est une IMAGE bitmap (placement 2D précis : nom centré, prix au centre,
- * code-barres en bas) insérée via `encoder.image(...)`, suivie de la séquence
- * de coupe propre (form feed jusqu'au gap + petite avance + coupe).
+ * code-barres en bas) insérée via `encoder.image(...)`, suivie de sa coupe.
  *
  * Pourquoi image + StarPRNT : la mC-Label3 ne gère pas le Star Document Markup,
  * et le mode texte StarPRNT ne sait ni centrer le texte agrandi ni positionner
@@ -15,9 +14,6 @@ import { renderLabelSheetBitmap } from '@/lib/services/cloudprnt/label-render';
  */
 
 export const STARPRNT_CONTENT_TYPE = 'application/vnd.star.starprnt';
-
-// Nombre max d'étiquettes par image continue (borne mémoire du bitmap).
-const MAX_PER_SHEET = 20;
 
 export async function buildLabelsStarPrnt(
   entries: Array<{ product: LabelProduct; qty: number }>,
@@ -35,21 +31,19 @@ export async function buildLabelsStarPrnt(
     for (let i = 0; i < n; i++) flat.push(product);
   }
 
-  // Une seule IMAGE continue par tranche (aucune commande entre les étiquettes
-  // → aucune vierge intercalaire). Une seule coupe à la fin de chaque tranche.
-  for (let start = 0; start < flat.length; start += MAX_PER_SHEET) {
-    const slice = flat.slice(start, start + MAX_PER_SHEET);
-    const bmp = await renderLabelSheetBitmap(slice, settings);
+  // UNE étiquette, UNE coupe. Le lot partait auparavant en une seule image
+  // continue, au pas calculé par le logiciel : à la troisième étiquette le
+  // décalage se voyait, et la coupe tombait là où l'image finissait — trop
+  // tôt. L'imprimante, elle, lit la marque noire et sait où couper : on lui
+  // rend ce travail plutôt que de le refaire à sa place.
+  for (const label of flat) {
+    const bmp = await renderLabelBitmap(label, settings);
     enc.image(
       { data: bmp.data, width: bmp.width, height: bmp.height },
       bmp.width,
       bmp.height,
       'threshold',
     );
-    // Coupe directe (sans form feed) : c'est le meilleur état — pas de vierge.
-    // (Le form feed avant coupe saute une étiquette → vierge.) La coupe tombe
-    // ~5 mm après le gap, offset propre à la coupe « commande » de la mC-Label3
-    // que le logiciel ne peut pas compenser (voir note).
     enc.cut();
   }
 

@@ -14,7 +14,6 @@ const elLayout = z.object({
 const schema = z.object({
   width_mm: z.number().min(10).max(200).optional(),
   height_mm: z.number().min(10).max(200).optional(),
-  gap_mm: z.number().min(0).max(20).optional(),
   show_name: z.boolean().optional(),
   show_barcode: z.boolean().optional(),
   show_price: z.boolean().optional(),

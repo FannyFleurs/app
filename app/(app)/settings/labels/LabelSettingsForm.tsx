@@ -85,22 +85,7 @@ export default function LabelSettingsForm({ initial, canEdit }: {
                 <input type="number" min={10} max={200} className="input h-10 w-28" value={form.height_mm}
                        disabled={!canEdit} onChange={(e) => set('height_mm', Number(e.target.value) || 0)} />
               </label>
-              <label className="text-sm">
-                <span className="block text-xs font-medium text-ink-soft mb-1">Écart (mm)</span>
-                <input type="number" step={0.5} min={0} max={20} className="input h-10 w-28 tabular-nums"
-                       value={form.gap_mm}
-                       disabled={!canEdit} onChange={(e) => set('gap_mm', Number(e.target.value) || 0)} />
-              </label>
             </div>
-            {/* Le lot part en UNE image continue : si le pas déclaré ne colle
-                pas au rouleau, le décalage s'accumule d'étiquette en étiquette. */}
-            <p className="text-xs text-ink-soft">
-              L&apos;écart est le blanc entre deux étiquettes du rouleau.
-              Papier <strong>prédécoupé</strong> : mesure ce blanc (3 mm sur le rouleau d&apos;origine).
-              Papier à <strong>marque noire</strong> : le pas est la hauteur d&apos;étiquette,
-              donc écart <strong>0</strong> — ou la marge que tu veux laisser au-dessus de la marque
-              (hauteur + écart doivent toujours faire le pas réel, marque à marque).
-            </p>
           </div>
 
           {/* Éléments */}

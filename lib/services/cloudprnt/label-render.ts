@@ -163,37 +163,32 @@ async function drawBarcode(
 }
 
 /**
- * Rend un « feuillet » : plusieurs étiquettes empilées dans UNE image continue
- * (chacune dans une case au pas étiquette+gap). Une seule image = un seul
- * enc.image() → aucune séparation entre étiquettes.
+ * Rend UNE étiquette, à la hauteur exacte du format.
+ *
+ * Le lot était auparavant empilé dans une seule image continue, au pas
+ * « hauteur + écart » calculé ici. C'était au logiciel de deviner la
+ * géométrie du rouleau : dès que le pas déclaré s'écartait du pas réel, le
+ * décalage s'additionnait d'une étiquette à l'autre — visible dès la
+ * troisième — et la coupe tombait là où l'image finissait, pas sur la
+ * marque noire.
+ *
+ * C'est l'imprimante qui sait où commence chaque étiquette : elle lit la
+ * marque. On lui envoie donc une étiquette, une coupe, et on la laisse se
+ * caler. Le logiciel ne modélise plus le papier.
  */
-export async function renderLabelSheetBitmap(labels: LabelProduct[], s: LabelSettings): Promise<LabelBitmap> {
+export async function renderLabelBitmap(label: LabelProduct, s: LabelSettings): Promise<LabelBitmap> {
   await ensureDeps();
   const PImage = PImageMod;
 
   let W = Math.round((s.width_mm || 51) * DPMM);
   W = Math.max(64, Math.round(W / 8) * 8); // largeur multiple de 8 (raster)
-  const contentH = Math.max(80, Math.round((s.height_mm || 51) * DPMM));
-  // L'écart vient des réglages : il valait 3 mm en dur, ce qui n'a de sens
-  // que pour le rouleau prédécoupé d'origine. Sur un papier à marque noire,
-  // le pas est la hauteur d'étiquette (écart 0) — et 3 mm de trop par
-  // étiquette faisaient dériver le lot entier.
-  const gapPx = Math.round((s.gap_mm ?? 3) * DPMM);
-  const pitch = contentH + gapPx;
-  // Réglage fin de la position de coupe : on raccourcit légèrement l'image en
-  // fin de lot pour remonter la coupe (la coupe tombait ~2 mm trop loin).
-  const CUT_TRIM_MM = 0;
-  const trimPx = Math.round(CUT_TRIM_MM * DPMM);
-  const H = Math.max(contentH - trimPx, pitch * labels.length - gapPx - trimPx);
+  const H = Math.max(80, Math.round((s.height_mm || 51) * DPMM));
 
-  const img = PImage.make(W, Math.max(contentH, H));
+  const img = PImage.make(W, H);
   const ctx = img.getContext('2d');
   ctx.fillStyle = '#FFFFFF';
-  ctx.fillRect(0, 0, W, Math.max(contentH, H));
+  ctx.fillRect(0, 0, W, H);
+  await drawLabel(ctx, W, 0, H, label, s);
 
-  for (let i = 0; i < labels.length; i++) {
-    await drawLabel(ctx, W, i * pitch, contentH, labels[i]!, s);
-  }
-
-  return { data: img.data as Uint8Array, width: W, height: Math.max(contentH, H) };
+  return { data: img.data as Uint8Array, width: W, height: H };
 }

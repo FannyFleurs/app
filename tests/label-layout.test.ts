@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { computeLabelLayout, estimateWidthMm } from '@/lib/services/label-layout';
 import { LABEL_DEFAULTS, LABEL_SIZE_PRESETS, mergeLabelDefaults, type LabelSettings } from '@/lib/settings/label';
 import { type LabelProduct } from '@/lib/services/label-print-core';
@@ -239,15 +240,17 @@ describe('Marge haute', () => {
   });
 });
 
-describe('Papier : écart et calage horizontal', () => {
-  it('accepte un écart nul (papier à marque noire)', () => {
-    // Sur ce papier, le pas EST la hauteur d'étiquette : 3 mm d'écart en dur
-    // décalaient le lot de 3 mm de plus à chaque étiquette.
-    expect(mergeLabelDefaults({ gap_mm: 0 }).gap_mm).toBe(0);
-    expect(mergeLabelDefaults({ gap_mm: 1.5 }).gap_mm).toBe(1.5);
-    // Valeur absente : on garde le rouleau prédécoupé d'origine.
-    expect(mergeLabelDefaults({}).gap_mm).toBe(3);
-    expect(mergeLabelDefaults({ gap_mm: -4 as unknown as number }).gap_mm).toBe(0);
+describe('Papier : une étiquette à la fois, et calage horizontal', () => {
+  it('rend une étiquette à la hauteur du format, sans pas maison', () => {
+    // Le lot partait en une image continue au pas « hauteur + écart » : le
+    // logiciel devinait la géométrie du rouleau, et à la troisième étiquette
+    // le décalage se voyait. C'est l'imprimante qui lit la marque noire.
+    const src = readFileSync('lib/services/cloudprnt/starprnt.ts', 'utf8');
+    expect(src).toContain('renderLabelBitmap');
+    expect(src).not.toContain('MAX_PER_SHEET');
+    // Une étiquette, une coupe.
+    expect(src).toMatch(/for \(const label of flat\) \{[\s\S]{0,400}enc\.cut\(\);/);
+    expect(readFileSync('lib/settings/label.ts', 'utf8')).not.toContain('gap_mm');
   });
 
   it('donne au code-barres de quoi être accroché', () => {
