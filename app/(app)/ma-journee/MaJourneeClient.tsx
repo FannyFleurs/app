@@ -1,11 +1,14 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { formatEUR } from '@/lib/services/money';
 import { PAYMENT_LABELS } from '@/components/labels';
 import EmptyState from '@/components/EmptyState';
 import Badge from '@/components/Badge';
-import Icon from '@/components/Icon';
+import Icon, { type IconName } from '@/components/Icon';
+import {
+  CourbeJournee, AnneauPaiements, MicroCourbe, EtatVide, COULEURS_PAIEMENT,
+} from './DayCharts';
 import PageHeader from '@/components/PageHeader';
 import ReturnModal from './ReturnModal';
 import PaymentCorrectionModal from './PaymentCorrectionModal';
@@ -51,14 +54,57 @@ interface SaleDetail {
 
 type SummaryMode = 'simple' | 'complet';
 
+/**
+ * CA par heure d'encaissement, 24 seaux.
+ *
+ * L'heure est lue en heure de Paris et non dans le fuseau du navigateur : une
+ * vente de 23 h 50 doit rester au soir de sa journée, pas basculer au
+ * lendemain. Et le format demandé est en-GB : `fr-FR` rend « 10 h », dont
+ * Number ne tire rien — la courbe restait plate à zéro toute la journée.
+ */
+export function ventilationHoraire(
+  ventes: Array<Pick<Sale, 'validated_at' | 'total_ttc' | 'status'>>,
+): number[] {
+  const seaux = new Array<number>(24).fill(0);
+  for (const s of ventes) {
+    if (s.status === 'cancelled_by_credit_note') continue;
+    const h = Number(new Intl.DateTimeFormat('en-GB', {
+      hour: '2-digit', hour12: false, timeZone: 'Europe/Paris',
+    }).format(new Date(s.validated_at)).replace(/\D/g, ''));
+    if (!Number.isFinite(h)) continue;
+    const i = Math.min(23, Math.max(0, h));
+    seaux[i] = (seaux[i] ?? 0) + Number(s.total_ttc);
+  }
+  return seaux;
+}
+
+/** Même série, lue en cumulé depuis l'ouverture. */
+export function cumule(valeurs: number[]): number[] {
+  let acc = 0;
+  return valeurs.map((v) => (acc += v));
+}
+
 export default function MaJourneeClient() {
   const today = new Date().toISOString().slice(0, 10);
   const [date, setDate] = useState(today);
   const [sales, setSales] = useState<Sale[]>([]);
   const [cashSummary, setCashSummary] = useState<{
-    cash_sales: number; bank_deposits: number; cash_refunds?: number; expected_cash: number;
-  }>({ cash_sales: 0, bank_deposits: 0, cash_refunds: 0, expected_cash: 0 });
+    opening_float?: number; cash_sales: number; bank_deposits: number;
+    cash_refunds?: number; cash_in?: number; cash_out?: number; expected_cash: number;
+  }>({ opening_float: 0, cash_sales: 0, bank_deposits: 0, cash_refunds: 0, expected_cash: 0 });
   const [returnsTotal, setReturnsTotal] = useState(0);
+  const [returnsCount, setReturnsCount] = useState(0);
+  // Journée de la veille : sert uniquement aux comparaisons des tuiles.
+  const [veille, setVeille] = useState<{
+    ttc: number; count: number; avg: number; tickets: number;
+  } | null>(null);
+  const [commandes, setCommandes] = useState<Array<{
+    id: string; number: string; total_amount: string | null;
+    requested_at: string | null; customer_name: string | null; recipient_name: string | null;
+  }>>([]);
+  const [vueCourbe, setVueCourbe] = useState<'heure' | 'cumule'>('heure');
+  const [tiroir, setTiroir] = useState<string | null>(null);
+  const champRecherche = useRef<HTMLInputElement>(null);
   const [openedAt, setOpenedAt] = useState<string | null>(null);
   const [sealedAt, setSealedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -108,9 +154,21 @@ export default function MaJourneeClient() {
         setSales(j.sales ?? []);
         if (j.cash_summary) setCashSummary(j.cash_summary);
         setReturnsTotal(Number(j.returns_total ?? 0));
+        setReturnsCount(Number(j.returns_count ?? 0));
         setOpenedAt(j.opened_at ?? null);
       })
       .finally(() => setLoading(false));
+  }
+
+  /** Ouvre le tiroir-caisse et dit ce qui s'est passé, sans quitter l'écran. */
+  async function ouvrirTiroir() {
+    setTiroir('Ouverture…');
+    const r = await fetch('/api/cash-sessions/open-drawer', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: 'Ma journée' }),
+    }).catch(() => null);
+    setTiroir(r?.ok ? 'Tiroir ouvert' : 'Ouverture impossible');
+    setTimeout(() => setTiroir(null), 2500);
   }
 
   useEffect(() => {
@@ -147,9 +205,42 @@ export default function MaJourneeClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingSaleId, loading]);
 
-  // Charge le rapport X complet quand on passe en mode complet (ou change de date).
+  // Journée de la veille : uniquement pour les « % vs hier » des tuiles. Un
+  // écran de comptoir sans repère ne dit pas si la journée est bonne.
   useEffect(() => {
-    if (mode !== 'complet') return;
+    const veilleDate = new Date(`${date}T12:00:00`);
+    veilleDate.setDate(veilleDate.getDate() - 1);
+    const iso = veilleDate.toISOString().slice(0, 10);
+    setVeille(null);
+    void fetch(`/api/sales/today?date=${iso}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!j) return;
+        const ventes = (j.sales ?? []) as Sale[];
+        const ttc = ventes.reduce((s, v) => s + Number(v.total_ttc), 0) - Number(j.returns_total ?? 0);
+        setVeille({
+          ttc,
+          count: ventes.length,
+          avg: ventes.length > 0 ? ttc / ventes.length : 0,
+          tickets: ventes.length + Number(j.returns_count ?? 0),
+        });
+      })
+      .catch(() => undefined);
+  }, [date]);
+
+  // Dernières commandes (retrait / livraison), toutes dates : c'est ce qui
+  // attend d'être préparé, pas ce qui a été vendu aujourd'hui.
+  useEffect(() => {
+    void fetch('/api/orders')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => setCommandes(((j?.orders ?? []) as typeof commandes).slice(0, 4)))
+      .catch(() => undefined);
+  }, []);
+
+  // Rapport de journée : il porte le détail des encaissements et des
+  // catégories, dont l'écran a besoin en permanence — pas seulement quand on
+  // ouvre le X complet.
+  useEffect(() => {
     setLoadingReport(true);
     setDayReport(null);
     void fetch(`/api/reports/day?date=${date}`)
@@ -159,7 +250,7 @@ export default function MaJourneeClient() {
         if (j?.store_id) setReportStoreId(j.store_id as string);
       })
       .finally(() => setLoadingReport(false));
-  }, [mode, date]);
+  }, [date]);
 
   async function pickSale(id: string) {
     setSelected(id);
@@ -199,15 +290,70 @@ export default function MaJourneeClient() {
   const dateLabel = new Date(date).toLocaleDateString('fr-FR', {
     weekday: 'long', day: 'numeric', month: 'long',
   });
+  const dateCourte = new Date(date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' });
+
+  const heureOuverture = openedAt
+    ? new Date(openedAt).toLocaleTimeString('fr-FR', {
+        hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris',
+      })
+    : null;
+
+  const parHeure = useMemo(() => ventilationHoraire(sales), [sales]);
+  const courbe = useMemo(
+    () => (vueCourbe === 'heure' ? parHeure : cumule(parHeure)),
+    [parHeure, vueCourbe],
+  );
+
+  // Encaissements : toujours les trois mêmes lignes, même à zéro. Une légende
+  // qui change de composition d'un jour à l'autre ne se lit plus d'un coup.
+  const paiements = useMemo(() => {
+    const p = dayReport?.payments ?? [];
+    const somme = (garde: (m: string) => boolean) =>
+      p.filter((x) => garde(x.method)).reduce((s, x) => s + x.amount, 0);
+    return [
+      { label: 'Espèces', montant: somme((m) => m === 'cash'), couleur: COULEURS_PAIEMENT[0]! },
+      { label: 'Carte bancaire', montant: somme((m) => m === 'card'), couleur: COULEURS_PAIEMENT[1]! },
+      { label: 'Autres', montant: somme((m) => m !== 'cash' && m !== 'card'), couleur: COULEURS_PAIEMENT[2]! },
+    ];
+  }, [dayReport]);
+
+  const topPaiement = useMemo(() => {
+    const p = [...(dayReport?.payments ?? [])].sort((a, b) => b.amount - a.amount)[0];
+    if (!p || p.amount <= 0) return null;
+    return { label: PAYMENT_LABELS[p.method] ?? p.method, montant: p.amount };
+  }, [dayReport]);
+
+  const topCategories = useMemo(
+    () => [...(dayReport?.by_category ?? [])].sort((a, b) => b.ca_ttc - a.ca_ttc).slice(0, 5),
+    [dayReport],
+  );
+  const maxCategorie = topCategories[0]?.ca_ttc ?? 0;
+
+  // Tickets émis = ventes + avoirs : un retour donne lieu à un ticket lui aussi.
+  const ticketsEmis = totals.count + returnsCount;
+
+  // Mouvements de tiroir autres que la remise en banque et les remboursements,
+  // déjà affichés : sans cette ligne, les montants ne s'additionneraient plus.
+  const autresMouvements =
+    (cashSummary.cash_in ?? 0)
+    - ((cashSummary.cash_out ?? 0) - cashSummary.bank_deposits - (cashSummary.cash_refunds ?? 0));
+
+  const suffixeEcart = date === today ? 'vs hier' : 'vs la veille';
+  const ecartLabel = (courant: number, precedent: number | undefined) => {
+    if (precedent == null) return `— ${suffixeEcart}`;
+    if (precedent === 0) return courant === 0 ? `0% ${suffixeEcart}` : `+100% ${suffixeEcart}`;
+    const pct = ((courant - precedent) / Math.abs(precedent)) * 100;
+    return `${pct >= 0 ? '+' : ''}${pct.toFixed(0)}% ${suffixeEcart}`;
+  };
 
   return (
-    <div className="flex flex-col md:h-full md:overflow-hidden min-h-full">
-      <div className="px-4 md:px-6 pt-3 md:pt-4 pb-3 shrink-0 border-b border-border">
+    <div className="flex flex-col md:h-full md:overflow-hidden min-h-full bg-bg">
+      <div className="px-4 md:px-6 pt-3 md:pt-4 pb-3 shrink-0 border-b border-border bg-surface">
         <PageHeader
           title="Ma journée"
           subtitle={`${dateLabel} · ${totals.count} vente(s) ce jour`}
           actions={
-            <label className="inline-flex items-center gap-2 cursor-pointer relative rounded-xl border border-border px-3 h-10 text-sm text-ink-soft hover:bg-gray-50">
+            <label className="inline-flex items-center gap-2 cursor-pointer relative rounded-xl bg-accent-soft px-3 h-10 text-sm font-medium text-accent-deep hover:brightness-95">
               <input
                 type="date"
                 value={date}
@@ -215,284 +361,432 @@ export default function MaJourneeClient() {
                 onChange={(e) => setDate(e.target.value)}
                 className="absolute inset-0 opacity-0 cursor-pointer"
               />
-              <Icon name="my-day" size={18} /> Changer de date
+              <Icon name="calendar" size={16} /> Changer de date
             </label>
           }
         />
       </div>
-      <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[360px_1fr] md:overflow-hidden">
-      {/* SIDEBAR GAUCHE — synthèse journée */}
-      <aside className="border-r border-border bg-white overflow-y-auto flex flex-col">
-        {/* Switch X Simple / X Complet */}
-        <div className="px-5 pt-4">
-          {/* Heure d'ouverture de la caisse, juste au-dessus des boutons X. */}
-          {openedAt && (
-            <div className="mb-2 text-center text-xs text-ink-soft">
-              Caisse ouverte à{' '}
-              <span className="font-semibold text-ink">
-                {new Date(openedAt).toLocaleTimeString('fr-FR', {
-                  hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris',
-                })}
+
+      <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[320px_1fr] md:overflow-hidden">
+        {/* ---------------------------------------------- COLONNE JOURNÉE */}
+        <aside className="md:overflow-y-auto p-3 flex flex-col gap-3">
+          {/* État de la caisse : la première chose qu'on vérifie le matin. */}
+          <div className="rounded-2xl p-4 text-white" style={{ backgroundColor: 'var(--primary)' }}>
+            <div className="text-xs opacity-75">
+              {openedAt ? 'Caisse ouverte à' : 'Caisse non ouverte'}
+            </div>
+            <div className="mt-1 flex items-end justify-between gap-2">
+              <div className="text-3xl font-semibold tracking-tight tabular-nums">
+                {heureOuverture ?? '—'}
+              </div>
+              <span className="inline-flex items-center gap-1.5 text-xs pb-1">
+                <span className="h-2 w-2 rounded-full"
+                      style={{ backgroundColor: sealedAt ? '#FFEFB3' : openedAt ? '#7ED0A5' : '#9AA5A1' }} />
+                {sealedAt ? 'Clôturée' : openedAt ? 'Ouverte' : 'Fermée'}
               </span>
             </div>
-          )}
-          <div className="grid grid-cols-2 gap-1 rounded-2xl bg-gray-50 p-1">
-            <button
-              onClick={() => setMode('simple')}
-              className={`rounded-xl py-2 text-sm font-medium transition-colors ${
-                mode === 'simple' ? 'bg-white shadow-sm text-ink' : 'text-ink-soft'
-              }`}
-            >
-              X Simple
-            </button>
-            <button
-              onClick={() => setMode('complet')}
-              className={`rounded-xl py-2 text-sm font-medium transition-colors ${
-                mode === 'complet' ? 'bg-white shadow-sm text-ink' : 'text-ink-soft'
-              }`}
-            >
-              X Complet
-            </button>
           </div>
-        </div>
 
-        {mode === 'complet' ? (
-          /* X Complet : rapport détaillé identique au Z */
-          <div className="px-5 py-4">
-            {sealedAt && (
-              <div className="mb-3 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold text-white"
-                   style={{ backgroundColor: 'var(--primary)' }}>
-                Journée fermée — {new Date(sealedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
-              </div>
-            )}
-            {loadingReport || !dayReport
-              ? <p className="text-sm text-ink-soft">Chargement du rapport…</p>
-              : <DayReportView report={dayReport} />}
-          </div>
-        ) : (
-          <>
-            {/* Total TTC mis en avant : aplat jaune de la marque. C'est le
-                chiffre qu'on vient chercher en ouvrant l'écran — il doit se
-                lire depuis l'autre bout du comptoir. */}
-            <div className="px-5 py-6 text-center rounded-2xl mx-3 mt-3 bg-accent-soft">
-              <div className="inline-flex items-center gap-1 text-xs text-ink-soft">
-                <Icon name="dashboard" size={14} /> CA TTC
-              </div>
-              <div className="mt-1 text-4xl font-semibold tracking-tight">{formatEUR(totals.netTtc)}</div>
-              {returnsTotal > 0 && (
-                <div className="mt-1 text-xs text-ink-soft">
-                  {formatEUR(totals.ttc)} de ventes − {formatEUR(returnsTotal)} de retours
-                </div>
-              )}
-              {sealedAt && (
-                <div
-                  className="mt-3 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold text-white"
-                  style={{ backgroundColor: 'var(--primary)' }}
-                >
-                  Journée fermée — {new Date(sealedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
-                </div>
-              )}
+          {/* CA du jour : le chiffre qu'on vient chercher, lisible de loin. */}
+          <div className="rounded-2xl bg-accent-soft p-4">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-ink-soft">CA TTC</span>
+              <span className="text-accent-deep"><Icon name="dashboard" size={16} /></span>
             </div>
-
-            {/* KPI lignes */}
-            <div className="px-5 pb-4 space-y-3">
-              <KpiRow label="CA HT" value={formatEUR(totals.ht)} />
-              <KpiRow label="Ventes" value={totals.count.toString()} />
+            <div className="mt-1 text-3xl font-semibold tracking-tight tabular-nums">
+              {formatEUR(totals.netTtc)}
+            </div>
+            <MicroCourbe valeurs={parHeure} />
+            <div className="space-y-2 border-t border-black/10 pt-3">
+              <LigneCle label="CA HT" valeur={formatEUR(totals.ht)} />
+              <LigneCle label="Ventes" valeur={totals.count.toString()} />
               {returnsTotal > 0 && (
-                <KpiRow label="Retours / avoirs" value={`-${formatEUR(returnsTotal)}`} tone="warning" />
+                <LigneCle label="Retours / avoirs" valeur={`-${formatEUR(returnsTotal)}`} />
               )}
-              <KpiRow label="Panier moyen" value={formatEUR(totals.avg)} />
-              {/* Trésorerie : ventes espèces / remise banque / espèces attendues */}
-              <div className="pt-2 border-t border-border space-y-2">
-                <div className="text-[10px] uppercase tracking-widest text-ink-soft font-semibold">
-                  Trésorerie espèces
-                </div>
-                <KpiRow label="Ventes espèces" value={formatEUR(cashSummary.cash_sales)} />
-                {cashSummary.bank_deposits > 0 && (
-                  <KpiRow
-                    label="Remise en banque"
-                    value={`-${formatEUR(cashSummary.bank_deposits)}`}
-                    tone="warning"
-                  />
-                )}
-                {(cashSummary.cash_refunds ?? 0) > 0 && (
-                  <KpiRow
-                    label="Remboursements espèces"
-                    value={`-${formatEUR(cashSummary.cash_refunds ?? 0)}`}
-                    tone="warning"
-                  />
-                )}
-                <KpiRow
-                  label="Espèces attendues"
-                  value={formatEUR(cashSummary.expected_cash)}
-                  tone="accent"
+              <LigneCle label="Panier moyen" valeur={formatEUR(totals.avg)} />
+            </div>
+          </div>
+
+          {/* Tiroir-caisse. Le fond du matin en fait partie : sans lui, le
+              montant attendu ne correspond pas à ce qu'on compte le soir. */}
+          <div className="rounded-2xl bg-surface border border-border p-4">
+            <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-ink-soft font-semibold">
+              <Icon name="card" size={14} /> Trésorerie espèces
+            </div>
+            <div className="mt-3 space-y-2">
+              <LigneCle label="Fond de caisse (ouverture)" valeur={formatEUR(cashSummary.opening_float ?? 0)} />
+              <LigneCle label="Ventes espèces" valeur={formatEUR(cashSummary.cash_sales)} />
+              {cashSummary.bank_deposits > 0 && (
+                <LigneCle label="Remise en banque" valeur={`-${formatEUR(cashSummary.bank_deposits)}`} ton="warning" />
+              )}
+              {(cashSummary.cash_refunds ?? 0) > 0 && (
+                <LigneCle label="Remboursements espèces" valeur={`-${formatEUR(cashSummary.cash_refunds ?? 0)}`} ton="warning" />
+              )}
+              {autresMouvements !== 0 && (
+                <LigneCle
+                  label="Autres mouvements"
+                  valeur={`${autresMouvements > 0 ? '+' : '-'}${formatEUR(Math.abs(autresMouvements))}`}
+                  ton="warning"
                 />
+              )}
+              <div className="pt-2 border-t border-border">
+                <LigneCle label="Espèces attendues" valeur={formatEUR(cashSummary.expected_cash)} fort />
               </div>
             </div>
-          </>
-        )}
+          </div>
 
-        <div className="flex-1" />
+          <div className="flex-1" />
 
-        {/* Action en pied — équivalent du "Actions sur ma journée" */}
-        <div className="border-t border-border p-3 bg-white sticky bottom-0 space-y-2">
-          {mode === 'complet' && (
-            <>
-              <button
-                onClick={() => void printX()}
-                disabled={printingX}
-                className="btn-soft w-full text-sm h-11 flex items-center justify-center gap-2 disabled:opacity-50"
-              >
-                <Icon name="print" size={16} /> {printingX ? 'Impression…' : 'Imprimer le X'}
-              </button>
-              {dayReport?.store_name && (
-                <p className="text-center text-xs text-ink-soft -mt-1">
-                  Boutique : <span className="font-medium text-ink">{dayReport.store_name}</span>
-                </p>
-              )}
-            </>
-          )}
           {sealedAt ? (
-            <a
-              href="/closures"
-              className="btn-soft w-full text-sm h-11 flex items-center justify-center gap-2"
-              title="La journée est déjà clôturée — réimprimer le Z ou réouvrir la journée"
-            >
+            <a href="/closures"
+               className="btn-soft h-12 rounded-2xl flex items-center justify-center gap-2 text-sm"
+               title="La journée est déjà clôturée — réimprimer le Z ou réouvrir la journée">
               Journée clôturée — réouvrir / réimprimer le Z
             </a>
           ) : (
-            <a
-              href="/closures"
-              className="btn-primary w-full text-sm h-11 flex items-center justify-center"
-            >
-              Clôturer la journée
+            <a href="/closures"
+               className="btn-primary h-12 rounded-2xl flex items-center justify-center gap-2 text-sm font-semibold">
+              <Icon name="lock" size={16} /> Clôturer la journée
             </a>
           )}
-        </div>
-      </aside>
+        </aside>
 
-      {/* CONTENU — table de tickets / détail */}
-      <main className="overflow-y-auto bg-white">
-        {!selected ? (
-          <div className="p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="relative flex-1 max-w-md">
-                <input
-                  className="input pr-9"
-                  placeholder="Rechercher ou scanner un numéro de ticket…"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  onKeyDown={async (e) => {
-                    if (e.key === 'Enter' && search.trim()) {
-                      // Tente d'abord un scan exact (toutes dates)
-                      const r = await fetch(
-                        `/api/sales/today?scan=${encodeURIComponent(search.trim())}`,
-                      );
-                      if (r.ok) {
-                        const j = await r.json();
-                        if (j.sales?.[0]?.id) {
-                          await pickSale(j.sales[0].id);
-                          setSearch('');
-                        }
-                      }
-                    }
+        {/* ------------------------------------------------------ CONTENU */}
+        <main className="md:overflow-y-auto p-3 md:p-4">
+          {selected ? (
+            <div className="space-y-3">
+              <button
+                onClick={() => { setSelected(null); setDetail(null); }}
+                className="btn-ghost text-sm"
+              >
+                ‹ Retour à la journée
+              </button>
+              {loadingDetail ? (
+                <div className="card p-10 text-center text-ink-soft text-sm">Chargement…</div>
+              ) : detail ? (
+                <SaleDetailPanel
+                  detail={detail}
+                  onInvoiceGenerated={() => {
+                    void pickSale(detail.sale.id);
+                    reloadDay(false); // rafraîchit CA / badges sans fermer le détail
                   }}
                 />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-soft">⌕</span>
-              </div>
-              <div className="ml-auto flex items-center gap-2">
-                <span className="text-xs text-ink-soft">{filtered.length} ticket(s)</span>
-              </div>
+              ) : (
+                <EmptyState icon="⚠" title="Erreur de chargement" />
+              )}
             </div>
-
-            {loading ? (
-              <div className="card p-10 text-center text-ink-soft text-sm">Chargement…</div>
-            ) : filtered.length === 0 ? (
-              <EmptyState
-                icon="☼"
-                title="Aucune vente"
-                description={sales.length === 0 ? 'Aucun ticket validé pour cette date.' : 'Aucun résultat pour cette recherche.'}
-              />
-            ) : (
-              <div className="card overflow-hidden">
-                <div className="overflow-x-auto">
-                <table className="w-full text-sm min-w-[26rem]">
-                  <thead className="text-ink-soft text-[10px] uppercase tracking-widest border-b border-border">
-                    <tr>
-                      <th className="text-left px-4 py-3 font-semibold">Ticket</th>
-                      <th className="text-left px-4 py-3 font-semibold">Vente</th>
-                      <th className="text-left px-4 py-3 font-semibold">Vendeur</th>
-                      <th className="text-right px-4 py-3 font-semibold">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtered.map((s) => (
-                      <tr
-                        key={s.id}
-                        onClick={() => void pickSale(s.id)}
-                        className="border-t border-border hover:bg-gray-50 cursor-pointer"
-                      >
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono font-medium">{s.receipt_number}</span>
-                            {s.status === 'cancelled_by_credit_note' ? (
-                              <span className="rounded-full bg-danger/10 text-danger px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide whitespace-nowrap">
-                                Annulée
-                              </span>
-                            ) : Number(s.refunded_total) > 0 ? (
-                              <span className="rounded-full bg-warning/10 text-warning px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide whitespace-nowrap">
-                                Retour −{formatEUR(Number(s.refunded_total))}
-                              </span>
-                            ) : null}
-                          </div>
-                          <div className="text-xs text-ink-soft">
-                            {new Date(s.validated_at).toLocaleTimeString('fr-FR', {
-                              hour: '2-digit', minute: '2-digit', second: '2-digit',
-                            })}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-ink-soft">
-                          {s.customer ?? '—'}
-                        </td>
-                        <td className="px-4 py-3 text-ink-soft">{s.cashier}</td>
-                        <td className={`px-4 py-3 text-right font-medium ${
-                          s.status === 'cancelled_by_credit_note' ? 'line-through text-ink-soft' : ''
-                        }`}>{formatEUR(Number(s.total_ttc))}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+          ) : mode === 'complet' ? (
+            /* Rapport de caisse (X complet, identique au Z) */
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <button onClick={() => setMode('simple')} className="btn-ghost text-sm">
+                  ‹ Retour à la journée
+                </button>
+                <div className="ml-auto flex items-center gap-2">
+                  {dayReport?.store_name && (
+                    <span className="text-xs text-ink-soft">
+                      Boutique : <span className="font-medium text-ink">{dayReport.store_name}</span>
+                    </span>
+                  )}
+                  <button onClick={() => void printX()} disabled={printingX}
+                          className="btn-soft text-sm h-10 px-3 inline-flex items-center gap-2 disabled:opacity-50">
+                    <Icon name="print" size={16} /> {printingX ? 'Impression…' : 'Imprimer le X'}
+                  </button>
                 </div>
               </div>
-            )}
-          </div>
-        ) : (
-          <div className="p-6">
-            <button
-              onClick={() => { setSelected(null); setDetail(null); }}
-              className="btn-ghost text-sm mb-3"
-            >
-              ‹ Retour à la liste
-            </button>
-            {loadingDetail ? (
-              <div className="card p-10 text-center text-ink-soft text-sm">Chargement…</div>
-            ) : detail ? (
-              <SaleDetailPanel
-                detail={detail}
-                onInvoiceGenerated={() => {
-                  void pickSale(detail.sale.id);
-                  reloadDay(false); // rafraîchit CA / badges sans fermer le détail
-                }}
-              />
-            ) : (
-              <EmptyState icon="⚠" title="Erreur de chargement" />
-            )}
-          </div>
-        )}
-      </main>
+              {sealedAt && (
+                <div className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold text-white"
+                     style={{ backgroundColor: 'var(--primary)' }}>
+                  Journée fermée — {new Date(sealedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                </div>
+              )}
+              <div className="card p-5">
+                {loadingReport || !dayReport
+                  ? <p className="text-sm text-ink-soft">Chargement du rapport…</p>
+                  : <DayReportView report={dayReport} />}
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Recherche / scan de ticket */}
+              <div className="flex items-center gap-3">
+                <div className="relative flex-1">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-soft">
+                    <Icon name="search" size={16} />
+                  </span>
+                  <input
+                    ref={champRecherche}
+                    className="input h-11 pl-10"
+                    placeholder="Rechercher ou scanner un numéro de ticket…"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    onKeyDown={async (e) => {
+                      if (e.key === 'Enter' && search.trim()) {
+                        // Tente d'abord un scan exact (toutes dates)
+                        const r = await fetch(
+                          `/api/sales/today?scan=${encodeURIComponent(search.trim())}`,
+                        );
+                        if (r.ok) {
+                          const j = await r.json();
+                          if (j.sales?.[0]?.id) {
+                            await pickSale(j.sales[0].id);
+                            setSearch('');
+                          }
+                        }
+                      }
+                    }}
+                  />
+                </div>
+                <span className="text-sm text-ink-soft whitespace-nowrap">
+                  {filtered.length} ticket(s)
+                </span>
+              </div>
+
+              {/* Cinq chiffres de la journée */}
+              {/* Les paliers sont décalés d'un cran : la colonne de journée
+                  mange 320 px, la zone utile est bien plus étroite que la
+                  fenêtre — à 1180 px, cinq tuiles couperaient les montants. */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5 gap-3">
+                <Tuile icone="card" pleine label="CA TTC" valeur={formatEUR(totals.netTtc)}
+                       note={ecartLabel(totals.netTtc, veille?.ttc)} />
+                <Tuile icone="cart" label="Ventes" valeur={totals.count.toString()}
+                       note={ecartLabel(totals.count, veille?.count)} />
+                <Tuile icone="stock" label="Panier moyen" valeur={formatEUR(totals.avg)}
+                       note={ecartLabel(totals.avg, veille?.avg)} />
+                <Tuile icone="invoices" label="Tickets" valeur={ticketsEmis.toString()}
+                       note={ecartLabel(ticketsEmis, veille?.tickets)} />
+                <Tuile icone="pos" texte label="Top paiement" valeur={topPaiement?.label ?? '—'}
+                       note={topPaiement ? formatEUR(topPaiement.montant) : 'Aucune vente'} />
+              </div>
+
+              {/* Tickets du jour : la liste ne s'affiche que s'il y en a. */}
+              {filtered.length > 0 && (
+                <div className="card overflow-hidden">
+                  <div className="max-h-[22rem] overflow-y-auto overflow-x-auto">
+                    <table className="w-full text-sm min-w-[26rem]">
+                      <thead className="text-ink-soft text-[10px] uppercase tracking-widest border-b border-border sticky top-0 bg-surface">
+                        <tr>
+                          <th className="text-left px-4 py-3 font-semibold">Ticket</th>
+                          <th className="text-left px-4 py-3 font-semibold">Vente</th>
+                          <th className="text-left px-4 py-3 font-semibold">Vendeur</th>
+                          <th className="text-right px-4 py-3 font-semibold">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filtered.map((s) => (
+                          <tr
+                            key={s.id}
+                            onClick={() => void pickSale(s.id)}
+                            className="border-t border-border hover:bg-gray-50 cursor-pointer"
+                          >
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono font-medium">{s.receipt_number}</span>
+                                {s.status === 'cancelled_by_credit_note' ? (
+                                  <span className="rounded-full bg-danger/10 text-danger px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide whitespace-nowrap">
+                                    Annulée
+                                  </span>
+                                ) : Number(s.refunded_total) > 0 ? (
+                                  <span className="rounded-full bg-warning/10 text-warning px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide whitespace-nowrap">
+                                    Retour −{formatEUR(Number(s.refunded_total))}
+                                  </span>
+                                ) : null}
+                              </div>
+                              <div className="text-xs text-ink-soft">
+                                {new Date(s.validated_at).toLocaleTimeString('fr-FR', {
+                                  hour: '2-digit', minute: '2-digit', second: '2-digit',
+                                })}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-ink-soft">{s.customer ?? '—'}</td>
+                            <td className="px-4 py-3 text-ink-soft">{s.cashier}</td>
+                            <td className={`px-4 py-3 text-right font-medium ${
+                              s.status === 'cancelled_by_credit_note' ? 'line-through text-ink-soft' : ''
+                            }`}>{formatEUR(Number(s.total_ttc))}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+              {loading && filtered.length === 0 && (
+                <div className="card p-6 text-center text-ink-soft text-sm">Chargement…</div>
+              )}
+
+              {/* Courbe du jour + répartition des encaissements */}
+              <div className="grid grid-cols-1 xl:grid-cols-[2fr_1fr] gap-4">
+                <section className="card p-5">
+                  <div className="flex items-center justify-between gap-3">
+                    <h2 className="font-semibold">Évolution du CA TTC</h2>
+                    <select
+                      className="input h-9 w-auto text-sm"
+                      value={vueCourbe}
+                      onChange={(e) => setVueCourbe(e.target.value as 'heure' | 'cumule')}
+                    >
+                      <option value="heure">Par heure</option>
+                      <option value="cumule">Cumulé</option>
+                    </select>
+                  </div>
+                  <div className="mt-3">
+                    <CourbeJournee valeurs={courbe} vide={totals.ttc === 0} />
+                  </div>
+                </section>
+
+                <section className="card p-5">
+                  <h2 className="font-semibold">Répartition des ventes</h2>
+                  <div className="mt-4">
+                    <AnneauPaiements parts={paiements} />
+                  </div>
+                </section>
+              </div>
+
+              {/* Catégories, commandes, actions */}
+              <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+                <section className="card p-5">
+                  <div className="flex items-center justify-between gap-3">
+                    <h2 className="font-semibold">Top catégories (CA TTC)</h2>
+                    <span className="text-xs text-ink-soft whitespace-nowrap">{dateCourte}</span>
+                  </div>
+                  {topCategories.length === 0 ? (
+                    <div className="py-8">
+                      <EtatVide icone="tag" titre="Aucune donnée"
+                                texte="Aucune vente par catégorie pour cette période." />
+                    </div>
+                  ) : (
+                    <ul className="mt-4 space-y-3">
+                      {topCategories.map((c) => (
+                        <li key={c.name}>
+                          <div className="flex items-baseline justify-between gap-2 text-sm">
+                            <span className="truncate">{c.name}</span>
+                            <span className="tabular-nums font-medium">{formatEUR(c.ca_ttc)}</span>
+                          </div>
+                          <div className="mt-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                            <div className="h-full rounded-full"
+                                 style={{
+                                   width: `${maxCategorie > 0 ? (c.ca_ttc / maxCategorie) * 100 : 0}%`,
+                                   backgroundColor: 'var(--primary)',
+                                 }} />
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+
+                <section className="card p-5 flex flex-col">
+                  <h2 className="font-semibold">Dernières commandes</h2>
+                  {commandes.length === 0 ? (
+                    <div className="py-8">
+                      <EtatVide icone="doc" titre="Aucune commande"
+                                texte="Aucune commande enregistrée récemment." />
+                    </div>
+                  ) : (
+                    <ul className="mt-3 divide-y divide-border">
+                      {commandes.map((c) => (
+                        <li key={c.id} className="py-2.5 flex items-baseline justify-between gap-2 text-sm">
+                          <div className="min-w-0">
+                            <div className="font-medium truncate">{c.customer_name ?? c.recipient_name ?? 'Client comptoir'}</div>
+                            <div className="text-xs text-ink-soft">
+                              {c.number} · {c.requested_at
+                                ? new Date(c.requested_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
+                                : '—'}
+                            </div>
+                          </div>
+                          <span className="tabular-nums whitespace-nowrap">{formatEUR(Number(c.total_amount ?? 0))}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <div className="flex-1" />
+                  <a href="/orders" className="btn-soft h-10 mt-3 flex items-center justify-center text-sm">
+                    Voir toutes les commandes
+                  </a>
+                </section>
+
+                <section className="rounded-2xl bg-accent-soft p-5">
+                  <div className="flex items-center gap-2 font-semibold">
+                    <Icon name="sparkle" size={16} /> Actions rapides
+                  </div>
+                  <div className="mt-3 space-y-2">
+                    <ActionRapide icone="cart" label="Nouvelle vente" href="/caisse" />
+                    <ActionRapide icone="pos" label={tiroir ?? 'Ouvrir le tiroir caisse'}
+                                  onClick={() => void ouvrirTiroir()} />
+                    <ActionRapide icone="search" label="Recherche avancée"
+                                  onClick={() => champRecherche.current?.focus()} />
+                    <ActionRapide icone="print" label="Rapport de caisse"
+                                  onClick={() => setMode('complet')} />
+                  </div>
+                </section>
+              </div>
+            </div>
+          )}
+        </main>
       </div>
     </div>
   );
+}
+
+/** Ligne « libellé … valeur » des cartes de synthèse. */
+function LigneCle({ label, valeur, fort, ton }: {
+  label: string; valeur: string; fort?: boolean; ton?: 'warning';
+}) {
+  return (
+    <div className="flex items-baseline justify-between gap-2 text-sm">
+      <span className="text-ink-soft">{label}</span>
+      <span className={`tabular-nums whitespace-nowrap ${
+        fort ? 'font-semibold text-accent-deep' : ton === 'warning' ? 'text-warning' : 'font-medium'
+      }`}>{valeur}</span>
+    </div>
+  );
+}
+
+/** Tuile d'indicateur : pastille, libellé, chiffre, comparaison. */
+function Tuile({ icone, label, valeur, note, pleine, texte }: {
+  icone: IconName; label: string; valeur: string; note: string;
+  pleine?: boolean;
+  /** Valeur en toutes lettres (« Carte bancaire ») : elle a besoin de plus de
+   *  place qu'un montant, on la pose un cran plus petit pour ne pas la couper. */
+  texte?: boolean;
+}) {
+  return (
+    <div className="card p-4 flex items-center gap-3">
+      <span
+        className={`h-11 w-11 shrink-0 rounded-full grid place-items-center ${
+          pleine ? 'text-white' : 'bg-muted text-accent-deep'
+        }`}
+        style={pleine ? { backgroundColor: 'var(--primary)' } : undefined}
+      >
+        <Icon name={icone} size={20} />
+      </span>
+      {/* flex-1 : sans lui la colonne se fait écraser par la pastille et le
+          montant se coupe (« 530,3… ») dès qu'on descend sous le grand écran. */}
+      <div className="min-w-0 flex-1">
+        <div className="text-xs text-ink-soft truncate">{label}</div>
+        <div className={`font-semibold tracking-tight ${
+          texte ? 'text-sm leading-tight break-words' : 'text-xl tabular-nums truncate'
+        }`} title={valeur}>{valeur}</div>
+        <div className="text-[11px] text-ink-soft truncate">{note}</div>
+      </div>
+    </div>
+  );
+}
+
+/** Entrée du panneau « Actions rapides ». */
+function ActionRapide({ icone, label, href, onClick }: {
+  icone: IconName; label: string; href?: string; onClick?: () => void;
+}) {
+  const contenu = (
+    <>
+      <span className="text-accent-deep"><Icon name={icone} size={18} /></span>
+      <span className="flex-1 text-left truncate">{label}</span>
+      <span className="text-ink-soft">›</span>
+    </>
+  );
+  const classe = 'w-full h-11 px-3 rounded-xl bg-surface flex items-center gap-2.5 text-sm font-medium hover:brightness-95';
+  return href
+    ? <a href={href} className={classe}>{contenu}</a>
+    : <button type="button" onClick={onClick} className={classe}>{contenu}</button>;
 }
 
 /**
