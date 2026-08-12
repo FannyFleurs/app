@@ -327,7 +327,7 @@ export async function buildTestTopOfFormStarPrnt(
   count: number, settings: LabelSettings,
 ): Promise<Buffer> {
   const media = mediaImprimable(settings);
-  const n = Math.max(1, Math.min(5, Math.round(count || 0)));
+  const n = Math.max(1, Math.min(20, Math.round(count || 0)));
   const parCputil = await viaCputil(() => buildTestTopOfFormMarkup(n, media));
   if (!parCputil) {
     throw new Error(
