@@ -45,8 +45,21 @@ export async function POST(req: Request) {
   const settings = mergeLabelDefaults((st.rows[0]?.value as Record<string, unknown>) ?? null);
 
   const entries = parsed.data.entries.map((e) => ({ product: e.product as LabelProduct, qty: e.qty }));
-  const payload = await buildLabelsStarPrnt(entries, settings);
   const count = countLabels(entries);
+
+  // Le motif d'un échec doit remonter à l'écran : « Échec de l'envoi » sans
+  // raison a coûté plusieurs allers-retours au comptoir.
+  let payload: Buffer;
+  try {
+    payload = await buildLabelsStarPrnt(entries, settings);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[print-labels] fabrication du job', err);
+    return NextResponse.json(
+      { error: 'BUILD_FAILED', message: (err as Error).message ?? 'Fabrication du job impossible.' },
+      { status: 500 },
+    );
+  }
 
   const job = await enqueueJob({
     organizationId: g.user.organizationId,

@@ -43,7 +43,12 @@ export async function printProductLabels({
       }
       const j = await r.json().catch(() => null);
       if (j?.error !== 'NO_PRINTER') {
-        return { ok: false, message: "Échec de l'envoi à l'imprimante." };
+        return {
+          ok: false,
+          message: j?.message
+            ? `Échec de l'envoi à l'imprimante : ${j.message}`
+            : "Échec de l'envoi à l'imprimante.",
+        };
       }
       // Imprimante retirée entre-temps : on bascule sur le navigateur plutôt
       // que de laisser l'opérateur sans étiquette.

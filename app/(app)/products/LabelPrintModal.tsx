@@ -76,7 +76,10 @@ export default function LabelPrintModal({
       });
       if (r.ok) {
         const j = await r.json();
-        setCloudMsg(`${j.count} étiquette(s) envoyée(s) à « ${j.printer} ».`);
+        // Le moteur employé fait partie du compte rendu : c'est la première
+        // chose à savoir si l'étiquette sort de travers.
+        const par = j.moteur === 'markup+cputil' ? '' : ' — encodage direct';
+        setCloudMsg(`${j.count} étiquette(s) envoyée(s) à « ${j.printer} »${par}.`);
         return;
       }
       const j = await r.json().catch(() => null);
@@ -88,7 +91,9 @@ export default function LabelPrintModal({
         printLabels();
         return;
       }
-      setError("Échec de l'envoi à l'imprimante.");
+      setError(j?.message
+        ? `Échec de l'envoi à l'imprimante : ${j.message}`
+        : "Échec de l'envoi à l'imprimante.");
     } catch {
       setError("Imprimante injoignable (réseau).");
     } finally {

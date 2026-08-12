@@ -19,10 +19,15 @@ const nextConfig = {
     // pas seul. On force leur inclusion dans les fonctions API (Next 14.2 :
     // sous experimental).
     outputFileTracingIncludes: {
-      // Polices du rendu étiquettes + binaire CPUtil (conversion Star Document
-      // Markup → StarPRNT) : tous deux lus depuis process.cwd() à l'exécution,
+      // Polices du rendu étiquettes : lues depuis process.cwd() à l'exécution,
       // Next ne les trace pas seul.
-      '/api/**/*': ['./assets/fonts/**', './bin/cputil/**/*'],
+      '/api/**/*': ['./assets/fonts/**'],
+      // Binaire CPUtil (48 Mo) : UNIQUEMENT dans les deux routes qui
+      // l'exécutent. Sous '/api/**/*' il était recopié dans chaque fonction
+      // du projet — des centaines de mégaoctets pour rien, et le risque de
+      // dépasser la taille maximale d'une fonction.
+      '/api/cloudprnt/print-labels/route': ['./bin/cputil/**/*'],
+      '/api/cloudprnt/print-labels/test/route': ['./bin/cputil/**/*'],
     },
   },
   async headers() {
