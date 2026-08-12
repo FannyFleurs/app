@@ -4,7 +4,7 @@ import { requirePermission } from '@/lib/auth/guards';
 import { parseJson } from '@/lib/validation/api';
 import { query } from '@/lib/db/client';
 import { mergeLabelDefaults, LABEL_KEY } from '@/lib/settings/label';
-import { buildTestLabelsStarPrnt, STARPRNT_CONTENT_TYPE } from '@/lib/services/cloudprnt/starprnt';
+import { buildTestLabelsStarPrnt, dernierMoteurJob, STARPRNT_CONTENT_TYPE } from '@/lib/services/cloudprnt/starprnt';
 import { resolveLabelPrinter, enqueueJob } from '@/lib/services/cloudprnt/queue';
 
 export const dynamic = 'force-dynamic';
@@ -52,5 +52,6 @@ export async function POST(req: Request) {
 
   return NextResponse.json({
     ok: true, job_id: job.id, printer: printer.label, count: parsed.data.count,
+    ...dernierMoteurJob(),
   });
 }

@@ -4,7 +4,7 @@ import { requirePermission } from '@/lib/auth/guards';
 import { parseJson } from '@/lib/validation/api';
 import { query } from '@/lib/db/client';
 import { mergeLabelDefaults, LABEL_KEY } from '@/lib/settings/label';
-import { buildLabelsStarPrnt, countLabels, STARPRNT_CONTENT_TYPE } from '@/lib/services/cloudprnt/starprnt';
+import { buildLabelsStarPrnt, countLabels, dernierMoteurJob, STARPRNT_CONTENT_TYPE } from '@/lib/services/cloudprnt/starprnt';
 import { resolveLabelPrinter, enqueueJob } from '@/lib/services/cloudprnt/queue';
 import type { LabelProduct } from '@/lib/services/label-print';
 
@@ -57,5 +57,7 @@ export async function POST(req: Request) {
     userId: g.user.id,
   });
 
-  return NextResponse.json({ ok: true, job_id: job.id, printer: printer.label, count });
+  return NextResponse.json({
+    ok: true, job_id: job.id, printer: printer.label, count, ...dernierMoteurJob(),
+  });
 }

@@ -104,6 +104,47 @@ function traceJob(etiquettes: number, markupLen: number, octets: number, moteur:
 }
 
 /**
+ * Moteur ayant réellement produit le dernier job, et pourquoi.
+ *
+ * L'appelant le renvoie à l'écran : quand une impression part de travers, la
+ * première question est « par quel chemin est-elle passée ». Sans cette
+ * réponse, on diagnostique à l'aveugle — ce qui a déjà coûté trois essais.
+ */
+export interface MoteurJob { moteur: 'markup+cputil' | 'starprnt-encoder'; raison?: string }
+let dernierMoteur: MoteurJob = { moteur: 'starprnt-encoder' };
+export function dernierMoteurJob(): MoteurJob { return dernierMoteur; }
+
+/**
+ * Essaie le chemin Markup + CPUtil, et retombe sur l'encodage direct à la
+ * MOINDRE difficulté — binaire absent, non exécutable, conversion en échec.
+ *
+ * Le repli produit la même structure (image, 0x0C, image, …, une coupe) :
+ * l'impression reste juste. Ce qui compte, c'est que la boutique ne s'arrête
+ * jamais sur un problème d'outil, et que la raison soit dite.
+ */
+async function viaCputil(markup: () => Promise<string>): Promise<Buffer | null> {
+  if (!(await cputilDisponible())) {
+    dernierMoteur = { moteur: 'starprnt-encoder', raison: `CPUtil absent : ${cputilPath()}` };
+    // eslint-disable-next-line no-console
+    console.warn(`[label-job] ${dernierMoteur.raison} — repli sur l'encodage direct.`);
+    return null;
+  }
+  try {
+    const doc = await markup();
+    const out = await convertMarkupToStarPrnt(doc, PRINT_AREA_DOTS);
+    dernierMoteur = { moteur: 'markup+cputil' };
+    traceJob(0, doc.length, out.length, 'markup+cputil');
+    return out;
+  } catch (err) {
+    const raison = (err as Error).message ?? 'erreur inconnue';
+    dernierMoteur = { moteur: 'starprnt-encoder', raison: `CPUtil en échec : ${raison}` };
+    // eslint-disable-next-line no-console
+    console.error(`[label-job] ${dernierMoteur.raison} — repli sur l'encodage direct.`);
+    return null;
+  }
+}
+
+/**
  * Job d'un lot d'étiquettes.
  *
  * Chemin nominal : un document Star Document Markup — une image par
@@ -124,18 +165,8 @@ export async function buildLabelsStarPrnt(
   const flat = aplatir(entries);
   if (flat.length === 0) throw new Error('Aucune étiquette à imprimer.');
 
-  if (await cputilDisponible()) {
-    const markup = await buildLabelsMarkup(flat, media);
-    const out = await convertMarkupToStarPrnt(markup, PRINT_AREA_DOTS);
-    traceJob(flat.length, markup.length, out.length, 'markup+cputil');
-    return out;
-  }
-
-  // eslint-disable-next-line no-console
-  console.warn(
-    `[label-job] CPUtil absent (${cputilPath()}) : repli sur l'encodage direct.`,
-  );
-  return encoderDirect(flat, media);
+  const parCputil = await viaCputil(() => buildLabelsMarkup(flat, media));
+  return parCputil ?? encoderDirect(flat, media);
 }
 
 /** Repli : une image, une coupe, par étiquette, sans passer par le Markup. */
@@ -150,6 +181,11 @@ async function encoderDirect(
 
   // Même structure que le document Markup : image, avance sur la marque,
   // image, … et UNE seule coupe à la fin.
+  //
+  // Nuance connue de ce repli : la bibliothèque encadre `raw()` de LF/CR, si
+  // bien que l'octet d'avance sort en « 0A 0D 0C 0A 0D ». Le saut de ligne qui
+  // SUIT le form feed décale l'étiquette suivante d'une ligne. C'est pourquoi
+  // le chemin nominal reste CPUtil, qui pose l'octet nu.
   for (let i = 0; i < flat.length; i++) {
     const bmp = await renderSingleLabelBitmap(flat[i]!, media);
     enc.image(
@@ -183,12 +219,8 @@ export async function buildTestLabelsStarPrnt(
   const media = mediaImprimable(settings);
   const n = Math.max(1, Math.min(MAX_LABELS_PER_JOB, Math.round(count || 0)));
 
-  if (await cputilDisponible()) {
-    const markup = await buildTestLabelsMarkup(n, media);
-    const out = await convertMarkupToStarPrnt(markup, PRINT_AREA_DOTS);
-    traceJob(n, markup.length, out.length, 'markup+cputil');
-    return out;
-  }
+  const parCputil = await viaCputil(() => buildTestLabelsMarkup(n, media));
+  if (parCputil) return parCputil;
 
   const mod = await import('star-prnt-encoder');
   const StarPrntEncoder = mod.default;

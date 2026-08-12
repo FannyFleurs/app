@@ -36,11 +36,12 @@ const COUPE = /1b64(00|03)/g;
  * Avance sur la marque noire dans le flux binaire.
  *
  * On ne peut pas compter les `0x0C` isolés : les données raster en
- * contiennent par hasard. On ne retient donc que ceux immédiatement suivis
- * d'une commande de raster — `1B 1D 53` pour CPUtil, `1B 58` pour le repli —
- * c'est-à-dire ceux qui séparent réellement deux étiquettes.
+ * contiennent par hasard. On ne retient que ceux suivis d'une commande —
+ * directement (CPUtil pose l'octet nu) ou après le LF/CR dont l'encodeur de
+ * repli entoure `raw()`.
  */
-const avances = (job: Buffer) => (job.toString('hex').match(/0c1b(1d53|58)/g) ?? []).length;
+const avances = (job: Buffer) =>
+  (job.toString('hex').match(/0c(1b|0a0d1b)/g) ?? []).length;
 
 describe('Un job, N étiquettes indépendantes', () => {
   it('émet UNE coupe et N-1 avances sur la marque', async () => {

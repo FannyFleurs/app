@@ -108,10 +108,18 @@ export default function LabelPrinterForm({ stores, canWrite }: {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ store_id: p.store_id, count }),
     });
-    if (r.ok) setMsg(`${count} étiquette${count > 1 ? 's' : ''} de réglage envoyée${count > 1 ? 's' : ''} à « ${p.label} ».`);
-    else {
-      const j = await r.json().catch(() => null);
-      setErr(j?.error === 'NO_PRINTER' ? 'Aucune imprimante active trouvée.' : (j?.error ?? 'Échec de l\'envoi.'));
+    const j = await r.json().catch(() => null);
+    if (r.ok) {
+      // On dit par quel chemin le job est passé : quand une impression sort de
+      // travers, c'est la première question à laquelle il faut pouvoir répondre.
+      const par = j?.moteur === 'markup+cputil'
+        ? 'converti par CPUtil (recalage sur la marque noire)'
+        : `encodé directement${j?.raison ? ` — ${j.raison}` : ''}`;
+      setMsg(`${count} étiquette${count > 1 ? 's' : ''} de réglage envoyée${count > 1 ? 's' : ''} à « ${p.label} », ${par}.`);
+    } else {
+      setErr(j?.error === 'NO_PRINTER'
+        ? 'Aucune imprimante active trouvée.'
+        : `Échec de l'envoi${j?.message ? ` : ${j.message}` : ''}${j?.error ? ` (${j.error})` : ''}.`);
     }
   }
 
