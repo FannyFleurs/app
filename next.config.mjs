@@ -28,6 +28,7 @@ const nextConfig = {
       // dépasser la taille maximale d'une fonction.
       '/api/cloudprnt/print-labels/route': ['./bin/cputil/**/*'],
       '/api/cloudprnt/print-labels/test/route': ['./bin/cputil/**/*'],
+      '/api/cloudprnt/cputil-status/route': ['./bin/cputil/**/*'],
     },
   },
   async headers() {

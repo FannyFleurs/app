@@ -27,6 +27,7 @@ export default function LabelPrinterForm({ stores, canWrite }: {
   const [origin, setOrigin] = useState('');
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [diag, setDiag] = useState<string | null>(null);
 
   // Formulaire d'ajout
   const [mac, setMac] = useState('');
@@ -123,6 +124,30 @@ export default function LabelPrinterForm({ stores, canWrite }: {
     }
   }
 
+  /**
+   * Ce que vaut CPUtil dans l'environnement d'exécution réel.
+   *
+   * Absent du déploiement, présent sans droit d'exécution, ou incapable de
+   * démarrer : trois causes qui donnent le même « échec de l'envoi » à
+   * l'écran. Le diagnostic les sépare, et se lit depuis le comptoir.
+   */
+  async function diagnostic() {
+    setMsg(null); setErr(null); setDiag('…');
+    const r = await fetch('/api/cloudprnt/cputil-status');
+    if (!r.ok) { setDiag('Diagnostic indisponible.'); return; }
+    const d = await r.json();
+    const lignes = [
+      `chemin : ${d.chemin}`,
+      `dossier de travail : ${d.cwd}`,
+      `présent : ${d.existe ? 'oui' : 'NON'}${d.taille ? ` (${(d.taille / 1048576).toFixed(1)} Mo)` : ''}`,
+      `exécutable : ${d.executable ? 'oui' : 'NON'}`,
+      d.version ? `version : ${d.version}` : null,
+      d.erreur ? `erreur : ${d.erreur}` : null,
+      d.dossier ? `contenu du dossier : ${d.dossier.join(', ') || '(vide)'}` : null,
+    ].filter(Boolean);
+    setDiag(lignes.join('\n'));
+  }
+
   const pollUrl = (p: Printer) => `${origin}/api/cloudprnt${p.poll_token ? `?t=${encodeURIComponent(p.poll_token)}` : ''}`;
 
   return (
@@ -217,10 +242,21 @@ export default function LabelPrinterForm({ stores, canWrite }: {
                       C = avance entre, une coupe à la fin · D = rien entre, une coupe à la fin.
                       Dis-moi quel groupe sort juste : bonne position, pas de vierge, coupe au bord.
                     </p>
-                    <button className="btn-primary text-xs h-8 px-3 mt-2"
-                            onClick={() => void calibrage(p, 1, true)}>
-                      Imprimer le comparatif (8 étiquettes)
-                    </button>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <button className="btn-primary text-xs h-8 px-3"
+                              onClick={() => void calibrage(p, 1, true)}>
+                        Imprimer le comparatif (8 étiquettes)
+                      </button>
+                      <button className="btn-soft text-xs h-8 px-3"
+                              onClick={() => void diagnostic()}>
+                        Diagnostic CPUtil
+                      </button>
+                    </div>
+                    {diag && (
+                      <pre className="mt-2 rounded-xl bg-surface border border-border p-2 text-[11px] whitespace-pre-wrap break-all">
+                        {diag}
+                      </pre>
+                    )}
                   </div>
                 </div>
               )}

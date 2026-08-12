@@ -97,3 +97,67 @@ export async function convertMarkupToStarPrnt(
     await unlink(entree).catch(() => undefined);
   }
 }
+
+/* ------------------------------------------------------------------ */
+
+export interface DiagnosticCputil {
+  chemin: string;
+  cwd: string;
+  existe: boolean;
+  executable: boolean;
+  taille: number | null;
+  /** Sortie de `cputil version` si le binaire a pu être lancé. */
+  version: string | null;
+  /** Ce qui a empêché de l'utiliser, en clair. */
+  erreur: string | null;
+  /** Contenu du dossier bin/cputil tel qu'il existe à l'exécution. */
+  dossier: string[] | null;
+}
+
+/**
+ * Interroge l'environnement RÉEL d'exécution.
+ *
+ * Un binaire peut manquer à l'appel pour trois raisons qui se ressemblent de
+ * loin : absent du déploiement, présent mais sans droit d'exécution, présent
+ * et exécutable mais incapable de démarrer. Depuis un poste de développement
+ * on ne voit rien de tout cela — seule la lambda peut répondre.
+ */
+export async function diagnostiquerCputil(): Promise<DiagnosticCputil> {
+  const chemin = cputilPath();
+  const d: DiagnosticCputil = {
+    chemin, cwd: process.cwd(),
+    existe: false, executable: false, taille: null,
+    version: null, erreur: null, dossier: null,
+  };
+
+  try {
+    const { readdir, stat } = await import('node:fs/promises');
+    d.dossier = await readdir(path.dirname(chemin)).catch(() => null);
+    const st = await stat(chemin);
+    d.existe = true;
+    d.taille = st.size;
+  } catch (err) {
+    d.erreur = `Introuvable : ${(err as Error).message}`;
+    return d;
+  }
+
+  try {
+    await access(chemin, constants.X_OK);
+    d.executable = true;
+  } catch (err) {
+    d.erreur = `Présent mais non exécutable : ${(err as Error).message}`;
+    return d;
+  }
+
+  try {
+    const { stdout } = await execFileAsync(chemin, ['version'], {
+      encoding: 'utf8', timeout: 15_000, maxBuffer: 1024 * 1024,
+    });
+    d.version = String(stdout).trim().split('\n').slice(0, 3).join(' · ');
+  } catch (err) {
+    const e = err as { code?: number | string; stderr?: string; message?: string };
+    d.erreur = `Lancement impossible (code ${String(e.code ?? '?')}) : `
+      + `${e.message ?? ''} ${e.stderr ?? ''}`.trim().slice(0, 500);
+  }
+  return d;
+}
