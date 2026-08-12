@@ -257,13 +257,14 @@ export default function LabelPrinterForm({ stores, canWrite }: {
                   <div className="mt-3 border-t border-border pt-2">
                     <div className="text-xs font-medium">Essai — calage avant impression</div>
                     <p className="text-[11px] text-ink-soft mt-0.5">
-                      Cycle testé : <strong>se caler sur la marque, puis imprimer</strong>,
-                      répété, et une seule coupe sèche à la fin.
-                      Attendu : aucune étiquette blanche entre deux, et la coupe
-                      sur la séparation après la dernière.
+                      Cycle : <strong>imprimer, puis chercher la marque suivante</strong>,
+                      répété, et une seule coupe sèche à la fin. Aucune avance avant
+                      la première image — elle faisait sortir une vierge en tête.
+                      Attendu : aucune étiquette blanche, ni avant ni entre, et la
+                      coupe sur la séparation après la dernière.
                     </p>
                     <div className="mt-2 flex flex-wrap gap-2">
-                      {[1, 2, 5].map((n) => (
+                      {[1, 2, 5, 20].map((n) => (
                         <button key={n} className="btn-soft text-xs"
                                 onClick={() => void calibrage(p, n, { experience: true })}>
                           Essai {n} étiquette{n > 1 ? 's' : ''}
