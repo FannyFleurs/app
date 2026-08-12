@@ -716,6 +716,7 @@ export default function MaJourneeClient() {
                                   onClick={() => champRecherche.current?.focus()} />
                     <ActionRapide icone="print" label="Rapport de caisse"
                                   onClick={() => setMode('complet')} />
+                    <ActionRapide icone="fiscal" label="Historiques" href="/historiques" />
                   </div>
                 </section>
               </div>
