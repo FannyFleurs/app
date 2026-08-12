@@ -27,10 +27,12 @@ const PRODUIT = {
 const REGLAGES = { ...LABEL_DEFAULTS, width_mm: 50, height_mm: 25 };
 
 /**
- * Coupe StarPRNT : `ESC d n`. CPUtil émet `1B 64 03` (coupe avec avance),
- * l'encodage de repli `1B 64 00`.
+ * Coupe StarPRNT : `1B 64 00`, coupe SÈCHE.
+ *
+ * `1B 64 03` (coupe avec sa petite avance mécanique) tombait au milieu de
+ * l'étiquette : c'est l'avance sur la marque qui amène le papier au bord.
  */
-const COUPE = /1b64(00|03)/g;
+const COUPE = /1b6400/g;
 
 /**
  * Avance sur la marque noire dans le flux binaire.
@@ -44,15 +46,24 @@ const avances = (job: Buffer) =>
   (job.toString('hex').match(/0c(1b|0a0d1b)/g) ?? []).length;
 
 describe('Un job, N étiquettes indépendantes', () => {
-  it('émet UNE coupe et N-1 avances sur la marque', async () => {
-    // Guirlande : les étiquettes se suivent, une seule coupe à la fin, et
-    // entre deux un form feed (0x0C) qui laisse le capteur décider.
+  it('émet UNE coupe et N avances sur la marque', async () => {
+    // Structure validée sur l'imprimante : imprimer, chercher la marque
+    // suivante, … y compris après la DERNIÈRE image — sans quoi la coupe
+    // tombe au milieu de l'étiquette. Et rien avant la première : l'imprimante
+    // est déjà positionnée, une avance en tête sortait une vierge.
     for (const n of [1, 2, 3, 10]) {
       const job = await buildLabelsStarPrnt([{ product: PRODUIT, qty: n }], REGLAGES);
       const coupes = (job.toString('hex').match(COUPE) ?? []).length;
       expect(coupes, `${n} étiquette(s)`).toBe(1);
-      expect(avances(job), `${n} étiquette(s)`).toBe(n - 1);
+      expect(avances(job), `${n} étiquette(s)`).toBe(n);
     }
+  });
+
+  it('ne place aucune avance avant la première image', async () => {
+    const job = await buildLabelsStarPrnt([{ product: PRODUIT, qty: 3 }], REGLAGES);
+    const premierRaster = job.indexOf(Buffer.from([0x1b, 0x1d, 0x53]));
+    const debut = job.subarray(0, premierRaster >= 0 ? premierRaster : 64);
+    expect(debut.includes(0x0c)).toBe(false);
   });
 
   it('n\'initialise qu\'une fois, quel que soit le lot', async () => {
@@ -65,11 +76,14 @@ describe('Un job, N étiquettes indépendantes', () => {
     // Deux avances collées trahiraient une image unique suivie de feeds.
     const job = await buildLabelsStarPrnt([{ product: PRODUIT, qty: 3 }], REGLAGES);
     const hex = job.toString('hex');
+    // Les deux premières avances précèdent un raster, la dernière la coupe :
+    // on cherche donc « 0C suivi d'une commande », quelle qu'elle soit.
     const positions: number[] = [];
-    for (let i = 0; i + 8 <= hex.length; i += 2) {
-      if (/^0c1b(1d53|58)/.test(hex.slice(i, i + 8))) positions.push(i / 2);
+    for (let i = 0; i + 4 <= hex.length; i += 2) {
+      if (/^0c1b/.test(hex.slice(i, i + 4))) positions.push(i / 2);
     }
-    expect(positions).toHaveLength(2);
+    // Trois images : trois avances, dont la dernière juste avant la coupe.
+    expect(positions).toHaveLength(3);
     const ecart = positions[1]! - positions[0]!;
     expect(ecart).toBeGreaterThan(job.length * 0.25);
   });
@@ -131,7 +145,7 @@ describe('Ce qui ne doit plus exister', () => {
     // La borne s'applique au lot aplati, pas à un découpage graphique : au-delà
     // on tronque, on ne segmente pas.
     const job = await buildLabelsStarPrnt([{ product: PRODUIT, qty: 4 }], REGLAGES);
-    expect(avances(job)).toBe(3);
+    expect(avances(job)).toBe(4);
     expect((job.toString('hex').match(COUPE) ?? []).length).toBe(1);
   });
 });
@@ -140,7 +154,7 @@ describe('Lot de réglage', () => {
   it('numérote les étiquettes et n\'imprime aucun code-barres', async () => {
     const job = await buildTestLabelsStarPrnt(3, REGLAGES);
     expect((job.toString('hex').match(COUPE) ?? []).length).toBe(1);
-    expect(avances(job)).toBe(2);
+    expect(avances(job)).toBe(3);
     // Le rendu de test trace deux filets et un texte centré, rien d'autre.
     const rendu = readFileSync('lib/services/cloudprnt/label-render.ts', 'utf8');
     expect(rendu).toMatch(/export async function renderTestLabelBitmap/);
@@ -151,23 +165,25 @@ describe('Lot de réglage', () => {
 describe('Star Document Markup', () => {
   const MEDIA = { ...LABEL_DEFAULTS, width_mm: 50, height_mm: PRINTABLE_HEIGHT_MM };
 
-  it('intercale le recalage marque noire ENTRE les étiquettes seulement', async () => {
-    // Un feed après la dernière image ferait avancer deux fois avant la coupe.
+  it('place une avance après CHAQUE image, la dernière comprise', async () => {
     const markup = await buildLabelsMarkup([PRODUIT, PRODUIT, PRODUIT], MEDIA);
     const lignes = markup.split('\n');
-    expect(lignes).toHaveLength(6);
+    expect(lignes).toHaveLength(7);
     expect(lignes[0]).toMatch(/^\[image: url "data:image\/png;base64,/);
     expect(lignes[1]).toBe('[feed: black-mark]\\');
     expect(lignes[3]).toBe('[feed: black-mark]\\');
-    expect(lignes[5]).toBe('[cut]');
-    expect((markup.match(/\[feed: black-mark\]/g) ?? [])).toHaveLength(2);
-    expect((markup.match(/\[cut\]/g) ?? [])).toHaveLength(1);
+    expect(lignes[5]).toBe('[feed: black-mark]\\');
+    expect(lignes[6]).toBe('[cut: nofeed; full]');
+    expect((markup.match(/\[feed: black-mark\]/g) ?? [])).toHaveLength(3);
   });
 
-  it('n\'insère aucun feed pour une étiquette seule', async () => {
+  it('commence par l\'image, jamais par une avance', async () => {
+    // Une avance en tête faisait sortir une étiquette vierge : l'imprimante
+    // est déjà positionnée sur le premier support au début du job.
     const markup = await buildLabelsMarkup([PRODUIT], MEDIA);
-    expect(markup).not.toContain('[feed:');
-    expect(markup.split('\n')).toHaveLength(2);
+    expect(markup.split('\n')[0]).toMatch(/^\[image:/);
+    expect(markup.split('\n')).toHaveLength(3);
+    expect((markup.match(/\[feed: black-mark\]/g) ?? [])).toHaveLength(1);
   });
 
   it('protège la Data URL par des guillemets', async () => {
@@ -196,8 +212,8 @@ describe('Star Document Markup', () => {
   it('numérote le lot de réglage sans code-barres', async () => {
     const markup = await buildTestLabelsMarkup(5, MEDIA);
     expect((markup.match(/\[image:/g) ?? [])).toHaveLength(5);
-    expect((markup.match(/\[feed: black-mark\]/g) ?? [])).toHaveLength(4);
-    expect((markup.match(/\[cut\]/g) ?? [])).toHaveLength(1);
+    expect((markup.match(/\[feed: black-mark\]/g) ?? [])).toHaveLength(5);
+    expect((markup.match(/\[cut: nofeed; full\]/g) ?? [])).toHaveLength(1);
   });
 });
 

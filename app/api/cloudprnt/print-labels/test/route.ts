@@ -5,8 +5,7 @@ import { parseJson } from '@/lib/validation/api';
 import { query } from '@/lib/db/client';
 import { mergeLabelDefaults, LABEL_KEY } from '@/lib/settings/label';
 import {
-  buildTestLabelsStarPrnt, buildComparatifStarPrnt, buildTestTopOfFormStarPrnt,
-  dernierMoteurJob, STARPRNT_CONTENT_TYPE,
+  buildTestLabelsStarPrnt, dernierMoteurJob, STARPRNT_CONTENT_TYPE,
 } from '@/lib/services/cloudprnt/starprnt';
 import { resolveLabelPrinter, enqueueJob } from '@/lib/services/cloudprnt/queue';
 
@@ -14,11 +13,7 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 const schema = z.object({
-  count: z.number().int().min(1).max(20).optional(),
-  /** Comparatif : quatre enchaînements, deux étiquettes chacun, marqués A à D. */
-  comparatif: z.boolean().optional(),
-  /** Essai « top-of-form » : avance sur la marque AVANT chaque image. */
-  experience: z.boolean().optional(),
+  count: z.number().int().min(1).max(20),
   store_id: z.string().uuid().nullable().optional(),
 });
 
@@ -46,12 +41,10 @@ export async function POST(req: Request) {
   );
   const settings = mergeLabelDefaults((st.rows[0]?.value as Record<string, unknown>) ?? null);
 
-  const compte = parsed.data.count ?? 1;
+  const compte = parsed.data.count;
   let payload: Buffer;
   try {
-    payload = parsed.data.comparatif ? await buildComparatifStarPrnt(settings)
-      : parsed.data.experience ? await buildTestTopOfFormStarPrnt(compte, settings)
-      : await buildTestLabelsStarPrnt(compte, settings);
+    payload = await buildTestLabelsStarPrnt(compte, settings);
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error('[print-labels/test] fabrication du job', err);
@@ -66,14 +59,12 @@ export async function POST(req: Request) {
     printerId: printer.id,
     contentType: STARPRNT_CONTENT_TYPE,
     payload,
-    title: parsed.data.comparatif ? 'Réglage — comparatif des enchaînements'
-      : parsed.data.experience ? `Essai top-of-form — ${compte} étiquette${compte > 1 ? 's' : ''}`
-      : `Réglage — ${compte} étiquette${compte > 1 ? 's' : ''}`,
+    title: `Réglage — ${compte} étiquette${compte > 1 ? 's' : ''}`,
     userId: g.user.id,
   });
 
   return NextResponse.json({
-    ok: true, job_id: job.id, printer: printer.label, count: parsed.data.comparatif ? 8 : compte,
+    ok: true, job_id: job.id, printer: printer.label, count: compte,
     ...dernierMoteurJob(),
   });
 }

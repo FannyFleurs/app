@@ -103,11 +103,11 @@ export default function LabelPrinterForm({ stores, canWrite }: {
    * et en bas, sans code-barres. On compare la position du contenu de la
    * dernière à celle de la première : identique = le pas est juste.
    */
-  async function calibrage(p: Printer, count: number, extra: { comparatif?: boolean; experience?: boolean } = {}) {
+  async function calibrage(p: Printer, count: number) {
     setMsg(null); setErr(null);
     const r = await fetch('/api/cloudprnt/print-labels/test', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ store_id: p.store_id, count, ...extra }),
+      body: JSON.stringify({ store_id: p.store_id, count }),
     });
     const j = await r.json().catch(() => null);
     if (r.ok) {
@@ -219,9 +219,9 @@ export default function LabelPrinterForm({ stores, canWrite }: {
                 <div className="rounded-xl bg-muted/60 px-3 py-2">
                   <div className="text-xs font-medium">Réglage du pas (étiquettes numérotées)</div>
                   <p className="text-[11px] text-ink-soft mt-0.5">
-                    Tire un lot, puis compare la position du contenu de la dernière étiquette
-                    à celle de la première. Identique = le pas est juste. Un décalage qui
-                    grandit d&apos;une étiquette à l&apos;autre = la dérive existe encore.
+                    Étiquettes numérotées, filet en haut, filet en bas, sans code-barres.
+                    Tire un lot après un changement de rouleau : la dernière doit tomber
+                    comme la première, sans vierge avant ni entre.
                   </p>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {[1, 2, 5, 10, 20].map((n) => (
@@ -231,53 +231,17 @@ export default function LabelPrinterForm({ stores, canWrite }: {
                       </button>
                     ))}
                   </div>
-                  {/* Quatre enchaînements dans un seul tirage : c'est
-                      l'étiquette sortie qui tranche, pas une hypothèse. */}
-                  <div className="mt-3 border-t border-border pt-2">
-                    <div className="text-xs font-medium">Comparatif des enchaînements</div>
-                    <p className="text-[11px] text-ink-soft mt-0.5">
-                      Huit étiquettes : deux par mode, marquées <strong>A1 A2</strong>,
-                      <strong> B1 B2</strong>, <strong>C1 C2</strong>, <strong>D1 D2</strong>.
-                      A = coupe après chaque · B = avance sur la marque puis coupe ·
-                      C = avance entre, une coupe à la fin · D = rien entre, une coupe à la fin.
-                      Dis-moi quel groupe sort juste : bonne position, pas de vierge, coupe au bord.
-                    </p>
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <button className="btn-primary text-xs h-8 px-3"
-                              onClick={() => void calibrage(p, 1, { comparatif: true })}>
-                        Imprimer le comparatif (8 étiquettes)
-                      </button>
-                      <button className="btn-soft text-xs h-8 px-3"
-                              onClick={() => void diagnostic()}>
-                        Diagnostic CPUtil
-                      </button>
-                    </div>
-                    {/* Essai isolé : l'avance sur la marque AVANT chaque image,
-                      pour déterminer le cycle physique de la machine. */}
-                  <div className="mt-3 border-t border-border pt-2">
-                    <div className="text-xs font-medium">Essai — calage avant impression</div>
-                    <p className="text-[11px] text-ink-soft mt-0.5">
-                      Cycle : <strong>imprimer, puis chercher la marque suivante</strong>,
-                      répété, et une seule coupe sèche à la fin. Aucune avance avant
-                      la première image — elle faisait sortir une vierge en tête.
-                      Attendu : aucune étiquette blanche, ni avant ni entre, et la
-                      coupe sur la séparation après la dernière.
-                    </p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {[1, 2, 5, 20].map((n) => (
-                        <button key={n} className="btn-soft text-xs"
-                                onClick={() => void calibrage(p, n, { experience: true })}>
-                          Essai {n} étiquette{n > 1 ? 's' : ''}
-                        </button>
-                      ))}
-                    </div>
+                  <div className="mt-3 border-t border-border pt-2 flex flex-wrap items-center gap-2">
+                    <button className="btn-soft text-xs h-8 px-3"
+                            onClick={() => void diagnostic()}>
+                      Diagnostic CPUtil
+                    </button>
                   </div>
                   {diag && (
-                      <pre className="mt-2 rounded-xl bg-surface border border-border p-2 text-[11px] whitespace-pre-wrap break-all">
-                        {diag}
-                      </pre>
-                    )}
-                  </div>
+                    <pre className="mt-2 rounded-xl bg-surface border border-border p-2 text-[11px] whitespace-pre-wrap break-all">
+                      {diag}
+                    </pre>
+                  )}
                 </div>
               )}
               <label className="block text-xs">
