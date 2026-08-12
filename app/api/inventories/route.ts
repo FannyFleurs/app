@@ -4,6 +4,7 @@ import { query, withTransaction } from '@/lib/db/client';
 import { requirePermission } from '@/lib/auth/guards';
 import { parseJson, jsonError } from '@/lib/validation/api';
 import { audit } from '@/lib/audit/log';
+import { produitDansBoutique } from '@/lib/services/inventory-scope';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,11 +17,15 @@ const createSchema = z.object({
 });
 
 /**
- * Liste des inventaires (recents en premier).
+ * Liste des inventaires (récents en premier).
+ *
+ * Filtrable par boutique : un inventaire appartient à un lieu, et mélanger
+ * ceux d'Alençon et de Mortagne dans un même tableau ne dit rien à personne.
  */
-export async function GET() {
+export async function GET(req: Request) {
   const g = await requirePermission('stock.adjust');
   if ('response' in g) return g.response;
+  const storeId = new URL(req.url).searchParams.get('store_id') || null;
   const r = await query<{
     id: string; label: string; store_id: string; store_name: string;
     scope_type: string; scope_ids: string[]; status: string;
@@ -40,9 +45,10 @@ export async function GET() {
            FROM inventory_lines il WHERE il.inventory_id = i.id
        ) l ON TRUE
       WHERE i.organization_id = $1
+        AND ($2::uuid IS NULL OR i.store_id = $2)
       ORDER BY i.created_at DESC
       LIMIT 200`,
-    [g.user.organizationId],
+    [g.user.organizationId, storeId],
   );
   return NextResponse.json({ inventories: r.rows });
 }
@@ -86,6 +92,10 @@ export async function POST(req: Request) {
       const args: unknown[] = [g.user.organizationId, d.store_id, inventoryId];
       if (d.scope_type !== 'total') args.push(d.scope_ids);
 
+      // Un inventaire appartient à UNE boutique : il ne doit contenir que ce
+      // qui s'y trouve. Sans ce filtre, compter « les bougies » à Mortagne
+      // faisait entrer les bougies d'Alençon à zéro — autant d'écarts
+      // inventés, à justifier un par un.
       await client.query(
         `INSERT INTO inventory_lines
            (inventory_id, product_id, expected_qty, counted_qty, purchase_price_ht)
@@ -96,9 +106,20 @@ export async function POST(req: Request) {
              ON sl.product_id = p.id AND sl.store_id = $2 AND sl.organization_id = $1
           WHERE p.organization_id = $1
             AND p.is_active = TRUE
+            AND ${produitDansBoutique('$2')}
             ${whereScope}`,
         args,
       );
+
+      // Aucun article à compter : la session serait un cul-de-sac (le PDA
+      // afficherait une liste vide). On refuse plutôt que de laisser créer.
+      const n = await client.query<{ n: string }>(
+        `SELECT COUNT(*)::text AS n FROM inventory_lines WHERE inventory_id = $1`,
+        [inventoryId],
+      );
+      if (Number(n.rows[0]?.n ?? 0) === 0) {
+        throw Object.assign(new Error('EMPTY_SCOPE'), { code: 'EMPTY_SCOPE' });
+      }
 
       return { id: inventoryId };
     });
@@ -111,6 +132,11 @@ export async function POST(req: Request) {
     });
     return NextResponse.json(result, { status: 201 });
   } catch (err) {
+    if ((err as { code?: string }).code === 'EMPTY_SCOPE') {
+      return jsonError('EMPTY_SCOPE', 400, {
+        message: 'Aucun article à compter dans cette boutique pour cette sélection.',
+      });
+    }
     // eslint-disable-next-line no-console
     console.error('[inventory.create]', err);
     return jsonError('INTERNAL_ERROR', 500, { message: (err as Error).message });

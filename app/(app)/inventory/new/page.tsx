@@ -19,33 +19,13 @@ export default async function InventoryNewPage() {
     [user.organizationId],
   );
 
-  const categories = await query<{ id: string; name: string }>(
-    `SELECT id, name FROM product_categories
-      WHERE organization_id = $1
-      ORDER BY name`,
-    [user.organizationId],
-  );
-
-  // Fournisseurs = liste distincte des supplier_ref des produits actifs.
-  const suppliers = await query<{ supplier_ref: string; product_count: number }>(
-    `SELECT supplier_ref, COUNT(*)::int AS product_count
-       FROM products
-      WHERE organization_id = $1
-        AND is_active = TRUE
-        AND supplier_ref IS NOT NULL
-        AND supplier_ref <> ''
-      GROUP BY supplier_ref
-      ORDER BY supplier_ref`,
-    [user.organizationId],
-  );
-
+  // Catégories et fournisseurs ne sont plus chargés ici : ils dépendent de la
+  // boutique choisie dans le formulaire, et changent avec elle.
   const lockedStoreId = await resolveSettingsLockStoreId(user.organizationId);
 
   return (
     <InventoryNewForm
       stores={stores.rows}
-      categories={categories.rows}
-      suppliers={suppliers.rows}
       lockedStoreId={lockedStoreId}
     />
   );

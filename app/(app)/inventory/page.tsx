@@ -1,6 +1,7 @@
 import { readSessionFromCookie } from '@/lib/auth/session';
 import { userCan } from '@/lib/auth/permissions';
 import { query } from '@/lib/db/client';
+import { resolveSettingsLockStoreId } from '@/lib/pos/current-store';
 import InventoryList from './InventoryList';
 
 export const dynamic = 'force-dynamic';
@@ -18,5 +19,9 @@ export default async function InventoryPage() {
     [user.organizationId],
   );
 
-  return <InventoryList defaultStoreId={stores.rows[0]?.id ?? ''} />;
+  // Poste de caisse appairé : la liste est celle de SA boutique, sans
+  // sélecteur — on ne compte pas le stock d'à côté depuis le comptoir.
+  const lockedStoreId = await resolveSettingsLockStoreId(user.organizationId);
+
+  return <InventoryList stores={stores.rows} lockedStoreId={lockedStoreId} />;
 }
