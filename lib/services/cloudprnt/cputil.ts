@@ -40,6 +40,21 @@ export async function cputilDisponible(): Promise<boolean> {
   return disponible;
 }
 
+/**
+ * Variables d'environnement du sous-processus CPUtil, et d'elles seules.
+ *
+ * Le runtime .NET de CPUtil cherche ICU au démarrage — la bibliothèque
+ * d'internationalisation. Elle est absente de l'environnement Vercel, d'où
+ * « Couldn't find a valid ICU package installed on the system » et un binaire
+ * qui ne démarre pas. Le mode invariant lui dit de s'en passer : nous ne
+ * faisons ni tri, ni comparaison, ni formatage dépendant d'une culture — juste
+ * une conversion d'octets.
+ *
+ * Portée strictement locale au processus fils : `process.env` est repris tel
+ * quel, aucune variable de l'application n'est remplacée.
+ */
+const ENV_CPUTIL = { DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: '1' } as const;
+
 export class CputilError extends Error {
   constructor(message: string, readonly stderr?: string) {
     super(message);
@@ -73,10 +88,17 @@ export async function convertMarkupToStarPrnt(
   await writeFile(entree, markup, 'utf8');
 
   try {
+    // eslint-disable-next-line no-console
+    console.log('[CPUtil] globalization invariant enabled');
     const { stdout, stderr } = await execFileAsync(
       binaire,
       ['printarea', String(printAreaDots), 'decode', 'application/vnd.star.starprnt', entree, '-'],
-      { encoding: 'buffer', maxBuffer: 32 * 1024 * 1024, timeout: 20_000 },
+      {
+        encoding: 'buffer',
+        maxBuffer: 32 * 1024 * 1024,
+        timeout: 20_000,
+        env: { ...process.env, ...ENV_CPUTIL },
+      },
     );
     const out = Buffer.from(stdout);
     if (out.length === 0) {
@@ -152,6 +174,7 @@ export async function diagnostiquerCputil(): Promise<DiagnosticCputil> {
   try {
     const { stdout } = await execFileAsync(chemin, ['version'], {
       encoding: 'utf8', timeout: 15_000, maxBuffer: 1024 * 1024,
+      env: { ...process.env, ...ENV_CPUTIL },
     });
     d.version = String(stdout).trim().split('\n').slice(0, 3).join(' · ');
   } catch (err) {
