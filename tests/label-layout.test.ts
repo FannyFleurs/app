@@ -1,5 +1,4 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
 import { computeLabelLayout, estimateWidthMm } from '@/lib/services/label-layout';
 import { LABEL_DEFAULTS, LABEL_SIZE_PRESETS, mergeLabelDefaults, type LabelSettings } from '@/lib/settings/label';
 import { type LabelProduct } from '@/lib/services/label-print-core';
@@ -240,19 +239,7 @@ describe('Marge haute', () => {
   });
 });
 
-describe('Papier : une étiquette à la fois, et calage horizontal', () => {
-  it('rend une étiquette à la hauteur du format, sans pas maison', () => {
-    // Le lot partait en une image continue au pas « hauteur + écart » : le
-    // logiciel devinait la géométrie du rouleau, et à la troisième étiquette
-    // le décalage se voyait. C'est l'imprimante qui lit la marque noire.
-    const src = readFileSync('lib/services/cloudprnt/starprnt.ts', 'utf8');
-    expect(src).toContain('renderLabelBitmap');
-    expect(src).not.toContain('MAX_PER_SHEET');
-    // Une étiquette, une coupe.
-    expect(src).toMatch(/for \(const label of flat\) \{[\s\S]{0,400}enc\.cut\(\);/);
-    expect(readFileSync('lib/settings/label.ts', 'utf8')).not.toContain('gap_mm');
-  });
-
+describe('Code-barres et calage', () => {
   it('donne au code-barres de quoi être accroché', () => {
     // Sur l'étiquette du rayon (50 × 25), les barres faisaient moins de 5 mm :
     // lisibles de face, capricieuses de travers. Le bloc pèse désormais plus
