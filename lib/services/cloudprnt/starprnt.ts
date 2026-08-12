@@ -3,6 +3,7 @@ import { type LabelProduct } from '@/lib/services/label-print';
 import { renderSingleLabelBitmap, renderTestLabelBitmap } from '@/lib/services/cloudprnt/label-render';
 import {
   buildLabelsMarkup, buildTestLabelsMarkup, buildComparatifMarkup,
+  buildTestTopOfFormMarkup,
 } from '@/lib/services/cloudprnt/markup';
 import { convertMarkupToStarPrnt, cputilDisponible, cputilPath } from '@/lib/services/cloudprnt/cputil';
 
@@ -309,4 +310,30 @@ async function comparatifDirect(media: LabelSettings): Promise<Buffer> {
   const out = Buffer.from(enc.encode());
   traceJob(8, 0, out.length, 'starprnt-encoder');
   return out;
+}
+
+/**
+ * Lot d'ESSAI de la structure « top-of-form » : une avance sur la marque avant
+ * chaque image, une dernière avant la coupe sèche.
+ *
+ * Réservé au réglage : la production continue d'emprunter le chemin habituel
+ * tant que l'imprimante n'a pas tranché.
+ *
+ * Exige CPUtil. L'encodage de repli ne convient pas ici : la bibliothèque
+ * entoure `raw()` de LF/CR, or l'expérience porte précisément sur l'absence
+ * d'avance parasite entre le raster et l'avance sur la marque.
+ */
+export async function buildTestTopOfFormStarPrnt(
+  count: number, settings: LabelSettings,
+): Promise<Buffer> {
+  const media = mediaImprimable(settings);
+  const n = Math.max(1, Math.min(5, Math.round(count || 0)));
+  const parCputil = await viaCputil(() => buildTestTopOfFormMarkup(n, media));
+  if (!parCputil) {
+    throw new Error(
+      'Cet essai exige CPUtil (l\'encodage de repli ajoute des CR/LF qui '
+      + 'fausseraient le résultat). ' + (dernierMoteurJob().raison ?? ''),
+    );
+  }
+  return parCputil;
 }

@@ -126,3 +126,39 @@ export async function buildComparatifMarkup(settings: LabelSettings): Promise<st
   }
   return document(directives);
 }
+
+/* ------------------------------------------------------------------ */
+/* Expérience : la marque noire établit le top-of-form                 */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Structure à l'essai, pour le seul lot de test — la production n'y touche pas.
+ *
+ * Hypothèse : sur ce média, l'avance sur la marque ne TERMINE pas l'étiquette
+ * qu'on vient d'imprimer, elle établit le début physique de celle qu'on va
+ * imprimer. D'où un cycle « je me cale, puis j'imprime », répété :
+ *
+ *   [feed: black-mark]  ← top-of-form de l'étiquette 1
+ *   [image 1]
+ *   [feed: black-mark]  ← top-of-form de l'étiquette 2
+ *   [image 2]
+ *   …
+ *   [feed: black-mark]  ← amène le papier au bord après la dernière
+ *   [cut: nofeed; full] ← coupe sans chercher à avancer elle-même
+ *
+ * La coupe est en `nofeed` parce que `[cut]` seul (1B 64 03) ne cherche pas la
+ * marque : sa petite avance mécanique tombait au milieu de l'étiquette.
+ */
+export async function buildTestTopOfFormMarkup(
+  count: number, settings: LabelSettings,
+): Promise<string> {
+  const directives: string[] = [];
+  for (let i = 1; i <= count; i++) {
+    directives.push('[feed: black-mark]');
+    const bmp = await renderTestLabelBitmap(`TEST ${String(i).padStart(2, '0')}`, settings);
+    directives.push(await ligneImage(await bitmapToPngBuffer(bmp)));
+  }
+  directives.push('[feed: black-mark]');
+  directives.push('[cut: nofeed; full]');
+  return document(directives);
+}

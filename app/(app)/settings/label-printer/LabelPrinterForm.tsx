@@ -103,11 +103,11 @@ export default function LabelPrinterForm({ stores, canWrite }: {
    * et en bas, sans code-barres. On compare la position du contenu de la
    * dernière à celle de la première : identique = le pas est juste.
    */
-  async function calibrage(p: Printer, count: number, comparatif = false) {
+  async function calibrage(p: Printer, count: number, extra: { comparatif?: boolean; experience?: boolean } = {}) {
     setMsg(null); setErr(null);
     const r = await fetch('/api/cloudprnt/print-labels/test', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ store_id: p.store_id, count, comparatif }),
+      body: JSON.stringify({ store_id: p.store_id, count, ...extra }),
     });
     const j = await r.json().catch(() => null);
     if (r.ok) {
@@ -244,7 +244,7 @@ export default function LabelPrinterForm({ stores, canWrite }: {
                     </p>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
                       <button className="btn-primary text-xs h-8 px-3"
-                              onClick={() => void calibrage(p, 1, true)}>
+                              onClick={() => void calibrage(p, 1, { comparatif: true })}>
                         Imprimer le comparatif (8 étiquettes)
                       </button>
                       <button className="btn-soft text-xs h-8 px-3"
@@ -252,7 +252,26 @@ export default function LabelPrinterForm({ stores, canWrite }: {
                         Diagnostic CPUtil
                       </button>
                     </div>
-                    {diag && (
+                    {/* Essai isolé : l'avance sur la marque AVANT chaque image,
+                      pour déterminer le cycle physique de la machine. */}
+                  <div className="mt-3 border-t border-border pt-2">
+                    <div className="text-xs font-medium">Essai — calage avant impression</div>
+                    <p className="text-[11px] text-ink-soft mt-0.5">
+                      Cycle testé : <strong>se caler sur la marque, puis imprimer</strong>,
+                      répété, et une seule coupe sèche à la fin.
+                      Attendu : aucune étiquette blanche entre deux, et la coupe
+                      sur la séparation après la dernière.
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {[1, 2, 5].map((n) => (
+                        <button key={n} className="btn-soft text-xs"
+                                onClick={() => void calibrage(p, n, { experience: true })}>
+                          Essai {n} étiquette{n > 1 ? 's' : ''}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {diag && (
                       <pre className="mt-2 rounded-xl bg-surface border border-border p-2 text-[11px] whitespace-pre-wrap break-all">
                         {diag}
                       </pre>
