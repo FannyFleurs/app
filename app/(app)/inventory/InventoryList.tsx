@@ -33,17 +33,33 @@ const STATUS_LABEL: Record<string, { label: string; tone: 'success' | 'warning' 
   cancelled:   { label: 'Annulé',     tone: 'neutral' },
 };
 
-export default function InventoryList({ defaultStoreId: _defaultStoreId }: { defaultStoreId: string }) {
+export default function InventoryList({ stores, lockedStoreId }: {
+  stores: { id: string; name: string }[];
+  lockedStoreId?: string | null;
+}) {
   const [items, setItems] = useState<Inventory[]>([]);
   const [loading, setLoading] = useState(true);
+  // Un inventaire appartient à une boutique : la liste en montre une à la
+  // fois, celle du poste par défaut.
+  const [storeId, setStoreId] = useState('');
 
   useEffect(() => {
+    if (lockedStoreId) { setStoreId(lockedStoreId); return; }
+    let sid = '';
+    try { sid = localStorage.getItem('webpos_current_store_id') || ''; } catch { /* ignore */ }
+    if (!sid || !stores.some((s) => s.id === sid)) sid = stores[0]?.id ?? '';
+    setStoreId(sid);
+  }, [stores, lockedStoreId]);
+
+  useEffect(() => {
+    if (!storeId) return;
+    setLoading(true);
     void (async () => {
-      const r = await fetch('/api/inventories');
+      const r = await fetch(`/api/inventories?store_id=${encodeURIComponent(storeId)}`);
       if (r.ok) setItems((await r.json()).inventories);
       setLoading(false);
     })();
-  }, []);
+  }, [storeId]);
 
   return (
     <div className="p-6 md:p-8 space-y-5 w-full">
@@ -51,16 +67,25 @@ export default function InventoryList({ defaultStoreId: _defaultStoreId }: { def
         title="Inventaires"
         subtitle="Sessions de comptage — total, par catégorie ou par fournisseur."
         actions={
-          <Link href="/inventory/new" className="btn-primary h-11 px-5 text-sm font-semibold whitespace-nowrap">
-            + Nouvel inventaire
-          </Link>
+          <div className="flex items-center gap-2">
+            {!lockedStoreId && stores.length > 1 && (
+              <select className="input h-11 min-w-[170px] text-sm" value={storeId}
+                      onChange={(e) => setStoreId(e.target.value)}>
+                {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            )}
+            <Link href="/inventory/new" className="btn-primary h-11 px-5 text-sm font-semibold whitespace-nowrap">
+              + Nouvel inventaire
+            </Link>
+          </div>
         }
       />
 
       {loading ? (
         <div className="text-sm text-ink-soft">Chargement…</div>
       ) : items.length === 0 ? (
-        <EmptyState icon="◎" title="Aucun inventaire" />
+        <EmptyState icon="◎" title="Aucun inventaire"
+                    description={`Aucune session de comptage pour ${stores.find((s) => s.id === storeId)?.name ?? 'cette boutique'}.`} />
       ) : (
         // Défilement plutôt que coupe : en `overflow-hidden`, les dernières
         // colonnes disparaissaient sans recours sur téléphone.
@@ -69,7 +94,6 @@ export default function InventoryList({ defaultStoreId: _defaultStoreId }: { def
             <thead className="bg-white text-ink-soft text-xs uppercase border-b border-border">
               <tr>
                 <th className="text-left px-4 py-3">Libellé</th>
-                <th className="text-left px-4 py-3">Boutique</th>
                 <th className="text-left px-4 py-3">Portée</th>
                 <th className="text-right px-4 py-3">Lignes</th>
                 <th className="text-right px-4 py-3">Écarts</th>
@@ -84,7 +108,6 @@ export default function InventoryList({ defaultStoreId: _defaultStoreId }: { def
                 return (
                   <tr key={i.id} className="border-t border-border">
                     <td className="px-4 py-3 font-medium">{i.label}</td>
-                    <td className="px-4 py-3 text-ink-soft">{i.store_name}</td>
                     <td className="px-4 py-3 text-ink-soft">
                       {SCOPE_LABEL[i.scope_type]}
                       {i.scope_type !== 'total' && i.scope_ids.length > 0 && (

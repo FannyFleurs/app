@@ -2,21 +2,29 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+
+interface Categorie { id: string; name: string; product_count: number }
+interface Fournisseur { supplier_ref: string; product_count: number }
 
 interface Props {
   stores: { id: string; name: string }[];
-  categories: { id: string; name: string }[];
-  suppliers: { supplier_ref: string; product_count: number }[];
   /** Poste de caisse appairé : inventaire verrouillé sur sa boutique. */
   lockedStoreId?: string | null;
 }
 
 type Scope = 'total' | 'category' | 'supplier';
 
-export default function InventoryNewForm({ stores, categories, suppliers, lockedStoreId }: Props) {
+export default function InventoryNewForm({ stores, lockedStoreId }: Props) {
   const router = useRouter();
   const [storeId, setStoreId] = useState(lockedStoreId ?? stores[0]?.id ?? '');
+  // Catégories et fournisseurs PRÉSENTS dans la boutique choisie : la liste
+  // est rechargée à chaque changement de boutique, et la sélection remise à
+  // zéro — garder une catégorie d'Alençon en comptant Mortagne n'aurait aucun
+  // sens, et créerait des lignes vides.
+  const [categories, setCategories] = useState<Categorie[]>([]);
+  const [suppliers, setSuppliers] = useState<Fournisseur[]>([]);
+  const [chargementPortees, setChargementPortees] = useState(true);
   const [label, setLabel] = useState(
     `Inventaire ${new Date().toLocaleDateString('fr-FR')}`,
   );
@@ -25,6 +33,22 @@ export default function InventoryNewForm({ stores, categories, suppliers, locked
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!storeId) return;
+    let annule = false;
+    setChargementPortees(true);
+    setSelected(new Set());
+    void fetch(`/api/inventories/scopes?store_id=${encodeURIComponent(storeId)}`)
+      .then((r) => (r.ok ? r.json() : { categories: [], suppliers: [] }))
+      .then((j) => {
+        if (annule) return;
+        setCategories(j.categories ?? []);
+        setSuppliers(j.suppliers ?? []);
+      })
+      .finally(() => { if (!annule) setChargementPortees(false); });
+    return () => { annule = true; };
+  }, [storeId]);
+
   function toggle(id: string) {
     setSelected((s) => {
       const next = new Set(s);
@@ -32,6 +56,8 @@ export default function InventoryNewForm({ stores, categories, suppliers, locked
       return next;
     });
   }
+
+  const nomBoutique = stores.find((s) => s.id === storeId)?.name ?? 'cette boutique';
 
   async function submit() {
     if (!storeId) { setErr('Boutique obligatoire.'); return; }
@@ -120,19 +146,25 @@ export default function InventoryNewForm({ stores, categories, suppliers, locked
           </div>
           <p className="mt-2 text-xs text-ink-soft">
             {scope === 'total'
-              ? 'Tous les produits actifs de la boutique.'
+              ? `Tous les articles actifs de ${nomBoutique}.`
               : scope === 'category'
-                ? 'Uniquement les produits des catégories cochées.'
-                : 'Uniquement les produits associés aux fournisseurs cochés.'}
+                ? `Uniquement les articles des catégories cochées, présents à ${nomBoutique}.`
+                : `Uniquement les articles des fournisseurs cochés, présents à ${nomBoutique}.`}
           </p>
         </div>
 
         {scope === 'category' && (
           <div>
-            <div className="text-xs font-medium text-ink-soft mb-2">Catégories</div>
+            <div className="text-xs font-medium text-ink-soft mb-2">
+              Catégories présentes à {nomBoutique}
+            </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-72 overflow-y-auto">
-              {categories.length === 0 ? (
-                <div className="col-span-full text-xs text-ink-soft">Aucune catégorie.</div>
+              {chargementPortees ? (
+                <div className="col-span-full text-xs text-ink-soft">Chargement…</div>
+              ) : categories.length === 0 ? (
+                <div className="col-span-full text-xs text-ink-soft">
+                  Aucune catégorie n&apos;a d&apos;article dans cette boutique.
+                </div>
               ) : categories.map((c) => (
                 <label
                   key={c.id}
@@ -148,7 +180,10 @@ export default function InventoryNewForm({ stores, categories, suppliers, locked
                     onChange={() => toggle(c.id)}
                     className="h-4 w-4"
                   />
-                  <span className="text-sm truncate">{c.name}</span>
+                  <span className="text-sm truncate">
+                    {c.name}
+                    <span className="text-ink-soft text-xs ml-1">· {c.product_count}</span>
+                  </span>
                 </label>
               ))}
             </div>
@@ -157,11 +192,15 @@ export default function InventoryNewForm({ stores, categories, suppliers, locked
 
         {scope === 'supplier' && (
           <div>
-            <div className="text-xs font-medium text-ink-soft mb-2">Fournisseurs</div>
+            <div className="text-xs font-medium text-ink-soft mb-2">
+              Fournisseurs présents à {nomBoutique}
+            </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-72 overflow-y-auto">
-              {suppliers.length === 0 ? (
+              {chargementPortees ? (
+                <div className="col-span-full text-xs text-ink-soft">Chargement…</div>
+              ) : suppliers.length === 0 ? (
                 <div className="col-span-full text-xs text-ink-soft">
-                  Aucun fournisseur renseigné sur les produits.
+                  Aucun fournisseur renseigné sur les articles de cette boutique.
                 </div>
               ) : suppliers.map((s) => (
                 <label
