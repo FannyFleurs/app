@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { formatEUR } from '@/lib/services/money';
 import type { DashboardData } from '@/lib/analytics/dashboard';
-import { LineCompare, Bars, StackedBar, HalfDonut } from '@/components/analytics/charts';
+import { LineCompare, Bars, StackedBar } from '@/components/analytics/charts';
 import PageHeader from '@/components/PageHeader';
 
 interface Store { id: string; name: string }
@@ -188,12 +188,10 @@ export default function DashboardClient({ firstName, stores, lockedStoreId }: { 
             label: p.label, value: p.amount, color: PAYMENT_COLORS[p.method] ?? '#94a3b8',
           }))} />}
         </Card>
-        <Card title={`CA par mode de vente ${suffix}`}>
-          {data && <HalfDonut
-            slices={[{ label: 'Sur place', value: ht ? cur!.ca_ht : cur!.ca_ttc, color: '#a855f7' }]}
-            centerLabel="Total"
-            centerValue={formatEUR(ht ? (cur?.ca_ht ?? 0) : (cur?.ca_ttc ?? 0))} />}
-        </Card>
+        {/* La TVA était calculée par l'API et jetée : la page n'en montrait que
+            le total. Le détail par taux est ce qu'on recopie sur la
+            déclaration — il a plus sa place ici qu'un camembert. */}
+        <TvaCard rows={data?.tva ?? []} total={cur?.tva ?? 0} />
       </section>
 
       {/* Top / flop produits */}
@@ -214,24 +212,85 @@ function topRows(data: DashboardData | null, ht: boolean, which: 'top' | 'flop')
   return which === 'top' ? sorted.slice().reverse().slice(0, 5) : sorted.slice(0, 5);
 }
 
-function delta(cur?: number, prev?: number): { pct: number; up: boolean } | null {
-  if (cur == null || prev == null || prev === 0) return null;
+/**
+ * Évolution par rapport à la même période l'an dernier.
+ *
+ * Trois états, et pas deux : la comparaison n'existe pas encore (rien n'est
+ * chargé), elle n'a pas de base (l'an dernier valait zéro — un pourcentage
+ * serait une division par zéro), ou elle se calcule. Le deuxième cas était
+ * rendu comme le premier : le coin de la tuile restait vide, et on ne savait
+ * pas si le chiffre manquait ou s'il n'y avait rien à comparer.
+ */
+type Delta = { kind: 'pct'; pct: number; up: boolean } | { kind: 'sans-base' } | null;
+
+function delta(cur?: number, prev?: number): Delta {
+  if (cur == null || prev == null) return null;
+  if (prev === 0) return { kind: 'sans-base' };
   const pct = ((cur - prev) / Math.abs(prev)) * 100;
-  return { pct: Math.abs(pct), up: cur >= prev };
+  return { kind: 'pct', pct: Math.abs(pct), up: cur >= prev };
 }
 
-function Kpi({ label, value, delta }: { label: string; value: string; delta: { pct: number; up: boolean } | null }) {
+function Kpi({ label, value, delta }: { label: string; value: string; delta: Delta }) {
   return (
     <div className="card p-5">
-      <div className="flex items-center justify-between">
-        <div className="text-xs uppercase tracking-wider text-ink-soft">{label}</div>
-        {delta && (
-          <span className={`text-xs font-medium tabular-nums ${delta.up ? 'text-success' : 'text-danger'}`}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex-1 text-xs uppercase tracking-wider text-ink-soft">{label}</div>
+        {delta?.kind === 'pct' && (
+          <span className={`shrink-0 text-xs font-medium tabular-nums ${delta.up ? 'text-success' : 'text-danger'}`}>
             {delta.up ? '↑' : '↓'} {delta.pct.toFixed(0)}%
+          </span>
+        )}
+        {delta?.kind === 'sans-base' && (
+          <span
+            className="shrink-0 text-xs font-medium text-ink-soft"
+            title="Rien à comparer : la période équivalente de l'an dernier est vide."
+          >
+            —
           </span>
         )}
       </div>
       <div className="mt-2 text-3xl font-semibold tracking-tight tabular-nums">{value}</div>
+    </div>
+  );
+}
+
+/**
+ * TVA collectée, ventilée par taux : la base H.T., la taxe, et le TTC.
+ *
+ * Une boutique qui ajoute un taux le voit apparaître sans intervention —
+ * les lignes viennent des ventes de la période, pas d'une liste figée.
+ */
+function TvaCard({ rows, total }: { rows: DashboardData['tva']; total: number }) {
+  return (
+    <div className="card p-5">
+      <div className="text-sm text-ink-soft">TVA collectée</div>
+      <div className="mt-0.5 text-2xl font-semibold tracking-tight tabular-nums">{formatEUR(total)}</div>
+      <div className="mt-3">
+        {rows.length === 0 ? (
+          <p className="text-sm text-ink-soft">Aucune vente sur la période.</p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="text-ink-soft text-xs uppercase tracking-wider">
+              <tr>
+                <th className="text-left py-1.5">Taux</th>
+                <th className="text-right py-1.5">Base H.T.</th>
+                <th className="text-right py-1.5">TVA</th>
+                <th className="text-right py-1.5">TTC</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.rate} className="border-t border-border">
+                  <td className="py-2 tabular-nums">{r.rate} %</td>
+                  <td className="py-2 text-right tabular-nums whitespace-nowrap">{formatEUR(r.base_ht)}</td>
+                  <td className="py-2 text-right tabular-nums whitespace-nowrap font-medium">{formatEUR(r.tva)}</td>
+                  <td className="py-2 text-right tabular-nums whitespace-nowrap">{formatEUR(r.ttc)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   );
 }

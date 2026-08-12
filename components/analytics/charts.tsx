@@ -172,47 +172,6 @@ export function StackedBar({
 }
 
 /* ------------------------------------------------------------------ */
-/* Demi-donut (CA par mode de vente)                                   */
-/* ------------------------------------------------------------------ */
-
-export function HalfDonut({
-  slices, centerLabel, centerValue,
-}: {
-  slices: { label: string; value: number; color: string }[];
-  centerLabel: string;
-  centerValue: string;
-}) {
-  const total = slices.reduce((a, s) => a + s.value, 0);
-  const W = 320, H = 180, cx = W / 2, cy = H - 12, r = 130, thick = 46;
-  let acc = 0;
-  const arcs = slices.map((s) => {
-    const frac = total > 0 ? s.value / total : 0;
-    const a0 = Math.PI - acc * Math.PI;
-    const a1 = Math.PI - (acc + frac) * Math.PI;
-    acc += frac;
-    const p = (ang: number, rad: number) => [cx + Math.cos(ang) * rad, cy - Math.sin(ang) * rad];
-    const [x0, y0] = p(a0, r);
-    const [x1, y1] = p(a1, r);
-    const [x2, y2] = p(a1, r - thick);
-    const [x3, y3] = p(a0, r - thick);
-    const large = frac > 0.5 ? 1 : 0;
-    return { s, d: `M ${x0} ${y0} A ${r} ${r} 0 ${large} 1 ${x1} ${y1} L ${x2} ${y2} A ${r - thick} ${r - thick} 0 ${large} 0 ${x3} ${y3} Z` };
-  });
-  return (
-    <div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full max-w-[340px] mx-auto" style={{ height: 'auto' }} role="img">
-        {total <= 0 ? (
-          <path d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy} L ${cx + r - thick} ${cy} A ${r - thick} ${r - thick} 0 0 0 ${cx - r + thick} ${cy} Z`} fill={GRID} />
-        ) : arcs.map((a) => <path key={a.s.label} d={a.d} fill={a.s.color} />)}
-        <text x={cx} y={cy - 30} textAnchor="middle" fontSize={13} fill={AXIS}>{centerLabel}</text>
-        <text x={cx} y={cy - 8} textAnchor="middle" fontSize={20} fontWeight={700} fill="var(--ink)">{centerValue}</text>
-      </svg>
-      <Legend items={slices.map((s) => ({ color: s.color, label: s.label }))} />
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
 
 function Legend({ items }: { items: { color: string; label: string }[] }) {
   return (
