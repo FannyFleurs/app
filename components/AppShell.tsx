@@ -56,11 +56,13 @@ export default function AppShell({
    * caisses côte à côte pouvaient afficher deux verts différents, et chaque
    * écran ajouté devait être vérifié dans quatre combinaisons. HelloPos a
    * maintenant une identité, elle ne se négocie plus poste par poste.
+   *
+   * Il n'y a plus de `data-mode` : l'attribut ne valait plus que « light » et
+   * plus une seule règle CSS ne le lisait. Le mode clair est celui de `:root`.
    */
   const appliedTheme = BRAND_THEME;
   useEffect(() => {
     document.body.setAttribute('data-theme', appliedTheme);
-    document.body.setAttribute('data-mode', 'light');
   }, [appliedTheme]);
 
   // Le rail gauche reste visible sous l'overlay « Toutes les pages ». Si
