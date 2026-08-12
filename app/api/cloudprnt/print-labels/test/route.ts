@@ -4,14 +4,18 @@ import { requirePermission } from '@/lib/auth/guards';
 import { parseJson } from '@/lib/validation/api';
 import { query } from '@/lib/db/client';
 import { mergeLabelDefaults, LABEL_KEY } from '@/lib/settings/label';
-import { buildTestLabelsStarPrnt, dernierMoteurJob, STARPRNT_CONTENT_TYPE } from '@/lib/services/cloudprnt/starprnt';
+import {
+  buildTestLabelsStarPrnt, buildComparatifStarPrnt, dernierMoteurJob, STARPRNT_CONTENT_TYPE,
+} from '@/lib/services/cloudprnt/starprnt';
 import { resolveLabelPrinter, enqueueJob } from '@/lib/services/cloudprnt/queue';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 const schema = z.object({
-  count: z.number().int().min(1).max(20),
+  count: z.number().int().min(1).max(20).optional(),
+  /** Comparatif : quatre enchaînements, deux étiquettes chacun, marqués A à D. */
+  comparatif: z.boolean().optional(),
   store_id: z.string().uuid().nullable().optional(),
 });
 
@@ -39,19 +43,24 @@ export async function POST(req: Request) {
   );
   const settings = mergeLabelDefaults((st.rows[0]?.value as Record<string, unknown>) ?? null);
 
-  const payload = await buildTestLabelsStarPrnt(parsed.data.count, settings);
+  const compte = parsed.data.count ?? 1;
+  const payload = parsed.data.comparatif
+    ? await buildComparatifStarPrnt(settings)
+    : await buildTestLabelsStarPrnt(compte, settings);
 
   const job = await enqueueJob({
     organizationId: g.user.organizationId,
     printerId: printer.id,
     contentType: STARPRNT_CONTENT_TYPE,
     payload,
-    title: `Réglage — ${parsed.data.count} étiquette${parsed.data.count > 1 ? 's' : ''}`,
+    title: parsed.data.comparatif
+      ? 'Réglage — comparatif des enchaînements'
+      : `Réglage — ${compte} étiquette${compte > 1 ? 's' : ''}`,
     userId: g.user.id,
   });
 
   return NextResponse.json({
-    ok: true, job_id: job.id, printer: printer.label, count: parsed.data.count,
+    ok: true, job_id: job.id, printer: printer.label, count: parsed.data.comparatif ? 8 : compte,
     ...dernierMoteurJob(),
   });
 }

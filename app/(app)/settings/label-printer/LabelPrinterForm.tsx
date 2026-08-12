@@ -102,11 +102,11 @@ export default function LabelPrinterForm({ stores, canWrite }: {
    * et en bas, sans code-barres. On compare la position du contenu de la
    * dernière à celle de la première : identique = le pas est juste.
    */
-  async function calibrage(p: Printer, count: number) {
+  async function calibrage(p: Printer, count: number, comparatif = false) {
     setMsg(null); setErr(null);
     const r = await fetch('/api/cloudprnt/print-labels/test', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ store_id: p.store_id, count }),
+      body: JSON.stringify({ store_id: p.store_id, count, comparatif }),
     });
     const j = await r.json().catch(() => null);
     if (r.ok) {
@@ -205,6 +205,22 @@ export default function LabelPrinterForm({ stores, canWrite }: {
                         {n} étiquette{n > 1 ? 's' : ''}
                       </button>
                     ))}
+                  </div>
+                  {/* Quatre enchaînements dans un seul tirage : c'est
+                      l'étiquette sortie qui tranche, pas une hypothèse. */}
+                  <div className="mt-3 border-t border-border pt-2">
+                    <div className="text-xs font-medium">Comparatif des enchaînements</div>
+                    <p className="text-[11px] text-ink-soft mt-0.5">
+                      Huit étiquettes : deux par mode, marquées <strong>A1 A2</strong>,
+                      <strong> B1 B2</strong>, <strong>C1 C2</strong>, <strong>D1 D2</strong>.
+                      A = coupe après chaque · B = avance sur la marque puis coupe ·
+                      C = avance entre, une coupe à la fin · D = rien entre, une coupe à la fin.
+                      Dis-moi quel groupe sort juste : bonne position, pas de vierge, coupe au bord.
+                    </p>
+                    <button className="btn-primary text-xs h-8 px-3 mt-2"
+                            onClick={() => void calibrage(p, 1, true)}>
+                      Imprimer le comparatif (8 étiquettes)
+                    </button>
                   </div>
                 </div>
               )}
