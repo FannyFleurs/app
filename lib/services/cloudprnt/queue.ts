@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { query } from '@/lib/db/client';
+import { choisirImprimante } from './printer-choice';
 
 export interface CloudPrntPrinter {
   id: string;
@@ -19,12 +20,7 @@ export function normalizeMac(mac: string): string {
   return mac.trim().toLowerCase().replace(/[^0-9a-f]/g, '');
 }
 
-/**
- * Résout l'imprimante étiquettes à utiliser pour une organisation :
- *   1. imprimante rattachée à la boutique du poste (si storeId),
- *   2. sinon imprimante « organisation » (store_id NULL),
- *   3. sinon l'unique imprimante étiquettes active.
- */
+/** Imprimante ÉTIQUETTES de la boutique. Voir `choisirImprimante`. */
 export async function resolveLabelPrinter(
   organizationId: string,
   storeId?: string | null,
@@ -35,20 +31,10 @@ export async function resolveLabelPrinter(
       WHERE organization_id = $1 AND role = 'label' AND enabled = TRUE`,
     [organizationId],
   );
-  if (rows.length === 0) return null;
-  if (storeId) {
-    const forStore = rows.find((p) => p.store_id === storeId);
-    if (forStore) return forStore;
-  }
-  const orgWide = rows.find((p) => p.store_id === null);
-  if (orgWide) return orgWide;
-  return rows[0]!;
+  return choisirImprimante(rows, storeId);
 }
 
-/**
- * Résout l'imprimante TICKET (role='receipt') à utiliser : boutique du poste,
- * sinon imprimante « organisation » (store_id NULL), sinon la première active.
- */
+/** Imprimante TICKET de la boutique. Voir `choisirImprimante`. */
 export async function resolveReceiptPrinter(
   organizationId: string,
   storeId?: string | null,
@@ -59,14 +45,7 @@ export async function resolveReceiptPrinter(
       WHERE organization_id = $1 AND role = 'receipt' AND enabled = TRUE`,
     [organizationId],
   );
-  if (rows.length === 0) return null;
-  if (storeId) {
-    const forStore = rows.find((p) => p.store_id === storeId);
-    if (forStore) return forStore;
-  }
-  const orgWide = rows.find((p) => p.store_id === null);
-  if (orgWide) return orgWide;
-  return rows[0]!;
+  return choisirImprimante(rows, storeId);
 }
 
 /** Ajoute un job dans la file. Renvoie le jeton du job. */
