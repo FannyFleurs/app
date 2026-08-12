@@ -21,7 +21,6 @@ import { computeLabelLayout, type LabelBlock } from '@/lib/services/label-layout
  */
 
 const DPMM = 8;        // 203 dpi ≈ 8 points/mm
-const GAP_MM = 3;      // gap prédécoupé entre étiquettes (Fanny Fleurs : 3 mm)
 
 /** Hauteur de capitale d'une police, en fraction de sa taille em. */
 const CAP_RATIO = 0.72;
@@ -78,7 +77,7 @@ async function drawLabel(
   // Le calage de l'imprimante entre dans le CALCUL de la mise en page, pas
   // dans un décalage de pixels : translater l'image rognerait le haut, alors
   // que resserrer les marges tasse le contenu sans rien perdre.
-  const layout = computeLabelLayout(p, s, s.print_offset_y_mm ?? 0);
+  const layout = computeLabelLayout(p, s, s.print_offset_y_mm ?? 0, s.print_offset_x_mm ?? 0);
   // Le moteur raisonne sur le format demandé ; la case réellement disponible
   // peut différer d'un pixel ou deux (largeur arrondie au multiple de 8 exigé
   // par le raster). On projette donc plutôt que de supposer.
@@ -175,7 +174,11 @@ export async function renderLabelSheetBitmap(labels: LabelProduct[], s: LabelSet
   let W = Math.round((s.width_mm || 51) * DPMM);
   W = Math.max(64, Math.round(W / 8) * 8); // largeur multiple de 8 (raster)
   const contentH = Math.max(80, Math.round((s.height_mm || 51) * DPMM));
-  const gapPx = Math.round(GAP_MM * DPMM);
+  // L'écart vient des réglages : il valait 3 mm en dur, ce qui n'a de sens
+  // que pour le rouleau prédécoupé d'origine. Sur un papier à marque noire,
+  // le pas est la hauteur d'étiquette (écart 0) — et 3 mm de trop par
+  // étiquette faisaient dériver le lot entier.
+  const gapPx = Math.round((s.gap_mm ?? 3) * DPMM);
   const pitch = contentH + gapPx;
   // Réglage fin de la position de coupe : on raccourcit légèrement l'image en
   // fin de lot pour remonter la coupe (la coupe tombait ~2 mm trop loin).

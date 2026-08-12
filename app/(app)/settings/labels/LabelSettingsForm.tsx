@@ -85,7 +85,22 @@ export default function LabelSettingsForm({ initial, canEdit }: {
                 <input type="number" min={10} max={200} className="input h-10 w-28" value={form.height_mm}
                        disabled={!canEdit} onChange={(e) => set('height_mm', Number(e.target.value) || 0)} />
               </label>
+              <label className="text-sm">
+                <span className="block text-xs font-medium text-ink-soft mb-1">Écart (mm)</span>
+                <input type="number" step={0.5} min={0} max={20} className="input h-10 w-28 tabular-nums"
+                       value={form.gap_mm}
+                       disabled={!canEdit} onChange={(e) => set('gap_mm', Number(e.target.value) || 0)} />
+              </label>
             </div>
+            {/* Le lot part en UNE image continue : si le pas déclaré ne colle
+                pas au rouleau, le décalage s'accumule d'étiquette en étiquette. */}
+            <p className="text-xs text-ink-soft">
+              L&apos;écart est le blanc entre deux étiquettes du rouleau.
+              Papier <strong>prédécoupé</strong> : mesure ce blanc (3 mm sur le rouleau d&apos;origine).
+              Papier à <strong>marque noire</strong> : le pas est la hauteur d&apos;étiquette,
+              donc écart <strong>0</strong> — ou la marge que tu veux laisser au-dessus de la marque
+              (hauteur + écart doivent toujours faire le pas réel, marque à marque).
+            </p>
           </div>
 
           {/* Éléments */}
@@ -106,24 +121,42 @@ export default function LabelSettingsForm({ initial, canEdit }: {
             <p className="text-sm text-ink-soft">
               Si l&apos;impression tombe trop bas sur l&apos;étiquette — marge haute
               excessive et bas rogné — mesure le décalage sur une étiquette sortie et
-              saisis-le en négatif pour remonter le contenu d&apos;autant.
+              saisis-le en négatif pour remonter le contenu d&apos;autant. Même chose
+              en largeur : quand le média n&apos;est pas centré sous la tête, le contenu
+              sort d&apos;un bord et laisse un blanc à l&apos;autre.
               Ce réglage ne concerne que l&apos;impression : l&apos;aperçu montre le
               résultat attendu une fois le calage juste.
             </p>
-            <label className="text-sm inline-flex items-end gap-3">
-              <span>
-                <span className="block text-xs font-medium text-ink-soft mb-1">
-                  Décalage vertical (mm)
+            <div className="flex flex-wrap items-end gap-4">
+              <label className="text-sm inline-flex items-end gap-3">
+                <span>
+                  <span className="block text-xs font-medium text-ink-soft mb-1">
+                    Décalage vertical (mm)
+                  </span>
+                  <input type="number" step={0.5} min={-15} max={15}
+                         className="input h-10 w-28 tabular-nums" value={form.print_offset_y_mm}
+                         disabled={!canEdit}
+                         onChange={(e) => set('print_offset_y_mm', Number(e.target.value) || 0)} />
                 </span>
-                <input type="number" step={0.5} min={-15} max={15}
-                       className="input h-10 w-28 tabular-nums" value={form.print_offset_y_mm}
-                       disabled={!canEdit}
-                       onChange={(e) => set('print_offset_y_mm', Number(e.target.value) || 0)} />
-              </span>
-              <span className="pb-2 text-xs text-ink-soft">
-                négatif = vers le haut
-              </span>
-            </label>
+                <span className="pb-2 text-xs text-ink-soft">
+                  négatif = vers le haut
+                </span>
+              </label>
+              <label className="text-sm inline-flex items-end gap-3">
+                <span>
+                  <span className="block text-xs font-medium text-ink-soft mb-1">
+                    Décalage horizontal (mm)
+                  </span>
+                  <input type="number" step={0.5} min={-15} max={15}
+                         className="input h-10 w-28 tabular-nums" value={form.print_offset_x_mm}
+                         disabled={!canEdit}
+                         onChange={(e) => set('print_offset_x_mm', Number(e.target.value) || 0)} />
+                </span>
+                <span className="pb-2 text-xs text-ink-soft">
+                  négatif = vers la gauche
+                </span>
+              </label>
+            </div>
           </div>
 
           {/* Composition : ordre fixe, force relative réglable */}
