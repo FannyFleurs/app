@@ -8,35 +8,26 @@ suivante » — en la séquence que la mC-Label3 attend. Sans lui, le logiciel
 retombe sur un encodage direct qui imprime correctement mais ne recale pas le
 support entre deux étiquettes : la dérive cumulative revient.
 
-## Le binaire n'est pas versionné
+## Le binaire présent ici
 
-Il pèse plusieurs dizaines de mégaoctets et appartient à Star. À déposer ici :
+`cputil` — **v2.0.1, Linux x64**, 48,6 Mo, ELF x86-64 auto-suffisant (.NET 8
+embarqué, aucune installation requise). Versionné volontairement : les
+fonctions Vercel n'ont pas de réseau au démarrage, le binaire doit voyager
+avec le déploiement.
 
-```
-bin/cputil/cputil        # binaire Linux x64, exécutable
-```
+Il tourne sur Amazon Linux x86_64, l'architecture des lambdas Vercel. Une
+version macOS ou arm64 ne s'exécuterait pas.
 
-## Où le prendre
+Source : CloudPRNT SDK de Star —
+https://star-m.jp/products/s_print/sdk/StarCloudPRNT/manual/en/cputil.html
 
-CloudPRNT SDK de Star — binaires natifs pour Linux x64, macOS et Windows :
-
-- https://star-m.jp/products/s_print/sdk/StarCloudPRNT/manual/en/cputil.html
-- source : https://github.com/star-micronics/cloudprnt-sdk
-
-Prendre la version **Linux x64** : les fonctions Vercel tournent sur Amazon
-Linux, en x86_64. Une version macOS ou arm64 ne s'exécutera pas.
-
-## Après l'avoir déposé
+## Pour le remplacer par une version plus récente
 
 ```bash
+tar -xzf cputil-linux-x64_vXXX.tar.gz
+cp cputil-linux-x64_vXXX/cputil-linux-x64/cputil bin/cputil/cputil
 chmod +x bin/cputil/cputil
-git add -f bin/cputil/cputil     # si un .gitignore l'écarte
-```
-
-Vérifier la syntaxe réellement acceptée par le binaire livré :
-
-```bash
-./bin/cputil/cputil --help
+./bin/cputil/cputil            # affiche l'aide : vérifier que la syntaxe n'a pas bougé
 ```
 
 Le code appelle :
@@ -60,3 +51,16 @@ Avec `LABEL_JOB_HEXDUMP=1`, chaque job imprime son moteur dans les journaux :
 ```
 
 Si la ligne dit `starprnt-encoder`, le binaire n'a pas été trouvé.
+
+## Ce que la conversion nous a appris
+
+`[feed: black-mark]` se compile en **un seul octet : `0x0C`** (form feed).
+Trouvé en comparant deux documents identiques, l'un avec le feed, l'autre
+sans : un octet d'écart. Sur une imprimante réglée `Top Search Sensor = Black
+Mark`, ce form feed avance jusqu'à la marque suivante — c'est le capteur qui
+donne la distance.
+
+C'est pourquoi le repli sans CPUtil (`lib/services/cloudprnt/starprnt.ts`)
+produit désormais la même structure : image, `0x0C`, image, `0x0C`, …, coupe.
+
+Coupe : CPUtil émet `1B 64 03` (coupe avec avance), le repli `1B 64 00`.

@@ -26,15 +26,31 @@ const PRODUIT = {
 };
 const REGLAGES = { ...LABEL_DEFAULTS, width_mm: 50, height_mm: 25 };
 
-/** Coupe StarPRNT émise par la bibliothèque : ESC d 0. */
-const COUPE = /1b6400/g;
+/**
+ * Coupe StarPRNT : `ESC d n`. CPUtil émet `1B 64 03` (coupe avec avance),
+ * l'encodage de repli `1B 64 00`.
+ */
+const COUPE = /1b64(00|03)/g;
+
+/**
+ * Avance sur la marque noire dans le flux binaire.
+ *
+ * On ne peut pas compter les `0x0C` isolés : les données raster en
+ * contiennent par hasard. On ne retient donc que ceux immédiatement suivis
+ * d'une commande de raster — `1B 1D 53` pour CPUtil, `1B 58` pour le repli —
+ * c'est-à-dire ceux qui séparent réellement deux étiquettes.
+ */
+const avances = (job: Buffer) => (job.toString('hex').match(/0c1b(1d53|58)/g) ?? []).length;
 
 describe('Un job, N étiquettes indépendantes', () => {
-  it('émet autant de coupes que d\'étiquettes', async () => {
+  it('émet UNE coupe et N-1 avances sur la marque', async () => {
+    // Guirlande : les étiquettes se suivent, une seule coupe à la fin, et
+    // entre deux un form feed (0x0C) qui laisse le capteur décider.
     for (const n of [1, 2, 3, 10]) {
       const job = await buildLabelsStarPrnt([{ product: PRODUIT, qty: n }], REGLAGES);
-      const hex = job.toString('hex');
-      expect((hex.match(COUPE) ?? []).length, `${n} étiquette(s)`).toBe(n);
+      const coupes = (job.toString('hex').match(COUPE) ?? []).length;
+      expect(coupes, `${n} étiquette(s)`).toBe(1);
+      expect(avances(job), `${n} étiquette(s)`).toBe(n - 1);
     }
   });
 
@@ -44,21 +60,17 @@ describe('Un job, N étiquettes indépendantes', () => {
     expect((job.toString('hex').match(/1b40/g) ?? []).length).toBe(1);
   });
 
-  it('répartit les coupes régulièrement — pas de tout imprimer puis couper', async () => {
-    // Trois coupes groupées en fin de job trahiraient une image unique.
+  it('espace les avances d\'une étiquette entière', async () => {
+    // Deux avances collées trahiraient une image unique suivie de feeds.
     const job = await buildLabelsStarPrnt([{ product: PRODUIT, qty: 3 }], REGLAGES);
     const hex = job.toString('hex');
     const positions: number[] = [];
-    for (let i = 0; i + 6 <= hex.length; i += 2) {
-      if (hex.startsWith('1b6400', i)) positions.push(i / 2);
+    for (let i = 0; i + 8 <= hex.length; i += 2) {
+      if (/^0c1b(1d53|58)/.test(hex.slice(i, i + 8))) positions.push(i / 2);
     }
-    expect(positions).toHaveLength(3);
-    const p1 = positions[1]! - positions[0]!;
-    const p2 = positions[2]! - positions[1]!;
-    // Les cycles sont identiques : même image, même écart d'une coupe à l'autre.
-    expect(Math.abs(p1 - p2)).toBeLessThanOrEqual(2);
-    // Et la première coupe tombe au premier tiers, pas à la fin.
-    expect(positions[0]!).toBeLessThan(job.length / 2);
+    expect(positions).toHaveLength(2);
+    const ecart = positions[1]! - positions[0]!;
+    expect(ecart).toBeGreaterThan(job.length * 0.25);
   });
 
   it('grandit proportionnellement à la quantité', async () => {
@@ -105,25 +117,29 @@ describe('Ce qui ne doit plus exister', () => {
     expect(src).not.toMatch(/enc\.(newline|feed|line|rule)\(/);
   });
 
-  it('garde la coupe derrière une fonction dédiée', () => {
-    // Le jour où la séquence de coupe AVEC avance sera connue, un seul
-    // endroit changera.
-    expect(src).toMatch(/function appendLabelCut/);
-    expect(src).toContain('FullCutWithFeed');
-    expect(src).toContain('enc.raw');
+  it('nomme l\'octet d\'avance et ne l\'écrit qu\'à un endroit', () => {
+    // 0x0C = form feed. Sur une imprimante réglée « Top Search Sensor =
+    // Black Mark », il avance jusqu'à la marque : c'est le capteur qui donne
+    // la distance. Trouvé en compilant [feed: black-mark] avec CPUtil.
+    expect(src).toMatch(/const FEED_BLACK_MARK = 0x0c;/);
+    expect(src).toMatch(/enc\.raw\(\[FEED_BLACK_MARK\]\)/);
   });
 
-  it('borne la quantité sans découper le rendu en tranches', () => {
+  it('borne la quantité sans découper le rendu en tranches', async () => {
     expect(MAX_LABELS_PER_JOB).toBe(200);
-    const long = buildLabelsStarPrnt([{ product: PRODUIT, qty: 500 }], REGLAGES);
-    return expect(long).resolves.toBeInstanceOf(Buffer);
+    // La borne s'applique au lot aplati, pas à un découpage graphique : au-delà
+    // on tronque, on ne segmente pas.
+    const job = await buildLabelsStarPrnt([{ product: PRODUIT, qty: 4 }], REGLAGES);
+    expect(avances(job)).toBe(3);
+    expect((job.toString('hex').match(COUPE) ?? []).length).toBe(1);
   });
 });
 
 describe('Lot de réglage', () => {
   it('numérote les étiquettes et n\'imprime aucun code-barres', async () => {
     const job = await buildTestLabelsStarPrnt(3, REGLAGES);
-    expect((job.toString('hex').match(COUPE) ?? []).length).toBe(3);
+    expect((job.toString('hex').match(COUPE) ?? []).length).toBe(1);
+    expect(avances(job)).toBe(2);
     // Le rendu de test trace deux filets et un texte centré, rien d'autre.
     const rendu = readFileSync('lib/services/cloudprnt/label-render.ts', 'utf8');
     expect(rendu).toMatch(/export async function renderTestLabelBitmap/);
