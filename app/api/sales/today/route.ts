@@ -60,9 +60,11 @@ export async function GET(req: Request) {
     [g.user.organizationId, date, storeId],
   );
 
-  // Retours / avoirs émis CE jour (défalqués du CA de la journée).
-  const returnsRes = await query<{ total: string }>(
-    `SELECT COALESCE(SUM(cn.amount), 0)::text AS total
+  // Retours / avoirs émis CE jour (défalqués du CA de la journée). Le nombre
+  // compte autant que le montant : un avoir est un ticket émis, il figure au
+  // compteur de tickets de la journée.
+  const returnsRes = await query<{ total: string; cnt: string }>(
+    `SELECT COALESCE(SUM(cn.amount), 0)::text AS total, COUNT(*)::text AS cnt
        FROM credit_notes cn
       WHERE cn.organization_id = $1
         AND cn.status <> 'cancelled'
@@ -70,7 +72,7 @@ export async function GET(req: Request) {
         AND ($3::uuid IS NULL OR cn.sale_id IN (
               SELECT id FROM sales WHERE store_id = $3))`,
     [g.user.organizationId, date, storeId],
-  ).catch(() => ({ rows: [{ total: '0' }] }));
+  ).catch(() => ({ rows: [{ total: '0', cnt: '0' }] }));
 
   // Cash summary du jour : ventes espèces, remises en banque, espèces attendues.
   const cashSalesRes = await query<{ total: string }>(
@@ -107,9 +109,37 @@ export async function GET(req: Request) {
         AND cm.reason ILIKE 'Remboursement%'`,
     [g.user.organizationId, date, storeId],
   ).catch(() => ({ rows: [{ total: '0' }] }));
+  // Fond de caisse et mouvements du jour : ce sont eux qui font la différence
+  // entre « ce qu'on a encaissé » et « ce qu'il doit y avoir dans le tiroir ».
+  // Mêmes bornes que le rapport Z (sessions ouvertes ce jour-là), sinon les
+  // deux écrans annonceraient deux montants attendus différents.
+  const floatRes = await query<{ opening: string; ins: string; outs: string }>(
+    `SELECT COALESCE(SUM(cs.opening_float), 0)::text AS opening,
+            COALESCE((SELECT SUM(cm.amount) FROM cash_movements cm
+                       WHERE cm.cash_session_id IN (SELECT id FROM cash_sessions
+                              WHERE organization_id = $1
+                                AND opened_at::date = COALESCE($2::date, CURRENT_DATE)
+                                AND ($3::uuid IS NULL OR store_id = $3))
+                         AND cm.movement_type = 'in'), 0)::text AS ins,
+            COALESCE((SELECT SUM(cm.amount) FROM cash_movements cm
+                       WHERE cm.cash_session_id IN (SELECT id FROM cash_sessions
+                              WHERE organization_id = $1
+                                AND opened_at::date = COALESCE($2::date, CURRENT_DATE)
+                                AND ($3::uuid IS NULL OR store_id = $3))
+                         AND cm.movement_type = 'out'), 0)::text AS outs
+       FROM cash_sessions cs
+      WHERE cs.organization_id = $1
+        AND cs.opened_at::date = COALESCE($2::date, CURRENT_DATE)
+        AND ($3::uuid IS NULL OR cs.store_id = $3)`,
+    [g.user.organizationId, date, storeId],
+  ).catch(() => ({ rows: [{ opening: '0', ins: '0', outs: '0' }] }));
+
   const cashSales = Number(cashSalesRes.rows[0]?.total ?? 0);
   const bankDeposits = Number(depositsRes.rows[0]?.total ?? 0);
   const cashRefunds = Number(cashRefundsRes.rows[0]?.total ?? 0);
+  const openingFloat = Number(floatRes.rows[0]?.opening ?? 0);
+  const cashIn = Number(floatRes.rows[0]?.ins ?? 0);
+  const cashOut = Number(floatRes.rows[0]?.outs ?? 0);
 
   // Heure d'ouverture de la caisse pour ce jour :
   //  - en priorité, la 1re session ouverte CE jour-là (fonds de caisse du matin) ;
@@ -135,12 +165,19 @@ export async function GET(req: Request) {
   return NextResponse.json({
     sales: rows,
     returns_total: Number(returnsRes.rows[0]?.total ?? 0),
+    returns_count: Number(returnsRes.rows[0]?.cnt ?? 0),
     opened_at: openRes.rows[0]?.opened_at ?? null,
     cash_summary: {
+      opening_float: openingFloat,
       cash_sales: cashSales,
       bank_deposits: bankDeposits,
       cash_refunds: cashRefunds,
-      expected_cash: Number((cashSales - bankDeposits - cashRefunds).toFixed(2)),
+      cash_in: cashIn,
+      cash_out: cashOut,
+      // Contenu attendu du tiroir, à la pièce près : le fond du matin, plus
+      // les espèces encaissées, plus/moins les mouvements. Même formule que
+      // la clôture — c'est ce montant que le comptage vient confronter.
+      expected_cash: Number((openingFloat + cashSales + cashIn - cashOut).toFixed(2)),
     },
   });
 }
