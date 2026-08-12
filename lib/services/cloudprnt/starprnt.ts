@@ -1,10 +1,7 @@
 import { type LabelSettings } from '@/lib/settings/label';
 import { type LabelProduct } from '@/lib/services/label-print';
 import { renderSingleLabelBitmap, renderTestLabelBitmap } from '@/lib/services/cloudprnt/label-render';
-import {
-  buildLabelsMarkup, buildTestLabelsMarkup, buildComparatifMarkup,
-  buildTestTopOfFormMarkup,
-} from '@/lib/services/cloudprnt/markup';
+import { buildLabelsMarkup, buildTestLabelsMarkup } from '@/lib/services/cloudprnt/markup';
 import { convertMarkupToStarPrnt, cputilDisponible, cputilPath } from '@/lib/services/cloudprnt/cputil';
 
 /**
@@ -182,22 +179,22 @@ async function encoderDirect(
   const enc = new StarPrntEncoder({});
   enc.initialize();
 
-  // Même structure que le document Markup : image, avance sur la marque,
-  // image, … et UNE seule coupe à la fin.
+  // Même structure que le document Markup : image, avance sur la marque, …
+  // avance après la DERNIÈRE aussi, puis une seule coupe.
   //
   // Nuance connue de ce repli : la bibliothèque encadre `raw()` de LF/CR, si
   // bien que l'octet d'avance sort en « 0A 0D 0C 0A 0D ». Le saut de ligne qui
   // SUIT le form feed décale l'étiquette suivante d'une ligne. C'est pourquoi
   // le chemin nominal reste CPUtil, qui pose l'octet nu.
-  for (let i = 0; i < flat.length; i++) {
-    const bmp = await renderSingleLabelBitmap(flat[i]!, media);
+  for (const product of flat) {
+    const bmp = await renderSingleLabelBitmap(product, media);
     enc.image(
       { data: bmp.data, width: bmp.width, height: bmp.height },
       bmp.width,
       bmp.height,
       'threshold',
     );
-    if (i < flat.length - 1) enc.raw([FEED_BLACK_MARK]);
+    enc.raw([FEED_BLACK_MARK]);
   }
   enc.cut();
 
@@ -220,7 +217,7 @@ export async function buildTestLabelsStarPrnt(
   settings: LabelSettings,
 ): Promise<Buffer> {
   const media = mediaImprimable(settings);
-  const n = Math.max(1, Math.min(MAX_LABELS_PER_JOB, Math.round(count || 0)));
+  const n = Math.max(1, Math.min(20, Math.round(count || 0)));
 
   const parCputil = await viaCputil(() => buildTestLabelsMarkup(n, media));
   if (parCputil) return parCputil;
@@ -238,7 +235,7 @@ export async function buildTestLabelsStarPrnt(
       bmp.height,
       'threshold',
     );
-    if (i < n) enc.raw([FEED_BLACK_MARK]);
+    enc.raw([FEED_BLACK_MARK]);
   }
   enc.cut();
 
@@ -255,85 +252,5 @@ export function countLabels(entries: Array<{ qty: number }>): number {
   );
 }
 
-/**
- * Comparatif des enchaînements : quatre façons d'enchaîner deux étiquettes,
- * marquées A à D, dans un seul tirage.
- *
- * Ce que le logiciel ne peut pas deviner, c'est la géométrie de la machine —
- * distance du capteur à la tête, de la tête au massicot. Elle décide de tout
- * et aucune documentation ne la donne. Une impression tranche ; quatre
- * hypothèses testées une par une coûtent quatre allers-retours au comptoir.
- *
- * Exige CPUtil : les enchaînements comparés sont des directives Markup.
- */
-export async function buildComparatifStarPrnt(settings: LabelSettings): Promise<Buffer> {
-  const media = mediaImprimable(settings);
-  const parCputil = await viaCputil(() => buildComparatifMarkup(media));
-  return parCputil ?? comparatifDirect(media);
-}
 
-/**
- * Le même comparatif, encodé sans CPUtil.
- *
- * Possible parce que les octets sont maintenant connus : `0x0C` pour l'avance
- * sur la marque, `1B 64 03` pour la coupe avec avance, `1B 64 00` pour la
- * coupe sèche. Le comparatif doit pouvoir être tiré même quand l'outil de
- * conversion fait défaut — c'est justement dans ces moments qu'on en a besoin.
- */
-async function comparatifDirect(media: LabelSettings): Promise<Buffer> {
-  const mod = await import('star-prnt-encoder');
-  const StarPrntEncoder = mod.default;
-  const enc = new StarPrntEncoder({});
-  enc.initialize();
 
-  const COUPE_AVEC_AVANCE = [0x1b, 0x64, 0x03];
-  const COUPE_SECHE = [0x1b, 0x64, 0x00];
-  const modes: Array<{ cle: string; entre: number[]; fin: number[] }> = [
-    { cle: 'A', entre: COUPE_AVEC_AVANCE,                        fin: COUPE_AVEC_AVANCE },
-    { cle: 'B', entre: [FEED_BLACK_MARK, ...COUPE_SECHE],        fin: [FEED_BLACK_MARK, ...COUPE_SECHE] },
-    { cle: 'C', entre: [FEED_BLACK_MARK],                        fin: COUPE_AVEC_AVANCE },
-    { cle: 'D', entre: [],                                       fin: COUPE_AVEC_AVANCE },
-  ];
-
-  for (const mode of modes) {
-    for (let i = 1; i <= 2; i++) {
-      const bmp = await renderTestLabelBitmap(`${mode.cle}${i}`, media);
-      enc.image(
-        { data: bmp.data, width: bmp.width, height: bmp.height },
-        bmp.width, bmp.height, 'threshold',
-      );
-      const suite = i < 2 ? mode.entre : mode.fin;
-      if (suite.length > 0) enc.raw(suite);
-    }
-  }
-
-  const out = Buffer.from(enc.encode());
-  traceJob(8, 0, out.length, 'starprnt-encoder');
-  return out;
-}
-
-/**
- * Lot d'ESSAI de la structure « top-of-form » : une avance sur la marque avant
- * chaque image, une dernière avant la coupe sèche.
- *
- * Réservé au réglage : la production continue d'emprunter le chemin habituel
- * tant que l'imprimante n'a pas tranché.
- *
- * Exige CPUtil. L'encodage de repli ne convient pas ici : la bibliothèque
- * entoure `raw()` de LF/CR, or l'expérience porte précisément sur l'absence
- * d'avance parasite entre le raster et l'avance sur la marque.
- */
-export async function buildTestTopOfFormStarPrnt(
-  count: number, settings: LabelSettings,
-): Promise<Buffer> {
-  const media = mediaImprimable(settings);
-  const n = Math.max(1, Math.min(20, Math.round(count || 0)));
-  const parCputil = await viaCputil(() => buildTestTopOfFormMarkup(n, media));
-  if (!parCputil) {
-    throw new Error(
-      'Cet essai exige CPUtil (l\'encodage de repli ajoute des CR/LF qui '
-      + 'fausseraient le résultat). ' + (dernierMoteurJob().raison ?? ''),
-    );
-  }
-  return parCputil;
-}

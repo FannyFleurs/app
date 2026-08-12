@@ -42,14 +42,36 @@ function document(directives: string[]): string {
     .join('\n');
 }
 
-/** Une étiquette par image, avance sur la marque entre deux, une coupe. */
+/**
+ * La structure d'un lot, validée sur l'imprimante :
+ *
+ *   <image 1>
+ *   [feed: black-mark]   ← amène le papier au début de l'étiquette suivante
+ *   <image 2>
+ *   …
+ *   <image N>
+ *   [feed: black-mark]   ← amène le papier au bord après la dernière
+ *   [cut: nofeed; full]  ← coupe sans chercher à avancer elle-même
+ *
+ * Trois choses s'y jouent, chacune payée d'un tirage raté :
+ *
+ *  - AUCUNE avance avant la première image. L'imprimante est déjà positionnée
+ *    sur le premier support au début du job ; une avance en tête faisait sortir
+ *    une étiquette vierge.
+ *  - Une avance APRÈS chaque image, la dernière comprise. Sans la dernière, la
+ *    coupe tombe au milieu de l'étiquette.
+ *  - Une coupe en `nofeed` : `[cut]` seul (1B 64 03) ne cherche pas la marque,
+ *    sa petite avance mécanique ne suffit pas.
+ *
+ * Pour N étiquettes : N rasters, exactement N avances, une seule coupe.
+ */
 function assembler(images: string[]): string {
   const directives: string[] = [];
-  images.forEach((img, i) => {
+  for (const img of images) {
     directives.push(img);
-    if (i < images.length - 1) directives.push('[feed: black-mark]');
-  });
-  directives.push('[cut]');
+    directives.push('[feed: black-mark]');
+  }
+  directives.push('[cut: nofeed; full]');
   return document(directives);
 }
 
@@ -76,94 +98,3 @@ export async function buildTestLabelsMarkup(
   return assembler(images);
 }
 
-/* ------------------------------------------------------------------ */
-/* Comparatif des enchaînements                                        */
-/* ------------------------------------------------------------------ */
-
-/**
- * Ce qui sépare deux étiquettes, et ce qui termine le lot.
- *
- * Les octets produits par CPUtil sont connus et vérifiés :
- *   [feed: black-mark] et [feed: form] → 0C
- *   [cut]                              → 1B 64 03 (avance + coupe)
- *   [cut: nofeed; full]                → 1B 64 00 (coupe sèche)
- *   [cut: feed; full]                  → 1B 64 02
- *
- * Ce qui n'est PAS connu, c'est la géométrie de la machine : distance du
- * capteur à la tête, de la tête au massicot. Elle décide de tout, et aucune
- * documentation ne la donne. D'où ce comparatif : quatre enchaînements
- * imprimés à la suite, marqués A à D, et c'est l'étiquette sortie qui trie.
- */
-export const MODES_ENCHAINEMENT = {
-  A: { entre: ['[cut]'],                                     libelle: 'coupe après chaque étiquette' },
-  B: { entre: ['[feed: black-mark]', '[cut: nofeed; full]'], libelle: 'avance sur la marque puis coupe' },
-  C: { entre: ['[feed: black-mark]'],                        libelle: 'avance entre, une seule coupe à la fin' },
-  D: { entre: [] as string[],                                libelle: 'rien entre, une seule coupe à la fin' },
-};
-
-export type ModeEnchainement = keyof typeof MODES_ENCHAINEMENT;
-
-/**
- * Document de comparaison : deux étiquettes par mode, marquées « A1 A2 »,
- * « B1 B2 »… Une seule impression tranche, au lieu d'un aller-retour par
- * hypothèse.
- */
-export async function buildComparatifMarkup(settings: LabelSettings): Promise<string> {
-  const directives: string[] = [];
-  for (const cle of Object.keys(MODES_ENCHAINEMENT) as ModeEnchainement[]) {
-    const mode = MODES_ENCHAINEMENT[cle];
-    for (let i = 1; i <= 2; i++) {
-      const bmp = await renderTestLabelBitmap(`${cle}${i}`, settings);
-      directives.push(await ligneImage(await bitmapToPngBuffer(bmp)));
-      // Entre les deux étiquettes du mode : son enchaînement. Après la
-      // seconde : la coupe qui clôt le mode, pour que les quatre lots
-      // sortent séparés et comparables côte à côte.
-      // Après la seconde étiquette : le même enchaînement s'il coupe déjà,
-      // sinon une coupe pour séparer ce mode du suivant.
-      if (i < 2 || mode.entre.some((d) => d.startsWith('[cut'))) directives.push(...mode.entre);
-      else directives.push('[cut]');
-    }
-  }
-  return document(directives);
-}
-
-/* ------------------------------------------------------------------ */
-/* Expérience : la marque noire établit le top-of-form                 */
-/* ------------------------------------------------------------------ */
-
-/**
- * Structure validée au comptoir, pour le lot de test — la production n'y
- * touche pas encore.
- *
- *   [image 1]
- *   [feed: black-mark]   ← amène le papier au début de l'étiquette 2
- *   [image 2]
- *   …
- *   [image N]
- *   [feed: black-mark]   ← amène le papier au bord après la dernière
- *   [cut: nofeed; full]  ← coupe sans chercher à avancer elle-même
- *
- * Aucune avance AVANT la première image : l'imprimante est déjà positionnée
- * sur le premier support au début du job, et un `0x0C` en tête faisait sortir
- * une étiquette vierge. Constaté à l'impression : la série de cinq était
- * juste, mais précédée d'une vierge.
- *
- * L'avance qui suit la DERNIÈRE image est indispensable : elle amène le papier
- * jusqu'à la marque, sans quoi la coupe tombe au milieu de l'étiquette. Et la
- * coupe est en `nofeed` parce que `[cut]` seul (1B 64 03) ne cherche pas la
- * marque : sa petite avance mécanique ne suffit pas.
- *
- * Pour N étiquettes : N rasters, exactement N avances, une seule coupe.
- */
-export async function buildTestTopOfFormMarkup(
-  count: number, settings: LabelSettings,
-): Promise<string> {
-  const directives: string[] = [];
-  for (let i = 1; i <= count; i++) {
-    const bmp = await renderTestLabelBitmap(`TEST ${String(i).padStart(2, '0')}`, settings);
-    directives.push(await ligneImage(await bitmapToPngBuffer(bmp)));
-    directives.push('[feed: black-mark]');
-  }
-  directives.push('[cut: nofeed; full]');
-  return document(directives);
-}
