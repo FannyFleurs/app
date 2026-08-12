@@ -13,7 +13,8 @@ export default async function CustomersPage() {
 
   const totalRes = await query<{ n: string }>(
     `SELECT COUNT(*)::text AS n FROM customers
-      WHERE organization_id = $1 AND is_anonymized = FALSE`,
+      WHERE organization_id = $1 AND is_anonymized = FALSE
+        AND archived_at IS NULL`,
     [user.organizationId],
   );
   const total = Number(totalRes.rows[0]?.n ?? 0);
@@ -44,6 +45,7 @@ export default async function CustomersPage() {
        FROM customers c
        LEFT JOIN sales s ON s.customer_id = c.id AND s.status = 'validated'
       WHERE c.organization_id = $1 AND c.is_anonymized = FALSE
+        AND c.archived_at IS NULL
       GROUP BY c.id
       ORDER BY MAX(s.validated_at) DESC NULLS LAST, c.created_at DESC
       LIMIT 200`,

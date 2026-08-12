@@ -30,6 +30,7 @@ export default async function LoyaltyPage() {
        FROM loyalty_accounts la
        JOIN customers c ON c.id = la.customer_id
       WHERE la.organization_id = $1 AND c.is_anonymized = FALSE
+        AND c.archived_at IS NULL
       ORDER BY la.points_balance DESC LIMIT 100`,
     [user.organizationId],
   );

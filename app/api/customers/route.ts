@@ -12,8 +12,14 @@ export async function GET(req: Request) {
   const q = url.searchParams.get('q')?.trim().toLowerCase();
   const limit = Math.min(Number(url.searchParams.get('limit') ?? 50), 200);
 
+  // Fiches archivées : hors de TOUTES les recherches (back-office comme
+  // caisse). Elles ne redeviennent visibles que sur demande explicite —
+  // l'écran « Archivés », d'où l'on peut les remettre en service.
+  const archived = url.searchParams.get('archived');
+
   const params: unknown[] = [g.user.organizationId];
   let where = `organization_id = $1 AND is_anonymized = FALSE`;
+  where += archived === 'only' ? ` AND archived_at IS NOT NULL` : ` AND archived_at IS NULL`;
   if (q) {
     params.push(`%${q}%`);
     params.push(q);
@@ -30,7 +36,7 @@ export async function GET(req: Request) {
   const { rows } = await query(
     `SELECT id, type, first_name, last_name, company_name, email, phone,
             siret, siren, vat_number, public_service_code, commitment_number,
-            address, loyalty_code, default_discount_pct,
+            address, loyalty_code, default_discount_pct, archived_at,
             COALESCE(company_name, NULLIF(TRIM(CONCAT(first_name,' ',last_name)), '')) AS display_name,
             created_at
        FROM customers

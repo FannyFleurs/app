@@ -288,7 +288,7 @@ export default function ProductsList({
                 <input type="checkbox" checked={onlyTop} onChange={(e) => setOnlyTop(e.target.checked)} /> ★ Top
               </label>
               <label className="flex items-center gap-1.5 cursor-pointer">
-                <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} /> Inactifs
+                <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} /> Archivés
               </label>
               {canEdit && backOffice && stores.length > 1 && (
                 <button
@@ -401,7 +401,7 @@ export default function ProductsList({
                         </div>
                         <div className="mt-0.5 flex items-center gap-1.5 text-xs text-ink-soft">
                           <span className="truncate">{p.category_name ?? 'Sans catégorie'}</span>
-                          {!p.is_active && <Badge tone="danger">Inactif</Badge>}
+                          {!p.is_active && <Badge tone="warning">Archivé</Badge>}
                           {p.is_active && !p.visible_in_pos && <Badge tone="neutral">Caché</Badge>}
                           {limited && (
                             <span className="ml-auto rounded-full bg-bg px-1.5 py-0.5 text-[10px] whitespace-nowrap"

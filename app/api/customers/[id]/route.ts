@@ -14,7 +14,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
             siret, siren, vat_number, public_service_code, commitment_number,
             address, consent_email, consent_sms,
             internal_notes, loyalty_code, default_discount_pct, loyalty_enabled,
-            payment_terms, billing_frequency, created_at
+            payment_terms, billing_frequency, created_at, archived_at
        FROM customers WHERE id = $1 AND organization_id = $2`,
     [params.id, g.user.organizationId],
   );

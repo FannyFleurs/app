@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { confirmThemed } from '@/lib/ui/dialog';
 import { QuantityKeypadModal, TypeAndReasonModal, type ProductRow } from './MovementModals';
 import Badge from '@/components/Badge';
 import EmptyState from '@/components/EmptyState';
@@ -28,6 +29,34 @@ interface StockLevel {
   unit: string;
   purchase_price_ht?: string | null;
   sale_price_ttc?: string | null;
+  category_id?: string | null;
+  category_name?: string | null;
+}
+
+/** Article archivé : sorti de la caisse, conservé pour l'historique. */
+interface ArchivedProduct {
+  id: string;
+  name: string;
+  sku: string | null;
+  category_id: string | null;
+  category_name: string | null;
+}
+
+/**
+ * Lignes à zéro pour la boutique affichée, éventuellement restreintes à une
+ * catégorie.
+ *
+ * Le zéro se lit sur la quantité, pas sur l'absence de ligne : un article
+ * jamais entré en stock n'a pas de ligne du tout et n'a rien à faire ici — on
+ * ne propose d'archiver que ce qui a réellement été écoulé.
+ */
+export function zeroStockRows(levels: StockLevel[], categoryId: string): StockLevel[] {
+  return levels.filter((l) => {
+    if (Number(l.quantity) !== 0) return false;
+    if (categoryId === 'all') return true;
+    if (categoryId === 'none') return !l.category_id;
+    return l.category_id === categoryId;
+  });
 }
 
 interface Movement {
@@ -54,12 +83,14 @@ const TYPE_LABELS: Record<string, { label: string; tone: 'success'|'soft'|'warni
   inventory:    { label: 'Inventaire',   tone: 'neutral' },
 };
 
-type Section = 'levels' | 'create' | 'movements' | 'inventory';
+type Section = 'levels' | 'zero' | 'archived' | 'create' | 'movements' | 'inventory';
 
-const NAV: Array<{ key: Section; group: 'Gestion' | 'Inventaire'; label: string; icon: IconName }> = [
+const NAV: Array<{ key: Section; group: 'Gestion' | 'Catalogue' | 'Inventaire'; label: string; icon: IconName }> = [
   { key: 'levels',     group: 'Gestion',    label: 'Visualiser stock',       icon: 'stock' },
   { key: 'create',     group: 'Gestion',    label: 'Faire un mouvement',     icon: 'exports' },
   { key: 'movements',  group: 'Gestion',    label: 'Visualiser mouvements',  icon: 'orders' },
+  { key: 'zero',       group: 'Catalogue',  label: 'Stock à 0',              icon: 'warning' },
+  { key: 'archived',   group: 'Catalogue',  label: 'Produits archivés',      icon: 'package' },
   { key: 'inventory',  group: 'Inventaire', label: 'Inventaire',             icon: 'invoices' },
 ];
 
@@ -67,6 +98,11 @@ export default function StockAdmin({ canAdjust, stores, lockedStoreId }: { canAd
   const [section, setSection] = useState<Section>('levels');
   const [levels, setLevels] = useState<StockLevel[]>([]);
   const [movements, setMovements] = useState<Movement[]>([]);
+  const [archived, setArchived] = useState<ArchivedProduct[]>([]);
+  // Sélection de l'écran « Stock à 0 » : les identifiants d'articles cochés.
+  const [selection, setSelection] = useState<Set<string>>(new Set());
+  const [zeroCat, setZeroCat] = useState<string>('all');
+  const [busyArchive, setBusyArchive] = useState(false);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
   // Boutique visualisée : le stock et les mouvements sont TOUJOURS filtrés sur
@@ -89,13 +125,67 @@ export default function StockAdmin({ canAdjust, stores, lockedStoreId }: { canAd
     if (section === 'movements') {
       const r = await fetch(`/api/stock/movement${qs}`);
       if (r.ok) setMovements((await r.json()).movements);
+    } else if (section === 'archived') {
+      // `active=false` lève le filtre côté serveur : la réponse contient tout
+      // le catalogue, on ne garde ici que ce qui est archivé.
+      const r = await fetch('/api/products?active=false');
+      if (r.ok) {
+        const j = await r.json();
+        setArchived((j.products as Array<Record<string, unknown>>)
+          .filter((p) => p.is_active === false)
+          .map((p) => ({
+            id: String(p.id), name: String(p.name),
+            sku: (p.sku as string) ?? null,
+            category_id: (p.category_id as string) ?? null,
+            category_name: (p.category_name as string) ?? null,
+          })));
+      }
     } else {
       const r = await fetch(`/api/stock/levels${qs}`);
       if (r.ok) setLevels((await r.json()).levels);
+      setSelection(new Set());
     }
     setLoading(false);
   }
   useEffect(() => { void reload(); /* eslint-disable-next-line */ }, [section, storeId]);
+
+  /** Sort de la caisse (ou y remet) les articles désignés, puis recharge. */
+  async function applyArchive(ids: string[], archiver: boolean) {
+    if (ids.length === 0) return;
+    if (archiver && !(await confirmThemed({
+      title: ids.length === 1 ? 'Archiver cet article' : `Archiver ${ids.length} articles`,
+      confirmLabel: 'Archiver',
+      message: 'Ils disparaîtront de la caisse (tuiles, recherche, scan) dans TOUTES les boutiques. '
+        + 'Leur historique de ventes est conservé, et « Produits archivés » permet de les remettre en rayon.',
+    }))) return;
+    setBusyArchive(true);
+    const r = await fetch('/api/products/bulk-archive', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids, archived: archiver }),
+    });
+    setBusyArchive(false);
+    if (r.ok) { setSelection(new Set()); void reload(); }
+  }
+
+  const zeroRows = useMemo(() => zeroStockRows(levels, zeroCat), [levels, zeroCat]);
+  const filteredArchived = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    if (!needle) return archived;
+    return archived.filter((p) =>
+      p.name.toLowerCase().includes(needle) || p.sku?.toLowerCase().includes(needle),
+    );
+  }, [archived, q]);
+  // Catégories réellement présentes dans le stock affiché : un menu qui ne
+  // propose que des filtres donnant un résultat.
+  const zeroCats = useMemo(() => {
+    const m = new Map<string, string>();
+    let sansCat = false;
+    for (const l of levels.filter((x) => Number(x.quantity) === 0)) {
+      if (l.category_id) m.set(l.category_id, l.category_name ?? '—');
+      else sansCat = true;
+    }
+    return { list: [...m.entries()].sort((a, b) => a[1].localeCompare(b[1], 'fr')), sansCat };
+  }, [levels]);
 
   const filteredLevels = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -247,6 +337,152 @@ export default function StockAdmin({ canAdjust, stores, lockedStoreId }: { canAd
                         </tr>
                       );
                     })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {section === 'zero' && (
+          <div className="p-6 space-y-4">
+            <div>
+              <h2 className="text-xl font-semibold tracking-tight">Stock à 0</h2>
+              <p className="mt-1 text-sm text-ink-soft">
+                Articles épuisés dans <span className="font-medium text-ink">{stores.find((s) => s.id === storeId)?.name ?? '—'}</span>.
+                Archiver retire l&apos;article de la caisse de <strong>toutes</strong> les boutiques ;
+                l&apos;historique est conservé et le retour se fait depuis « Produits archivés ».
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <select className="input h-10 w-full sm:w-64 text-sm" value={zeroCat}
+                      onChange={(e) => { setZeroCat(e.target.value); setSelection(new Set()); }}>
+                <option value="all">Toutes les catégories</option>
+                {zeroCats.list.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+                {zeroCats.sansCat && <option value="none">Sans catégorie</option>}
+              </select>
+              <button
+                className="btn-primary h-10 px-4 text-sm disabled:opacity-40"
+                disabled={selection.size === 0 || busyArchive}
+                onClick={() => void applyArchive([...selection], true)}
+              >
+                {busyArchive ? '…' : `Archiver la sélection (${selection.size})`}
+              </button>
+            </div>
+
+            {loading ? (
+              <div className="text-sm text-ink-soft">Chargement…</div>
+            ) : zeroRows.length === 0 ? (
+              <EmptyState icon="✓" title="Aucun article à 0"
+                          description="Tous les articles suivis ont du stock dans cette boutique." />
+            ) : (
+              <div className="card overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="text-ink-soft text-[10px] uppercase tracking-widest border-b border-border">
+                    <tr>
+                      <th className="px-4 py-3 w-10">
+                        <input
+                          type="checkbox"
+                          aria-label="Tout sélectionner"
+                          checked={selection.size === zeroRows.length && zeroRows.length > 0}
+                          onChange={(e) => setSelection(
+                            e.target.checked ? new Set(zeroRows.map((l) => l.product_id)) : new Set(),
+                          )}
+                        />
+                      </th>
+                      <th className="text-left px-4 py-3 font-semibold">Produit</th>
+                      <th className="text-left px-4 py-3 font-semibold">Catégorie</th>
+                      <th className="px-4 py-3"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {zeroRows.map((l) => {
+                      const coche = selection.has(l.product_id);
+                      return (
+                        <tr key={l.product_id} className="border-t border-border hover:bg-gray-50">
+                          <td className="px-4 py-3">
+                            <input
+                              type="checkbox"
+                              aria-label={`Sélectionner ${l.product_name}`}
+                              checked={coche}
+                              onChange={(e) => setSelection((cur) => {
+                                const n = new Set(cur);
+                                if (e.target.checked) n.add(l.product_id); else n.delete(l.product_id);
+                                return n;
+                              })}
+                            />
+                          </td>
+                          <td className="px-4 py-3 font-medium">
+                            <div>{l.product_name}</div>
+                            {l.product_sku && (
+                              <div className="text-[11px] text-ink-soft font-mono">{l.product_sku}</div>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-ink-soft">{l.category_name ?? '—'}</td>
+                          <td className="px-4 py-3 text-right">
+                            <button className="btn-soft text-xs h-8 px-3" disabled={busyArchive}
+                                    onClick={() => void applyArchive([l.product_id], true)}>
+                              Archiver
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {section === 'archived' && (
+          <div className="p-6 space-y-4">
+            <div>
+              <h2 className="text-xl font-semibold tracking-tight">Produits archivés</h2>
+              <p className="mt-1 text-sm text-ink-soft">
+                Articles retirés de la caisse. Les désarchiver les replace immédiatement
+                sur les tuiles et dans la recherche.
+              </p>
+            </div>
+
+            <div className="relative max-w-xl">
+              <input className="input pr-9" placeholder="Rechercher…" value={q}
+                     onChange={(e) => setQ(e.target.value)} />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-soft">⌕</span>
+            </div>
+
+            {loading ? (
+              <div className="text-sm text-ink-soft">Chargement…</div>
+            ) : filteredArchived.length === 0 ? (
+              <EmptyState icon="∅" title="Aucun produit archivé"
+                          description="Les articles archivés depuis la fiche produit ou l'écran « Stock à 0 » apparaissent ici." />
+            ) : (
+              <div className="card overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="text-ink-soft text-[10px] uppercase tracking-widest border-b border-border">
+                    <tr>
+                      <th className="text-left px-4 py-3 font-semibold">Produit</th>
+                      <th className="text-left px-4 py-3 font-semibold">Catégorie</th>
+                      <th className="px-4 py-3"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredArchived.map((p) => (
+                      <tr key={p.id} className="border-t border-border hover:bg-gray-50">
+                        <td className="px-4 py-3 font-medium">
+                          <div>{p.name}</div>
+                          {p.sku && <div className="text-[11px] text-ink-soft font-mono">{p.sku}</div>}
+                        </td>
+                        <td className="px-4 py-3 text-ink-soft">{p.category_name ?? '—'}</td>
+                        <td className="px-4 py-3 text-right">
+                          <button className="btn-primary text-xs h-8 px-3" disabled={busyArchive}
+                                  onClick={() => void applyArchive([p.id], false)}>
+                            Désarchiver
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
