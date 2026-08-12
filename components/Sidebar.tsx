@@ -55,6 +55,10 @@ export const SIDEBAR_ITEMS: SidebarItem[] = [
   // Pilotage (en bas — pas en haut)
   { href: '/dashboard',    label: 'Tableau de bord',      icon: 'dashboard',    group: 'Pilotage', perm: 'settings.read' },
   { href: '/reports',      label: 'Rapports',             icon: 'exports',      group: 'Pilotage', perm: 'settings.read', boOnly: true },
+  // Journal des espèces et des gestes sensibles. Sous `closures.daily` : c'est
+  // le registre de qui ouvre le tiroir et annule une vente — il regarde le
+  // travail de l'équipe, il ne s'adresse pas à elle.
+  { href: '/historiques',  label: 'Historiques',          icon: 'fiscal',       group: 'Pilotage', perm: 'closures.daily' },
   // Entrées du comptable externe. Elles doivent exister ICI : n'ayant plus
   // `settings.read`, il ne voit plus l'entrée « Paramètres » et n'aurait aucun
   // chemin vers la comptabilité depuis le back-office.
