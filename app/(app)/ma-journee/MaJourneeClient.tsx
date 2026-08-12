@@ -160,12 +160,17 @@ export default function MaJourneeClient() {
       .finally(() => setLoading(false));
   }
 
-  /** Ouvre le tiroir-caisse et dit ce qui s'est passé, sans quitter l'écran. */
+  /**
+   * Ouvre le tiroir-caisse et dit ce qui s'est passé, sans quitter l'écran.
+   *
+   * Le `store_id` est transmis comme pour le X : sans lui, le serveur choisit
+   * une imprimante et pouvait faire s'ouvrir le tiroir d'une AUTRE boutique.
+   */
   async function ouvrirTiroir() {
     setTiroir('Ouverture…');
     const r = await fetch('/api/cash-sessions/open-drawer', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reason: 'Ma journée' }),
+      body: JSON.stringify({ reason: 'Ma journée', store_id: reportStoreId ?? undefined }),
     }).catch(() => null);
     setTiroir(r?.ok ? 'Tiroir ouvert' : 'Ouverture impossible');
     setTimeout(() => setTiroir(null), 2500);
@@ -173,14 +178,29 @@ export default function MaJourneeClient() {
 
   useEffect(() => {
     reloadDay();
-    // Indicateur "journée fermée" : check la clôture du jour
-    setSealedAt(null);
-    void fetch(`/api/closures/daily/today?date=${date}`)
-      .then((r) => r.ok ? r.json() : null)
-      .then((j) => { if (j?.sealed_at) setSealedAt(j.sealed_at); })
-      .catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date]);
+
+  /**
+   * Indicateur « journée clôturée » — DE CETTE BOUTIQUE.
+   *
+   * On attend de connaître la boutique affichée (`reportStoreId`, renvoyée par
+   * le rapport) avant d'interroger, et on la transmet. Sans elle, la caisse de
+   * Mortagne s'annonçait clôturée parce qu'Alençon l'était.
+   */
+  useEffect(() => {
+    setSealedAt(null);
+    if (!reportStoreId) return;
+    const store = `&store_id=${encodeURIComponent(reportStoreId)}`;
+    let annule = false;
+    void fetch(`/api/closures/daily/today?date=${date}${store}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((j) => { if (!annule && j?.sealed_at) setSealedAt(j.sealed_at); })
+      .catch(() => undefined);
+    // La date ou la boutique peut changer avant la réponse : on ignore alors
+    // un résultat qui porterait sur la journée précédente.
+    return () => { annule = true; };
+  }, [date, reportStoreId]);
 
   // Deep-link depuis l'historique article : ?date=YYYY-MM-DD&sale=<id>.
   // On force la date de la vente et on mémorise le ticket à ouvrir.
