@@ -21,19 +21,7 @@ import { computeLabelLayout, type LabelBlock } from '@/lib/services/label-layout
  */
 
 const DPMM = 8;        // 203 dpi ≈ 8 points/mm
-/**
- * Écart entre deux étiquettes du rouleau, en millimètres.
- *
- * Le lot part en UNE image continue : chaque étiquette occupe une case au pas
- * physique du média, soit hauteur + écart. Ce pas doit coller au rouleau, au
- * dixième près — sinon l'erreur s'additionne d'une étiquette à l'autre et se
- * voit dès la troisième.
- *
- * Rouleau prédécoupé (l'ancien) : 3 mm de blanc entre deux étiquettes.
- * Rouleau à marque noire (l'actuel) : les étiquettes se touchent, le pas EST
- * la hauteur d'étiquette — donc 0.
- */
-const GAP_MM = 0;
+const GAP_MM = 3;      // gap prédécoupé entre étiquettes (Fanny Fleurs : 3 mm)
 
 /** Hauteur de capitale d'une police, en fraction de sa taille em. */
 const CAP_RATIO = 0.72;
