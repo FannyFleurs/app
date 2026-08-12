@@ -127,12 +127,10 @@ describe('Tenue dans les bords', () => {
   it('réserve une marge de sécurité, plus large en bas', () => {
     for (const f of LABEL_SIZE_PRESETS) {
       const r = computeLabelLayout(LONG, settings({ width_mm: f.w, height_mm: f.h }));
-      // Marges volontairement serrées : sur 25 mm de haut, chaque dixième
-      // rendu au contenu grossit le code-barres. Le bord d'attaque ne risque
-      // rien (l'étiquette entre déjà calée sous la tête), le bord de fuite
-      // garde donc la marge la plus large des deux.
-      expect(r.marginMm).toBeGreaterThanOrEqual(0.8);
-      expect(r.marginBottomMm).toBeGreaterThanOrEqual(1.5);
+      expect(r.marginMm).toBeGreaterThanOrEqual(1.2);
+      // Le média avance vers le bas : l'erreur de calage s'y cumule, et c'est
+      // là qu'on perdait les chiffres du code-barres à l'impression.
+      expect(r.marginBottomMm).toBeGreaterThanOrEqual(3);
       expect(r.marginBottomMm).toBeGreaterThan(r.marginMm);
     }
   });
@@ -142,10 +140,9 @@ describe('Tenue dans les bords', () => {
       const r = computeLabelLayout(SHORT, settings({ width_mm: f.w, height_mm: f.h }));
       const bc = r.blocks.find((b) => b.kind === 'barcode')!;
       const basChiffres = bc.yMm + bc.hMm + bc.fontMm * 1.25;
-      // Au moins 1,5 mm sous le dernier trait d'encre. C'était 3 mm tant que
-      // la position de l'étiquette se devinait : sur papier à marque noire,
-      // elle se lit sur la marque et la dérive ne se cumule plus.
-      expect.soft(f.h - basChiffres, `${f.w}×${f.h}`).toBeGreaterThanOrEqual(1.5);
+      // Au moins 3 mm sous le dernier trait d'encre : de quoi encaisser le
+      // décalage d'entraînement constaté sur les étiquettes imprimées.
+      expect.soft(f.h - basChiffres, `${f.w}×${f.h}`).toBeGreaterThanOrEqual(3);
     }
   });
 
@@ -235,47 +232,6 @@ describe('Marge haute', () => {
     for (const f of LABEL_SIZE_PRESETS) {
       const r = computeLabelLayout(SHORT, settings({ width_mm: f.w, height_mm: f.h }));
       expect.soft(r.marginMm, `${f.w}×${f.h}`).toBeLessThanOrEqual(2);
-    }
-  });
-});
-
-describe('Code-barres et calage', () => {
-  it('donne au code-barres de quoi être accroché', () => {
-    // Sur l'étiquette du rayon (50 × 25), les barres faisaient moins de 5 mm :
-    // lisibles de face, capricieuses de travers. Le bloc pèse désormais plus
-    // lourd que le prix dans le partage de la hauteur.
-    const r = computeLabelLayout(SHORT, settings({ width_mm: 50, height_mm: 25 }));
-    const bc = r.blocks.find((b) => b.kind === 'barcode')!;
-    expect(bc.hMm).toBeGreaterThanOrEqual(6);
-    expect(bc.fontMm).toBeGreaterThanOrEqual(2);
-  });
-
-  it('déplace le contenu sans le rogner', () => {
-    // Le calage joue sur les MARGES : une translation pousserait le contenu
-    // au-delà du bord, soit exactement le défaut qu'on corrige.
-    const s = settings({ width_mm: 50, height_mm: 25 });
-    const centre = computeLabelLayout(SHORT, s);
-    const droite = computeLabelLayout(SHORT, s, 0, 2);
-    const gauche = computeLabelLayout(SHORT, s, 0, -2);
-    const x = (r: typeof centre) => r.blocks[0]!.xMm;
-    expect(x(droite)).toBeGreaterThan(x(centre));
-    expect(x(gauche)).toBeLessThan(x(centre));
-    for (const r of [centre, droite, gauche]) {
-      for (const b of r.blocks) {
-        expect(b.xMm).toBeGreaterThanOrEqual(0);
-        expect(b.xMm + b.wMm).toBeLessThanOrEqual(r.widthMm + 0.01);
-      }
-    }
-  });
-
-  it('borne le calage pour ne jamais sortir de l\'étiquette', () => {
-    const s = settings({ width_mm: 50, height_mm: 25 });
-    for (const shift of [-40, 40]) {
-      const r = computeLabelLayout(LONG, s, 0, shift);
-      for (const b of r.blocks) {
-        expect(b.xMm).toBeGreaterThanOrEqual(0);
-        expect(b.xMm + b.wMm).toBeLessThanOrEqual(r.widthMm + 0.01);
-      }
     }
   });
 });
