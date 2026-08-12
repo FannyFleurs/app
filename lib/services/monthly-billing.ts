@@ -27,7 +27,9 @@ export async function runMonthlyBillingForOrg(
        FROM customers
       WHERE organization_id = $1
         AND billing_frequency = 'monthly'
-        AND is_anonymized = FALSE`,
+        AND is_anonymized = FALSE
+        -- Fiche archivée (doublon rangé) : on ne lui envoie plus de facture.
+        AND archived_at IS NULL`,
     [organizationId],
   );
 

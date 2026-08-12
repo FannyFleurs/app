@@ -151,6 +151,7 @@ export default function ProductFormModal({
   const [newSup, setNewSup] = useState<string | null>(null);
   const [inlineBusy, setInlineBusy] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [archiving, setArchiving] = useState(false);
 
   // Photo de l'article : capturée (appareil) ou existante. Enregistrée via
   // l'endpoint dédié après la sauvegarde (la data URL est trop grande pour le
@@ -159,6 +160,38 @@ export default function ProductFormModal({
   const [photo, setPhoto] = useState<string | null>(null);
   const [existingPhoto, setExistingPhoto] = useState<string | null>(product?.image_url ?? null);
   const photoInputRef = useRef<HTMLInputElement>(null);
+
+  /**
+   * Archive l'article, ou le remet en service.
+   *
+   * Archivé, il quitte la caisse : plus de tuile, plus de résultat de
+   * recherche, plus de scan. Il n'est pas supprimé pour autant — les ventes
+   * passées y renvoient, et l'article se retrouve dans « Produits archivés »
+   * (page Stock) d'où un clic le remet en rayon.
+   *
+   * Enregistré immédiatement, sans passer par « Enregistrer » : c'est une
+   * décision à part, pas un champ de la fiche.
+   */
+  async function toggleArchive() {
+    if (!product) return;
+    const suivant = !form.is_active;   // true = on remet en service
+    if (!suivant && !(await confirmThemed({
+      title: `Archiver « ${product.name} »`,
+      confirmLabel: 'Archiver',
+      message: "L'article disparaîtra de la caisse (tuiles, recherche, scan). "
+        + 'Son historique de ventes est conservé, et vous pourrez le remettre en rayon '
+        + 'depuis Stock › Produits archivés.',
+    }))) return;
+    setArchiving(true); setError(null);
+    const r = await fetch(`/api/products/${product.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_active: suivant, visible_in_pos: suivant }),
+    });
+    setArchiving(false);
+    if (!r.ok) { setError("Archivage impossible."); return; }
+    setForm((f) => ({ ...f, is_active: suivant, visible_in_pos: suivant }));
+    onSaved(product.id);
+  }
 
   async function remove() {
     if (!product) return;
@@ -312,7 +345,14 @@ export default function ProductFormModal({
         ? 'card w-full p-4 sm:p-6'
         : 'card w-full max-w-2xl lg:max-w-4xl p-4 sm:p-6 my-4 sm:my-8'}>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">{product ? 'Modifier produit' : 'Nouveau produit'}</h2>
+          <div className="flex items-center gap-2 min-w-0">
+            <h2 className="text-lg font-semibold">{product ? 'Modifier produit' : 'Nouveau produit'}</h2>
+            {product && !form.is_active && (
+              <span className="rounded-full bg-warning/15 text-warning px-2 py-0.5 text-xs font-medium">
+                Archivé — hors caisse
+              </span>
+            )}
+          </div>
           <button onClick={onClose} className="text-ink-soft hover:text-ink text-xl leading-none"
                   title={inline ? 'Fermer la fiche' : 'Fermer'}>✕</button>
         </div>
@@ -577,10 +617,11 @@ export default function ProductFormModal({
                      onChange={(v) => setForm({ ...form, price_is_free: v, sale_price_ttc: v ? '' : form.sale_price_ttc })} />
               <Check label="Top produit (épinglé en grille)" checked={form.is_top_product}
                      onChange={(v) => setForm({ ...form, is_top_product: v })} />
+              {/* « Actif » a été retiré : deux commandes pour un même effet
+                  (la case et le bouton Archiver) se contredisaient à la
+                  première hésitation. C'est le bouton qui décide. */}
               <Check label="Visible en caisse" checked={form.visible_in_pos}
                      onChange={(v) => setForm({ ...form, visible_in_pos: v })} />
-              <Check label="Actif" checked={form.is_active}
-                     onChange={(v) => setForm({ ...form, is_active: v })} />
             </div>
             <p className="mt-2 text-xs text-ink-soft">
               {form.track_stock
@@ -726,6 +767,15 @@ export default function ProductFormModal({
                       className="btn-soft" title="Imprimer une étiquette avec code-barres et prix">
                 Imprimer étiquette
               </button>
+              {product && (
+                <button type="button" onClick={() => void toggleArchive()} disabled={archiving}
+                        className="btn-soft"
+                        title={form.is_active
+                          ? 'Retirer cet article de la caisse (conserve son historique)'
+                          : 'Remettre cet article en caisse'}>
+                  {archiving ? '…' : form.is_active ? 'Archiver' : 'Désarchiver'}
+                </button>
+              )}
               {product && (
                 <button type="button" onClick={() => void remove()} disabled={deleting}
                         className="btn-soft text-danger" title="Supprimer cet article">

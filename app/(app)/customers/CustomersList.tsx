@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { confirmThemed } from '@/lib/ui/dialog';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Badge from '@/components/Badge';
 import EmptyState from '@/components/EmptyState';
@@ -25,6 +26,7 @@ interface Customer {
   total_ttc: string;
   loyalty_points: string | null;
   default_discount_pct?: string | null;
+  archived_at?: string | null;
 }
 
 const TYPE_LABEL: Record<string, string> = {
@@ -45,6 +47,7 @@ interface CustomerDetail {
     consent_email: boolean; consent_sms: boolean;
     internal_notes: string | null; loyalty_code: string | null;
     created_at: string;
+    archived_at?: string | null;
   };
   sales: { id: string; receipt_number: string; total_ttc: string; validated_at: string }[];
   loyalty_points: number | null;
@@ -81,6 +84,12 @@ export default function CustomersList({ customers: initialCustomers, total, canW
   const [serverResults, setServerResults] = useState<Customer[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [type, setType] = useState<'all' | string>('all');
+  // Les fiches archivées sortent de la liste et des recherches : cette bascule
+  // est le seul endroit d'où on les revoit, pour en remettre une en service.
+  const [showArchived, setShowArchived] = useState(false);
+  // Incrémenté après un archivage : la liste de gauche vient du serveur, il
+  // faut la redemander pour que la fiche rangée en disparaisse (ou y revienne).
+  const [tick, setTick] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   // Selection automatique via ?id=<uuid> (utilise depuis /caisse quand
@@ -101,11 +110,17 @@ export default function CustomersList({ customers: initialCustomers, total, canW
   // forcément, d'où l'impossibilité de les retrouver sans cette recherche.
   useEffect(() => {
     const needle = q.trim();
-    if (needle.length < 2) { setServerResults(null); setSearching(false); return; }
+    // Vue « Archivés » : la liste initiale rendue par le serveur ne contient
+    // que des fiches actives, il faut donc toujours interroger l'API, même
+    // sans recherche.
+    if (needle.length < 2 && !showArchived) { setServerResults(null); setSearching(false); return; }
     let cancelled = false;
     setSearching(true);
     const t = setTimeout(() => {
-      void fetch(`/api/customers?q=${encodeURIComponent(needle)}&limit=200`)
+      const p = new URLSearchParams({ limit: '200' });
+      if (needle.length >= 2) p.set('q', needle);
+      if (showArchived) p.set('archived', 'only');
+      void fetch(`/api/customers?${p.toString()}`)
         .then((r) => (r.ok ? r.json() : { customers: [] }))
         .then((j) => {
           if (cancelled) return;
@@ -116,6 +131,7 @@ export default function CustomersList({ customers: initialCustomers, total, canW
             company_name: (c.company_name as string) ?? null, siret: (c.siret as string) ?? null,
             nb_sales: '0', last_visit: null, total_ttc: '0',
             loyalty_points: null, default_discount_pct: (c.default_discount_pct as string) ?? null,
+            archived_at: (c.archived_at as string) ?? null,
           }));
           setServerResults(rows);
         })
@@ -123,12 +139,14 @@ export default function CustomersList({ customers: initialCustomers, total, canW
         .finally(() => { if (!cancelled) setSearching(false); });
     }, 250);
     return () => { cancelled = true; clearTimeout(t); };
-  }, [q]);
+  }, [q, showArchived, tick]);
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    const usingServer = needle.length >= 2 && serverResults != null;
-    const source = usingServer ? serverResults! : customers;
+    const usingServer = (needle.length >= 2 || showArchived) && serverResults != null;
+    // Sans résultat serveur en vue « Archivés », on n'affiche RIEN plutôt que
+    // la liste des fiches actives : ce serait un contresens.
+    const source = usingServer ? serverResults! : showArchived ? [] : customers;
     return source.filter((c) => {
       if (type !== 'all' && c.type !== type) return false;
       if (usingServer || !needle) return true;
@@ -140,7 +158,7 @@ export default function CustomersList({ customers: initialCustomers, total, canW
         c.siret?.includes(needle)
       );
     });
-  }, [customers, serverResults, q, type]);
+  }, [customers, serverResults, q, type, showArchived]);
 
   async function selectCustomer(id: string) {
     setSelectedId(id);
@@ -208,12 +226,22 @@ export default function CustomersList({ customers: initialCustomers, total, canW
                 </button>
               ))}
             </div>
+            <label className="flex items-center gap-1.5 text-[11px] text-ink-soft cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showArchived}
+                onChange={(e) => { setShowArchived(e.target.checked); setSelectedId(null); setDetail(null); }}
+              />
+              Fiches archivées
+            </label>
           </div>
 
           <div className="flex-1 overflow-y-auto">
             {filtered.length === 0 ? (
               <div className="p-6 text-center text-ink-soft text-sm">
-                {searching ? 'Recherche…' : customers.length === 0 ? 'Aucun client.' : 'Aucun résultat.'}
+                {searching ? 'Recherche…'
+                  : showArchived ? 'Aucune fiche archivée.'
+                  : customers.length === 0 ? 'Aucun client.' : 'Aucun résultat.'}
               </div>
             ) : (
               <div className="divide-y divide-border">
@@ -231,7 +259,9 @@ export default function CustomersList({ customers: initialCustomers, total, canW
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span className="font-medium truncate">{c.display_name || '—'}</span>
-                        <Badge tone="neutral">{TYPE_LABEL[c.type] ?? c.type}</Badge>
+                        <Badge tone={c.archived_at ? 'warning' : 'neutral'}>
+                          {c.archived_at ? 'Archivé' : (TYPE_LABEL[c.type] ?? c.type)}
+                        </Badge>
                       </div>
                       <div className="mt-0.5 text-xs text-ink-soft truncate">{subline}</div>
                     </button>
@@ -270,6 +300,11 @@ export default function CustomersList({ customers: initialCustomers, total, canW
               canWrite={canWrite}
               onEdit={() => setEditing(detail.customer as unknown as CustomerLike)}
               onReload={() => void selectCustomer(detail.customer.id)}
+              onArchived={() => {
+                setTick((t) => t + 1);
+                router.refresh();
+                void selectCustomer(detail.customer.id);
+              }}
             />
           )}
         </main>
@@ -298,11 +333,39 @@ export default function CustomersList({ customers: initialCustomers, total, canW
   );
 }
 
-function CustomerDetailContent({ tab, onTabChange, detail, canWrite, onEdit, onReload }: {
+function CustomerDetailContent({ tab, onTabChange, detail, canWrite, onEdit, onReload, onArchived }: {
   tab: Tab; onTabChange: (t: Tab) => void;
-  detail: CustomerDetail; canWrite: boolean; onEdit: () => void; onReload: () => void;
+  detail: CustomerDetail; canWrite: boolean;
+  onEdit: () => void; onReload: () => void; onArchived: () => void;
 }) {
   const c = detail.customer;
+  const archived = !!c.archived_at;
+  const [archiving, setArchiving] = useState(false);
+
+  /**
+   * Range la fiche (ou la remet en service). Rien n'est supprimé : les
+   * tickets et factures du client restent attachés à cette fiche, elle cesse
+   * seulement de remonter dans les recherches — le geste qu'appellent les
+   * doublons.
+   */
+  async function toggleArchive() {
+    const suivant = !archived;
+    if (suivant && !(await confirmThemed({
+      title: `Archiver « ${c.company_name || [c.first_name, c.last_name].filter(Boolean).join(' ') || 'ce client'} »`,
+      confirmLabel: 'Archiver',
+      message: 'La fiche sortira des recherches clients, en caisse comme au back-office. '
+        + 'Son historique est conservé, et vous pourrez la remettre en service à tout moment '
+        + 'depuis le filtre « Fiches archivées ».',
+    }))) return;
+    setArchiving(true);
+    const r = await fetch(`/api/customers/${c.id}/archive`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ archived: suivant }),
+    });
+    setArchiving(false);
+    if (r.ok) onArchived();
+  }
+
   const display = c.company_name || [c.first_name, c.last_name].filter(Boolean).join(' ') || 'Client';
   const totalTtc = detail.sales.reduce((s, x) => s + Number(x.total_ttc), 0);
   const avg = detail.sales.length > 0 ? totalTtc / detail.sales.length : 0;
@@ -341,15 +404,29 @@ function CustomerDetailContent({ tab, onTabChange, detail, canWrite, onEdit, onR
       <div className="sticky top-0 z-10 bg-white border-b border-border">
         <div className="px-4 sm:px-6 pt-5 pb-3 flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="text-xl font-semibold tracking-tight truncate">{display}</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-xl font-semibold tracking-tight truncate">{display}</h2>
+              {archived && <Badge tone="warning">Archivé</Badge>}
+            </div>
             <div className="text-sm text-ink-soft mt-0.5">
-              {lastVisit
+              {archived
+                ? <>Fiche archivée le {new Date(c.archived_at!).toLocaleDateString('fr-FR')} — invisible dans les recherches</>
+                : lastVisit
                 ? <>Dernière visite le {new Date(lastVisit).toLocaleDateString('fr-FR')}</>
                 : <>Client depuis le {new Date(c.created_at).toLocaleDateString('fr-FR')}</>
               }
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            {canWrite && (
+              <button onClick={() => void toggleArchive()} disabled={archiving}
+                      className="btn-soft text-sm whitespace-nowrap"
+                      title={archived
+                        ? 'Remettre cette fiche dans les recherches'
+                        : 'Retirer cette fiche des recherches (doublon)'}>
+                {archiving ? '…' : archived ? 'Désarchiver' : 'Archiver'}
+              </button>
+            )}
             {canWrite && (
               <button onClick={onEdit} className="btn-primary text-sm whitespace-nowrap">
                 Modifier client

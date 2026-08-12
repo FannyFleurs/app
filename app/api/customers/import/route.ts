@@ -129,7 +129,13 @@ export async function POST(req: Request) {
         let customerId: string | null = null;
         if (email) {
           const ex = await client.query<{ id: string }>(
-            `SELECT id FROM customers WHERE organization_id = $1 AND email = $2 AND is_anonymized = FALSE LIMIT 1`,
+            // Une fiche archivée ne sert plus de point d'ancrage : la mettre à
+            // jour la laisserait invisible, l'import semblerait sans effet.
+            // L'email retrouve alors une fiche neuve et active.
+            `SELECT id FROM customers
+              WHERE organization_id = $1 AND email = $2 AND is_anonymized = FALSE
+                AND archived_at IS NULL
+              LIMIT 1`,
             [g.user.organizationId, email],
           );
           customerId = ex.rows[0]?.id ?? null;
