@@ -54,16 +54,6 @@ export interface LabelSettings {
    * telle qu'elle doit tomber sur l'étiquette une fois le calage juste.
    */
   print_offset_y_mm: number;
-  /**
-   * Calage HORIZONTAL de l'impression, en millimètres (négatif = vers la
-   * gauche).
-   *
-   * Le média n'est pas toujours centré sous la tête : selon le guide-papier
-   * et le rouleau, une même image se pose quelques millimètres de côté, et
-   * le contenu sort d'un bord en laissant un blanc à l'autre. Comme le
-   * calage vertical, il se mesure sur une étiquette sortie.
-   */
-  print_offset_x_mm: number;
 }
 
 export const LABEL_LAYOUT_DEFAULT: LabelLayout = {
@@ -83,7 +73,6 @@ export const LABEL_DEFAULTS: LabelSettings = {
   show_sku: false,
   layout: LABEL_LAYOUT_DEFAULT,
   print_offset_y_mm: 0,
-  print_offset_x_mm: 0,
 };
 
 function clampMm(v: unknown, fallback: number): number {
@@ -133,6 +122,5 @@ export function mergeLabelDefaults(partial: Partial<LabelSettings> | null | unde
     show_sku: partial.show_sku ?? LABEL_DEFAULTS.show_sku,
     layout: mergeLayout(partial.layout),
     print_offset_y_mm: clampOffset(partial.print_offset_y_mm, LABEL_DEFAULTS.print_offset_y_mm),
-    print_offset_x_mm: clampOffset(partial.print_offset_x_mm, LABEL_DEFAULTS.print_offset_x_mm),
   };
 }

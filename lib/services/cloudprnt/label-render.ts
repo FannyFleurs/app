@@ -21,6 +21,19 @@ import { computeLabelLayout, type LabelBlock } from '@/lib/services/label-layout
  */
 
 const DPMM = 8;        // 203 dpi ≈ 8 points/mm
+/**
+ * Écart entre deux étiquettes du rouleau, en millimètres.
+ *
+ * Le lot part en UNE image continue : chaque étiquette occupe une case au pas
+ * physique du média, soit hauteur + écart. Ce pas doit coller au rouleau, au
+ * dixième près — sinon l'erreur s'additionne d'une étiquette à l'autre et se
+ * voit dès la troisième.
+ *
+ * Rouleau prédécoupé (l'ancien) : 3 mm de blanc entre deux étiquettes.
+ * Rouleau à marque noire (l'actuel) : les étiquettes se touchent, le pas EST
+ * la hauteur d'étiquette — donc 0.
+ */
+const GAP_MM = 0;
 
 /** Hauteur de capitale d'une police, en fraction de sa taille em. */
 const CAP_RATIO = 0.72;
@@ -77,7 +90,7 @@ async function drawLabel(
   // Le calage de l'imprimante entre dans le CALCUL de la mise en page, pas
   // dans un décalage de pixels : translater l'image rognerait le haut, alors
   // que resserrer les marges tasse le contenu sans rien perdre.
-  const layout = computeLabelLayout(p, s, s.print_offset_y_mm ?? 0, s.print_offset_x_mm ?? 0);
+  const layout = computeLabelLayout(p, s, s.print_offset_y_mm ?? 0);
   // Le moteur raisonne sur le format demandé ; la case réellement disponible
   // peut différer d'un pixel ou deux (largeur arrondie au multiple de 8 exigé
   // par le raster). On projette donc plutôt que de supposer.
@@ -163,32 +176,33 @@ async function drawBarcode(
 }
 
 /**
- * Rend UNE étiquette, à la hauteur exacte du format.
- *
- * Le lot était auparavant empilé dans une seule image continue, au pas
- * « hauteur + écart » calculé ici. C'était au logiciel de deviner la
- * géométrie du rouleau : dès que le pas déclaré s'écartait du pas réel, le
- * décalage s'additionnait d'une étiquette à l'autre — visible dès la
- * troisième — et la coupe tombait là où l'image finissait, pas sur la
- * marque noire.
- *
- * C'est l'imprimante qui sait où commence chaque étiquette : elle lit la
- * marque. On lui envoie donc une étiquette, une coupe, et on la laisse se
- * caler. Le logiciel ne modélise plus le papier.
+ * Rend un « feuillet » : plusieurs étiquettes empilées dans UNE image continue
+ * (chacune dans une case au pas étiquette+gap). Une seule image = un seul
+ * enc.image() → aucune séparation entre étiquettes.
  */
-export async function renderLabelBitmap(label: LabelProduct, s: LabelSettings): Promise<LabelBitmap> {
+export async function renderLabelSheetBitmap(labels: LabelProduct[], s: LabelSettings): Promise<LabelBitmap> {
   await ensureDeps();
   const PImage = PImageMod;
 
   let W = Math.round((s.width_mm || 51) * DPMM);
   W = Math.max(64, Math.round(W / 8) * 8); // largeur multiple de 8 (raster)
-  const H = Math.max(80, Math.round((s.height_mm || 51) * DPMM));
+  const contentH = Math.max(80, Math.round((s.height_mm || 51) * DPMM));
+  const gapPx = Math.round(GAP_MM * DPMM);
+  const pitch = contentH + gapPx;
+  // Réglage fin de la position de coupe : on raccourcit légèrement l'image en
+  // fin de lot pour remonter la coupe (la coupe tombait ~2 mm trop loin).
+  const CUT_TRIM_MM = 0;
+  const trimPx = Math.round(CUT_TRIM_MM * DPMM);
+  const H = Math.max(contentH - trimPx, pitch * labels.length - gapPx - trimPx);
 
-  const img = PImage.make(W, H);
+  const img = PImage.make(W, Math.max(contentH, H));
   const ctx = img.getContext('2d');
   ctx.fillStyle = '#FFFFFF';
-  ctx.fillRect(0, 0, W, H);
-  await drawLabel(ctx, W, 0, H, label, s);
+  ctx.fillRect(0, 0, W, Math.max(contentH, H));
 
-  return { data: img.data as Uint8Array, width: W, height: H };
+  for (let i = 0; i < labels.length; i++) {
+    await drawLabel(ctx, W, i * pitch, contentH, labels[i]!, s);
+  }
+
+  return { data: img.data as Uint8Array, width: W, height: Math.max(contentH, H) };
 }

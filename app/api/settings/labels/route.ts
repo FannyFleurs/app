@@ -24,8 +24,6 @@ const schema = z.object({
   }).optional(),
   /** Calage vertical de l'impression, en mm (négatif = remonte le contenu). */
   print_offset_y_mm: z.number().min(-15).max(15).optional(),
-  /** Calage horizontal, en mm (négatif = vers la gauche). */
-  print_offset_x_mm: z.number().min(-15).max(15).optional(),
 });
 
 export async function GET() {
