@@ -34,7 +34,7 @@ describe('Palette de marque', () => {
   it('donne les mêmes valeurs aux variables CSS de base', () => {
     // `:root` sert quand aucun thème n'est encore appliqué (premier rendu,
     // pages hors application). Il ne doit pas montrer une autre couleur.
-    const root = css.slice(css.indexOf(':root {'), css.indexOf('body[data-mode="dark"]'));
+    const root = css.slice(css.indexOf(':root {'), css.indexOf('@keyframes fadeIn'));
     expect(root).toMatch(/--primary:\s*#013E37/i);
     expect(root).toMatch(/--primary-soft:\s*#FFEFB3/i);
     expect(root).toMatch(/--topbar-bg:\s*#013E37/i);
@@ -61,9 +61,20 @@ describe('Palette de marque', () => {
     expect(BRAND_THEME).toBe('hellopos');
     const shell = readFileSync('components/AppShell.tsx', 'utf8');
     expect(shell).toMatch(/const appliedTheme = BRAND_THEME;/);
-    expect(shell).toMatch(/setAttribute\('data-mode', 'light'\)/);
     // Plus aucun code ne repose le mode d'après une préférence.
     expect(shell).not.toMatch(/prefers-color-scheme/);
+  });
+
+  it('ne garde aucune trace du mode sombre', () => {
+    // Le mode sombre a été retiré de l'interface, mais son habillage est resté
+    // dans la feuille de style : une centaine de lignes que plus aucun
+    // sélecteur ne pouvait atteindre, puisque `data-mode` ne valait plus que
+    // « light ». Du CSS mort donne une fausse idée de ce que fait la page — on
+    // vérifie donc qu'il ne revient pas.
+    expect(css).not.toMatch(/data-mode/);
+    expect(css).not.toMatch(/prefers-color-scheme/);
+    const shell = readFileSync('components/AppShell.tsx', 'utf8');
+    expect(shell).not.toMatch(/setAttribute\('data-mode'/);
   });
 
   it('ne propose plus de personnalisation dans les réglages', () => {

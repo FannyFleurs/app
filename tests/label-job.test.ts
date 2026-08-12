@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
   buildLabelsStarPrnt, buildTestLabelsStarPrnt,
@@ -18,7 +18,14 @@ import { LABEL_DEFAULTS } from '@/lib/settings/label';
  * d'une étiquette à l'autre, visible dès la troisième. Ces tests interdisent
  * le retour de cette architecture — le positionnement appartient au capteur
  * de marque noire de l'imprimante.
+ *
+ * Ces tests fabriquent de VRAIS jobs : ils rendent les bitmaps et lancent
+ * CPUtil en sous-processus. Seuls, ils tiennent en 2,5 s ; lancés en parallèle
+ * du reste de la suite, plusieurs CPUtil se disputent le processeur et les 5 s
+ * par défaut de Vitest sont dépassées de temps en temps. Le délai est donc
+ * relevé pour ce fichier : l'échec n'apprenait rien, il fallait relancer.
  */
+vi.setConfig({ testTimeout: 30_000 });
 
 const PRODUIT = {
   name: 'Begonia blad. Double', sku: null,

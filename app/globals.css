@@ -34,9 +34,8 @@
   --primary-deep: #012B26;
   --primary-soft: #FFEFB3;
 
-  /* Neutres chauds — surchargés par data-mode="dark". Le fond tire très
-     légèrement vers l'ivoire pour que les cartes blanches se détachent
-     sans qu'on ait besoin d'ombres. */
+  /* Neutres chauds. Le fond tire très légèrement vers l'ivoire pour que les
+     cartes blanches se détachent sans qu'on ait besoin d'ombres. */
   --bg: #F8F6F0;
   --surface: #FFFFFF;
   --muted: #F3F1EA;
@@ -51,27 +50,6 @@
   /* Barre de navigation supérieure : le vert de marque, pleine surface. */
   --topbar-bg: #013E37;
   --topbar-user-bg: #012B26;
-}
-
-body[data-mode="dark"] {
-  color-scheme: dark;
-  --bg: #0F1115;
-  --surface: #1A1D22;
-  --muted: #22262B;
-  --ink: #EAE6DC;        /* off-white chaud */
-  --ink-soft: #A0A199;   /* gris chaud */
-  --border: #2E3239;
-  --topbar-bg: #0A0D11;
-  --topbar-user-bg: #06080B;
-
-  /* Encre de <body> elle-même.
-     Indispensable, et pas redondant avec la règle `.text-ink` plus bas : cette
-     dernière est un sélecteur de DESCENDANT, elle ne s'applique donc pas à
-     <body>, qui porte pourtant la classe. <body> conservait ainsi l'encre du
-     mode clair, et tout élément se contentant d'hériter — c'est-à-dire la
-     grande majorité des titres, libellés et montants — s'affichait sombre sur
-     fond sombre. */
-  color: var(--ink);
 }
 
 @keyframes fadeIn {
@@ -118,32 +96,6 @@ body[data-theme="emerald"]    { --primary: #1E7A5E; --primary-deep: #155C46; --p
 body[data-theme="teal"]       { --primary: #0E7490; --primary-deep: #0B5B70; --primary-soft: #E1EFF3; }
 body[data-theme="bordeaux"]   { --primary: #7B2D3A; --primary-deep: #5D2029; --primary-soft: #F3E4E7; }
 body[data-theme="lavender"]   { --primary: #6D5D9C; --primary-deep: #524879; --primary-soft: #ECE9F4; }
-
-/* Variantes d'accent propres au mode sombre.
-   Ce bloc DOIT rester après les `body[data-theme=…]` ci-dessus : à spécificité
-   égale, c'est la dernière règle qui gagne. Placé plus haut, il serait
-   silencieusement écrasé par la palette du thème. */
-body[data-mode="dark"] {
-  /* Les versions « soft » sont assombries pour rester des fonds. */
-  --primary-soft: color-mix(in srgb, var(--primary) 18%, #1A1D22);
-  /* La version « deep » est pensée pour du texte sur fond clair : sur fond
-     sombre elle disparaît. On l'éclaircit à la source plutôt que page par page
-     — elle est surtout consommée en style inline. Jamais utilisée comme fond
-     dans l'application (seulement dans le PDA, qui n'a pas de mode sombre),
-     donc l'éclaircir ne casse aucun contraste inverse. */
-  --primary-deep: color-mix(in srgb, var(--primary) 58%, white);
-}
-
-/* Le jaune de la marque ne se dérive pas : c'est lui qu'on reconnaît.
-   En mode sombre, la règle générale ci-dessus le transformait en un vert
-   terne — on le remet, assombri juste ce qu'il faut pour servir de fond, et
-   on garde le jaune franc pour le texte d'accent. Déclaré APRÈS le bloc
-   sombre : à spécificité égale, c'est le dernier qui gagne. */
-body[data-theme="hellopos"][data-mode="dark"] {
-  --primary-soft: #3B3316;
-  --primary-deep: #FFEFB3;
-  --accent-text: #FFEFB3;
-}
 
 /* Hauteur d'application : exactement la fenêtre VISIBLE.
    `100vh` compte la barre d'adresse repliée des navigateurs mobiles — la
@@ -217,10 +169,9 @@ input[type=radio] {
 }
 
 /* <select> : on neutralise complètement le rendu système (chrome + flèche
-   natifs, qui ne suivent pas le thème, surtout en mode sombre) et on dessine
-   notre propre flèche (chevron) aux couleurs du thème. Le fond, le texte et la
-   bordure viennent déjà de la classe .input (tokens du thème). Le popup de
-   choix suit le mode clair/sombre via `color-scheme` défini sur :root/body. */
+   natifs, qui ne suivent pas le thème) et on dessine notre propre flèche
+   (chevron) aux couleurs du thème. Le fond, le texte et la bordure viennent
+   déjà de la classe .input (tokens du thème). */
 select.input {
   -webkit-appearance: none;
   -moz-appearance: none;
@@ -241,10 +192,6 @@ select.input {
   padding-bottom: 0.5rem;
   line-height: 1.4;
 }
-/* En mode sombre, chevron plus clair pour rester visible. */
-body[data-mode="dark"] select.input {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23A0A199' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
-}
 /* Les <option> suivent aussi le thème là où c'est supporté (Firefox, Chrome
    récent). Sur iOS/Safari le popup reste piloté par `color-scheme`. */
 select.input option {
@@ -258,9 +205,6 @@ select.input option {
     background-color: var(--surface);
     border: 1px solid var(--border);
     box-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.04);
-  }
-  body[data-mode="dark"] .card {
-    box-shadow: 0 1px 2px rgba(0,0,0,0.4), 0 4px 12px rgba(0,0,0,0.3);
   }
   .btn {
     @apply inline-flex items-center justify-center gap-2 rounded-xl
@@ -278,9 +222,6 @@ select.input option {
     @apply btn;
     background-color: var(--primary-soft);
     color: var(--primary-deep);
-  }
-  body[data-mode="dark"] .btn-soft {
-    color: var(--ink);
   }
   .btn-soft:hover:not(:disabled) {
     background-color: color-mix(in srgb, var(--primary-soft) 70%, var(--surface));
@@ -315,7 +256,6 @@ select.input option {
     background-color: var(--primary-soft);
     color: var(--primary-deep);
   }
-  body[data-mode="dark"] .chip { color: var(--ink); }
   .nav-link {
     display: flex;
     align-items: center;
@@ -334,61 +274,17 @@ select.input option {
     color: var(--primary-deep);
     background-color: var(--primary-soft);
   }
-  body[data-mode="dark"] .nav-link-active {
-    color: var(--ink);
-  }
   .accent-bar { background-color: var(--primary); }
   /* Texte vert : on utilise le vert TEXTE (foncé, lisible) et non le vert
      d'accent clair, pour respecter les seuils de contraste WCAG. */
   .text-accent { color: var(--accent-text); }
   .text-accent-deep { color: var(--accent-text); }
-  body[data-mode="dark"] .text-accent { color: color-mix(in srgb, var(--primary) 65%, white); }
-  body[data-mode="dark"] .text-accent-deep { color: color-mix(in srgb, var(--primary) 60%, white); }
   .bg-accent-soft { background-color: var(--primary-soft); }
   /* Bordure d'accent : sert à marquer un élément sélectionné (pastille de
      période active des rapports) sans le remplir complètement. */
   .border-accent { border-color: var(--primary); }
-  body[data-mode="dark"] .border-accent {
-    border-color: color-mix(in srgb, var(--primary) 60%, white);
-  }
   /* Contour d'un bloc déjà rempli en `bg-accent-soft` : juste assez appuyé
      pour dessiner l'arête sans cerner la tuile d'un trait franc. */
   .border-accent-soft-line { border-color: color-mix(in srgb, var(--primary) 22%, transparent); }
-  body[data-mode="dark"] .border-accent-soft-line {
-    border-color: color-mix(in srgb, var(--primary) 45%, transparent);
-  }
 }
 
-/* Surcharges des utilitaires Tailwind hardcodés pour le mode sombre.
-   On ne change pas le code des composants : les classes utilitaires les
-   plus fréquentes basculent automatiquement leur valeur. */
-body[data-mode="dark"] {
-  /* Fonds */
-  & .bg-white   { background-color: var(--surface) !important; }
-  /* `surface` est une couleur littérale du thème Tailwind (#FFFFFF), pas une
-     variable : sans cette ligne, `bg-surface` restait un aplat blanc franc au
-     milieu d'une interface sombre — la barre d'actions des réglages, par
-     exemple. Ce n'est pas un défaut de contraste (le texte y reste lisible),
-     donc l'audit ne le signalait pas ; ça se voit à l'œil. */
-  & .bg-surface { background-color: var(--surface) !important; }
-  & .bg-gray-50 { background-color: var(--muted) !important; }
-  /* Les gris 100 à 300 servent de fonds « appuyés » (blocs de code, pastilles,
-     séparateurs pleins). Non rattrapés, ils restaient clairs sous du texte
-     devenu clair. On les échelonne pour garder leur hiérarchie relative. */
-  & .bg-gray-100 { background-color: var(--muted) !important; }
-  & .bg-gray-200 { background-color: color-mix(in srgb, var(--muted) 70%, white) !important; }
-  & .bg-gray-300 { background-color: color-mix(in srgb, var(--muted) 55%, white) !important; }
-  & .bg-bg      { background-color: var(--bg) !important; }
-  /* Textes */
-  & .text-ink       { color: var(--ink) !important; }
-  & .text-ink-soft  { color: var(--ink-soft) !important; }
-  /* Couleurs sémantiques : leurs valeurs sont choisies pour ressortir sur du
-     blanc et virent au sombre-sur-sombre ici. On les éclaircit en gardant leur
-     teinte, seul porteur du sens (rouge = erreur, vert = succès). */
-  & .text-danger    { color: color-mix(in srgb, #B42318 45%, white) !important; }
-  & .text-success   { color: color-mix(in srgb, #2F6B3F 42%, white) !important; }
-  & .text-warning   { color: color-mix(in srgb, #B7791F 45%, white) !important; }
-  /* Bordures */
-  & .border-border    { border-color: var(--border) !important; }
-  & .divide-border    > * + * { border-color: var(--border) !important; }
-}
