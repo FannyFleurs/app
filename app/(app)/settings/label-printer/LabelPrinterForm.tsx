@@ -97,6 +97,24 @@ export default function LabelPrinterForm({ stores, canWrite }: {
     }
   }
 
+  /**
+   * Lot de réglage : 1, 2, 5, 10 ou 20 étiquettes numérotées, filets en haut
+   * et en bas, sans code-barres. On compare la position du contenu de la
+   * dernière à celle de la première : identique = le pas est juste.
+   */
+  async function calibrage(p: Printer, count: number) {
+    setMsg(null); setErr(null);
+    const r = await fetch('/api/cloudprnt/print-labels/test', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ store_id: p.store_id, count }),
+    });
+    if (r.ok) setMsg(`${count} étiquette${count > 1 ? 's' : ''} de réglage envoyée${count > 1 ? 's' : ''} à « ${p.label} ».`);
+    else {
+      const j = await r.json().catch(() => null);
+      setErr(j?.error === 'NO_PRINTER' ? 'Aucune imprimante active trouvée.' : (j?.error ?? 'Échec de l\'envoi.'));
+    }
+  }
+
   const pollUrl = (p: Printer) => `${origin}/api/cloudprnt${p.poll_token ? `?t=${encodeURIComponent(p.poll_token)}` : ''}`;
 
   return (
@@ -164,6 +182,24 @@ export default function LabelPrinterForm({ stores, canWrite }: {
                   </div>
                 )}
               </div>
+              {canWrite && (
+                <div className="rounded-xl bg-muted/60 px-3 py-2">
+                  <div className="text-xs font-medium">Réglage du pas (étiquettes numérotées)</div>
+                  <p className="text-[11px] text-ink-soft mt-0.5">
+                    Tire un lot, puis compare la position du contenu de la dernière étiquette
+                    à celle de la première. Identique = le pas est juste. Un décalage qui
+                    grandit d&apos;une étiquette à l&apos;autre = la dérive existe encore.
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {[1, 2, 5, 10, 20].map((n) => (
+                      <button key={n} className="btn-soft text-xs"
+                              onClick={() => void calibrage(p, n)}>
+                        {n} étiquette{n > 1 ? 's' : ''}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <label className="block text-xs">
                 <span className="text-ink-soft">URL de sondage à saisir sur l'imprimante</span>
                 <input readOnly onFocus={(e) => e.currentTarget.select()}
