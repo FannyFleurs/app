@@ -268,11 +268,45 @@ export function countLabels(entries: Array<{ qty: number }>): number {
 export async function buildComparatifStarPrnt(settings: LabelSettings): Promise<Buffer> {
   const media = mediaImprimable(settings);
   const parCputil = await viaCputil(() => buildComparatifMarkup(media));
-  if (!parCputil) {
-    throw new Error(
-      'Le comparatif demande CPUtil, qui n\'a pas pu être utilisé : '
-      + (dernierMoteurJob().raison ?? 'raison inconnue'),
-    );
+  return parCputil ?? comparatifDirect(media);
+}
+
+/**
+ * Le même comparatif, encodé sans CPUtil.
+ *
+ * Possible parce que les octets sont maintenant connus : `0x0C` pour l'avance
+ * sur la marque, `1B 64 03` pour la coupe avec avance, `1B 64 00` pour la
+ * coupe sèche. Le comparatif doit pouvoir être tiré même quand l'outil de
+ * conversion fait défaut — c'est justement dans ces moments qu'on en a besoin.
+ */
+async function comparatifDirect(media: LabelSettings): Promise<Buffer> {
+  const mod = await import('star-prnt-encoder');
+  const StarPrntEncoder = mod.default;
+  const enc = new StarPrntEncoder({});
+  enc.initialize();
+
+  const COUPE_AVEC_AVANCE = [0x1b, 0x64, 0x03];
+  const COUPE_SECHE = [0x1b, 0x64, 0x00];
+  const modes: Array<{ cle: string; entre: number[]; fin: number[] }> = [
+    { cle: 'A', entre: COUPE_AVEC_AVANCE,                        fin: COUPE_AVEC_AVANCE },
+    { cle: 'B', entre: [FEED_BLACK_MARK, ...COUPE_SECHE],        fin: [FEED_BLACK_MARK, ...COUPE_SECHE] },
+    { cle: 'C', entre: [FEED_BLACK_MARK],                        fin: COUPE_AVEC_AVANCE },
+    { cle: 'D', entre: [],                                       fin: COUPE_AVEC_AVANCE },
+  ];
+
+  for (const mode of modes) {
+    for (let i = 1; i <= 2; i++) {
+      const bmp = await renderTestLabelBitmap(`${mode.cle}${i}`, media);
+      enc.image(
+        { data: bmp.data, width: bmp.width, height: bmp.height },
+        bmp.width, bmp.height, 'threshold',
+      );
+      const suite = i < 2 ? mode.entre : mode.fin;
+      if (suite.length > 0) enc.raw(suite);
+    }
   }
-  return parCputil;
+
+  const out = Buffer.from(enc.encode());
+  traceJob(8, 0, out.length, 'starprnt-encoder');
+  return out;
 }
