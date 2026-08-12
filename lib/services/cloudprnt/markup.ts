@@ -25,19 +25,32 @@ import {
 
 /** Une image, en Data URL PNG, prête à être posée dans le document. */
 async function ligneImage(png: Buffer): Promise<string> {
-  return `[image: url "data:image/png;base64,${png.toString('base64')}"]\\`;
+  return `[image: url "data:image/png;base64,${png.toString('base64')}"]`;
 }
 
-/** Assemble le document à partir d'images déjà encodées. */
+/**
+ * Assemble les directives en document.
+ *
+ * Chaque ligne SAUF la dernière reçoit le « \ » final : il annule le saut de
+ * ligne automatique qui suivrait la directive. Oublié une seule fois, il
+ * ajoute une avance d'une ligne — assez pour décaler une étiquette et fausser
+ * toute conclusion.
+ */
+function document(directives: string[]): string {
+  return directives
+    .map((d, i) => (i < directives.length - 1 ? `${d}\\` : d))
+    .join('\n');
+}
+
+/** Une étiquette par image, avance sur la marque entre deux, une coupe. */
 function assembler(images: string[]): string {
-  const morceaux: string[] = [];
+  const directives: string[] = [];
   images.forEach((img, i) => {
-    morceaux.push(img);
-    // Entre deux étiquettes seulement : après la dernière, la coupe suffit.
-    if (i < images.length - 1) morceaux.push('[feed: black-mark]\\');
+    directives.push(img);
+    if (i < images.length - 1) directives.push('[feed: black-mark]');
   });
-  morceaux.push('[cut]');
-  return morceaux.join('\n');
+  directives.push('[cut]');
+  return document(directives);
 }
 
 export async function buildLabelsMarkup(
@@ -61,4 +74,55 @@ export async function buildTestLabelsMarkup(
     images.push(await ligneImage(await bitmapToPngBuffer(bmp)));
   }
   return assembler(images);
+}
+
+/* ------------------------------------------------------------------ */
+/* Comparatif des enchaînements                                        */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Ce qui sépare deux étiquettes, et ce qui termine le lot.
+ *
+ * Les octets produits par CPUtil sont connus et vérifiés :
+ *   [feed: black-mark] et [feed: form] → 0C
+ *   [cut]                              → 1B 64 03 (avance + coupe)
+ *   [cut: nofeed; full]                → 1B 64 00 (coupe sèche)
+ *   [cut: feed; full]                  → 1B 64 02
+ *
+ * Ce qui n'est PAS connu, c'est la géométrie de la machine : distance du
+ * capteur à la tête, de la tête au massicot. Elle décide de tout, et aucune
+ * documentation ne la donne. D'où ce comparatif : quatre enchaînements
+ * imprimés à la suite, marqués A à D, et c'est l'étiquette sortie qui trie.
+ */
+export const MODES_ENCHAINEMENT = {
+  A: { entre: ['[cut]'],                                     libelle: 'coupe après chaque étiquette' },
+  B: { entre: ['[feed: black-mark]', '[cut: nofeed; full]'], libelle: 'avance sur la marque puis coupe' },
+  C: { entre: ['[feed: black-mark]'],                        libelle: 'avance entre, une seule coupe à la fin' },
+  D: { entre: [] as string[],                                libelle: 'rien entre, une seule coupe à la fin' },
+};
+
+export type ModeEnchainement = keyof typeof MODES_ENCHAINEMENT;
+
+/**
+ * Document de comparaison : deux étiquettes par mode, marquées « A1 A2 »,
+ * « B1 B2 »… Une seule impression tranche, au lieu d'un aller-retour par
+ * hypothèse.
+ */
+export async function buildComparatifMarkup(settings: LabelSettings): Promise<string> {
+  const directives: string[] = [];
+  for (const cle of Object.keys(MODES_ENCHAINEMENT) as ModeEnchainement[]) {
+    const mode = MODES_ENCHAINEMENT[cle];
+    for (let i = 1; i <= 2; i++) {
+      const bmp = await renderTestLabelBitmap(`${cle}${i}`, settings);
+      directives.push(await ligneImage(await bitmapToPngBuffer(bmp)));
+      // Entre les deux étiquettes du mode : son enchaînement. Après la
+      // seconde : la coupe qui clôt le mode, pour que les quatre lots
+      // sortent séparés et comparables côte à côte.
+      // Après la seconde étiquette : le même enchaînement s'il coupe déjà,
+      // sinon une coupe pour séparer ce mode du suivant.
+      if (i < 2 || mode.entre.some((d) => d.startsWith('[cut'))) directives.push(...mode.entre);
+      else directives.push('[cut]');
+    }
+  }
+  return document(directives);
 }

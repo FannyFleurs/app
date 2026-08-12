@@ -1,7 +1,9 @@
 import { type LabelSettings } from '@/lib/settings/label';
 import { type LabelProduct } from '@/lib/services/label-print';
 import { renderSingleLabelBitmap, renderTestLabelBitmap } from '@/lib/services/cloudprnt/label-render';
-import { buildLabelsMarkup, buildTestLabelsMarkup } from '@/lib/services/cloudprnt/markup';
+import {
+  buildLabelsMarkup, buildTestLabelsMarkup, buildComparatifMarkup,
+} from '@/lib/services/cloudprnt/markup';
 import { convertMarkupToStarPrnt, cputilDisponible, cputilPath } from '@/lib/services/cloudprnt/cputil';
 
 /**
@@ -250,4 +252,27 @@ export function countLabels(entries: Array<{ qty: number }>): number {
     (n, e) => n + Math.max(1, Math.min(MAX_LABELS_PER_JOB, Math.round(e.qty || 0))),
     0,
   );
+}
+
+/**
+ * Comparatif des enchaînements : quatre façons d'enchaîner deux étiquettes,
+ * marquées A à D, dans un seul tirage.
+ *
+ * Ce que le logiciel ne peut pas deviner, c'est la géométrie de la machine —
+ * distance du capteur à la tête, de la tête au massicot. Elle décide de tout
+ * et aucune documentation ne la donne. Une impression tranche ; quatre
+ * hypothèses testées une par une coûtent quatre allers-retours au comptoir.
+ *
+ * Exige CPUtil : les enchaînements comparés sont des directives Markup.
+ */
+export async function buildComparatifStarPrnt(settings: LabelSettings): Promise<Buffer> {
+  const media = mediaImprimable(settings);
+  const parCputil = await viaCputil(() => buildComparatifMarkup(media));
+  if (!parCputil) {
+    throw new Error(
+      'Le comparatif demande CPUtil, qui n\'a pas pu être utilisé : '
+      + (dernierMoteurJob().raison ?? 'raison inconnue'),
+    );
+  }
+  return parCputil;
 }
