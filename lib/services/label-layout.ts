@@ -27,13 +27,22 @@ import { type LabelProduct, discountedPrice } from './label-print-core';
  */
 
 /**
- * Marge minimale, en mm, en haut et sur les côtés.
+ * Marge minimale, en mm, sur les CÔTÉS.
  *
  * Volontairement serrée : sur une étiquette de quelques centimètres, chaque
  * millimètre rendu au contenu est du texte plus gros. Le bord de fuite, lui,
  * a sa propre marge (MIN_BOTTOM_MM) — c'est le seul qui court un risque.
  */
 const MIN_MARGIN_MM = 1.2;
+
+/**
+ * Marge minimale en HAUT, plus serrée que sur les côtés.
+ *
+ * Le bord d'attaque ne court aucun risque de rognage : c'est par lui que
+ * l'étiquette entre sous la tête, déjà calée. Le millimètre qu'on lui reprend
+ * part au contenu — et c'est le code-barres qui en profite.
+ */
+const MIN_TOP_MM = 0.8;
 
 /**
  * Marge BASSE minimale, nettement plus généreuse.
@@ -44,8 +53,13 @@ const MIN_MARGIN_MM = 1.2;
  * code-barres, dernier élément posé, disparaissaient alors que l'image envoyée
  * les contenait bien, à 2 mm du bord. On leur donne de quoi encaisser le
  * décalage plutôt que de compter sur un calage parfait.
+ *
+ * Ramenée de 3 à 1,5 mm depuis le passage au papier à marque noire : la
+ * position de chaque étiquette est lue sur sa marque, la dérive d'entraînement
+ * ne se cumule plus d'une étiquette à l'autre. Ce qui était une assurance
+ * devenait de la place perdue en bas de chaque étiquette.
  */
-const MIN_BOTTOM_MM = 3;
+const MIN_BOTTOM_MM = 1.5;
 
 /**
  * Hauteur de police minimale (em) sous laquelle une imprimante thermique
@@ -177,7 +191,11 @@ function fitText(
 /* ------------------------------------------------------------ composition */
 
 /** Poids de chaque bande dans la hauteur disponible. */
-const WEIGHTS = { name: 1.00, sku: 0.30, price: 1.30, barcode: 1.20 };
+// Le code-barres pèse plus lourd que le prix : c'est lui qu'une douchette
+// doit accrocher du premier coup, et des barres courtes se lisent mal de
+// travers. Le prix reste le plus GROS à l'œil — il occupe sa bande en
+// caractères pleins, là où le code-barres partage la sienne avec ses chiffres.
+const WEIGHTS = { name: 1.00, sku: 0.30, price: 1.30, barcode: 1.75 };
 
 /**
  * @param shiftMm Compensation du calage de l'imprimante, en mm (négatif =
@@ -187,21 +205,33 @@ const WEIGHTS = { name: 1.00, sku: 0.30, price: 1.30, barcode: 1.20 };
  *   basse — le contenu se tasse vers le haut et, une fois posé plus bas par
  *   la machine, retombe au bon endroit sur l'étiquette.
  *   Réservé au rendu thermique : l'aperçu montre la mise en page cible.
+ * @param shiftXMm Même compensation, horizontalement (négatif = vers la
+ *   gauche). Sert quand le média n'est pas centré sous la tête : le contenu
+ *   sort d'un côté et laisse un blanc de l'autre.
  */
-export function computeLabelLayout(p: LabelProduct, s: LabelSettings, shiftMm = 0): LabelLayoutResult {
+export function computeLabelLayout(
+  p: LabelProduct, s: LabelSettings, shiftMm = 0, shiftXMm = 0,
+): LabelLayoutResult {
   const W = Math.max(10, s.width_mm || 50);
   const H = Math.max(10, s.height_mm || 30);
   // Marge proportionnelle, jamais sous le seuil de sécurité : elle absorbe la
   // dérive d'entraînement du média, qui décale l'impression de quelques
   // dixièmes de millimètre d'une étiquette à l'autre.
   const baseMargin = Math.max(MIN_MARGIN_MM, Math.min(W, H) * 0.03);
-  const baseBottom = Math.max(MIN_BOTTOM_MM, H * 0.09);
+  const baseTop = Math.max(MIN_TOP_MM, Math.min(W, H) * 0.02);
+  const baseBottom = Math.max(MIN_BOTTOM_MM, H * 0.05);
   // Le calage se traduit en marges : ce qu'on retire en haut, on l'ajoute en
   // bas. Un filet de 0,4 mm reste réservé en haut — coller le texte au bord
   // n'apporte rien et le premier dixième de millimètre est rarement net.
-  const margin = Math.max(0.4, baseMargin + shiftMm);
+  const margin = Math.max(0.4, baseTop + shiftMm);
   const marginBottom = Math.max(MIN_BOTTOM_MM, baseBottom - shiftMm);
-  const usableW = Math.max(4, W - baseMargin * 2);
+  // Calage horizontal, même principe que le vertical : on déplace les MARGES
+  // au lieu de translater l'image. Une translation pousserait le contenu
+  // au-delà du bord et le rognerait — précisément le défaut qu'on corrige.
+  const shiftX = Math.min(8, Math.max(-8, shiftXMm));
+  const marginLeft = Math.max(0.4, baseMargin + shiftX);
+  const marginRight = Math.max(0.4, baseMargin - shiftX);
+  const usableW = Math.max(4, W - marginLeft - marginRight);
   const usableH = Math.max(4, H - margin - marginBottom);
 
   const hasName = !!(s.show_name && p.name);
@@ -235,7 +265,7 @@ export function computeLabelLayout(p: LabelProduct, s: LabelSettings, shiftMm = 
 
   // Facteur d'emphase par élément, réglable dans le paramétrage. Borné : il
   // module la hiérarchie, il ne doit pas pouvoir faire déborder un bloc.
-  const xLeft = baseMargin;
+  const xLeft = marginLeft;
   const emph = (k: 'name' | 'price' | 'barcode' | 'sku') =>
     Math.min(1.8, Math.max(0.5, s.layout?.[k]?.size ?? 1));
 

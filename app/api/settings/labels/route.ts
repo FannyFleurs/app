@@ -14,6 +14,7 @@ const elLayout = z.object({
 const schema = z.object({
   width_mm: z.number().min(10).max(200).optional(),
   height_mm: z.number().min(10).max(200).optional(),
+  gap_mm: z.number().min(0).max(20).optional(),
   show_name: z.boolean().optional(),
   show_barcode: z.boolean().optional(),
   show_price: z.boolean().optional(),
@@ -24,6 +25,8 @@ const schema = z.object({
   }).optional(),
   /** Calage vertical de l'impression, en mm (négatif = remonte le contenu). */
   print_offset_y_mm: z.number().min(-15).max(15).optional(),
+  /** Calage horizontal, en mm (négatif = vers la gauche). */
+  print_offset_x_mm: z.number().min(-15).max(15).optional(),
 });
 
 export async function GET() {
