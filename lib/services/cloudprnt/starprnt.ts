@@ -54,21 +54,20 @@ export const PRINTABLE_HEIGHT_MM = 23;
 export const MAX_LABELS_PER_JOB = 200;
 
 /**
- * Fin d'étiquette : coupe et repositionnement sur le support suivant.
+ * Avance jusqu'à la MARQUE NOIRE suivante : un seul octet, `0x0C` (FF).
  *
- * TODO — remplacer `enc.cut()` par la séquence StarPRNT officielle de coupe
- * AVEC avance (équivalent fonctionnel de FullCutWithFeed), à injecter via
- * `enc.raw([...])`. `enc.cut()` émet aujourd'hui `1B 64 00` (ESC d 0), une
- * coupe sèche : rien ne garantit que le support se recale sur la marque noire
- * avant l'étiquette suivante.
+ * Trouvé en compilant `[feed: black-mark]` avec CPUtil et en comparant le
+ * résultat au même document sans le feed : la différence tenait en un octet.
+ * Les spécifications de commandes StarPRNT étant publiées en PDF chiffrés,
+ * c'était le seul moyen de l'obtenir.
  *
- * Ne JAMAIS remplacer cela par une avance fixe (feed de 25 mm, répétition de
- * LF, `newline()` calculé) : ce serait refabriquer le pas en logiciel, donc
- * réintroduire la dérive cumulative que toute cette architecture élimine.
+ * Sur une imprimante réglée `Top Search Sensor = Black Mark` et `Top Search
+ * Control = Enabled`, le form feed avance jusqu'à la prochaine marque : c'est
+ * le capteur qui décide de la distance, pas nous. Ne JAMAIS remplacer cela par
+ * une avance fixe (25 mm, répétition de LF, `newline()`) : ce serait
+ * refabriquer le pas en logiciel, donc réintroduire la dérive cumulative.
  */
-function appendLabelCut(enc: { cut: () => void }): void {
-  enc.cut();
-}
+const FEED_BLACK_MARK = 0x0c;
 
 /** Aplatit le lot (article × quantité), borné par MAX_LABELS_PER_JOB. */
 function aplatir(entries: Array<{ product: LabelProduct; qty: number }>): LabelProduct[] {
@@ -112,10 +111,10 @@ function traceJob(etiquettes: number, markupLen: number, octets: number, moteur:
  * converti en StarPRNT par CPUtil. Le recalage entre deux étiquettes est fait
  * par le capteur de marque noire, jamais par une avance calculée ici.
  *
- * Repli : tant que le binaire CPUtil n'est pas déposé dans `bin/cputil/`, on
- * encode directement (une image, une coupe, par étiquette). Ce repli imprime,
- * mais sans le recalage sur la marque — il n'est là que pour ne pas arrêter la
- * boutique, et il le dit dans les journaux.
+ * Repli si le binaire CPUtil manque : on encode nous-mêmes la même structure,
+ * l'octet d'avance sur la marque étant désormais connu (0x0C). Le résultat est
+ * équivalent ; le chemin Markup reste le nominal parce que c'est Star qui y
+ * décide des commandes, pas nous.
  */
 export async function buildLabelsStarPrnt(
   entries: Array<{ product: LabelProduct; qty: number }>,
@@ -134,8 +133,7 @@ export async function buildLabelsStarPrnt(
 
   // eslint-disable-next-line no-console
   console.warn(
-    `[label-job] CPUtil absent (${cputilPath()}) : repli sur l'encodage direct, `
-    + 'sans recalage sur la marque noire entre deux étiquettes.',
+    `[label-job] CPUtil absent (${cputilPath()}) : repli sur l'encodage direct.`,
   );
   return encoderDirect(flat, media);
 }
@@ -150,16 +148,19 @@ async function encoderDirect(
   const enc = new StarPrntEncoder({});
   enc.initialize();
 
-  for (const product of flat) {
-    const bmp = await renderSingleLabelBitmap(product, media);
+  // Même structure que le document Markup : image, avance sur la marque,
+  // image, … et UNE seule coupe à la fin.
+  for (let i = 0; i < flat.length; i++) {
+    const bmp = await renderSingleLabelBitmap(flat[i]!, media);
     enc.image(
       { data: bmp.data, width: bmp.width, height: bmp.height },
       bmp.width,
       bmp.height,
       'threshold',
     );
-    appendLabelCut(enc);
+    if (i < flat.length - 1) enc.raw([FEED_BLACK_MARK]);
   }
+  enc.cut();
 
   const out = Buffer.from(enc.encode());
   traceJob(flat.length, 0, out.length, 'starprnt-encoder');
@@ -202,8 +203,9 @@ export async function buildTestLabelsStarPrnt(
       bmp.height,
       'threshold',
     );
-    appendLabelCut(enc);
+    if (i < n) enc.raw([FEED_BLACK_MARK]);
   }
+  enc.cut();
 
   const out = Buffer.from(enc.encode());
   traceJob(n, 0, out.length, 'starprnt-encoder');
