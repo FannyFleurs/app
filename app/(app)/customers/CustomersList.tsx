@@ -59,6 +59,7 @@ type Tab =
   | 'commentaires'
   | 'tickets'
   | 'achats'
+  | 'avoirs'
   | 'fidelite'
   | 'bons-achats';
 
@@ -70,6 +71,7 @@ const TABS: Array<{ key: Tab; label: string }> = [
   // rien distinguer, et poussait le dernier onglet hors de la barre.
   { key: 'tickets',      label: 'Tickets' },
   { key: 'achats',       label: 'Achats' },
+  { key: 'avoirs',       label: 'Avoirs' },
   { key: 'fidelite',     label: 'Fidélité' },
   { key: 'bons-achats',  label: 'Bons d\'achats' },
 ];
@@ -553,6 +555,7 @@ function CustomerDetailContent({ tab, onTabChange, detail, canWrite, onEdit, onR
 
       {tab === 'tickets' && <TicketsTable sales={detail.sales} link />}
       {tab === 'achats'  && <PurchasedItemsTable customerId={c.id} />}
+      {tab === 'avoirs'  && <CreditNotesTable customerId={c.id} />}
 
       {tab === 'fidelite' && (
         <div className="space-y-3">
@@ -626,6 +629,83 @@ function PurchasedItemsTable({ customerId }: { customerId: string }) {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+interface CreditNote {
+  id: string; number: string; created_at: string;
+  amount: number; used_amount: number; remaining: number;
+  status: string; reason: string | null; receipt_number: string | null;
+}
+
+const CREDIT_STATUS: Record<string, { label: string; tone: 'success' | 'soft' | 'warning' | 'neutral' }> = {
+  open: { label: 'Disponible', tone: 'success' },
+  partially_used: { label: 'Partiel', tone: 'warning' },
+  used: { label: 'Épuisé', tone: 'neutral' },
+  cancelled: { label: 'Annulé', tone: 'neutral' },
+  pending: { label: 'En attente', tone: 'soft' },
+};
+
+/**
+ * Les avoirs du client : ceux émis lors d'une reprise de produit sur l'une de
+ * ses ventes, comme ceux créés directement à son nom. La colonne « Reste »
+ * dit ce qu'il peut encore dépenser ; le numéro ouvre le PDF de l'avoir.
+ */
+function CreditNotesTable({ customerId }: { customerId: string }) {
+  const [rows, setRows] = useState<CreditNote[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    void fetch(`/api/customers/${customerId}/credit-notes`)
+      .then((r) => (r.ok ? r.json() : { credit_notes: [] }))
+      .then((j) => setRows(j.credit_notes ?? []))
+      .finally(() => setLoading(false));
+  }, [customerId]);
+
+  if (loading) return <div className="card p-8 text-center text-ink-soft text-sm">Chargement…</div>;
+  if (rows.length === 0) {
+    return <div className="card p-8 text-center text-ink-soft text-sm">Aucun avoir pour ce client.</div>;
+  }
+  return (
+    <div className="card overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm min-w-[40rem]">
+          <thead className="text-ink-soft text-[10px] uppercase tracking-widest border-b border-border">
+            <tr>
+              <th className="text-left px-4 py-3 font-semibold">Avoir</th>
+              <th className="text-left px-4 py-3 font-semibold">Date</th>
+              <th className="text-left px-4 py-3 font-semibold">Ticket d&apos;origine</th>
+              <th className="text-right px-4 py-3 font-semibold">Montant</th>
+              <th className="text-right px-4 py-3 font-semibold">Reste</th>
+              <th className="text-center px-4 py-3 font-semibold">État</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((cn) => {
+              const st = CREDIT_STATUS[cn.status] ?? { label: cn.status, tone: 'neutral' as const };
+              return (
+                <tr key={cn.id} className="border-t border-border">
+                  <td className="px-4 py-2 font-medium">
+                    <a href={`/api/credit-notes/${cn.id}/pdf`} target="_blank" rel="noreferrer"
+                       className="text-accent-deep hover:underline">
+                      {cn.number}
+                    </a>
+                  </td>
+                  <td className="px-4 py-2 text-ink-soft text-xs">
+                    {new Date(cn.created_at).toLocaleDateString('fr-FR')}
+                  </td>
+                  <td className="px-4 py-2 text-ink-soft">{cn.receipt_number ?? '—'}</td>
+                  <td className="px-4 py-2 text-right tabular-nums">{formatEUR(cn.amount)}</td>
+                  <td className="px-4 py-2 text-right tabular-nums font-medium">{formatEUR(cn.remaining)}</td>
+                  <td className="px-4 py-2 text-center"><Badge tone={st.tone}>{st.label}</Badge></td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
