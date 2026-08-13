@@ -1,5 +1,6 @@
 import type { ReceiptSnapshot, OrgInfo } from '@/lib/services/receipt-pdf';
 import type { ReceiptSettings } from '@/lib/settings/receipt';
+import { isDepositReason } from '@/lib/services/cash-deposit';
 import type { DayReport } from '@/lib/services/day-report';
 import { round2 } from '@/lib/services/money';
 
@@ -577,7 +578,7 @@ export interface BankDepositData {
   org_name: string;
 }
 
-/** Reçu de remise en banque / mouvement de caisse (StarPRNT). */
+/** Reçu de prélèvement / mouvement de caisse (StarPRNT). */
 export async function buildBankDepositStarPrnt(
   m: BankDepositData,
   settings: ReceiptSettings | null,
@@ -586,7 +587,7 @@ export async function buildBankDepositStarPrnt(
   const W = columns(paperWidthMm);
   const enc = await newEncoder(W);
   const { center, left, rule, row } = layout(enc, W);
-  const isBankDeposit = m.movement_type === 'out' && /banque/i.test(m.reason);
+  const isBankDeposit = m.movement_type === 'out' && isDepositReason(m.reason);
 
   await printShopName(enc, settings?.shop_name?.trim() || m.org_name, paperWidthMm);
   if (settings?.address_line1) center(settings.address_line1);
@@ -594,7 +595,7 @@ export async function buildBankDepositStarPrnt(
   if (settings?.siret) center(`SIRET ${settings.siret}`);
 
   rule();
-  center(isBankDeposit ? 'REMISE EN BANQUE' : (m.movement_type === 'out' ? 'SORTIE CAISSE' : 'ENTREE CAISSE'), true);
+  center(isBankDeposit ? 'PRELEVEMENT' : (m.movement_type === 'out' ? 'SORTIE CAISSE' : 'ENTREE CAISSE'), true);
   rule();
   const d = new Date(m.created_at);
   row('Date', d.toLocaleDateString('fr-FR', { timeZone: 'Europe/Paris' }));

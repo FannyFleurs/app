@@ -1,4 +1,5 @@
 import { query } from '@/lib/db/client';
+import { isDepositReason, DEPOSIT_LABEL } from '@/lib/services/cash-deposit';
 
 /**
  * Journal d'une journée : tout ce qui touche aux espèces et aux gestes
@@ -192,11 +193,11 @@ export async function computeDayHistory(opts: {
 
   for (const m of movementsR.rows) {
     const sortie = m.movement_type === 'out';
-    const banque = /banque/i.test(m.reason);
+    const banque = isDepositReason(m.reason);
     events.push({
       at: new Date(m.created_at).toISOString(),
       group: 'especes',
-      label: banque ? 'Remise en banque' : sortie ? 'Sortie d\'espèces' : 'Entrée d\'espèces',
+      label: banque ? DEPOSIT_LABEL : sortie ? 'Sortie d\'espèces' : 'Entrée d\'espèces',
       person: m.person,
       amount: sortie ? -Number(m.amount) : Number(m.amount),
       detail: m.reason,
@@ -243,7 +244,7 @@ export async function computeDayHistory(opts: {
     const qui = t.person ?? 'Inconnu';
     parPersonne.set(qui, (parPersonne.get(qui) ?? 0) + 1);
   }
-  const remises = events.filter((e) => e.label === 'Remise en banque');
+  const remises = events.filter((e) => e.label === DEPOSIT_LABEL);
   const fermetures = sessionsR.rows.filter((s) => s.closed_today && s.cash_variance != null);
 
   return {

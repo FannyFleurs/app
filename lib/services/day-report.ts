@@ -1,5 +1,6 @@
 import { query } from '@/lib/db/client';
 import { loadReceiptSettings } from '@/lib/settings/receipt-server';
+import { depositReasonSql } from '@/lib/services/cash-deposit';
 
 /**
  * Rapport de journée (Z scellé ou X en cours), au format « Récapitulatif ».
@@ -141,7 +142,7 @@ export async function computeDayReport(opts: {
                 COALESCE((SELECT SUM(cm.amount) FROM cash_movements cm WHERE cm.cash_session_id IN
                           (SELECT id FROM cash_sessions WHERE store_id=$2 AND opened_at::date=$3::date) AND cm.movement_type='out'),0)::text outs,
                 COALESCE((SELECT SUM(cm.amount) FROM cash_movements cm WHERE cm.cash_session_id IN
-                          (SELECT id FROM cash_sessions WHERE store_id=$2 AND opened_at::date=$3::date) AND cm.movement_type='out' AND cm.reason ILIKE '%banque%'),0)::text deposits
+                          (SELECT id FROM cash_sessions WHERE store_id=$2 AND opened_at::date=$3::date) AND cm.movement_type='out' AND ${depositReasonSql('cm.reason')}),0)::text deposits
            FROM cash_sessions cs WHERE cs.organization_id=$1 AND cs.store_id=$2 AND cs.opened_at::date=$3::date`, [...P]),
       query<{ opened_at: string | null; closed_at: string | null }>(
         `SELECT MIN(opened_at)::text opened_at, MAX(closed_at)::text closed_at

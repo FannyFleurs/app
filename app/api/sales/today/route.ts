@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { query } from '@/lib/db/client';
 import { requirePermission } from '@/lib/auth/guards';
 import { resolveDeviceStoreId } from '@/lib/pos/current-store';
+import { depositReasonSql } from '@/lib/services/cash-deposit';
 
 export async function GET(req: Request) {
   const g = await requirePermission('pos.use');
@@ -94,7 +95,7 @@ export async function GET(req: Request) {
         AND cs.opened_at::date = COALESCE($2::date, CURRENT_DATE)
         AND ($3::uuid IS NULL OR cs.store_id = $3)
         AND cm.movement_type = 'out'
-        AND cm.reason ILIKE '%banque%'`,
+        AND ${depositReasonSql('cm.reason')}`,
     [g.user.organizationId, date, storeId],
   );
   // Remboursements espèces du jour (retours) : sortent du tiroir eux aussi.

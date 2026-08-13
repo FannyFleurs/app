@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import PDFDocument from 'pdfkit';
 import { query } from '@/lib/db/client';
 import { requirePermission } from '@/lib/auth/guards';
+import { isDepositReason } from '@/lib/services/cash-deposit';
 import { jsonError } from '@/lib/validation/api';
 import { formatEUR } from '@/lib/services/money';
 import { loadReceiptSettings } from '@/lib/settings/receipt-server';
@@ -38,7 +39,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   const m = rows[0]!;
 
   const rs = await loadReceiptSettings(g.user.organizationId, m.store_id);
-  const isBankDeposit = m.movement_type === 'out' && /banque/i.test(m.reason);
+  const isBankDeposit = m.movement_type === 'out' && isDepositReason(m.reason);
 
   const pdf = await new Promise<Buffer>((resolve, reject) => {
     const doc = new PDFDocument({
@@ -59,7 +60,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 
     doc.moveDown(0.5);
     doc.font('Helvetica-Bold').fontSize(12)
-       .text(isBankDeposit ? 'REMISE EN BANQUE' : (m.movement_type === 'out' ? 'SORTIE CAISSE' : 'ENTRÉE CAISSE'),
+       .text(isBankDeposit ? 'PRÉLÈVEMENT' : (m.movement_type === 'out' ? 'SORTIE CAISSE' : 'ENTRÉE CAISSE'),
             { align: 'center' });
 
     doc.moveDown(0.3);

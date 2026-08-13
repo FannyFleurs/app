@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { formatEUR } from '@/lib/services/money';
+import { DEFAULT_DEPOSIT_REASON, ensureDepositReason } from '@/lib/services/cash-deposit';
 
 interface Props {
   registerId: string;
@@ -12,7 +13,7 @@ interface Props {
 
 export default function BankDepositModal({ registerId, maxAmount, onClose, onSaved }: Props) {
   const [amount, setAmount] = useState(0);
-  const [reason, setReason] = useState('Remise en banque');
+  const [reason, setReason] = useState(DEFAULT_DEPOSIT_REASON);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [printReceipt, setPrintReceipt] = useState(true);
@@ -20,12 +21,9 @@ export default function BankDepositModal({ registerId, maxAmount, onClose, onSav
   async function submit() {
     if (amount <= 0) { setError('Montant invalide.'); return; }
     setLoading(true); setError(null);
-    // Force le mot-clé "banque" dans le motif pour que la remise soit reconnue
-    // et défalquée dans la clôture / le Z.
-    const finalReason = (() => {
-      const r = reason.trim() || 'Remise en banque';
-      return /banque/i.test(r) ? r : `Remise en banque · ${r}`;
-    })();
+    // Garantit un mot-clé reconnu dans le motif pour que le prélèvement soit
+    // défalqué dans la clôture / le Z.
+    const finalReason = ensureDepositReason(reason);
     const res = await fetch('/api/cash-sessions/cash-movement', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -52,13 +50,14 @@ export default function BankDepositModal({ registerId, maxAmount, onClose, onSav
     <div className="fixed inset-0 z-50 grid place-items-center bg-ink/30 backdrop-blur-sm p-4">
       <div className="card w-full max-w-2xl lg:max-w-4xl p-6">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Remise en banque</h2>
+          <h2 className="text-lg font-semibold">Prélèvement</h2>
           <button onClick={onClose} className="text-ink-soft hover:text-ink">✕</button>
         </div>
 
         <p className="mt-2 text-sm text-ink-soft">
-          Sortie d&apos;espèces du tiroir-caisse pour dépôt en banque. L&apos;opération
-          est tracée dans le journal des mouvements et déduite des espèces attendues.
+          Sortie d&apos;espèces du tiroir-caisse (dépôt en banque, retrait…).
+          L&apos;opération est tracée dans le journal des mouvements et déduite des
+          espèces attendues.
         </p>
 
         <label className="block mt-4 text-sm font-medium text-ink-soft">Montant (€)</label>
@@ -81,7 +80,7 @@ export default function BankDepositModal({ registerId, maxAmount, onClose, onSav
           className="input mt-1"
           value={reason}
           onChange={(e) => setReason(e.target.value)}
-          placeholder="Remise en banque · numéro de bordereau"
+          placeholder="Prélèvement · numéro de bordereau"
         />
 
         <label className="mt-3 flex items-center gap-2 text-sm">

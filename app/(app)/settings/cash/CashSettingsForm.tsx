@@ -51,7 +51,7 @@ export default function CashSettingsForm({ canEdit, stores, lockedStoreId }: {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Gestion argent</h1>
           <p className="mt-1 text-sm text-ink-soft">
-            Plafond d&apos;espèces, fonds de caisse minimum, remises en banque — par boutique.
+            Plafond d&apos;espèces, fonds de caisse minimum, prélèvements — par boutique.
           </p>
         </div>
         <StoreScopeSelect stores={stores} value={storeId} onChange={setStoreId} lockedStoreId={lockedStoreId} />
@@ -103,8 +103,8 @@ export default function CashSettingsForm({ canEdit, stores, lockedStoreId }: {
         </Field>
 
         <Field
-          label="Fonds de caisse minimum après remise (€)"
-          help="Montant à laisser obligatoirement dans le tiroir lors d'une remise en banque."
+          label="Fonds de caisse minimum après prélèvement (€)"
+          help="Montant à laisser obligatoirement dans le tiroir lors d'un prélèvement."
         >
           <input
             type="number" step="10" min={0}
@@ -117,19 +117,19 @@ export default function CashSettingsForm({ canEdit, stores, lockedStoreId }: {
 
         <div className="space-y-2 pt-2 border-t border-border">
           <Check
-            label="Autoriser les remises en banque pendant la journée"
+            label="Autoriser les prélèvements pendant la journée"
             checked={form.allow_bank_deposit}
             disabled={!canEdit}
             onChange={(v) => setForm({ ...form, allow_bank_deposit: v })}
           />
           <Check
-            label="Exiger au moins une remise en banque par jour"
+            label="Exiger au moins un prélèvement par jour"
             checked={form.bank_deposit_required}
             disabled={!canEdit || !form.allow_bank_deposit}
             onChange={(v) => setForm({ ...form, bank_deposit_required: v })}
           />
           <Check
-            label="Imprimer un reçu à chaque remise en banque"
+            label="Imprimer un reçu à chaque prélèvement"
             checked={form.print_bank_deposit_receipt}
             disabled={!canEdit || !form.allow_bank_deposit}
             onChange={(v) => setForm({ ...form, print_bank_deposit_receipt: v })}

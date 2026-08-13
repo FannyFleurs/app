@@ -49,12 +49,16 @@ describe('Contenu du journal', () => {
 
   it('nomme les gestes attendus', () => {
     for (const libelle of [
-      'Ouverture de caisse', 'Fermeture de caisse', 'Remise en banque',
+      'Ouverture de caisse', 'Fermeture de caisse',
       'Ouverture manuelle du tiroir', 'Clôture de journée',
       'Vente validée annulée', 'Retour / avoir', 'Code PIN refusé',
     ]) {
       expect(service, libelle).toContain(libelle);
     }
+    // Le prélèvement (ex-« remise en banque ») tire son libellé du module
+    // partagé cash-deposit, pour que l'affichage et la catégorisation SQL ne
+    // puissent pas diverger.
+    expect(service).toMatch(/DEPOSIT_LABEL/);
   });
 
   it('ne compte une session que le jour du geste', () => {

@@ -388,11 +388,11 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
           </button>
           <button onClick={() => setShowDeposit(true)} disabled={!registerId || alreadySealed}
                   className="btn-soft h-10 px-3.5 text-sm font-medium inline-flex items-center gap-2 disabled:opacity-50"
-                  title="Enregistrer une remise d'espèces en banque">
+                  title="Enregistrer un prélèvement d'espèces (dépôt en banque, retrait…)">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M3 21h18" /><path d="M5 21V10" /><path d="M19 21V10" /><path d="M12 3 3.5 8h17L12 3Z" /><path d="M9 21v-7h6v7" />
             </svg>
-            Remise en banque
+            Prélèvement
           </button>
           {alreadySealed ? (
             <>

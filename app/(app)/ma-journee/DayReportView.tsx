@@ -85,7 +85,7 @@ export default function DayReportView({ report: r }: { report: DayReport }) {
       <Section title="Entrées d'argent">
         {r.cash.entrees_argent > 0 && <Row label="Entrées d'argent" value={eur(r.cash.entrees_argent)} />}
         <Row label="Fonds de caisse" value={eur(r.cash.fonds_de_caisse)} />
-        {r.cash.remise_banque > 0 && <Row label="Remise en banque" value={`-${eur(r.cash.remise_banque)}`} />}
+        {r.cash.remise_banque > 0 && <Row label="Prélèvement" value={`-${eur(r.cash.remise_banque)}`} />}
         <Row label="Total espèce caisse à la fermeture" value={eur(r.cash.total_espece_fermeture)} />
         {r.cash.counted != null && <Row label="Espèces comptées" value={eur(r.cash.counted)} />}
         <Row label="Ouverture tiroir caisse sans ticket" value={String(r.cash.tiroir_sans_ticket)} />

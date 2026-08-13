@@ -1,4 +1,5 @@
 import { query } from '@/lib/db/client';
+import { depositReasonSql } from '@/lib/services/cash-deposit';
 
 export interface ClosurePreview {
   totals: { sales: number; ht: number; tva: number; ttc: number; discount: number };
@@ -136,7 +137,7 @@ export async function computeClosurePreview(storeId: string, date: string): Prom
         AND cm.created_at::date = $2::date
         AND ($3::timestamptz IS NULL OR cm.created_at > $3)
         AND cm.movement_type = 'out'
-        AND cm.reason ILIKE '%banque%'`,
+        AND ${depositReasonSql('cm.reason')}`,
     [storeId, date, periodStart],
   );
   const bankDeposits = Number(depositsRes.rows[0]?.total ?? 0);
