@@ -64,26 +64,6 @@ export default function UsersAdmin({ canWrite, currentUserId }: { canWrite: bool
   // Nom lisible des boutiques d'un user (pour la colonne du tableau).
   const storeName = (id: string) => stores.find((s) => s.id === id)?.name ?? '—';
 
-  /**
-   * Archive (ou réactive) un compte, sans ouvrir la fiche. Un compte archivé
-   * disparaît de l'écran de connexion des caisses (l'API `users/select` ne
-   * renvoie que les actifs) ; il reste dans cette liste et peut être réactivé.
-   * On ne s'archive pas soi-même : le bouton n'apparaît pas sur sa propre ligne.
-   */
-  async function setArchived(u: User, archive: boolean) {
-    const ok = await confirmThemed({
-      message: archive
-        ? `Archiver ${u.full_name} ? Il n'apparaîtra plus sur l'écran de connexion des caisses. Vous pourrez le réactiver à tout moment.`
-        : `Réactiver ${u.full_name} ? Il réapparaîtra sur l'écran de connexion des caisses.`,
-    });
-    if (!ok) return;
-    const r = await fetch(`/api/users/${u.id}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ is_active: !archive ? true : false }),
-    });
-    if (r.ok) void reload();
-  }
-
   return (
     <div className="p-6 md:p-8 space-y-5 max-w-6xl">
       <Link href="/settings" className="text-sm text-ink-soft hover:text-ink">← Paramètres</Link>
@@ -102,11 +82,10 @@ export default function UsersAdmin({ canWrite, currentUserId }: { canWrite: bool
       ) : (
         <div className="card overflow-hidden">
           <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[52rem]">
+          <table className="w-full text-sm min-w-[44rem]">
             <thead className="bg-white text-ink-soft text-xs uppercase border-b border-border">
               <tr>
                 <th className="text-left px-4 py-3">Nom</th>
-                <th className="text-left px-4 py-3">Email</th>
                 <th className="text-left px-4 py-3">Rôle</th>
                 <th className="text-left px-4 py-3">Boutiques</th>
                 <th className="text-center px-4 py-3">PIN</th>
@@ -122,7 +101,6 @@ export default function UsersAdmin({ canWrite, currentUserId }: { canWrite: bool
                     {u.full_name}
                     {u.id === currentUserId && <span className="ml-2 text-[10px] text-ink-soft">(moi)</span>}
                   </td>
-                  <td className="px-4 py-3 text-ink-soft">{u.email}</td>
                   <td className="px-4 py-3"><Badge tone="soft">{ROLE_LABELS[u.role] ?? u.role}</Badge></td>
                   <td className="px-4 py-3 text-xs text-ink-soft">
                     {!u.store_ids || u.store_ids.length === 0
@@ -144,24 +122,9 @@ export default function UsersAdmin({ canWrite, currentUserId }: { canWrite: bool
                   </td>
                   <td className="px-4 py-3 text-right whitespace-nowrap">
                     {canWrite && (
-                      <div className="inline-flex items-center justify-end gap-3">
-                        <button className="text-accent-deep hover:underline text-sm" onClick={() => setEditing(u)}>
-                          Modifier
-                        </button>
-                        {/* Pas d'archivage de son propre compte : on ne se
-                            retire pas soi-même l'accès. */}
-                        {u.id !== currentUserId && (
-                          u.is_active ? (
-                            <button className="text-danger hover:underline text-sm" onClick={() => void setArchived(u, true)}>
-                              Archiver
-                            </button>
-                          ) : (
-                            <button className="text-accent-deep hover:underline text-sm" onClick={() => void setArchived(u, false)}>
-                              Réactiver
-                            </button>
-                          )
-                        )}
-                      </div>
+                      <button className="text-accent-deep hover:underline text-sm" onClick={() => setEditing(u)}>
+                        Modifier
+                      </button>
                     )}
                   </td>
                 </tr>
@@ -188,6 +151,7 @@ export default function UsersAdmin({ canWrite, currentUserId }: { canWrite: bool
         <UserFormModal
           user={editing}
           stores={stores}
+          currentUserId={currentUserId}
           onClose={() => setEditing(undefined)}
           onSaved={() => { setEditing(undefined); void reload(); }}
         />
@@ -196,9 +160,10 @@ export default function UsersAdmin({ canWrite, currentUserId }: { canWrite: bool
   );
 }
 
-function UserFormModal({ user, stores, onClose, onSaved }: {
+function UserFormModal({ user, stores, currentUserId, onClose, onSaved }: {
   user: User | null;
   stores: Store[];
+  currentUserId: string;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -282,6 +247,35 @@ function UserFormModal({ user, stores, onClose, onSaved }: {
     const r = await fetch(url, {
       method, headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
+    });
+    setSaving(false);
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      setError(j.message ?? prettyError(j.error));
+      return;
+    }
+    onSaved();
+  }
+
+  /**
+   * Archive (ou réactive) le compte depuis sa fiche. Un compte archivé
+   * disparaît de l'écran de connexion des caisses (l'API `users/select` ne
+   * renvoie que les actifs) ; il reste dans la liste et peut être réactivé.
+   * Il n'est pas supprimé : ses ventes restent attribuables.
+   */
+  async function toggleArchive() {
+    if (!user) return;
+    const archive = user.is_active;
+    const ok = await confirmThemed({
+      message: archive
+        ? `Archiver ${user.full_name} ? Ce compte n'apparaîtra plus sur l'écran de connexion des caisses. Vous pourrez le réactiver à tout moment.`
+        : `Réactiver ${user.full_name} ? Ce compte réapparaîtra sur l'écran de connexion des caisses.`,
+    });
+    if (!ok) return;
+    setSaving(true); setError(null);
+    const r = await fetch(`/api/users/${user.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_active: !archive }),
     });
     setSaving(false);
     if (!r.ok) {
@@ -506,13 +500,6 @@ function UserFormModal({ user, stores, onClose, onSaved }: {
                 À réserver aux postes physiquement sécurisés.
               </p>
             )}
-            {user && (
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={isActive}
-                       onChange={(e) => setIsActive(e.target.checked)} />
-                Compte actif
-              </label>
-            )}
           </div>
 
           {user && (
@@ -522,11 +509,29 @@ function UserFormModal({ user, stores, onClose, onSaved }: {
 
         {error && <div className="mt-3 rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
 
-        <div className="mt-4 flex justify-end gap-2">
-          <button onClick={onClose} className="btn-ghost">Annuler</button>
-          <button onClick={() => void submit()} disabled={saving} className="btn-primary">
-            {saving ? 'Enregistrement…' : (user ? 'Enregistrer' : 'Créer')}
-          </button>
+        <div className="mt-4 flex items-center justify-between gap-2">
+          {/* Archiver / réactiver, à gauche : c'est une action sur le compte,
+              distincte de l'enregistrement des champs. Jamais sur son propre
+              compte — on ne se retire pas soi-même l'accès. */}
+          <div>
+            {user && user.id !== currentUserId && (
+              user.is_active ? (
+                <button onClick={() => void toggleArchive()} disabled={saving} className="btn-danger">
+                  Archiver
+                </button>
+              ) : (
+                <button onClick={() => void toggleArchive()} disabled={saving} className="btn-soft">
+                  Réactiver
+                </button>
+              )
+            )}
+          </div>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="btn-ghost">Annuler</button>
+            <button onClick={() => void submit()} disabled={saving} className="btn-primary">
+              {saving ? 'Enregistrement…' : (user ? 'Enregistrer' : 'Créer')}
+            </button>
+          </div>
         </div>
       </div>
     </div>

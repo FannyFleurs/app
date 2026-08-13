@@ -2,19 +2,19 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 
 /**
- * Gestion des utilisateurs : modifier et archiver depuis la liste.
+ * Gestion des utilisateurs : modifier et archiver depuis la fiche.
  *
- * Un compte créé par erreur devait pouvoir être corrigé ou retiré. La fiche
- * d'édition existait déjà ; ce qui manquait, c'était de pouvoir archiver un
- * compte d'un geste, sans deviner que la case « Compte actif » de la fiche
- * fait office d'archivage. Ces contrôles fixent le geste et ses garde-fous.
+ * Un compte créé par erreur devait pouvoir être corrigé ou retiré. La liste
+ * n'ouvre plus qu'à « Modifier » ; l'archivage est une action de la fiche,
+ * distincte de l'enregistrement des champs. La colonne email a quitté la
+ * liste. Ces contrôles fixent le geste et ses garde-fous.
  */
 
 const src = readFileSync('app/(app)/users/UsersAdmin.tsx', 'utf8');
 const selectRoute = readFileSync('app/api/users/select/route.ts', 'utf8');
 
-describe('Actions de la liste', () => {
-  it('propose Modifier et Archiver/Réactiver sur chaque ligne', () => {
+describe('Fiche utilisateur', () => {
+  it('porte Archiver et Réactiver', () => {
     expect(src).toMatch(/>\s*Modifier\s*</);
     expect(src).toMatch(/>\s*Archiver\s*</);
     expect(src).toMatch(/>\s*Réactiver\s*</);
@@ -23,18 +23,27 @@ describe('Actions de la liste', () => {
   it('archive via is_active plutôt que par une suppression', () => {
     // On ne supprime jamais un compte : l'historique de ses ventes doit
     // rester attribuable. Archiver = is_active false.
-    expect(src).toMatch(/is_active:/);
+    expect(src).toMatch(/is_active: !archive/);
     expect(src).toMatch(/method: 'PATCH'/);
   });
 
   it('interdit d\'archiver son propre compte', () => {
     // Se retirer soi-même l'accès enfermerait dehors : le bouton n'apparaît
-    // pas sur sa propre ligne.
-    expect(src).toMatch(/u\.id !== currentUserId/);
+    // pas quand on édite sa propre fiche.
+    expect(src).toMatch(/user\.id !== currentUserId/);
   });
 
   it('demande confirmation avant d\'archiver', () => {
     expect(src).toMatch(/confirmThemed/);
+  });
+});
+
+describe('Liste', () => {
+  it('n\'affiche plus la colonne email', () => {
+    // L'email n'a pas à s'étaler sur un écran face au magasin ; il reste dans
+    // la fiche. La liste n'en porte plus la colonne.
+    expect(src).not.toMatch(/>\s*Email\s*<\/th>/);
+    expect(src).not.toMatch(/\{u\.email\}/);
   });
 });
 
