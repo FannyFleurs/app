@@ -49,7 +49,12 @@ export function AnneauPaiements({ parts }: {
 
   return (
     <div>
-      <div className="relative mx-auto" style={{ width: 160, height: 160 }}>
+      {/* L'anneau suit la hauteur de l'écran au lieu d'imposer 160 px. Sur un
+          portable en 768 px, ces 160 px fixes poussaient la légende — le
+          détail par moyen de paiement — hors de la carte : il restait un
+          camembert sans rien pour le lire. Plafonné à 160, donc inchangé dès
+          que la place existe. */}
+      <div className="relative mx-auto aspect-square w-[clamp(104px,16vh,160px)]">
         <svg viewBox="0 0 160 160" className="w-full h-full -rotate-90" role="img"
              aria-label="Répartition des encaissements par moyen de paiement">
           <circle cx={C} cy={C} r={R} fill="none" stroke="#EDEAE0" strokeWidth={EP} />
@@ -74,7 +79,7 @@ export function AnneauPaiements({ parts }: {
           </div>
         </div>
       </div>
-      <ul className="mt-4 space-y-2">
+      <ul className="mt-3 space-y-1.5">
         {parts.map((p) => (
           <li key={p.label} className="flex items-center gap-2 text-sm">
             <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: p.couleur }} />

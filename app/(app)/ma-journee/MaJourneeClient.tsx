@@ -98,16 +98,14 @@ export default function MaJourneeClient() {
   const [veille, setVeille] = useState<{
     ttc: number; count: number; avg: number; tickets: number;
   } | null>(null);
-  const [commandes, setCommandes] = useState<Array<{
-    id: string; number: string; total_amount: string | null;
-    requested_at: string | null; customer_name: string | null; recipient_name: string | null;
-  }>>([]);
   const [vueCourbe, setVueCourbe] = useState<'heure' | 'cumule'>('heure');
   const [tiroir, setTiroir] = useState<string | null>(null);
   const champRecherche = useRef<HTMLInputElement>(null);
   const [openedAt, setOpenedAt] = useState<string | null>(null);
   const [sealedAt, setSealedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  // Liste des ventes du jour : dans une modale, ouverte à la demande.
+  const [listeOuverte, setListeOuverte] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   // Vente à ouvrir automatiquement (deep-link depuis l'historique article :
   // /ma-journee?date=…&sale=…). Ouverte une fois la journée chargée.
@@ -248,15 +246,6 @@ export default function MaJourneeClient() {
       .catch(() => undefined);
   }, [date]);
 
-  // Dernières commandes (retrait / livraison), toutes dates : c'est ce qui
-  // attend d'être préparé, pas ce qui a été vendu aujourd'hui.
-  useEffect(() => {
-    void fetch('/api/orders')
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j) => setCommandes(((j?.orders ?? []) as typeof commandes).slice(0, 4)))
-      .catch(() => undefined);
-  }, []);
-
   // Rapport de journée : il porte le détail des encaissements et des
   // catégories, dont l'écran a besoin en permanence — pas seulement quand on
   // ouvre le X complet.
@@ -337,12 +326,6 @@ export default function MaJourneeClient() {
     ];
   }, [dayReport]);
 
-  const topPaiement = useMemo(() => {
-    const p = [...(dayReport?.payments ?? [])].sort((a, b) => b.amount - a.amount)[0];
-    if (!p || p.amount <= 0) return null;
-    return { label: PAYMENT_LABELS[p.method] ?? p.method, montant: p.amount };
-  }, [dayReport]);
-
   const topCategories = useMemo(
     () => [...(dayReport?.by_category ?? [])].sort((a, b) => b.ca_ttc - a.ca_ttc).slice(0, 5),
     [dayReport],
@@ -358,7 +341,9 @@ export default function MaJourneeClient() {
     (cashSummary.cash_in ?? 0)
     - ((cashSummary.cash_out ?? 0) - cashSummary.bank_deposits - (cashSummary.cash_refunds ?? 0));
 
-  const suffixeEcart = date === today ? 'vs hier' : 'vs la veille';
+  // « vs veille » et non « vs la veille » : trois caractères de moins, et la
+  // ligne cesse de se couper dans une tuile de 155 px.
+  const suffixeEcart = date === today ? 'vs hier' : 'vs veille';
   const ecartLabel = (courant: number, precedent: number | undefined) => {
     if (precedent == null) return `— ${suffixeEcart}`;
     if (precedent === 0) return courant === 0 ? `0% ${suffixeEcart}` : `+100% ${suffixeEcart}`;
@@ -527,9 +512,15 @@ export default function MaJourneeClient() {
               </div>
             </div>
           ) : (
-            <div className="space-y-4">
+            /* Colonne à hauteur d'écran À PARTIR DE xl (1280 px) : recherche,
+               tuiles et cartes du bas gardent leur taille, la courbe prend ce
+               qui reste, et la page tient exactement dans la fenêtre.
+               En dessous, les rangées s'empilent en une seule colonne — cinq
+               cartes l'une sous l'autre ne tiennent dans aucune hauteur d'écran
+               et la page défile, comme avant. */
+            <div className="flex flex-col gap-3 xl:h-full xl:min-h-0">
               {/* Recherche / scan de ticket */}
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 shrink-0">
                 <div className="relative flex-1">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-soft">
                     <Icon name="search" size={16} />
@@ -557,16 +548,24 @@ export default function MaJourneeClient() {
                     }}
                   />
                 </div>
-                <span className="text-sm text-ink-soft whitespace-nowrap">
-                  {filtered.length} ticket(s)
-                </span>
+                {/* La liste des ventes a quitté la page pour une modale : elle
+                    prenait 22 rem de hauteur en permanence, alors qu'on ne la
+                    consulte que pour retrouver un ticket. Le bouton est resté
+                    là où elle était, contre le compteur. */}
+                <button
+                  type="button"
+                  onClick={() => setListeOuverte(true)}
+                  className="btn-soft h-11 px-4 text-sm whitespace-nowrap inline-flex items-center gap-2"
+                >
+                  <Icon name="invoices" size={16} />
+                  Liste des ventes
+                  <span className="text-ink-soft">({filtered.length})</span>
+                </button>
               </div>
 
-              {/* Cinq chiffres de la journée */}
-              {/* Les paliers sont décalés d'un cran : la colonne de journée
-                  mange 320 px, la zone utile est bien plus étroite que la
-                  fenêtre — à 1180 px, cinq tuiles couperaient les montants. */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5 gap-3">
+              {/* Quatre chiffres de la journée. Le détail des règlements se lit
+                  dans « Répartition des ventes », juste en dessous. */}
+              <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 shrink-0">
                 <Tuile icone="card" pleine label="CA TTC" valeur={formatEUR(totals.netTtc)}
                        note={ecartLabel(totals.netTtc, veille?.ttc)} />
                 <Tuile icone="cart" label="Ventes" valeur={totals.count.toString()}
@@ -575,69 +574,12 @@ export default function MaJourneeClient() {
                        note={ecartLabel(totals.avg, veille?.avg)} />
                 <Tuile icone="invoices" label="Tickets" valeur={ticketsEmis.toString()}
                        note={ecartLabel(ticketsEmis, veille?.tickets)} />
-                <Tuile icone="pos" texte label="Top paiement" valeur={topPaiement?.label ?? '—'}
-                       note={topPaiement ? formatEUR(topPaiement.montant) : 'Aucune vente'} />
               </div>
 
-              {/* Tickets du jour : la liste ne s'affiche que s'il y en a. */}
-              {filtered.length > 0 && (
-                <div className="card overflow-hidden">
-                  <div className="max-h-[22rem] overflow-y-auto overflow-x-auto">
-                    <table className="w-full text-sm min-w-[26rem]">
-                      <thead className="text-ink-soft text-[10px] uppercase tracking-widest border-b border-border sticky top-0 bg-surface">
-                        <tr>
-                          <th className="text-left px-4 py-3 font-semibold">Ticket</th>
-                          <th className="text-left px-4 py-3 font-semibold">Vente</th>
-                          <th className="text-left px-4 py-3 font-semibold">Vendeur</th>
-                          <th className="text-right px-4 py-3 font-semibold">Total</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filtered.map((s) => (
-                          <tr
-                            key={s.id}
-                            onClick={() => void pickSale(s.id)}
-                            className="border-t border-border hover:bg-gray-50 cursor-pointer"
-                          >
-                            <td className="px-4 py-3">
-                              <div className="flex items-center gap-2">
-                                <span className="font-mono font-medium">{s.receipt_number}</span>
-                                {s.status === 'cancelled_by_credit_note' ? (
-                                  <span className="rounded-full bg-danger/10 text-danger px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide whitespace-nowrap">
-                                    Annulée
-                                  </span>
-                                ) : Number(s.refunded_total) > 0 ? (
-                                  <span className="rounded-full bg-warning/10 text-warning px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide whitespace-nowrap">
-                                    Retour −{formatEUR(Number(s.refunded_total))}
-                                  </span>
-                                ) : null}
-                              </div>
-                              <div className="text-xs text-ink-soft">
-                                {new Date(s.validated_at).toLocaleTimeString('fr-FR', {
-                                  hour: '2-digit', minute: '2-digit', second: '2-digit',
-                                })}
-                              </div>
-                            </td>
-                            <td className="px-4 py-3 text-ink-soft">{s.customer ?? '—'}</td>
-                            <td className="px-4 py-3 text-ink-soft">{s.cashier}</td>
-                            <td className={`px-4 py-3 text-right font-medium ${
-                              s.status === 'cancelled_by_credit_note' ? 'line-through text-ink-soft' : ''
-                            }`}>{formatEUR(Number(s.total_ttc))}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-              {loading && filtered.length === 0 && (
-                <div className="card p-6 text-center text-ink-soft text-sm">Chargement…</div>
-              )}
-
               {/* Courbe du jour + répartition des encaissements */}
-              <div className="grid grid-cols-1 xl:grid-cols-[2fr_1fr] gap-4">
-                <section className="card p-5">
-                  <div className="flex items-center justify-between gap-3">
+              <div className="grid grid-cols-1 xl:grid-cols-[2fr_1fr] gap-3 xl:flex-1 xl:min-h-0">
+                <section className="card p-5 flex flex-col min-h-0">
+                  <div className="flex items-center justify-between gap-3 shrink-0">
                     <h2 className="font-semibold">Évolution du CA TTC</h2>
                     <select
                       className="input h-9 w-auto text-sm"
@@ -648,33 +590,40 @@ export default function MaJourneeClient() {
                       <option value="cumule">Cumulé</option>
                     </select>
                   </div>
-                  <div className="mt-3">
+                  {/* Hors du calage pleine hauteur, la carte n'impose aucune
+                      hauteur : sans plancher, la courbe se réduirait à rien. */}
+                  <div className="mt-3 min-h-[220px] xl:flex-1 xl:min-h-0">
                     <CourbeJournee valeurs={courbe} vide={totals.ttc === 0} />
                   </div>
                 </section>
 
-                <section className="card p-5">
-                  <h2 className="font-semibold">Répartition des ventes</h2>
-                  <div className="mt-4">
+                <section className="card p-5 flex flex-col min-h-0">
+                  <h2 className="font-semibold shrink-0">Répartition des ventes</h2>
+                  <div className="mt-4 flex-1 min-h-0 overflow-y-auto">
                     <AnneauPaiements parts={paiements} />
                   </div>
                 </section>
               </div>
 
-              {/* Catégories, commandes, actions */}
-              <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-                <section className="card p-5">
-                  <div className="flex items-center justify-between gap-3">
+              {/* Catégories et actions rapides.
+                  Les deux rangées se partagent la hauteur restante à parts
+                  égales. Laisser celle-ci prendre sa hauteur naturelle privait
+                  l'anneau des encaissements de sa légende : le détail par
+                  moyen de paiement disparaissait pour afficher une cinquième
+                  catégorie. Ce qui déborde ici défile dans sa carte. */}
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 xl:flex-1 xl:min-h-0">
+                <section className="card p-5 flex flex-col min-h-0">
+                  <div className="flex items-center justify-between gap-3 shrink-0">
                     <h2 className="font-semibold">Top catégories (CA TTC)</h2>
                     <span className="text-xs text-ink-soft whitespace-nowrap">{dateCourte}</span>
                   </div>
                   {topCategories.length === 0 ? (
-                    <div className="py-8">
+                    <div className="flex-1 min-h-0 grid place-items-center overflow-y-auto">
                       <EtatVide icone="tag" titre="Aucune donnée"
                                 texte="Aucune vente par catégorie pour cette période." />
                     </div>
                   ) : (
-                    <ul className="mt-4 space-y-3">
+                    <ul className="mt-4 space-y-3 flex-1 min-h-0 overflow-y-auto">
                       {topCategories.map((c) => (
                         <li key={c.name}>
                           <div className="flex items-baseline justify-between gap-2 text-sm">
@@ -694,41 +643,11 @@ export default function MaJourneeClient() {
                   )}
                 </section>
 
-                <section className="card p-5 flex flex-col">
-                  <h2 className="font-semibold">Dernières commandes</h2>
-                  {commandes.length === 0 ? (
-                    <div className="py-8">
-                      <EtatVide icone="doc" titre="Aucune commande"
-                                texte="Aucune commande enregistrée récemment." />
-                    </div>
-                  ) : (
-                    <ul className="mt-3 divide-y divide-border">
-                      {commandes.map((c) => (
-                        <li key={c.id} className="py-2.5 flex items-baseline justify-between gap-2 text-sm">
-                          <div className="min-w-0">
-                            <div className="font-medium truncate">{c.customer_name ?? c.recipient_name ?? 'Client comptoir'}</div>
-                            <div className="text-xs text-ink-soft">
-                              {c.number} · {c.requested_at
-                                ? new Date(c.requested_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
-                                : '—'}
-                            </div>
-                          </div>
-                          <span className="tabular-nums whitespace-nowrap">{formatEUR(Number(c.total_amount ?? 0))}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  <div className="flex-1" />
-                  <a href="/orders" className="btn-soft h-10 mt-3 flex items-center justify-center text-sm">
-                    Voir toutes les commandes
-                  </a>
-                </section>
-
-                <section className="rounded-2xl bg-accent-soft p-5">
-                  <div className="flex items-center gap-2 font-semibold">
+                <section className="rounded-2xl bg-accent-soft p-5 flex flex-col min-h-0">
+                  <div className="flex items-center gap-2 font-semibold shrink-0">
                     <Icon name="sparkle" size={16} /> Actions rapides
                   </div>
-                  <div className="mt-3 space-y-2">
+                  <div className="mt-3 space-y-2 flex-1 min-h-0 overflow-y-auto">
                     <ActionRapide icone="cart" label="Nouvelle vente" href="/caisse" />
                     <ActionRapide icone="pos" label={tiroir ?? 'Ouvrir le tiroir caisse'}
                                   onClick={() => void ouvrirTiroir()} />
@@ -743,6 +662,118 @@ export default function MaJourneeClient() {
             </div>
           )}
         </main>
+      </div>
+
+      {listeOuverte && (
+        <ListeVentesModal
+          ventes={filtered}
+          chargement={loading}
+          dateLabel={dateLabel}
+          onFermer={() => setListeOuverte(false)}
+          onChoisir={(id) => { setListeOuverte(false); void pickSale(id); }}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Les ventes du jour, telles qu'elles s'affichaient dans la page.
+ *
+ * Le tableau n'a pas changé — mêmes colonnes, mêmes badges « Annulée » et
+ * « Retour », même heure sous le numéro de ticket. Cliquer une ligne fait ce
+ * qu'il a toujours fait : ouvrir le détail de la vente. La modale se referme
+ * pour le laisser voir, puisque c'est la page qui l'affiche.
+ */
+function ListeVentesModal({ ventes, chargement, dateLabel, onFermer, onChoisir }: {
+  ventes: Sale[];
+  chargement: boolean;
+  dateLabel: string;
+  onFermer: () => void;
+  onChoisir: (id: string) => void;
+}) {
+  // Échap ferme : une modale plein écran sans sortie au clavier se subit.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onFermer(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onFermer]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] grid place-items-center bg-ink/40 backdrop-blur-sm p-4"
+      onClick={onFermer}
+    >
+      <div
+        className="card w-full max-w-3xl max-h-[85vh] flex flex-col overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Liste des ventes"
+      >
+        <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-border shrink-0">
+          <div>
+            <h2 className="text-lg font-semibold">Liste des ventes</h2>
+            <p className="text-xs text-ink-soft">{dateLabel} · {ventes.length} ticket(s)</p>
+          </div>
+          <button onClick={onFermer} className="text-ink-soft hover:text-ink text-xl leading-none">✕</button>
+        </div>
+
+        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto">
+          {ventes.length === 0 ? (
+            <div className="py-12">
+              {chargement
+                ? <p className="text-center text-sm text-ink-soft">Chargement…</p>
+                : <EtatVide icone="doc" titre="Aucune vente"
+                            texte="Aucun ticket enregistré pour cette journée." />}
+            </div>
+          ) : (
+            <table className="w-full text-sm min-w-[26rem]">
+              <thead className="text-ink-soft text-[10px] uppercase tracking-widest border-b border-border sticky top-0 bg-surface">
+                <tr>
+                  <th className="text-left px-4 py-3 font-semibold">Ticket</th>
+                  <th className="text-left px-4 py-3 font-semibold">Vente</th>
+                  <th className="text-left px-4 py-3 font-semibold">Vendeur</th>
+                  <th className="text-right px-4 py-3 font-semibold">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ventes.map((s) => (
+                  <tr
+                    key={s.id}
+                    onClick={() => onChoisir(s.id)}
+                    className="border-t border-border hover:bg-gray-50 cursor-pointer"
+                  >
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-medium">{s.receipt_number}</span>
+                        {s.status === 'cancelled_by_credit_note' ? (
+                          <span className="rounded-full bg-danger/10 text-danger px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide whitespace-nowrap">
+                            Annulée
+                          </span>
+                        ) : Number(s.refunded_total) > 0 ? (
+                          <span className="rounded-full bg-warning/10 text-warning px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide whitespace-nowrap">
+                            Retour −{formatEUR(Number(s.refunded_total))}
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="text-xs text-ink-soft">
+                        {new Date(s.validated_at).toLocaleTimeString('fr-FR', {
+                          hour: '2-digit', minute: '2-digit', second: '2-digit',
+                        })}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-ink-soft">{s.customer ?? '—'}</td>
+                    <td className="px-4 py-3 text-ink-soft">{s.cashier}</td>
+                    <td className={`px-4 py-3 text-right font-medium ${
+                      s.status === 'cancelled_by_credit_note' ? 'line-through text-ink-soft' : ''
+                    }`}>{formatEUR(Number(s.total_ttc))}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -762,7 +793,15 @@ function LigneCle({ label, valeur, fort, ton }: {
   );
 }
 
-/** Tuile d'indicateur : pastille, libellé, chiffre, comparaison. */
+/**
+ * Tuile d'indicateur : pastille, libellé, chiffre, comparaison.
+ *
+ * Les tailles montent par paliers. La colonne de journée mange 320 px : à
+ * 1366 px de fenêtre, quatre tuiles se partagent moins de 750 px, et un
+ * montant à 20 px n'y tenait pas — « 530,30 € » sortait « 530,… ». La pastille
+ * et le texte se resserrent donc sur les fenêtres étroites et ne reprennent
+ * leur taille pleine qu'à partir de 2xl, où la place existe vraiment.
+ */
 function Tuile({ icone, label, valeur, note, pleine, texte }: {
   icone: IconName; label: string; valeur: string; note: string;
   pleine?: boolean;
@@ -771,23 +810,23 @@ function Tuile({ icone, label, valeur, note, pleine, texte }: {
   texte?: boolean;
 }) {
   return (
-    <div className="card p-4 flex items-center gap-3">
+    <div className="card p-3 2xl:p-4 flex items-center gap-2.5 2xl:gap-3">
       <span
-        className={`h-11 w-11 shrink-0 rounded-full grid place-items-center ${
+        className={`h-9 w-9 2xl:h-11 2xl:w-11 shrink-0 rounded-full grid place-items-center ${
           pleine ? 'text-white' : 'bg-muted text-accent-deep'
         }`}
         style={pleine ? { backgroundColor: 'var(--primary)' } : undefined}
       >
-        <Icon name={icone} size={20} />
+        <Icon name={icone} size={18} />
       </span>
       {/* flex-1 : sans lui la colonne se fait écraser par la pastille et le
           montant se coupe (« 530,3… ») dès qu'on descend sous le grand écran. */}
       <div className="min-w-0 flex-1">
-        <div className="text-xs text-ink-soft truncate">{label}</div>
+        <div className="text-[11px] 2xl:text-xs text-ink-soft truncate">{label}</div>
         <div className={`font-semibold tracking-tight ${
-          texte ? 'text-sm leading-tight break-words' : 'text-xl tabular-nums truncate'
+          texte ? 'text-sm leading-tight break-words' : 'text-base 2xl:text-xl tabular-nums truncate'
         }`} title={valeur}>{valeur}</div>
-        <div className="text-[11px] text-ink-soft truncate">{note}</div>
+        <div className="text-[10px] 2xl:text-[11px] text-ink-soft truncate" title={note}>{note}</div>
       </div>
     </div>
   );
