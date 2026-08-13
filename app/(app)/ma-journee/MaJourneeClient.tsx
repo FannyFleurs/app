@@ -643,11 +643,14 @@ export default function MaJourneeClient() {
                   )}
                 </section>
 
-                <section className="rounded-2xl bg-accent-soft p-5 flex flex-col min-h-0">
-                  <div className="flex items-center gap-2 font-semibold shrink-0">
+                <section className="rounded-2xl bg-accent-soft p-3 flex flex-col min-h-0">
+                  <div className="flex items-center gap-2 font-semibold shrink-0 px-1">
                     <Icon name="sparkle" size={16} /> Actions rapides
                   </div>
-                  <div className="mt-3 space-y-2 flex-1 min-h-0 overflow-y-auto">
+                  {/* Entrées resserrées : les cinq, dont « Historiques » en
+                      dernier, doivent tenir sans que la colonne se mette à
+                      défiler sur un écran de portable (768 px de haut). */}
+                  <div className="mt-2 space-y-1 flex-1 min-h-0 overflow-y-auto">
                     <ActionRapide icone="cart" label="Nouvelle vente" href="/caisse" />
                     <ActionRapide icone="pos" label={tiroir ?? 'Ouvrir le tiroir caisse'}
                                   onClick={() => void ouvrirTiroir()} />
@@ -843,7 +846,7 @@ function ActionRapide({ icone, label, href, onClick }: {
       <span className="text-ink-soft">›</span>
     </>
   );
-  const classe = 'w-full h-11 px-3 rounded-xl bg-surface flex items-center gap-2.5 text-sm font-medium hover:brightness-95';
+  const classe = 'w-full h-8 px-3 rounded-lg bg-surface flex items-center gap-2.5 text-sm font-medium hover:brightness-95';
   return href
     ? <a href={href} className={classe}>{contenu}</a>
     : <button type="button" onClick={onClick} className={classe}>{contenu}</button>;
