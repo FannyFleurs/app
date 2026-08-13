@@ -10,7 +10,7 @@ import PaidOrderNotifier from './PaidOrderNotifier';
 import SchoolModeBanner from './SchoolModeBanner';
 import SessionKeepAlive from './SessionKeepAlive';
 import type { Role, Permission } from '@/lib/auth/rbac';
-import { BRAND_THEME, POS_THEME_COLOR_VALUES, type AutoLogoutMode } from '@/lib/settings/pos-ui';
+import { BRAND_THEME, type AutoLogoutMode } from '@/lib/settings/pos-ui';
 
 interface User { id: string; fullName: string; role: Role; email: string }
 
@@ -70,24 +70,26 @@ export default function AppShell({
   // l'overlay pour révéler la page demandée.
   useEffect(() => { setMenuOpen(false); }, [pathname]);
 
-  // Synchronise la meta theme-color (barre systeme iOS/Android, titre de
-  // fenêtre PWA macOS/Windows) avec la couleur d'accent du thème : le
-  // bandeau coloré reste présent sur TOUTES les pages de l'app.
+  // Couleur de la barre système iOS/Android (`theme-color`) : BLANC, pour se
+  // fondre avec l'en-tête blanc de l'app sur mobile.
   //
-  // IMPORTANT : la dépendance à `pathname` est indispensable. Next.js
-  // ré-applique la `themeColor` du viewport racine (#FFFFFF) sur CHAQUE
-  // navigation client. Sans re-run à chaque changement de route, le bandeau
-  // coloré disparaissait à la 1re navigation et ne revenait jamais. On
-  // ré-affirme donc la couleur d'accent après chaque navigation.
+  // Avant, on la forçait au vert de marque. Mais l'en-tête mobile est blanc :
+  // iOS peignait donc une bande verte au-dessus d'un en-tête blanc — un
+  // « halo » détaché, visible ou non selon la position de la barre d'adresse
+  // de Safari (en haut / en bas) propre à chaque iPhone. En blanc, la barre
+  // système prolonge l'en-tête sans rupture.
+  //
+  // La dépendance à `pathname` reste : Next.js ré-applique la `themeColor` du
+  // viewport racine à chaque navigation ; on ré-affirme donc le blanc après
+  // chaque changement de route (sans quoi une valeur héritée pourrait revenir).
   useEffect(() => {
-    const hex = POS_THEME_COLOR_VALUES[BRAND_THEME]?.main ?? '#FFFFFF';
     let meta = document.querySelector('meta[name="theme-color"]') as HTMLMetaElement | null;
     if (!meta) {
       meta = document.createElement('meta');
       meta.name = 'theme-color';
       document.head.appendChild(meta);
     }
-    meta.content = hex;
+    meta.content = '#FFFFFF';
   }, [pathname]);
 
   async function logout() {
