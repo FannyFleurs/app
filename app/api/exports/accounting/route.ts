@@ -11,6 +11,7 @@ import {
   type AccountingAccounts,
 } from '@/lib/settings/accounting';
 import { groupByAccount, formatRate, type SalesAccountRule } from '@/lib/services/accounting-mapping';
+import { renderSalesXlsx } from '@/lib/services/accounting-xlsx-workbook';
 
 /**
  * Comptes des écritures agrégées (Écritures comptables, FEC-like) : ventes du
@@ -46,7 +47,7 @@ export async function GET() {
 const schema = z.object({
   period_start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   period_end:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  format:       z.enum(['sales_csv', 'entries_csv', 'json', 'fec_like', 'accounts_csv']),
+  format:       z.enum(['sales_csv', 'entries_csv', 'json', 'fec_like', 'accounts_csv', 'accounts_xlsx']),
   /**
    * Boutiques retenues. Vide ou absent = toutes — le comptable d'une
    * organisation mono-boutique n'a rien à cocher, et celui d'un groupe peut
@@ -76,6 +77,8 @@ export async function POST(req: Request) {
 
   let content = '';
   let mime = 'text/csv';
+  // Sortie binaire (Excel) : quand elle est posée, elle prime sur `content`.
+  let payload: Buffer | null = null;
 
   if (format === 'sales_csv') {
     const sales = await query<{
@@ -150,9 +153,10 @@ export async function POST(req: Request) {
       out.push([d, accts.bank,    'Banque — CB',           card.toFixed(2), '0.00']);
     }
     content = '﻿' + [header.join(';')].concat(out.map((r) => r.join(';'))).join('\n');
-  } else if (format === 'accounts_csv') {
+  } else if (format === 'accounts_csv' || format === 'accounts_xlsx') {
     // Ventilation par compte de ventes : famille × taux × boutique, telle que
-    // le comptable la relit dans son grand livre.
+    // le comptable la relit dans son grand livre. Le CSV et l'Excel partent des
+    // MÊMES totaux — seule la mise en forme diffère.
     const lines = await query<{
       store_id: string | null; store_name: string | null;
       category_id: string | null; category_name: string | null;
@@ -197,6 +201,12 @@ export async function POST(req: Request) {
       rules.rows,
     );
 
+    if (format === 'accounts_xlsx') {
+      // Excel à la mise en page attendue par le comptable (fichier modèle) :
+      // deux lignes par famille, ligne « VENTES », total équilibré.
+      payload = await renderSalesXlsx(totals, period_end);
+      mime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    } else {
     // Deux natures dans le même fichier : le HT au crédit du compte de ventes,
     // la TVA au crédit du compte de TVA. C'est la ventilation qu'un comptable
     // saisit ; les fournir séparément l'obligerait à recroiser deux exports.
@@ -236,6 +246,7 @@ export async function POST(req: Request) {
     out.push(['TOTAL', '', 'Total TVA', '', tot.tva.toFixed(2), '']);
     out.push(['TOTAL', '', 'Total TTC', '', tot.ttc.toFixed(2), '']);
     content = '\ufeff' + [header.join(';')].concat(out.map((r) => r.join(';'))).join('\n');
+    }
   } else if (format === 'fec_like') {
     // Format pseudo-FEC : JournalCode|EcritureNum|EcritureDate|CompteNum|CompteLib|PieceRef|PieceDate|EcritureLib|Debit|Credit
     const sales = await query<{
@@ -296,7 +307,8 @@ export async function POST(req: Request) {
     mime = 'application/json';
   }
 
-  const buffer = Buffer.from(content, 'utf8');
+  // Excel produit un buffer binaire ; les autres formats, du texte.
+  const buffer = payload ?? Buffer.from(content, 'utf8');
   const sha256 = crypto.createHash('sha256').update(buffer).digest('hex');
 
   const ins = await query<{ id: string }>(

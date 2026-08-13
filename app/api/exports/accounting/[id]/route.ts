@@ -23,7 +23,9 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   if (!match) return jsonError('INVALID_PAYLOAD', 500);
   const mime = match[1]!;
   const buf = Buffer.from(match[2]!, 'base64');
-  const ext = mime.includes('json') ? 'json' : (e.format === 'fec_like' ? 'txt' : 'csv');
+  const ext = mime.includes('spreadsheetml') ? 'xlsx'
+    : mime.includes('json') ? 'json'
+    : (e.format === 'fec_like' ? 'txt' : 'csv');
   const filename = `export-${e.format}-${e.period_start}_${e.period_end}.${ext}`;
 
   return new NextResponse(buf, {
