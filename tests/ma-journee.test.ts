@@ -80,12 +80,36 @@ describe('Composition de l\'écran', () => {
   it('porte les blocs de la journée', () => {
     for (const bloc of [
       'Caisse ouverte à', 'CA TTC', 'Trésorerie espèces', 'Espèces attendues',
-      'Clôturer la journée', 'Top paiement', 'Évolution du CA TTC',
-      'Répartition des ventes', 'Top catégories (CA TTC)', 'Dernières commandes',
-      'Actions rapides',
+      'Clôturer la journée', 'Évolution du CA TTC',
+      'Répartition des ventes', 'Top catégories (CA TTC)', 'Actions rapides',
     ]) {
       expect(page, bloc).toContain(bloc);
     }
+  });
+
+  it('ne porte plus les blocs retirés', () => {
+    // « Top paiement » doublait la carte « Répartition des ventes », qui donne
+    // le détail par moyen de règlement. « Dernières commandes » regardait
+    // ailleurs que la journée : des commandes de toutes dates, sur un écran
+    // qui rend compte d'un jour. Les deux prenaient de la hauteur sur un écran
+    // qui doit tenir dans la fenêtre.
+    expect(page).not.toContain('Top paiement');
+    expect(page).not.toContain('Dernières commandes');
+    // La requête qui ne servait qu'aux commandes part avec le bloc.
+    expect(page).not.toMatch(/fetch\('\/api\/orders'\)/);
+  });
+
+  it('sort la liste des ventes dans une modale', () => {
+    // La liste occupait 22 rem en permanence alors qu'on ne la consulte que
+    // pour retrouver un ticket. Elle n'a pas changé — mêmes colonnes, même
+    // clic qui ouvre le détail de la vente —, elle a seulement déménagé.
+    expect(page).toContain('Liste des ventes');
+    expect(page).toMatch(/function ListeVentesModal/);
+    expect(page).toMatch(/setListeOuverte\(true\)/);
+    // Le clic referme la modale ET ouvre le détail, comme avant le déplacement.
+    expect(page).toMatch(/setListeOuverte\(false\); void pickSale\(id\)/);
+    // Les colonnes de la liste ne vivent plus que dans la modale.
+    expect(page.match(/Vendeur</g) ?? []).toHaveLength(1);
   });
 
   it('garde les gestes du comptoir accessibles', () => {

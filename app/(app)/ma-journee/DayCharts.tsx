@@ -40,8 +40,12 @@ export function CourbeJournee({ valeurs, vide }: {
   const paliers = [0, 0.25, 0.5, 0.75, 1];
 
   return (
-    <div className="relative">
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 'auto' }} role="img"
+    // `h-full` : la courbe suit la hauteur que lui laisse la carte, au lieu de
+    // l'imposer par son rapport largeur/hauteur. Le viewBox et le
+    // `preserveAspectRatio` par défaut font le reste — le dessin se réduit
+    // sans se déformer, et la page tient dans l'écran.
+    <div className="relative h-full min-h-0">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-full" role="img"
            aria-label="Évolution du chiffre d'affaires heure par heure">
         <defs>
           <linearGradient id="mj-aire" x1="0" y1="0" x2="0" y2="1">
