@@ -66,7 +66,7 @@ describe('Fiche client — onglets', () => {
 
     expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual([
       'Dashboard', 'Informations', 'Commentaires', 'Tickets', 'Achats',
-      'Fidélité', "Bons d'achats",
+      'Avoirs', 'Fidélité', "Bons d'achats",
     ]);
     expect(screen.getAllByRole('tab').filter((t) => t.getAttribute('aria-selected') === 'true'))
       .toHaveLength(1);
