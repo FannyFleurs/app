@@ -222,6 +222,28 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
   }, [preview, declared]);
   const hasAnyDiscrepancy = hasCashDiscrepancy || paymentVariances.length > 0;
 
+  /**
+   * Tous les modes de paiement sont-ils validés ? La clôture n'est possible
+   * qu'à cette condition : on ne scelle pas une journée dont un règlement n'a
+   * pas été pointé.
+   *
+   * Non-espèces : une saisie réelle a été renseignée (le bouton « Valider le
+   * montant attendu » la remplit d'un clic). Espèces : le tiroir a été compté,
+   * sauf s'il n'y avait pas d'espèces à compter.
+   */
+  const allPaymentsValidated = useMemo(() => {
+    if (!preview) return false;
+    const nonCashOk = preview.payments
+      .filter((p) => p.method !== 'cash')
+      .every((p) => {
+        const dv = declared[p.method];
+        return dv != null && dv !== '' && Number.isFinite(Number(dv));
+      });
+    const hasCashLine = preview.payments.some((p) => p.method === 'cash' && p.total > 0);
+    const cashOk = !hasCashLine || countedCash > 0;
+    return nonCashOk && cashOk;
+  }, [preview, declared, countedCash]);
+
   // Comptage tactile : 1 clic sur une tuile = +1 ; appui long = saisir le
   // nombre exact (évite de cliquer 50 fois pour 50 pièces).
   const lpTimer = useRef<number | null>(null);
@@ -414,11 +436,13 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
           ) : (
             <button
               onClick={() => void seal()}
-              disabled={!preview || sealing || (preview.held_count ?? 0) > 0}
+              disabled={!preview || sealing || (preview.held_count ?? 0) > 0 || !allPaymentsValidated}
               className="btn h-10 px-4 text-sm font-semibold bg-danger text-white hover:bg-danger/90 disabled:opacity-50"
               title={(preview?.held_count ?? 0) > 0
                 ? 'Des paniers sont en attente : finissez-les avant de clôturer'
-                : 'Clôturer définitivement la journée'}
+                : !allPaymentsValidated
+                  ? 'Validez tous les modes de paiement (et comptez les espèces) avant de clôturer'
+                  : 'Clôturer définitivement la journée'}
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <rect x="4" y="10" width="16" height="10" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" />
@@ -450,7 +474,6 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
           {alreadySealed && (
             <div className="rounded-xl bg-success/10 px-3 py-2 text-sm text-success">
               ✓ La journée a déjà été clôturée le {new Date(preview!.sealed!.sealed_at).toLocaleString('fr-FR')}.
-              Les écarts d&apos;espèces ne sont plus pertinents — vous pouvez réimprimer le Z.
             </div>
           )}
 
@@ -477,9 +500,7 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
           {zToast && <div className="rounded-xl bg-success/10 px-3 py-2 text-sm text-success shrink-0">{zToast}</div>}
           {sealedResult && (
             <div className="rounded-xl bg-success/10 px-4 py-2.5 text-sm text-success flex items-center justify-between gap-3 shrink-0">
-              <span>
-                ✓ Clôture scellée. Empreinte fiscale <code className="font-mono">{sealedResult.fiscal_hash.slice(0,16)}…</code>
-              </span>
+              <span>✓ Journée clôturée.</span>
               <button onClick={() => void printZ(sealedResult.id)} className="btn-primary text-sm">
                 Imprimer le Z
               </button>
