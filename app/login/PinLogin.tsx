@@ -180,7 +180,7 @@ export default function PinLogin({ onEmailLogin }: { onEmailLogin?: () => void }
   const emailButton = onEmailLogin ? (
     <button
       onClick={onEmailLogin}
-      className="mt-8 inline-flex items-center gap-2.5 rounded-xl border px-5 h-12 text-sm font-medium transition-colors"
+      className="inline-flex items-center gap-2.5 rounded-xl border px-5 h-12 text-sm font-medium transition-colors"
       style={{ color: GOLD, borderColor: GOLD_LINE }}
     >
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -259,8 +259,6 @@ export default function PinLogin({ onEmailLogin }: { onEmailLogin?: () => void }
           />
         )}
 
-        {emailButton}
-
         {/* Création de boutique (essai) : uniquement quand ce poste n'a encore
             aucun utilisateur. */}
         {!selected && users.length === 0 && (
@@ -285,6 +283,9 @@ export default function PinLogin({ onEmailLogin }: { onEmailLogin?: () => void }
           </div>
         )}
       </div>
+
+      {/* Connexion par email : en pied de page, détachée de la carte. */}
+      {emailButton && <footer className="shrink-0 pt-8 flex justify-center">{emailButton}</footer>}
     </main>
   );
 
