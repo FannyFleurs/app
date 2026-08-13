@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requirePermission } from '@/lib/auth/guards';
 import { parseJson, jsonError } from '@/lib/validation/api';
 import { ReturnService } from '@/lib/services/return-service';
+import { enqueueCreditNotePrint } from '@/lib/services/cloudprnt/print-credit-note';
 import { audit } from '@/lib/audit/log';
 
 const schema = z.object({
@@ -46,7 +47,21 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         is_full_return: out.is_full_return,
       },
     });
-    return NextResponse.json(out, { status: 201 });
+    // Impression de l'avoir sur l'imprimante ticket, en N exemplaires (réglage
+    // « Exemplaires d'avoir », 2 par défaut). Best-effort : une imprimante
+    // absente ou un souci d'impression ne doit pas faire échouer le retour,
+    // qui est déjà enregistré. Le client garde le repli PDF.
+    let printed: { printer_label: string; copies: number } | null = null;
+    try {
+      printed = await enqueueCreditNotePrint({
+        organizationId: g.user.organizationId,
+        userId: g.user.id,
+        creditNoteId: out.credit_note_id,
+      });
+    } catch {
+      printed = null;
+    }
+    return NextResponse.json({ ...out, printed }, { status: 201 });
   } catch (e) {
     const msg = (e as Error).message;
     const status =

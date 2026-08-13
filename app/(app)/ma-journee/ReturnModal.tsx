@@ -34,7 +34,10 @@ interface Props {
   /** Quantités déjà retournées par ligne (line_index → qté) : plafonne le retour. */
   returnedByLine?: Record<number, number>;
   onClose: () => void;
-  onSuccess: (creditNote: { id: string; number: string; amount: number }) => void;
+  onSuccess: (creditNote: {
+    id: string; number: string; amount: number;
+    printed?: { printer_label: string; copies: number } | null;
+  }) => void;
 }
 
 type RefundMethod = 'credit_note' | 'cash' | 'card' | 'transfer' | 'check' | 'on_account';
@@ -140,7 +143,7 @@ export default function ReturnModal({ saleId, receiptNumber, lines, payments = [
       return;
     }
     const j = await res.json();
-    onSuccess({ id: j.credit_note_id, number: j.number, amount: j.amount });
+    onSuccess({ id: j.credit_note_id, number: j.number, amount: j.amount, printed: j.printed ?? null });
   }
 
   function setQty(line_index: number, qty: number, max: number) {
