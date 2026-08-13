@@ -44,6 +44,12 @@ export interface ReceiptSettings {
   auto_print_receipt: boolean;
   /** À la clôture journalière (Z), imprime automatiquement le Z. */
   auto_print_z: boolean;
+  /**
+   * Nombre d'exemplaires imprimés d'un avoir sur l'imprimante ticket, lors
+   * d'une reprise de produit. 2 par défaut (un pour le client, un pour la
+   * boutique). 0 = ne pas imprimer automatiquement.
+   */
+  credit_note_copies: number;
 }
 
 export const RECEIPT_DEFAULTS: ReceiptSettings = {
@@ -61,7 +67,15 @@ export const RECEIPT_DEFAULTS: ReceiptSettings = {
   show_tax_breakdown: true,
   auto_print_receipt: false,
   auto_print_z: false,
+  credit_note_copies: 2,
 };
+
+/** Nombre d'exemplaires d'avoir, borné (0 à 5) et entier. */
+export function creditNoteCopies(settings: Pick<ReceiptSettings, 'credit_note_copies'>): number {
+  const n = Math.round(Number(settings.credit_note_copies));
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.min(5, n);
+}
 
 export function mergeReceiptDefaults(partial: Partial<ReceiptSettings> | null | undefined): ReceiptSettings {
   if (!partial) return { ...RECEIPT_DEFAULTS };

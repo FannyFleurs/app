@@ -566,6 +566,69 @@ export async function buildZReportStarPrnt(
   return Buffer.from(enc.encode());
 }
 
+export interface CreditNoteReceiptData {
+  number: string;
+  amount: number;
+  reason: string;
+  is_full_return: boolean;
+  issued_at: string;
+  origin_receipt_number: string | null;
+  org_name: string;
+  store_name: string;
+  user_name: string | null;
+  customer_name: string | null;
+  lines: Array<{ label: string; quantity: number; refunded_ttc: number }>;
+}
+
+/**
+ * Avoir (bon de retour) en StarPRNT — la version ticket du PDF d'avoir, pour
+ * l'imprimante de la boutique. On l'imprime en plusieurs exemplaires (un pour
+ * le client, un pour la boutique), le nombre étant réglé côté appelant.
+ */
+export async function buildCreditNoteStarPrnt(
+  cn: CreditNoteReceiptData,
+  settings: ReceiptSettings | null,
+  paperWidthMm?: number,
+): Promise<Buffer> {
+  const W = columns(paperWidthMm);
+  const enc = await newEncoder(W);
+  const { center, left, rule, row } = layout(enc, W);
+
+  await printShopName(enc, settings?.shop_name?.trim() || cn.org_name, paperWidthMm);
+  if (settings?.address_line1) center(settings.address_line1);
+  if (settings?.address_zip_city) center(settings.address_zip_city);
+  if (settings?.siret) center(`SIRET ${settings.siret}`);
+
+  rule();
+  center('AVOIR', true);
+  center(cn.number);
+  rule();
+  const d = new Date(cn.issued_at);
+  row('Date', d.toLocaleDateString('fr-FR', { timeZone: 'Europe/Paris' }));
+  row('Heure', d.toLocaleTimeString('fr-FR', { timeZone: 'Europe/Paris' }));
+  if (cn.origin_receipt_number) row("Ticket d'origine", cn.origin_receipt_number);
+  row('Retour', cn.is_full_return ? 'Total' : 'Partiel');
+  if (cn.customer_name) row('Client', cn.customer_name);
+  row('Vendeur', cn.user_name ?? '—');
+  if (cn.reason) { left('Motif :'); left(cn.reason); }
+
+  if (cn.lines.length > 0) {
+    rule();
+    for (const l of cn.lines) {
+      const label = l.quantity > 1 ? `${l.label} x${l.quantity}` : l.label;
+      row(label, eur2(l.refunded_ttc));
+    }
+  }
+
+  rule();
+  row('MONTANT AVOIR', eur2(cn.amount), true);
+  enc.newline();
+  center('A valoir sur un prochain achat.');
+  center('A conserver.');
+  feedAndCut(enc);
+  return Buffer.from(enc.encode());
+}
+
 export interface BankDepositData {
   id?: string;
   movement_type: 'in' | 'out';

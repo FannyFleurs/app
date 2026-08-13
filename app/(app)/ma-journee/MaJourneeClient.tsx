@@ -853,6 +853,43 @@ function ActionRapide({ icone, label, href, onClick }: {
 }
 
 /**
+ * Réimpression d'un avoir sur l'imprimante ticket. Le nombre d'exemplaires
+ * suit le réglage de la boutique. Repli PDF géré à côté par un simple lien.
+ */
+function ReprintAvoirButton({ creditNoteId, onDone }: {
+  creditNoteId: string; onDone: (message: string) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  async function reprint() {
+    setBusy(true);
+    try {
+      const r = await fetch(`/api/credit-notes/${creditNoteId}/print`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+      });
+      if (r.ok) {
+        const j = await r.json();
+        onDone(j.copies > 0
+          ? `Avoir renvoyé à l'impression (${j.copies} exemplaire${j.copies > 1 ? 's' : ''}).`
+          : 'Impression désactivée (voir Réglages → Ticket).');
+      } else if (r.status === 409) {
+        onDone('Aucune imprimante ticket configurée — utilisez le PDF.');
+      } else {
+        onDone("L'avoir n'a pas pu être imprimé.");
+      }
+    } catch {
+      onDone('Imprimante injoignable.');
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <button onClick={() => void reprint()} disabled={busy} className="btn-primary text-xs">
+      {busy ? 'Impression…' : "Imprimer l'avoir"}
+    </button>
+  );
+}
+
+/**
  * Actions sur le ticket d'une vente passée : réimpression (ouvre le PDF et
  * déclenche l'impression) et renvoi par email (à l'email du client, ou saisi
  * à la volée si absent).
@@ -1016,7 +1053,10 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showReturn, setShowReturn] = useState(false);
-  const [creditNote, setCreditNote] = useState<{ id: string; number: string; amount: number } | null>(null);
+  const [creditNote, setCreditNote] = useState<{
+    id: string; number: string; amount: number;
+    printed?: { printer_label: string; copies: number } | null;
+  } | null>(null);
   const [showCorrection, setShowCorrection] = useState(false);
   const [showCancel, setShowCancel] = useState(false);
   const [showAttach, setShowAttach] = useState(false);
@@ -1306,15 +1346,27 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
       </div>
 
       {creditNote && (
-        <div className="rounded-xl bg-danger/10 px-4 py-3 text-sm flex items-center justify-between">
+        <div className="rounded-xl bg-danger/10 px-4 py-3 text-sm flex flex-wrap items-center justify-between gap-2">
           <span>
             <span className="font-semibold text-danger">Avoir {creditNote.number}</span>
             <span className="text-ink-soft ml-2">émis pour {formatEUR(creditNote.amount)}</span>
+            {creditNote.printed && creditNote.printed.copies > 0 && (
+              <span className="text-ink-soft ml-2">
+                · imprimé en {creditNote.printed.copies} exemplaire{creditNote.printed.copies > 1 ? 's' : ''}
+              </span>
+            )}
           </span>
-          <a href={`/api/credit-notes/${creditNote.id}/pdf`} target="_blank" rel="noreferrer"
-             className="btn-primary text-xs">
-            Télécharger l&apos;avoir
-          </a>
+          <div className="flex items-center gap-2">
+            <ReprintAvoirButton
+              creditNoteId={creditNote.id}
+              onDone={(msg) => { setInfo(msg); setTimeout(() => setInfo(null), 3000); }}
+            />
+            {/* Repli : le PDF reste accessible si l'imprimante ticket manque. */}
+            <a href={`/api/credit-notes/${creditNote.id}/pdf`} target="_blank" rel="noreferrer"
+               className="btn-ghost text-xs">
+              PDF
+            </a>
+          </div>
         </div>
       )}
 

@@ -241,6 +241,26 @@ export default function ReceiptSettingsForm({ stores, canEdit, lockedStoreId }: 
             <Check label="Imprimer le Z automatiquement à la clôture journalière"
                    checked={form.auto_print_z} disabled={!canEdit}
                    onChange={(v) => setForm({ ...form, auto_print_z: v })} />
+            <div className="pt-1">
+              <label className="text-sm font-medium text-ink-soft">
+                Exemplaires d&apos;avoir imprimés lors d&apos;une reprise
+              </label>
+              <div className="mt-1 flex items-center gap-2">
+                <input
+                  type="number" min={0} max={5} step={1}
+                  className="input h-9 w-24"
+                  value={form.credit_note_copies}
+                  disabled={!canEdit}
+                  onChange={(e) => setForm({
+                    ...form,
+                    credit_note_copies: Math.max(0, Math.min(5, Math.round(Number(e.target.value) || 0))),
+                  })}
+                />
+                <span className="text-xs text-ink-soft">
+                  0 = ne pas imprimer. 2 par défaut (un pour le client, un pour la boutique).
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 

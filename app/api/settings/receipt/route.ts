@@ -22,6 +22,7 @@ const schema = z.object({
   show_tax_breakdown: z.boolean().optional(),
   auto_print_receipt: z.boolean().optional(),
   auto_print_z: z.boolean().optional(),
+  credit_note_copies: z.number().int().min(0).max(5).optional(),
 });
 
 /** Vérifie que la boutique appartient à l'organisation de l'utilisateur. */
