@@ -35,6 +35,14 @@ export const CORE_FORMAT: ExportFormatMeta = {
 /** Facultatifs : masqués tant qu’ils ne sont pas activés. */
 export const OPTIONAL_FORMATS: ExportFormatMeta[] = [
   {
+    value: 'accounts_xlsx',
+    label: 'Ventes par compte — Excel',
+    description:
+      'La même ventilation par compte que le CSV, mais en Excel (.xlsx) à la mise en '
+      + 'page attendue par le comptable : deux lignes par famille (ventes puis TVA), '
+      + 'une ligne « VENTES » qui porte le CA, un total équilibré.',
+  },
+  {
     value: 'sales_csv',
     label: 'Ventes — CSV',
     description:
