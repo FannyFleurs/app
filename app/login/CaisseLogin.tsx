@@ -45,17 +45,10 @@ export default function CaisseLogin({ logoUrl, brandName }: { logoUrl: string; b
   }
 
   if (mode === 'pin') {
-    return (
-      <div className="relative">
-        <PinLogin />
-        <button
-          onClick={() => setMode('email')}
-          className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 text-sm text-ink-soft hover:text-ink underline"
-        >
-          Connexion par email
-        </button>
-      </div>
-    );
+    // Le bouton « Connexion par email » fait partie du design de l'écran PIN
+    // (cadre or sur le fond vert) : on le passe à PinLogin plutôt que de le
+    // superposer.
+    return <PinLogin onEmailLogin={() => setMode('email')} />;
   }
 
   return (
