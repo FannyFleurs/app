@@ -9,6 +9,7 @@ import { CASH_KEY, mergeCashDefaults, type CashSettings } from '@/lib/settings/c
 import { loadReceiptSettings } from '@/lib/settings/receipt-server';
 import { resolveReceiptPrinter, enqueueJob } from '@/lib/services/cloudprnt/queue';
 import { buildBankDepositStarPrnt, STARPRNT_CONTENT_TYPE } from '@/lib/services/cloudprnt/receipt-star';
+import { isDepositReason, DEPOSIT_LABEL } from '@/lib/services/cash-deposit';
 
 const schema = z.object({
   register_id: z.string().uuid(),
@@ -61,7 +62,7 @@ export async function POST(req: Request) {
   // réglage « Imprimer un reçu à chaque remise en banque » est coché et qu'une
   // imprimante est configurée). AWAIT + try/catch : ne bloque pas l'opération.
   let receiptPrinted = false;
-  const isBankDeposit = movement_type === 'out' && /banque/i.test(reason);
+  const isBankDeposit = movement_type === 'out' && isDepositReason(reason);
   if (isBankDeposit) {
     try {
       const cash = mergeCashDefaults(
@@ -94,7 +95,7 @@ export async function POST(req: Request) {
             await enqueueJob({
               organizationId: g.user.organizationId, printerId: printer.id,
               contentType: STARPRNT_CONTENT_TYPE, payload,
-              title: 'Remise en banque', userId: g.user.id,
+              title: DEPOSIT_LABEL, userId: g.user.id,
             });
             receiptPrinted = true;
           }

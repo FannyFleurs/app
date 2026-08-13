@@ -422,7 +422,7 @@ export default function MaJourneeClient() {
               <LigneCle label="Fond de caisse (ouverture)" valeur={formatEUR(cashSummary.opening_float ?? 0)} />
               <LigneCle label="Ventes espèces" valeur={formatEUR(cashSummary.cash_sales)} />
               {cashSummary.bank_deposits > 0 && (
-                <LigneCle label="Remise en banque" valeur={`-${formatEUR(cashSummary.bank_deposits)}`} ton="warning" />
+                <LigneCle label="Prélèvement" valeur={`-${formatEUR(cashSummary.bank_deposits)}`} ton="warning" />
               )}
               {(cashSummary.cash_refunds ?? 0) > 0 && (
                 <LigneCle label="Remboursements espèces" valeur={`-${formatEUR(cashSummary.cash_refunds ?? 0)}`} ton="warning" />

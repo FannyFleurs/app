@@ -106,9 +106,9 @@ export default function HistoryClient({ stores, lockedStoreId }: {
             alerte={(resume?.drawer_opens ?? 0) > 0}
           />
           <Chiffre
-            label="Remises en banque"
+            label="Prélèvements"
             valeur={formatEUR(resume?.bank_deposits_total ?? 0)}
-            note={`${resume?.bank_deposits_count ?? 0} remise(s)`}
+            note={`${resume?.bank_deposits_count ?? 0} prélèvement(s)`}
           />
           <Chiffre
             label="Écart de caisse"
