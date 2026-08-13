@@ -5,6 +5,7 @@ import Link from 'next/link';
 import PageHeader from '@/components/PageHeader';
 import Badge from '@/components/Badge';
 import EmptyState from '@/components/EmptyState';
+import { confirmThemed } from '@/lib/ui/dialog';
 
 interface User {
   id: string; email: string; full_name: string;
@@ -63,8 +64,28 @@ export default function UsersAdmin({ canWrite, currentUserId }: { canWrite: bool
   // Nom lisible des boutiques d'un user (pour la colonne du tableau).
   const storeName = (id: string) => stores.find((s) => s.id === id)?.name ?? '—';
 
+  /**
+   * Archive (ou réactive) un compte, sans ouvrir la fiche. Un compte archivé
+   * disparaît de l'écran de connexion des caisses (l'API `users/select` ne
+   * renvoie que les actifs) ; il reste dans cette liste et peut être réactivé.
+   * On ne s'archive pas soi-même : le bouton n'apparaît pas sur sa propre ligne.
+   */
+  async function setArchived(u: User, archive: boolean) {
+    const ok = await confirmThemed({
+      message: archive
+        ? `Archiver ${u.full_name} ? Il n'apparaîtra plus sur l'écran de connexion des caisses. Vous pourrez le réactiver à tout moment.`
+        : `Réactiver ${u.full_name} ? Il réapparaîtra sur l'écran de connexion des caisses.`,
+    });
+    if (!ok) return;
+    const r = await fetch(`/api/users/${u.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_active: !archive ? true : false }),
+    });
+    if (r.ok) void reload();
+  }
+
   return (
-    <div className="p-6 md:p-8 space-y-5 max-w-5xl">
+    <div className="p-6 md:p-8 space-y-5 max-w-6xl">
       <Link href="/settings" className="text-sm text-ink-soft hover:text-ink">← Paramètres</Link>
       <PageHeader
         title="Gestion des utilisateurs"
@@ -80,7 +101,8 @@ export default function UsersAdmin({ canWrite, currentUserId }: { canWrite: bool
         <EmptyState icon="◎" title="Aucun utilisateur" />
       ) : (
         <div className="card overflow-hidden">
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[52rem]">
             <thead className="bg-white text-ink-soft text-xs uppercase border-b border-border">
               <tr>
                 <th className="text-left px-4 py-3">Nom</th>
@@ -118,19 +140,35 @@ export default function UsersAdmin({ canWrite, currentUserId }: { canWrite: bool
                     {u.last_login_at ? new Date(u.last_login_at).toLocaleString('fr-FR') : 'Jamais'}
                   </td>
                   <td className="px-4 py-3 text-center">
-                    {u.is_active ? <Badge tone="success">Actif</Badge> : <Badge tone="danger">Désactivé</Badge>}
+                    {u.is_active ? <Badge tone="success">Actif</Badge> : <Badge tone="warning">Archivé</Badge>}
                   </td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="px-4 py-3 text-right whitespace-nowrap">
                     {canWrite && (
-                      <button className="text-accent-deep hover:underline text-sm" onClick={() => setEditing(u)}>
-                        Modifier
-                      </button>
+                      <div className="inline-flex items-center justify-end gap-3">
+                        <button className="text-accent-deep hover:underline text-sm" onClick={() => setEditing(u)}>
+                          Modifier
+                        </button>
+                        {/* Pas d'archivage de son propre compte : on ne se
+                            retire pas soi-même l'accès. */}
+                        {u.id !== currentUserId && (
+                          u.is_active ? (
+                            <button className="text-danger hover:underline text-sm" onClick={() => void setArchived(u, true)}>
+                              Archiver
+                            </button>
+                          ) : (
+                            <button className="text-accent-deep hover:underline text-sm" onClick={() => void setArchived(u, false)}>
+                              Réactiver
+                            </button>
+                          )
+                        )}
+                      </div>
                     )}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 
