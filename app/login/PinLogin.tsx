@@ -284,8 +284,9 @@ export default function PinLogin({ onEmailLogin }: { onEmailLogin?: () => void }
         )}
       </div>
 
-      {/* Connexion par email : en pied de page, détachée de la carte. */}
-      {emailButton && <footer className="shrink-0 pt-8 flex justify-center">{emailButton}</footer>}
+      {/* Connexion par email : en pied de page, détachée de la carte, avec une
+          marge basse pour ne pas coller au bord de l'écran. */}
+      {emailButton && <footer className="shrink-0 pt-8 pb-10 flex justify-center">{emailButton}</footer>}
     </main>
   );
 
