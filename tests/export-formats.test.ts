@@ -20,6 +20,14 @@ describe('Formats disponibles', () => {
     }
   });
 
+  it('propose l\'Excel par défaut, garde le CSV en réserve', () => {
+    // Le format montré d'emblée est l'Excel « Ventes par compte » : c'est le
+    // fichier voulu au quotidien. Le CSV de la même ventilation n'est pas
+    // supprimé — il reste activable dans les paramètres.
+    expect(CORE_FORMAT.value).toBe('accounts_xlsx');
+    expect(OPTIONAL_FORMATS.map((f) => f.value)).toContain('accounts_csv');
+  });
+
   it('ajoute ceux qui ont été activés, sans jamais retirer le format de base', () => {
     const on = availableFormats({ optional: ['fec_like', 'sales_csv'] });
     expect(on[0]!.value).toBe(CORE_FORMAT.value);

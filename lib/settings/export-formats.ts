@@ -23,24 +23,31 @@ export interface ExportFormatMeta {
   caveat?: string;
 }
 
-/** Toujours proposé : c'est l'export de référence. */
+/**
+ * Toujours proposé : c'est l'export de référence.
+ *
+ * L'Excel « Ventes par compte » à la mise en page du comptable : c'est le
+ * fichier voulu au quotidien, donc le seul montré d'emblée. Le CSV de la même
+ * ventilation existe toujours — il est passé en facultatif ci-dessous, à
+ * réactiver dans Paramètres → Formats d'export si le besoin revient.
+ */
 export const CORE_FORMAT: ExportFormatMeta = {
-  value: 'accounts_csv',
-  label: 'Ventes par compte — CSV',
+  value: 'accounts_xlsx',
+  label: 'Ventes par compte — Excel',
   description:
-    'La ventilation par compte comptable : le HT de chaque famille × taux × boutique, '
-    + 'puis la TVA collectée et les totaux. C’est ce que saisit votre comptable.',
+    'La ventilation par compte comptable en Excel (.xlsx), à la mise en page attendue '
+    + 'par votre comptable : deux lignes par famille (ventes puis TVA collectée), une '
+    + 'ligne « VENTES » qui porte le CA, un total équilibré.',
 };
 
 /** Facultatifs : masqués tant qu’ils ne sont pas activés. */
 export const OPTIONAL_FORMATS: ExportFormatMeta[] = [
   {
-    value: 'accounts_xlsx',
-    label: 'Ventes par compte — Excel',
+    value: 'accounts_csv',
+    label: 'Ventes par compte — CSV',
     description:
-      'La même ventilation par compte que le CSV, mais en Excel (.xlsx) à la mise en '
-      + 'page attendue par le comptable : deux lignes par famille (ventes puis TVA), '
-      + 'une ligne « VENTES » qui porte le CA, un total équilibré.',
+      'La même ventilation par compte que l’Excel, mais en CSV : le HT de chaque '
+      + 'famille × taux × boutique, la TVA collectée, puis les totaux.',
   },
   {
     value: 'sales_csv',
