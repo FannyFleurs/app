@@ -1,6 +1,7 @@
 import { loadPlatform } from '@/lib/site/platform';
 import { REVIEWS, REVIEW_AVG } from '@/lib/site/reviews';
 import { pageMeta, SITE_URL } from '@/lib/site/meta';
+import DemoVideo from './DemoVideo';
 import {
   Eyebrow, ButtonPrimary, ButtonGhost, BrowserFrame, FeatureCard, Icon, Stars, initials,
   GREEN, GREEN_DEEP, GOLD, BORDER, IVORY,
@@ -112,6 +113,36 @@ export default async function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* ------------------------------------------------------- TRUST STRIP */}
+      <section style={{ backgroundColor: '#fff', borderBottom: `1px solid ${BORDER}` }}>
+        <div className="max-w-6xl mx-auto px-5 sm:px-6 py-5 flex flex-col sm:flex-row items-center justify-center gap-x-6 gap-y-2 text-center">
+          <div className="flex items-center gap-2">
+            <Stars n={5} />
+            <span className="text-sm font-semibold">{REVIEW_AVG}/5</span>
+          </div>
+          <span className="hidden sm:block h-4 w-px" style={{ backgroundColor: BORDER }} aria-hidden />
+          <span className="text-sm" style={{ color: '#5A625E' }}>
+            Adopté au quotidien par des fleuristes, cavistes, jardineries, concept stores et torréfacteurs.
+          </span>
+        </div>
+      </section>
+
+      {/* -------------------------------------------------------- DEMO VIDEO */}
+      {platform.demo_video_url && (
+        <section className="max-w-6xl mx-auto px-5 sm:px-6 py-16 md:py-24">
+          <div className="max-w-2xl mx-auto text-center">
+            <Eyebrow>En 2 minutes</Eyebrow>
+            <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">Voyez HelloPos en action.</h2>
+            <p className="mt-3 text-base md:text-lg" style={{ color: '#5A625E' }}>
+              Une démonstration courte de l’encaissement, du pilotage et de la clôture.
+            </p>
+          </div>
+          <div className="mt-10 max-w-4xl mx-auto">
+            <DemoVideo url={platform.demo_video_url} poster="/site/screens/caisse.png" />
+          </div>
+        </section>
+      )}
 
       {/* ------------------------------------------------------------ FEATURES */}
       <section className="max-w-6xl mx-auto px-5 sm:px-6 py-16 md:py-24">

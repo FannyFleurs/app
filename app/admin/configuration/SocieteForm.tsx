@@ -15,12 +15,13 @@ type SocieteData = {
   contact_email: string;
   contact_phone: string;
   website: string;
+  demo_video_url: string;
 };
 
 const KEYS = Object.keys({
   company_legal_name: '', company_siren: '', company_siret: '', company_vat: '',
   address_line1: '', address_zip: '', address_city: '', address_country: '',
-  contact_email: '', contact_phone: '', website: '',
+  contact_email: '', contact_phone: '', website: '', demo_video_url: '',
 } as SocieteData) as (keyof SocieteData)[];
 
 export default function SocieteForm({ initial }: { initial: SocieteData }) {
@@ -116,6 +117,20 @@ export default function SocieteForm({ initial }: { initial: SocieteData }) {
           <label className="text-sm font-medium text-ink-soft">Site web</label>
           <input className="input mt-1" value={s.website}
                  onChange={(e) => patch('website', e.target.value)} placeholder="https://…" />
+        </div>
+      </section>
+
+      <section className="card p-5 space-y-4">
+        <h2 className="font-semibold">Site vitrine</h2>
+        <div>
+          <label className="text-sm font-medium text-ink-soft">Vidéo de démonstration</label>
+          <input className="input mt-1" value={s.demo_video_url}
+                 onChange={(e) => patch('demo_video_url', e.target.value)}
+                 placeholder="https://www.youtube.com/watch?v=… ou lien Loom / .mp4" />
+          <p className="text-xs text-ink-soft mt-1">
+            Collez un lien YouTube, Vimeo, Loom ou un fichier .mp4. Un encart vidéo
+            apparaît alors sur la page d&apos;accueil. Laissez vide pour ne rien afficher.
+          </p>
         </div>
       </section>
 
