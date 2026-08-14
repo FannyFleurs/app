@@ -186,20 +186,20 @@ function ModeChoice({ value, disabled, onChange }: {
 }) {
   const options = [
     {
-      shared: false,
-      title: 'Un fonds par caisse',
-      lines: [
-        'Chaque caisse ouvre la journée avec son propre fonds.',
-        'Chaque caisse compte et ferme la sienne.',
-      ],
-    },
-    {
       shared: true,
-      title: 'Un fonds commun à la boutique',
+      title: 'Un fonds commun à la boutique (par défaut)',
       lines: [
         'La première caisse ouverte déclare le fonds pour toute la boutique.',
         'Les autres postes n\'ont rien à ouvrir : ils encaissent directement.',
         'La première fermeture referme la caisse sur tous les postes.',
+      ],
+    },
+    {
+      shared: false,
+      title: 'Un fonds par caisse (poste)',
+      lines: [
+        'Chaque caisse ouvre la journée avec son propre fonds.',
+        'Chaque caisse compte et ferme la sienne.',
       ],
     },
   ];
