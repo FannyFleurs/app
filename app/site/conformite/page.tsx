@@ -54,7 +54,7 @@ export default function CompliancePage() {
         <div className="max-w-2xl">
           <Eyebrow>Les quatre exigences</Eyebrow>
           <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">
-            Les « 4 I », couverts de bout en bout.
+            Inaltérabilité, sécurisation, conservation, archivage.
           </h2>
         </div>
         <div className="mt-10 grid gap-5 sm:grid-cols-2">

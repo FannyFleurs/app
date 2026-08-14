@@ -28,7 +28,7 @@ const PLANS = [
 const FAQ = [
   { q: 'Y a-t-il un engagement ?', a: 'Non. L’abonnement est mensuel et résiliable à tout moment. Vos données restent exportables.' },
   { q: 'L’essai est-il vraiment gratuit ?', a: 'Oui, 14 jours pour tester toutes les fonctionnalités. L’installation se fait avec vous, sans carte bancaire.' },
-  { q: 'Le matériel est-il compris ?', a: 'HelloPos fonctionne sur iPad avec une imprimante ticket réseau. On vous conseille le matériel adapté à votre comptoir.' },
+  { q: 'Le matériel est-il compris ?', a: 'HelloPos fonctionne sur tablette avec une imprimante ticket réseau. On vous conseille le matériel adapté à votre comptoir.' },
   { q: 'Est-ce conforme à la loi française ?', a: 'Oui : chaîne fiscale scellée (art. 286 CGI), rapport Z, exports comptables. La conformité est intégrée, pas en option.' },
 ];
 
