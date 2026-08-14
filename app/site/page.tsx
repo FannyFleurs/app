@@ -6,9 +6,9 @@ import {
 
 export const dynamic = 'force-dynamic';
 export const metadata = {
-  title: 'HelloPos — La caisse des fleuristes',
+  title: 'HelloPos — La caisse de votre boutique',
   description:
-    'Caisse tactile, catalogue, stock, fidélité, commande différée et pilotage à distance. Une seule application pour fleuristes et commerces végétaux, conforme à la réglementation française.',
+    'Caisse tactile, catalogue, stock, fidélité, commande différée et pilotage à distance. Une seule application pour votre commerce, conforme à la réglementation française.',
 };
 
 const FEATURES = [
@@ -30,7 +30,7 @@ const FEATURES = [
   {
     title: 'Commande différée',
     icon: <Icon path={<><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></>} />,
-    desc: 'Retrait à date et livraison, écran atelier mural — pensé pour les mariages, deuils et commandes entreprises.',
+    desc: 'Retrait à date et livraison, écran de préparation mural — pensé pour les commandes à l’avance et les comptes entreprises.',
   },
   {
     title: 'Pilotage à distance',
@@ -64,10 +64,10 @@ export default async function HomePage() {
               className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-widest"
               style={{ backgroundColor: 'rgba(255,239,179,0.15)', color: GOLD }}
             >
-              Fleuristes & commerces végétaux
+              Commerçants indépendants
             </span>
             <h1 className="mt-5 text-4xl md:text-6xl font-bold tracking-tight text-white" style={{ textWrap: 'balance' } as React.CSSProperties}>
-              La caisse pensée pour votre boutique de fleurs.
+              La caisse pensée pour votre boutique.
             </h1>
             <p className="mt-5 text-lg md:text-xl leading-relaxed" style={{ color: 'rgba(234,230,220,0.85)' }}>
               Encaissement tactile, catalogue, stock, fidélité, commande différée et
@@ -84,7 +84,7 @@ export default async function HomePage() {
           </div>
 
           <div className="mt-12 md:mt-16">
-            <BrowserFrame src="/site/screens/dashboard.png" alt={`Tableau de bord ${brand}`} />
+            <BrowserFrame src="/site/screens/caisse.png" alt={`Écran de caisse ${brand}`} />
           </div>
         </div>
       </section>
@@ -158,8 +158,8 @@ export default async function HomePage() {
           ))}
         </div>
         <div className="mt-12 grid gap-5 sm:grid-cols-2">
+          <BrowserFrame src="/site/screens/caisse-paiement.png" alt="Encaissement en caisse" />
           <BrowserFrame src="/site/screens/rapports.png" alt="Rapports" />
-          <BrowserFrame src="/site/screens/cloture.png" alt="Clôture de caisse" />
         </div>
       </section>
 
