@@ -116,8 +116,26 @@ export default function ReceiptPreviewModal({ receipt, storeId, onClose }: Props
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Pas d'auto-fermeture : l'écran de validation reste affiché jusqu'à ce que
-  // l'utilisateur ferme (clic « Nouvelle vente », ✕, ou clic en dehors).
+  // Fermeture automatique après 30 s SANS interaction : sur un comptoir, un
+  // écran de validation oublié bloque la caisse pour le client suivant. Toute
+  // action (clic, touche, toucher) réarme le délai. En pause tant qu'un
+  // sous-écran (email, ticket sans prix) est ouvert : on ne referme pas le
+  // tout derrière lui. Le mode école, purement démonstratif, garde la
+  // fermeture manuelle.
+  useEffect(() => {
+    if (isSchool || showEmailModal || showGiftPicker) return;
+    let timer = window.setTimeout(() => onClose(), 30_000);
+    const reset = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => onClose(), 30_000);
+    };
+    const events = ['mousedown', 'keydown', 'touchstart', 'pointerdown', 'wheel'] as const;
+    events.forEach((e) => window.addEventListener(e, reset, { passive: true }));
+    return () => {
+      window.clearTimeout(timer);
+      events.forEach((e) => window.removeEventListener(e, reset));
+    };
+  }, [isSchool, showEmailModal, showGiftPicker, onClose]);
 
   async function generateInvoice() {
     setGenerating(true); setError(null);
@@ -332,11 +350,6 @@ export default function ReceiptPreviewModal({ receipt, storeId, onClose }: Props
           </div>
         )}
 
-        {!isSchool && (
-          <div className="mt-4 h-[300px] rounded-xl border border-border overflow-hidden">
-            <iframe src={pdfUrl} className="w-full h-full" title="Ticket" />
-          </div>
-        )}
         </div>
       </div>
 
