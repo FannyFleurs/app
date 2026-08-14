@@ -109,7 +109,7 @@ export default function MobileMenu({ nav }: { nav: { href: string; label: string
                 className="site-btn flex items-center justify-center h-12 rounded-xl text-base font-semibold text-white"
                 style={{ backgroundColor: GREEN }}
               >
-                Demander une démo
+                Réserver une démo
               </Link>
             </div>
           </div>

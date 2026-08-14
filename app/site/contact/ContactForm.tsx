@@ -99,7 +99,7 @@ export default function ContactForm() {
         className="site-btn inline-flex items-center justify-center h-12 px-6 rounded-xl text-base font-semibold text-white disabled:opacity-70"
         style={{ backgroundColor: GREEN }}
       >
-        {state === 'sending' ? 'Envoi…' : 'Envoyer ma demande'}
+        {state === 'sending' ? 'Envoi…' : 'Réserver ma démo gratuite'}
       </button>
 
       {state === 'error' ? (

@@ -94,7 +94,7 @@ export default async function PricingPage() {
                     ? { backgroundColor: GREEN, color: '#fff' }
                     : { color: GREEN, border: `1px solid ${GOLD_LINE}`, backgroundColor: IVORY }}
                 >
-                  {i === 2 ? 'Nous contacter' : 'Demander une démo'}
+                  {i === 2 ? 'Parler à un conseiller' : 'Réserver une démo'}
                 </a>
               </div>
             );
@@ -120,7 +120,7 @@ export default async function PricingPage() {
             ))}
           </div>
           <div className="mt-12 text-center">
-            <ButtonPrimary href="/contact">Demander une démo</ButtonPrimary>
+            <ButtonPrimary href="/contact">Réserver une démo gratuite</ButtonPrimary>
           </div>
         </div>
       </section>

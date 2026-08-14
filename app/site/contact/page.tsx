@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 export const metadata = {
   title: 'Contact — HelloPos',
   description:
-    'Demandez une démonstration de HelloPos, la caisse des fleuristes. Une démo de 20 minutes adaptée à votre boutique.',
+    'Réservez une démo gratuite de HelloPos, la caisse tout-en-un des commerçants. 20 minutes, sur votre propre catalogue.',
 };
 
 export default async function ContactPage() {
@@ -32,8 +32,8 @@ export default async function ContactPage() {
 
       <section className="max-w-6xl mx-auto px-5 sm:px-6 py-16 md:py-24 grid gap-10 lg:grid-cols-[1.4fr_1fr] lg:items-start">
         <div className="rounded-2xl bg-white p-6 md:p-8" style={{ border: `1px solid ${BORDER}` }}>
-          <h2 className="text-xl font-bold">Demander une démo</h2>
-          <p className="mt-1 text-sm" style={{ color: '#5A625E' }}>On vous recontacte sous 24 h ouvrées.</p>
+          <h2 className="text-xl font-bold">Réservez votre démo</h2>
+          <p className="mt-1 text-sm" style={{ color: '#5A625E' }}>Gratuite, 20 minutes, sur votre catalogue. On vous rappelle sous 24 h ouvrées.</p>
           <div className="mt-6">
             <ContactForm />
           </div>

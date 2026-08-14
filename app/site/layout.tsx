@@ -73,7 +73,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
               className="site-btn hidden sm:inline-flex items-center h-10 px-4 rounded-xl text-sm font-semibold text-white"
               style={{ backgroundColor: '#013E37' }}
             >
-              Demander une démo
+              Réserver une démo
             </Link>
             <MobileMenu nav={NAV} />
           </div>
@@ -95,8 +95,8 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
               )}
             </div>
             <p className="mt-3 text-sm max-w-sm" style={{ color: 'rgba(234,230,220,0.75)' }}>
-              La caisse pensée pour votre boutique. Du comptoir au back-office,
-              une seule application, conforme à la réglementation française.
+              Vendez plus vite et gérez sans effort. Du comptoir au back-office,
+              une seule application, conforme à la loi française.
             </p>
           </div>
 

@@ -39,12 +39,13 @@ export default function CompliancePage() {
           <div className="max-w-3xl">
             <Eyebrow onDark>Conformité</Eyebrow>
             <h1 className="mt-3 text-4xl md:text-5xl font-bold tracking-tight text-white">
-              Conforme à la loi française, sans y penser.
+              Prêt pour un contrôle, sans stress.
             </h1>
             <p className="mt-4 text-lg" style={{ color: 'rgba(234,230,220,0.85)' }}>
               HelloPos respecte l’article 286, I, 3° bis du CGI : inaltérabilité,
               sécurisation, conservation et archivage des données de caisse. La
-              conformité est intégrée au produit — pas une option à cocher.
+              conformité est intégrée au produit — vous n’avez rien à cocher, rien
+              à craindre.
             </p>
           </div>
         </div>
@@ -98,9 +99,9 @@ export default function CompliancePage() {
       <section style={{ backgroundColor: GREEN_DEEP }}>
         <div className="max-w-4xl mx-auto px-5 sm:px-6 py-16 text-center">
           <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-white">Une question sur la conformité ?</h2>
-          <p className="mt-4 text-lg" style={{ color: 'rgba(234,230,220,0.8)' }}>On répond volontiers, sans jargon.</p>
+          <p className="mt-4 text-lg" style={{ color: 'rgba(234,230,220,0.8)' }}>On vous répond clairement, sans jargon.</p>
           <div className="mt-8 flex justify-center" style={{ color: GOLD }}>
-            <ButtonPrimary href="/contact" onDark>Nous contacter</ButtonPrimary>
+            <ButtonPrimary href="/contact" onDark>Poser votre question</ButtonPrimary>
           </div>
         </div>
       </section>
