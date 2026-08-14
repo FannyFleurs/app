@@ -1,300 +1,184 @@
-import Link from 'next/link';
-import { query } from '@/lib/db/client';
-import { mergePlatformDefaults, type PlatformSettings } from '@/lib/settings/platform';
+import { loadPlatform } from '@/lib/site/platform';
+import {
+  Eyebrow, ButtonPrimary, ButtonGhost, BrowserFrame, FeatureCard, Icon,
+  GREEN, GREEN_DEEP, GOLD, BORDER, IVORY,
+} from './_ui';
 
 export const dynamic = 'force-dynamic';
 export const metadata = {
-  title: 'HelloPos — Caisse pour fleuristes',
+  title: 'HelloPos — La caisse des fleuristes',
   description:
-    'Caisse SaaS moderne pour fleuristes et commerces végétaux : encaissement iPad, catalogue, stock, fidélité, conformité française.',
+    'Caisse iPad, catalogue, stock, fidélité, commande différée et pilotage à distance. Une seule application pour fleuristes et commerces végétaux, conforme à la réglementation française.',
 };
-
-async function loadPlatform(): Promise<PlatformSettings> {
-  try {
-    const { rows } = await query<{ value: Partial<PlatformSettings> }>(
-      `SELECT value FROM platform_settings WHERE id = 1`,
-    );
-    return mergePlatformDefaults(rows[0]?.value ?? null);
-  } catch {
-    return mergePlatformDefaults(null);
-  }
-}
 
 const FEATURES = [
   {
-    title: 'Caisse iPad',
-    desc: 'Encaissement rapide, gestion des paniers en attente, commandes différées, TVA, tickets numériques.',
-    icon: '🛍️',
+    title: 'Caisse iPad rapide',
+    icon: <Icon path={<><rect x="3" y="4" width="18" height="14" rx="2" /><path d="M3 9h18M7 21h10" /></>} />,
+    desc: 'Encaissement en quelques gestes, paniers en attente, prix libres, remises, tickets numériques et impression.',
   },
   {
-    title: 'Multi-boutiques',
-    desc: 'Gérez plusieurs boutiques et leurs caisses. Catalogues partagés ou distincts, transferts de stock.',
-    icon: '🏬',
+    title: 'Catalogue & stock',
+    icon: <Icon path={<><path d="M20 7 12 3 4 7l8 4 8-4Z" /><path d="M4 7v10l8 4 8-4V7" /><path d="M12 11v10" /></>} />,
+    desc: 'Familles, variantes, codes-barres, étiquettes imprimées, inventaire par boutique et transferts de stock.',
   },
   {
     title: 'Fidélité & Wallet',
-    desc: 'Programme de fidélité intégré, cartes Apple Wallet dématérialisées, avoirs, cartes cadeaux.',
-    icon: '💳',
+    icon: <Icon path={<><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 10h18" /></>} />,
+    desc: 'Programme de fidélité, cartes Apple Wallet dématérialisées, avoirs et cartes cadeaux suivis au client.',
   },
   {
     title: 'Commande différée',
-    desc: 'Retrait à date et livraison, idéal pour les événements (mariages, deuils, entreprises).',
-    icon: '📅',
+    icon: <Icon path={<><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></>} />,
+    desc: 'Retrait à date et livraison, écran atelier mural — pensé pour les mariages, deuils et commandes entreprises.',
   },
   {
-    title: 'Conformité fiscale',
-    desc: 'Chaîne fiscale certifiable (article 286 CGI), exports comptables FEC, journal Z, tickets sécurisés.',
-    icon: '✅',
+    title: 'Pilotage à distance',
+    icon: <Icon path={<><path d="M3 3v18h18" /><path d="m7 14 4-4 3 3 5-6" /></>} />,
+    desc: 'Chiffre d’affaires en direct, marge, TVA, top produits, historiques. Sur mobile comme sur ordinateur.',
   },
   {
-    title: 'Back-office distant',
-    desc: 'Suivez le CA en direct, pilotez le catalogue et les stocks depuis n\'importe où (mobile, ordinateur).',
-    icon: '📊',
+    title: 'Conforme, sereine',
+    icon: <Icon path={<><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3Z" /><path d="m9 12 2 2 4-4" /></>} />,
+    desc: 'Chaîne fiscale scellée (art. 286 CGI), rapport Z, exports comptables. La conformité, sans y penser.',
   },
 ];
 
-const PLANS = [
-  {
-    name: 'Essentiel',
-    price: '29',
-    tag: 'Boutique unique',
-    features: [
-      '1 boutique · 1 caisse',
-      'Catalogue illimité',
-      'Fidélité de base',
-      'Support email',
-    ],
-    cta: 'Essayer 14 jours',
-    highlight: false,
-  },
-  {
-    name: 'Croissance',
-    price: '59',
-    tag: 'Le plus choisi',
-    features: [
-      '1 boutique · jusqu\'à 5 caisses',
-      'Multi-postes + affichage client',
-      'Écran & Livraison (commande différée)',
-      'Wallet Apple, avoirs, cartes cadeaux',
-      'Exports comptables · support prioritaire',
-    ],
-    cta: 'Essayer 14 jours',
-    highlight: true,
-  },
-  {
-    name: 'Réseau',
-    price: 'Sur mesure',
-    tag: 'Multi-boutiques',
-    features: [
-      'Boutiques illimitées',
-      'Transferts de stock',
-      'Rapports consolidés',
-      'Onboarding + formation',
-    ],
-    cta: 'Nous contacter',
-    highlight: false,
-  },
+const STEPS = [
+  { n: '1', t: 'On installe avec vous', d: 'Catalogue, boutiques, caisses, imprimantes : votre configuration est prête le premier jour.' },
+  { n: '2', t: 'Votre équipe encaisse', d: 'Connexion par code, tuiles familles, encaissement immédiat. Rien à apprendre.' },
+  { n: '3', t: 'Vous pilotez à distance', d: 'Le back-office suit le CA, le stock et la caisse depuis n’importe où.' },
 ];
 
-export default async function LandingPage() {
+export default async function HomePage() {
   const platform = await loadPlatform();
   const brand = platform.brand_name || 'HelloPos';
+
   return (
-    <main className="min-h-screen bg-white text-ink">
-      {/* Header */}
-      <header className="border-b border-border">
-        <div className="max-w-6xl mx-auto flex items-center justify-between px-6 py-4">
-          <Link href="/" className="flex items-center gap-2">
-            {platform.logo_url ? (
-              // Logo « wordmark » : hauteur fixe, largeur auto, sans dupliquer
-              // le nom en texte.
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={platform.logo_url} alt={brand} className="h-10 w-auto max-w-[180px] object-contain" />
-            ) : (
-              <>
-                <span
-                  className="grid h-9 w-9 place-items-center rounded-xl text-white font-semibold"
-                  style={{ backgroundColor: 'var(--primary, #6d5b3f)' }}
-                >
-                  {brand.charAt(0)}
-                </span>
-                <span className="font-semibold tracking-tight">{brand}</span>
-              </>
-            )}
-          </Link>
-          <nav className="hidden md:flex items-center gap-6 text-sm">
-            <a href="#features" className="text-ink-soft hover:text-ink">Fonctionnalités</a>
-            <a href="#pricing" className="text-ink-soft hover:text-ink">Tarifs</a>
-            <a href="/setup" className="text-ink-soft hover:text-ink">Créer une boutique</a>
-          </nav>
-          <div className="flex items-center gap-2">
-            <Link href="/login" className="btn-ghost text-sm">Se connecter</Link>
-            <Link href="/setup" className="btn-primary text-sm">Essai gratuit</Link>
-          </div>
-        </div>
-      </header>
-
-      {/* Hero */}
-      <section className="max-w-6xl mx-auto px-6 pt-16 pb-20 text-center">
-        <span className="inline-block rounded-full bg-accent-soft text-accent-deep text-xs font-semibold uppercase tracking-widest px-3 py-1">
-          Nouveau
-        </span>
-        <h1 className="mt-4 text-4xl md:text-5xl font-semibold tracking-tight max-w-3xl mx-auto">
-          La caisse pensée pour les fleuristes modernes.
-        </h1>
-        <p className="mt-4 text-lg text-ink-soft max-w-2xl mx-auto">
-          Encaissement iPad, catalogue, stock, fidélité et pilotage à distance.
-          Une seule app, conforme à la réglementation française.
-        </p>
-        <div className="mt-8 flex items-center justify-center gap-3">
-          <Link href="/setup" className="btn-primary h-12 px-6 text-base">
-            Démarrer l&apos;essai gratuit
-          </Link>
-          <a href="#features" className="btn-ghost h-12 px-6 text-base">
-            Voir les fonctionnalités
-          </a>
-        </div>
-        <p className="mt-4 text-xs text-ink-soft">
-          14 jours d&apos;essai · sans carte bancaire · résiliation à tout moment
-        </p>
-      </section>
-
-      {/* Features */}
-      <section id="features" className="border-t border-border bg-gray-50">
-        <div className="max-w-6xl mx-auto px-6 py-16">
-          <div className="text-center max-w-2xl mx-auto mb-10">
-            <h2 className="text-3xl font-semibold tracking-tight">Tout ce dont votre boutique a besoin</h2>
-            <p className="mt-3 text-ink-soft">
-              Du comptoir au back-office, {brand} couvre l&apos;ensemble des besoins d&apos;un fleuriste indépendant ou en réseau.
+    <>
+      {/* ---------------------------------------------------------------- HERO */}
+      <section style={{ backgroundColor: GREEN }}>
+        <div className="max-w-6xl mx-auto px-5 sm:px-6 pt-16 pb-14 md:pt-24 md:pb-20">
+          <div className="max-w-3xl">
+            <span
+              className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-widest"
+              style={{ backgroundColor: 'rgba(255,239,179,0.15)', color: GOLD }}
+            >
+              Fleuristes & commerces végétaux
+            </span>
+            <h1 className="mt-5 text-4xl md:text-6xl font-bold tracking-tight text-white" style={{ textWrap: 'balance' } as React.CSSProperties}>
+              La caisse pensée pour votre boutique de fleurs.
+            </h1>
+            <p className="mt-5 text-lg md:text-xl leading-relaxed" style={{ color: 'rgba(234,230,220,0.85)' }}>
+              Encaissement iPad, catalogue, stock, fidélité, commande différée et
+              pilotage à distance. Une seule application, conforme à la
+              réglementation française.
+            </p>
+            <div className="mt-8 flex flex-wrap items-center gap-3">
+              <ButtonPrimary href="/contact" onDark>Demander une démo</ButtonPrimary>
+              <ButtonGhost href="/fonctionnalites" onDark>Voir les fonctionnalités</ButtonGhost>
+            </div>
+            <p className="mt-4 text-sm" style={{ color: 'rgba(234,230,220,0.6)' }}>
+              Installation accompagnée · essai de 14 jours · sans engagement
             </p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {FEATURES.map((f) => (
-              <div key={f.title} className="card p-6">
-                <div className="text-3xl mb-3">{f.icon}</div>
-                <h3 className="font-semibold text-lg">{f.title}</h3>
-                <p className="mt-2 text-sm text-ink-soft">{f.desc}</p>
-              </div>
-            ))}
+
+          <div className="mt-12 md:mt-16">
+            <BrowserFrame src="/site/screens/dashboard.png" alt={`Tableau de bord ${brand}`} />
           </div>
         </div>
       </section>
 
-      {/* Pricing */}
-      <section id="pricing" className="border-t border-border bg-white">
-        <div className="max-w-6xl mx-auto px-6 py-16">
-          <div className="text-center max-w-2xl mx-auto mb-10">
-            <h2 className="text-3xl font-semibold tracking-tight">Des tarifs simples</h2>
-            <p className="mt-3 text-ink-soft">
-              Un forfait mensuel par boutique. Pas d&apos;engagement, pas de frais cachés.
-            </p>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            {PLANS.map((p, i) => {
-              // Noms/prix personnalisables en configuration (ordre : Essentiel,
-              // Croissance, Réseau).
-              const name = i === 0
-                ? (platform.plan_essentiel_name || p.name)
-                : i === 1
-                  ? (platform.plan_croissance_name || p.name)
-                  : (platform.plan_reseau_name || p.name);
-              const price = i === 0
-                ? (platform.plan_essentiel_price || p.price)
-                : i === 1
-                  ? (platform.plan_croissance_price || p.price)
-                  : (platform.plan_reseau_price || p.price);
-              return (
-              <div
-                key={p.name}
-                className={`card p-6 ${
-                  p.highlight
-                    ? 'border-2 border-accent shadow-lg'
-                    : ''
-                }`}
-              >
-                <div className="text-xs uppercase tracking-widest text-ink-soft font-semibold">
-                  {p.tag}
-                </div>
-                <h3 className="mt-2 text-xl font-semibold">{name}</h3>
-                <div className="mt-4 flex items-baseline gap-1">
-                  <span className="text-4xl font-semibold">{price}</span>
-                  {/^[0-9]+([.,][0-9]+)?$/.test(String(price).trim()) && (
-                    <span className="text-ink-soft">€ HT / mois</span>
-                  )}
-                </div>
-                <ul className="mt-5 space-y-2 text-sm">
-                  {p.features.map((feat) => (
-                    <li key={feat} className="flex items-start gap-2">
-                      <span className="text-accent-deep mt-0.5">✓</span>
-                      <span>{feat}</span>
-                    </li>
-                  ))}
-                </ul>
-                <Link
-                  href="/setup"
-                  className={`mt-6 block text-center h-11 leading-[44px] rounded-xl font-semibold ${
-                    p.highlight ? 'btn-primary' : 'btn-soft'
-                  }`}
-                >
-                  {p.cta}
-                </Link>
-              </div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
-      {/* CTA */}
-      <section className="border-t border-border bg-gray-50">
-        <div className="max-w-4xl mx-auto px-6 py-16 text-center">
-          <h2 className="text-3xl font-semibold tracking-tight">Prêt à passer à {brand} ?</h2>
-          <p className="mt-3 text-ink-soft">
-            Créez votre compte en moins de 2 minutes et testez toutes les fonctionnalités pendant 14 jours.
+      {/* ------------------------------------------------------------ FEATURES */}
+      <section className="max-w-6xl mx-auto px-5 sm:px-6 py-16 md:py-24">
+        <div className="max-w-2xl">
+          <Eyebrow>Tout au même endroit</Eyebrow>
+          <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">
+            Du comptoir au back-office, sans logiciel en plus.
+          </h2>
+          <p className="mt-3 text-base md:text-lg" style={{ color: '#5A625E' }}>
+            {brand} réunit la caisse, le catalogue, la fidélité, la commande
+            différée et la comptabilité. Une équipe, une application.
           </p>
-          <div className="mt-6 flex items-center justify-center gap-3">
-            <Link href="/setup" className="btn-primary h-12 px-6 text-base">
-              Créer ma boutique
-            </Link>
-            <Link href="/login" className="btn-ghost h-12 px-6 text-base">
-              J&apos;ai déjà un compte
-            </Link>
-          </div>
+        </div>
+        <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {FEATURES.map((f) => (
+            <FeatureCard key={f.title} icon={f.icon} title={f.title}>{f.desc}</FeatureCard>
+          ))}
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="border-t border-border bg-white">
-        <div className="max-w-6xl mx-auto px-6 py-8 space-y-4 text-sm text-ink-soft">
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-            <div>© {new Date().getFullYear()} {brand}
-              {platform.company_legal_name && ` — ${platform.company_legal_name}`}
-            </div>
-            <div className="flex gap-4">
-              {platform.contact_email && (
-                <a href={`mailto:${platform.contact_email}`} className="hover:text-ink">Contact</a>
-              )}
-              <Link href="/login" className="hover:text-ink">Caisse</Link>
-              <Link href="/bo" className="hover:text-ink">Back-office</Link>
-            </div>
+      {/* ---------------------------------------------------- SCREENSHOT SPLIT */}
+      <section style={{ backgroundColor: '#fff', borderTop: `1px solid ${BORDER}`, borderBottom: `1px solid ${BORDER}` }}>
+        <div className="max-w-6xl mx-auto px-5 sm:px-6 py-16 md:py-24 grid gap-12 lg:grid-cols-2 lg:items-center">
+          <div>
+            <Eyebrow>Le comptoir</Eyebrow>
+            <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">
+              « Ma journée » : tout ce qui compte, en un écran.
+            </h2>
+            <p className="mt-4 text-base md:text-lg" style={{ color: '#5A625E' }}>
+              Chiffre d’affaires du jour, panier moyen, répartition des règlements,
+              trésorerie espèces et actions rapides. Ouvrez, encaissez, clôturez —
+              la caisse suit, vous gardez la main.
+            </p>
+            <ul className="mt-6 space-y-3 text-sm">
+              {[
+                'Ouverture de la journée en un montant, partagée par tous les postes.',
+                'Répartition des ventes par moyen de paiement, en direct.',
+                'Clôture guidée, rapport Z imprimé sur l’imprimante ticket.',
+              ].map((l) => (
+                <li key={l} className="flex items-start gap-2.5">
+                  <span className="mt-0.5" style={{ color: GREEN }}>
+                    <Icon path={<path d="m5 12 4 4L19 6" />} />
+                  </span>
+                  <span>{l}</span>
+                </li>
+              ))}
+            </ul>
           </div>
-          {(platform.address_line1 || platform.company_siret || platform.contact_phone) && (
-            <div className="text-xs text-ink-soft/80 space-y-0.5">
-              {(platform.address_line1 || platform.address_city) && (
-                <div>
-                  {[platform.address_line1, [platform.address_zip, platform.address_city].filter(Boolean).join(' '), platform.address_country]
-                    .filter(Boolean).join(', ')}
-                </div>
-              )}
-              <div className="flex flex-wrap gap-x-4">
-                {platform.company_siret && <span>SIRET {platform.company_siret}</span>}
-                {platform.company_vat && <span>TVA {platform.company_vat}</span>}
-                {platform.contact_phone && <span>Tél. {platform.contact_phone}</span>}
-              </div>
-            </div>
-          )}
+          <BrowserFrame src="/site/screens/ma-journee.png" alt="Écran Ma journée" />
         </div>
-      </footer>
-    </main>
+      </section>
+
+      {/* ----------------------------------------------------------- HOW / STEPS */}
+      <section className="max-w-6xl mx-auto px-5 sm:px-6 py-16 md:py-24">
+        <div className="max-w-2xl">
+          <Eyebrow>En pratique</Eyebrow>
+          <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">Prête à encaisser, dès le premier jour.</h2>
+        </div>
+        <div className="mt-10 grid gap-5 md:grid-cols-3">
+          {STEPS.map((s) => (
+            <div key={s.n} className="rounded-2xl p-6" style={{ backgroundColor: IVORY, border: `1px solid ${BORDER}` }}>
+              <div className="grid h-10 w-10 place-items-center rounded-full font-bold" style={{ backgroundColor: GREEN, color: '#fff' }}>
+                {s.n}
+              </div>
+              <h3 className="mt-4 font-semibold text-lg">{s.t}</h3>
+              <p className="mt-2 text-sm" style={{ color: '#5A625E' }}>{s.d}</p>
+            </div>
+          ))}
+        </div>
+        <div className="mt-12 grid gap-5 sm:grid-cols-2">
+          <BrowserFrame src="/site/screens/rapports.png" alt="Rapports" />
+          <BrowserFrame src="/site/screens/cloture.png" alt="Clôture de caisse" />
+        </div>
+      </section>
+
+      {/* ------------------------------------------------------------- CTA BAND */}
+      <section style={{ backgroundColor: GREEN_DEEP }}>
+        <div className="max-w-4xl mx-auto px-5 sm:px-6 py-16 md:py-20 text-center">
+          <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-white">
+            Envie de voir {brand} sur votre comptoir ?
+          </h2>
+          <p className="mt-4 text-lg" style={{ color: 'rgba(234,230,220,0.8)' }}>
+            Une démonstration de 20 minutes, adaptée à votre boutique. On vous
+            montre l’encaissement, le pilotage et la conformité.
+          </p>
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+            <ButtonPrimary href="/contact" onDark>Demander une démo</ButtonPrimary>
+            <ButtonGhost href="/tarifs" onDark>Voir les tarifs</ButtonGhost>
+          </div>
+        </div>
+      </section>
+    </>
   );
 }

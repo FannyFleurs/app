@@ -48,6 +48,16 @@ function isStaticOrApi(pathname: string): boolean {
   );
 }
 
+/**
+ * Pages du site vitrine, servies sous /site/*. L'apex les expose à des URLs
+ * propres (hellopos.fr/tarifs → /site/tarifs) ; les captures et autres assets
+ * du site vivent sous /site/… et passent tels quels.
+ */
+const MARKETING_PATHS = new Set(['/fonctionnalites', '/tarifs', '/conformite', '/contact']);
+function isSitePath(pathname: string): boolean {
+  return pathname === '/site' || pathname.startsWith('/site/');
+}
+
 export function middleware(req: NextRequest) {
   const host = normalizeHost((req.headers.get('host') ?? '').toLowerCase());
   const url = req.nextUrl.clone();
@@ -160,7 +170,13 @@ export function middleware(req: NextRequest) {
       url.pathname = '/site';
       return NextResponse.rewrite(url);
     }
-    if (pathname === '/site' || pathname === '/setup' || pathname.startsWith('/setup/')) {
+    // URLs propres du site vitrine (hellopos.fr/tarifs…) → /site/tarifs.
+    if (MARKETING_PATHS.has(pathname)) {
+      url.pathname = '/site' + pathname;
+      return NextResponse.rewrite(url);
+    }
+    // /site/* (accès direct + captures) et /setup servis tels quels.
+    if (isSitePath(pathname) || pathname === '/setup' || pathname.startsWith('/setup/')) {
       return NextResponse.next();
     }
     const to = url.clone();
@@ -171,6 +187,13 @@ export function middleware(req: NextRequest) {
   // ================================================================
   // *.vercel.app / localhost : fallbacks path-based (tests).
   // ================================================================
+
+  // Site vitrine : URLs propres → /site/* (comme sur l'apex réel), pour que
+  // la navigation du site fonctionne aussi en local / preview.
+  if (MARKETING_PATHS.has(pathname)) {
+    url.pathname = '/site' + pathname;
+    return NextResponse.rewrite(url);
+  }
 
   // Sortie du back-office
   if (pathname === '/bo/exit' || pathname === '/bo-exit') {
