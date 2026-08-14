@@ -29,7 +29,7 @@ export function ButtonPrimary({ href, children, onDark = false }: { href: string
   return (
     <Link
       href={href}
-      className="inline-flex items-center justify-center h-12 px-6 rounded-xl text-base font-semibold transition-transform active:scale-95"
+      className="site-btn inline-flex items-center justify-center h-12 px-6 rounded-xl text-base font-semibold"
       style={onDark
         ? { backgroundColor: GOLD, color: GREEN_DEEP }
         : { backgroundColor: GREEN, color: '#fff' }}
@@ -44,7 +44,7 @@ export function ButtonGhost({ href, children, onDark = false }: { href: string; 
   return (
     <Link
       href={href}
-      className="inline-flex items-center justify-center h-12 px-6 rounded-xl text-base font-medium transition-colors"
+      className="site-btn inline-flex items-center justify-center h-12 px-6 rounded-xl text-base font-medium"
       style={onDark
         ? { color: GOLD, border: `1px solid ${GOLD_LINE}` }
         : { color: GREEN, border: `1px solid ${BORDER}`, backgroundColor: '#fff' }}
@@ -78,7 +78,7 @@ export function BrowserFrame({ src, alt, className = '' }: { src: string; alt: s
 /** Carte de fonctionnalité : pastille dorée, titre, description. */
 export function FeatureCard({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl bg-white p-6 border" style={{ borderColor: BORDER }}>
+    <div className="site-card rounded-2xl bg-white p-6 border" style={{ borderColor: BORDER }}>
       <div className="grid h-11 w-11 place-items-center rounded-xl" style={{ backgroundColor: GOLD, color: GREEN_DEEP }}>
         {icon}
       </div>

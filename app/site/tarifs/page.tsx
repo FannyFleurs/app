@@ -89,7 +89,7 @@ export default async function PricingPage() {
                 </ul>
                 <a
                   href="/contact"
-                  className="mt-7 inline-flex items-center justify-center h-12 rounded-xl text-base font-semibold transition-transform active:scale-95"
+                  className="site-btn mt-7 inline-flex items-center justify-center h-12 rounded-xl text-base font-semibold"
                   style={p.highlight
                     ? { backgroundColor: GREEN, color: '#fff' }
                     : { color: GREEN, border: `1px solid ${GOLD_LINE}`, backgroundColor: IVORY }}

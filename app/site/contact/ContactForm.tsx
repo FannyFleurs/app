@@ -96,7 +96,7 @@ export default function ContactForm() {
       <button
         type="submit"
         disabled={state === 'sending'}
-        className="inline-flex items-center justify-center h-12 px-6 rounded-xl text-base font-semibold text-white transition-transform active:scale-95 disabled:opacity-70"
+        className="site-btn inline-flex items-center justify-center h-12 px-6 rounded-xl text-base font-semibold text-white disabled:opacity-70"
         style={{ backgroundColor: GREEN }}
       >
         {state === 'sending' ? 'Envoi…' : 'Envoyer ma demande'}
