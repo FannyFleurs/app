@@ -1,14 +1,16 @@
 import { loadPlatform } from '@/lib/site/platform';
+import { pageMeta } from '@/lib/site/meta';
 import {
   Eyebrow, ButtonPrimary, Icon, GREEN, GREEN_DEEP, GOLD, GOLD_LINE, BORDER, IVORY,
 } from '../_ui';
 
 export const dynamic = 'force-dynamic';
-export const metadata = {
+export const metadata = pageMeta({
   title: 'Tarifs — HelloPos',
   description:
     'Un forfait mensuel par boutique, sans engagement. Trois formules : Essentiel, Croissance et Réseau. Essai de 14 jours, installation accompagnée.',
-};
+  path: '/tarifs',
+});
 
 const PLANS = [
   {

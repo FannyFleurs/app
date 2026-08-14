@@ -92,6 +92,10 @@ export default function EmailCapture() {
                   Une erreur est survenue. Réessayez dans un instant.
                 </p>
               )}
+              <p className="mt-2 text-xs" style={{ color: INK_SOFT }}>
+                En vous inscrivant, vous acceptez notre{' '}
+                <a href="/confidentialite" className="underline" style={{ color: GREEN }}>politique de confidentialité</a>.
+              </p>
             </form>
           )}
         </div>

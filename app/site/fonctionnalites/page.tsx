@@ -2,12 +2,14 @@ import {
   Eyebrow, ButtonPrimary, BrowserFrame, FeatureCard, Icon,
   GREEN, GREEN_DEEP, GOLD, BORDER, IVORY,
 } from '../_ui';
+import { pageMeta } from '@/lib/site/meta';
 
-export const metadata = {
+export const metadata = pageMeta({
   title: 'Fonctionnalités — HelloPos',
   description:
     'Encaissez plus vite, ne manquez plus de stock, fidélisez vos clients et pilotez à distance. Voici comment HelloPos vous fait gagner du temps chaque jour.',
-};
+  path: '/fonctionnalites',
+});
 
 const BLOCKS = [
   {

@@ -1,12 +1,14 @@
 import {
   Eyebrow, ButtonPrimary, Icon, GREEN, GREEN_DEEP, GOLD, BORDER, IVORY,
 } from '../_ui';
+import { pageMeta } from '@/lib/site/meta';
 
-export const metadata = {
+export const metadata = pageMeta({
   title: 'Conformité fiscale — HelloPos',
   description:
     'Chaîne fiscale scellée (article 286 CGI), inaltérabilité, sécurisation, conservation et archivage. Rapport Z, exports comptables. HelloPos est conforme by design.',
-};
+  path: '/conformite',
+});
 
 const PILLARS = [
   {

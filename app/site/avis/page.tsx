@@ -1,15 +1,17 @@
 import { loadPlatform } from '@/lib/site/platform';
 import { REVIEWS, REVIEW_AVG } from '@/lib/site/reviews';
+import { pageMeta } from '@/lib/site/meta';
 import {
   Eyebrow, ButtonPrimary, ButtonGhost, Stars, initials, GREEN_DEEP, GOLD, BORDER, IVORY, GREEN,
 } from '../_ui';
 
 export const dynamic = 'force-dynamic';
-export const metadata = {
+export const metadata = pageMeta({
   title: 'Avis clients — HelloPos',
   description:
     'Ce que les commerçants disent de HelloPos : encaissement rapide, commande différée, pilotage à distance, clôture guidée et conformité. Une note moyenne de 4,9 sur 5.',
-};
+  path: '/avis',
+});
 
 export default async function ReviewsPage() {
   const platform = await loadPlatform();

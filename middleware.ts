@@ -44,6 +44,8 @@ function isStaticOrApi(pathname: string): boolean {
     pathname.startsWith('/_next') ||
     pathname.startsWith('/icons') ||
     pathname === '/favicon.ico' ||
+    pathname === '/robots.txt' ||
+    pathname === '/sitemap.xml' ||
     pathname.startsWith('/manifest') // /manifest.json ET /manifest-ca.json
   );
 }
@@ -53,7 +55,7 @@ function isStaticOrApi(pathname: string): boolean {
  * propres (hellopos.fr/tarifs → /site/tarifs) ; les captures et autres assets
  * du site vivent sous /site/… et passent tels quels.
  */
-const MARKETING_PATHS = new Set(['/fonctionnalites', '/tarifs', '/avis', '/conformite', '/contact']);
+const MARKETING_PATHS = new Set(['/fonctionnalites', '/tarifs', '/avis', '/conformite', '/contact', '/mentions-legales', '/confidentialite']);
 function isSitePath(pathname: string): boolean {
   return pathname === '/site' || pathname.startsWith('/site/');
 }
