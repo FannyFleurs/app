@@ -14,7 +14,12 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     title: 'HelloPos',
-    statusBarStyle: 'black-translucent',
+    // Barre d'état OPAQUE claire (texte noir), pas translucide : l'app est
+    // claire, et une barre translucide se superposait au contenu en y posant
+    // un voile dégradé — le « halo » en haut de l'écran en mode plein écran
+    // (app ajoutée à l'écran d'accueil). En `default`, iOS dessine une barre
+    // pleine qui prolonge l'en-tête blanc, sans halo.
+    statusBarStyle: 'default',
   },
   formatDetection: {
     telephone: false,
@@ -50,10 +55,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="fr">
       <head>
-        {/* iOS PWA — barre de statut transparente, plein écran */}
+        {/* iOS PWA — barre de statut opaque claire (texte noir), qui prolonge
+            l'en-tête blanc sans voile ni halo. */}
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-title" content="HelloPos" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="mobile-web-app-capable" content="yes" />
         {/* Évite l'auto-zoom iOS sur les inputs (taille de police >= 16px) */}
         <meta name="format-detection" content="telephone=no,email=no,address=no" />
