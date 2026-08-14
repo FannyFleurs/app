@@ -3,6 +3,7 @@ import { loadPlatform } from '@/lib/site/platform';
 import SiteInteractions from './SiteInteractions';
 import MobileMenu from './MobileMenu';
 import EmailCapture from './EmailCapture';
+import { SITE_URL } from '@/lib/site/meta';
 import './interactions.css';
 
 /**
@@ -27,8 +28,20 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
   const brand = platform.brand_name || 'HelloPos';
   const year = new Date().getFullYear();
 
+  const orgLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Organization',
+    name: brand,
+    url: SITE_URL,
+    logo: platform.logo_url || `${SITE_URL}/site/og.png`,
+    ...(platform.contact_email
+      ? { contactPoint: { '@type': 'ContactPoint', email: platform.contact_email, contactType: 'sales', areaServed: 'FR' } }
+      : {}),
+  };
+
   return (
     <div className="site-root min-h-screen flex flex-col" style={{ backgroundColor: '#F8F6F0', color: '#14211D' }}>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(orgLd) }} />
       <SiteInteractions />
       {/* En-tête */}
       <header
@@ -135,7 +148,11 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
 
         <div className="border-t" style={{ borderColor: 'rgba(255,255,255,0.1)' }}>
           <div className="max-w-6xl mx-auto px-5 sm:px-6 py-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs" style={{ color: 'rgba(234,230,220,0.6)' }}>
-            <div>© {year} {brand}{platform.company_legal_name && ` — ${platform.company_legal_name}`}</div>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+              <span>© {year} {brand}{platform.company_legal_name && ` — ${platform.company_legal_name}`}</span>
+              <Link href="/mentions-legales" className="hover:text-white transition-colors">Mentions légales</Link>
+              <Link href="/confidentialite" className="hover:text-white transition-colors">Confidentialité</Link>
+            </div>
             <div className="flex flex-wrap gap-x-4 gap-y-1">
               {platform.company_siret && <span>SIRET {platform.company_siret}</span>}
               {platform.company_vat && <span>TVA {platform.company_vat}</span>}

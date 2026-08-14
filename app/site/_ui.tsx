@@ -58,7 +58,15 @@ export function ButtonGhost({ href, children, onDark = false }: { href: string; 
  * Cadre « fenêtre » autour d'une capture d'écran : trois pastilles, un léger
  * relief, l'image dedans. Donne à la capture l'air d'un vrai logiciel.
  */
-export function BrowserFrame({ src, alt, className = '' }: { src: string; alt: string; className?: string }) {
+export function BrowserFrame({ src, alt, className = '', priority = false }: { src: string; alt: string; className?: string; priority?: boolean }) {
+  // Variantes WebP responsives (800w mobile, 1600w desktop) générées à côté du
+  // PNG d'origine, servi en repli. Dimensions fixées pour éviter tout saut de
+  // mise en page (CLS). Le hero passe priority pour charger sans attendre.
+  const base = src.replace(/\.png$/, '');
+  // Le hero occupe toute la largeur du contenu ; les blocs en deux colonnes ~
+  // la moitié. On adapte `sizes` pour que le navigateur choisisse la bonne
+  // variante (crisp sur le hero, léger ailleurs).
+  const sizes = priority ? '(max-width: 1152px) 100vw, 1152px' : '(max-width: 1024px) 100vw, 600px';
   return (
     <div
       className={`rounded-2xl overflow-hidden border shadow-2xl ${className}`}
@@ -69,8 +77,24 @@ export function BrowserFrame({ src, alt, className = '' }: { src: string; alt: s
         <span className="h-3 w-3 rounded-full" style={{ backgroundColor: '#F0C25A' }} />
         <span className="h-3 w-3 rounded-full" style={{ backgroundColor: '#7AD09A' }} />
       </div>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={src} alt={alt} className="w-full h-auto block" />
+      <picture>
+        <source
+          type="image/webp"
+          srcSet={`${base}-m.webp 800w, ${base}.webp 1600w`}
+          sizes={sizes}
+        />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={src}
+          alt={alt}
+          width={1440}
+          height={900}
+          loading={priority ? 'eager' : 'lazy'}
+          decoding="async"
+          fetchPriority={priority ? 'high' : 'auto'}
+          className="w-full h-auto block"
+        />
+      </picture>
     </div>
   );
 }

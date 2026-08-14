@@ -1,16 +1,18 @@
 import { loadPlatform } from '@/lib/site/platform';
 import { REVIEWS, REVIEW_AVG } from '@/lib/site/reviews';
+import { pageMeta, SITE_URL } from '@/lib/site/meta';
 import {
   Eyebrow, ButtonPrimary, ButtonGhost, BrowserFrame, FeatureCard, Icon, Stars, initials,
   GREEN, GREEN_DEEP, GOLD, BORDER, IVORY,
 } from './_ui';
 
 export const dynamic = 'force-dynamic';
-export const metadata = {
+export const metadata = pageMeta({
   title: 'HelloPos — Vendez vite, gérez sans effort',
   description:
     'Encaissez en quelques gestes, ne manquez plus de stock, faites revenir vos clients et pilotez votre boutique à distance. Une seule application, conforme, prête dès le premier jour.',
-};
+  path: '/',
+});
 
 const FEATURES = [
   {
@@ -55,8 +57,29 @@ export default async function HomePage() {
   const platform = await loadPlatform();
   const brand = platform.brand_name || 'HelloPos';
 
+  const appLd = {
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareApplication',
+    name: brand,
+    applicationCategory: 'BusinessApplication',
+    operatingSystem: 'iPadOS, Web',
+    url: SITE_URL,
+    offers: {
+      '@type': 'Offer',
+      price: (platform.plan_essentiel_price || '29').replace(',', '.'),
+      priceCurrency: 'EUR',
+    },
+    aggregateRating: {
+      '@type': 'AggregateRating',
+      ratingValue: REVIEW_AVG.replace(',', '.'),
+      reviewCount: REVIEWS.length,
+      bestRating: '5',
+    },
+  };
+
   return (
     <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(appLd) }} />
       {/* ---------------------------------------------------------------- HERO */}
       <section style={{ backgroundColor: GREEN }}>
         <div className="max-w-6xl mx-auto px-5 sm:px-6 pt-16 pb-14 md:pt-24 md:pb-20">
@@ -85,7 +108,7 @@ export default async function HomePage() {
           </div>
 
           <div className="mt-12 md:mt-16">
-            <BrowserFrame src="/site/screens/caisse.png" alt={`Écran de caisse ${brand}`} />
+            <BrowserFrame src="/site/screens/caisse.png" alt={`Écran de caisse ${brand}`} priority />
           </div>
         </div>
       </section>

@@ -1,13 +1,15 @@
 import { loadPlatform } from '@/lib/site/platform';
+import { pageMeta } from '@/lib/site/meta';
 import { Eyebrow, Icon, GREEN, GREEN_DEEP, GOLD, BORDER } from '../_ui';
 import ContactForm from './ContactForm';
 
 export const dynamic = 'force-dynamic';
-export const metadata = {
+export const metadata = pageMeta({
   title: 'Contact — HelloPos',
   description:
     'Réservez une démo gratuite de HelloPos, la caisse tout-en-un des commerçants. 20 minutes, sur votre propre catalogue.',
-};
+  path: '/contact',
+});
 
 export default async function ContactPage() {
   const platform = await loadPlatform();

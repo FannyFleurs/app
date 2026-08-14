@@ -108,7 +108,9 @@ export default function ContactForm() {
         </p>
       ) : (
         <p className="text-xs" style={{ color: '#5A625E' }}>
-          Vos informations servent uniquement à vous recontacter.
+          En envoyant ce formulaire, vous acceptez que vos données soient utilisées
+          pour vous recontacter. Voir notre{' '}
+          <a href="/confidentialite" className="underline" style={{ color: GREEN }}>politique de confidentialité</a>.
         </p>
       )}
     </form>
