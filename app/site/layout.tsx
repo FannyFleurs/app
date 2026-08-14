@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { loadPlatform } from '@/lib/site/platform';
 import SiteInteractions from './SiteInteractions';
 import MobileMenu from './MobileMenu';
+import EmailCapture from './EmailCapture';
 import './interactions.css';
 
 /**
@@ -81,6 +82,9 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
       </header>
 
       <main className="flex-1">{children}</main>
+
+      {/* Collecte email (bas de page, sur toutes les pages du site) */}
+      <EmailCapture />
 
       {/* Pied de page */}
       <footer style={{ backgroundColor: '#013E37', color: '#EAE6DC' }}>
