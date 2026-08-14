@@ -47,6 +47,12 @@ export interface PlatformSettings {
   contact_email: string;
   contact_phone: string;
   website: string;
+  /**
+   * URL d'une vidéo de démonstration (YouTube, Vimeo, Loom ou fichier .mp4).
+   * Si renseignée, un encart vidéo apparaît sur la page d'accueil du site
+   * vitrine. Vide = l'encart n'est pas affiché.
+   */
+  demo_video_url: string;
 
   /** ---- Facturation SaaS (Stripe plateforme) ---- */
   stripe_secret_key: string;
@@ -106,6 +112,7 @@ export const PLATFORM_DEFAULTS: PlatformSettings = {
   contact_email: '',
   contact_phone: '',
   website: '',
+  demo_video_url: '',
   stripe_secret_key: '',
   stripe_publishable_key: '',
   stripe_webhook_secret: '',
