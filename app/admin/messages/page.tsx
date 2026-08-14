@@ -22,6 +22,8 @@ function formatDate(iso: string): string {
   }
 }
 
+interface Subscriber { id: string; email: string; created_at: string }
+
 export default async function MessagesPage() {
   let rows: ContactMessage[] = [];
   try {
@@ -34,6 +36,16 @@ export default async function MessagesPage() {
     rows = res.rows;
   } catch {
     // Migration 0068 non appliquée : liste vide.
+  }
+
+  let subs: Subscriber[] = [];
+  try {
+    const res = await query<Subscriber>(
+      `SELECT id, email, created_at FROM email_subscribers ORDER BY created_at DESC LIMIT 500`,
+    );
+    subs = res.rows;
+  } catch {
+    // Migration 0069 non appliquée : liste vide.
   }
 
   return (
@@ -76,6 +88,26 @@ export default async function MessagesPage() {
                   Répondre
                 </a>
               </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <h2 className="text-lg font-semibold tracking-tight mt-10 mb-1">
+        Inscrits à la liste email
+        <span className="ml-2 text-sm font-normal text-ink-soft">({subs.length})</span>
+      </h2>
+      <p className="text-sm text-ink-soft mb-4">
+        Adresses collectées via le formulaire en bas du site vitrine.
+      </p>
+      {subs.length === 0 ? (
+        <div className="card p-6 text-center text-ink-soft">Aucun inscrit pour le moment.</div>
+      ) : (
+        <div className="card divide-y divide-border">
+          {subs.map((s) => (
+            <div key={s.id} className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm">
+              <a href={`mailto:${s.email}`} className="text-ink hover:underline truncate">{s.email}</a>
+              <span className="text-xs text-ink-soft whitespace-nowrap">{formatDate(s.created_at)}</span>
             </div>
           ))}
         </div>

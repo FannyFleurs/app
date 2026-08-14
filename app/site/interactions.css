@@ -37,6 +37,15 @@
   box-shadow: 0 10px 24px -14px rgba(1, 43, 38, 0.55);
 }
 
+/* CTA principale : ombre portée au repos pour la faire ressortir nettement
+   (contraste et hiérarchie visuelle forts, sans clignoter). */
+.site-btn-primary {
+  box-shadow: 0 8px 22px -10px rgba(1, 43, 38, 0.5);
+}
+.site-btn-primary:hover {
+  box-shadow: 0 14px 30px -12px rgba(1, 43, 38, 0.6);
+}
+
 /* Cartes : soulèvement discret au survol. */
 .site-card {
   transition:

@@ -1,6 +1,7 @@
 import { loadPlatform } from '@/lib/site/platform';
+import { REVIEWS, REVIEW_AVG } from '@/lib/site/reviews';
 import {
-  Eyebrow, ButtonPrimary, ButtonGhost, BrowserFrame, FeatureCard, Icon,
+  Eyebrow, ButtonPrimary, ButtonGhost, BrowserFrame, FeatureCard, Icon, Stars, initials,
   GREEN, GREEN_DEEP, GOLD, BORDER, IVORY,
 } from './_ui';
 
@@ -160,6 +161,44 @@ export default async function HomePage() {
         <div className="mt-12 grid gap-5 sm:grid-cols-2">
           <BrowserFrame src="/site/screens/caisse-paiement.png" alt="Encaissement en caisse" />
           <BrowserFrame src="/site/screens/rapports.png" alt="Rapports" />
+        </div>
+      </section>
+
+      {/* -------------------------------------------------------------- PROOF */}
+      <section style={{ backgroundColor: IVORY, borderTop: `1px solid ${BORDER}` }}>
+        <div className="max-w-6xl mx-auto px-5 sm:px-6 py-16 md:py-24">
+          <div className="max-w-2xl">
+            <Eyebrow>Ils l’utilisent tous les jours</Eyebrow>
+            <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">
+              Adopté par des commerçants comme vous.
+            </h2>
+            <div className="mt-4 inline-flex items-center gap-3">
+              <Stars n={5} />
+              <span className="text-sm font-semibold" style={{ color: GREEN }}>{REVIEW_AVG} / 5 · note moyenne</span>
+            </div>
+          </div>
+          <div className="mt-10 grid gap-5 md:grid-cols-3">
+            {REVIEWS.slice(0, 3).map((r) => (
+              <figure key={r.name + r.shop} className="rounded-2xl bg-white p-6" style={{ border: `1px solid ${BORDER}` }}>
+                <Stars n={r.stars} />
+                <blockquote className="mt-4 text-[15px] leading-relaxed" style={{ color: '#14211D' }}>
+                  « {r.quote} »
+                </blockquote>
+                <figcaption className="mt-5 flex items-center gap-3">
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-sm font-semibold" style={{ backgroundColor: GOLD, color: GREEN_DEEP }}>
+                    {initials(r.name)}
+                  </span>
+                  <span className="leading-tight">
+                    <span className="block font-semibold text-sm" style={{ color: '#14211D' }}>{r.name}</span>
+                    <span className="block text-sm" style={{ color: '#5A625E' }}>{r.shop} · {r.city}</span>
+                  </span>
+                </figcaption>
+              </figure>
+            ))}
+          </div>
+          <div className="mt-8">
+            <ButtonGhost href="/avis">Lire tous les avis</ButtonGhost>
+          </div>
         </div>
       </section>
 
