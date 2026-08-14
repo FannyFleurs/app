@@ -1,5 +1,7 @@
 import Link from 'next/link';
 import { loadPlatform } from '@/lib/site/platform';
+import SiteInteractions from './SiteInteractions';
+import './interactions.css';
 
 /**
  * Habillage commun du site vitrine hellopos.fr : en-tête collant et pied de
@@ -24,14 +26,15 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
   const year = new Date().getFullYear();
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#F8F6F0', color: '#14211D' }}>
+    <div className="site-root min-h-screen flex flex-col" style={{ backgroundColor: '#F8F6F0', color: '#14211D' }}>
+      <SiteInteractions />
       {/* En-tête */}
       <header
         className="sticky top-0 z-40 border-b backdrop-blur"
         style={{ borderColor: '#E7E3D8', backgroundColor: 'rgba(248,246,240,0.85)' }}
       >
-        <div className="max-w-6xl mx-auto flex items-center justify-between px-5 sm:px-6 h-16">
-          <Link href="/" className="flex items-center gap-2.5 shrink-0">
+        <div className="site-header-inner max-w-6xl mx-auto flex items-center justify-between px-5 sm:px-6">
+          <Link href="/" className="site-logo flex items-center gap-2.5 shrink-0">
             {platform.logo_url ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={platform.logo_url} alt={brand} className="h-9 w-auto max-w-[170px] object-contain" />
@@ -59,14 +62,14 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
           <div className="flex items-center gap-2">
             <a
               href="/login"
-              className="hidden sm:inline-flex items-center h-10 px-4 rounded-xl text-sm font-medium transition-colors hover:bg-black/5"
+              className="site-btn hidden sm:inline-flex items-center h-10 px-4 rounded-xl text-sm font-medium hover:bg-black/5"
               style={{ color: '#013E37' }}
             >
               Se connecter
             </a>
             <Link
               href="/contact"
-              className="inline-flex items-center h-10 px-4 rounded-xl text-sm font-semibold text-white transition-transform active:scale-95"
+              className="site-btn inline-flex items-center h-10 px-4 rounded-xl text-sm font-semibold text-white"
               style={{ backgroundColor: '#013E37' }}
             >
               Demander une démo
