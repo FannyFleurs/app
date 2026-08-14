@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { loadPlatform } from '@/lib/site/platform';
 import SiteInteractions from './SiteInteractions';
+import MobileMenu from './MobileMenu';
 import './interactions.css';
 
 /**
@@ -51,7 +52,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
             )}
           </Link>
 
-          <nav className="hidden md:flex items-center gap-7 text-sm font-medium">
+          <nav className="hidden lg:flex items-center gap-7 text-sm font-medium">
             {NAV.map((n) => (
               <Link key={n.href} href={n.href} className="text-ink-soft hover:text-ink transition-colors">
                 {n.label}
@@ -69,11 +70,12 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
             </a>
             <Link
               href="/contact"
-              className="site-btn inline-flex items-center h-10 px-4 rounded-xl text-sm font-semibold text-white"
+              className="site-btn hidden sm:inline-flex items-center h-10 px-4 rounded-xl text-sm font-semibold text-white"
               style={{ backgroundColor: '#013E37' }}
             >
               Demander une démo
             </Link>
+            <MobileMenu nav={NAV} />
           </div>
         </div>
       </header>
