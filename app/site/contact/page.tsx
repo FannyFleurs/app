@@ -35,7 +35,7 @@ export default async function ContactPage() {
           <h2 className="text-xl font-bold">Demander une démo</h2>
           <p className="mt-1 text-sm" style={{ color: '#5A625E' }}>On vous recontacte sous 24 h ouvrées.</p>
           <div className="mt-6">
-            <ContactForm to={email} />
+            <ContactForm />
           </div>
         </div>
 

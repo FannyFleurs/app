@@ -77,6 +77,13 @@ export async function sendOrgEmail(args: {
   html: string;
   attachments?: EmailAttachment[];
   /**
+   * Adresse de réponse explicite. Par défaut le reply-to est l'expéditeur
+   * (légitimité anti-spam). Pour un formulaire de contact, on veut plutôt
+   * répondre au visiteur : on passe alors son adresse ici.
+   */
+  replyToEmail?: string;
+  replyToName?: string;
+  /**
    * Autorise l'envoi même si la bascule « Activer » est désactivée.
    * Utile pour le bouton « Envoyer un test » : on veut pouvoir tester la
    * clé et l'expéditeur avant d'activer l'envoi en production.
@@ -95,8 +102,11 @@ export async function sendOrgEmail(args: {
     sender: { email: cfg.sender_email, name: cfg.sender_name || cfg.sender_email },
     to: [{ email: args.to, name: args.toName || args.to }],
     // Un reply-to explicite (adresse humaine) renforce la légitimité du message
-    // aux yeux des filtres anti-spam.
-    replyTo: { email: cfg.sender_email, name: cfg.sender_name || cfg.sender_email },
+    // aux yeux des filtres anti-spam. On peut le rediriger vers le visiteur
+    // (formulaire de contact) pour permettre une réponse directe.
+    replyTo: args.replyToEmail
+      ? { email: args.replyToEmail, name: args.replyToName || args.replyToEmail }
+      : { email: cfg.sender_email, name: cfg.sender_name || cfg.sender_email },
     subject: args.subject,
     htmlContent: args.html,
     // Alternative texte : un email HTML-seul est bien plus souvent classé en
