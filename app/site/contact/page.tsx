@@ -70,6 +70,25 @@ export default async function ContactPage() {
             </a>
           )}
 
+          <div className="rounded-2xl bg-white p-5" style={{ border: `1px solid ${BORDER}` }}>
+            <div className="text-xs font-semibold uppercase tracking-widest" style={{ color: '#5A625E' }}>Comment ça se passe</div>
+            <ol className="mt-4 space-y-3.5">
+              {[
+                'On échange 20 minutes sur votre boutique et vos besoins.',
+                'On prépare la démo sur votre propre catalogue.',
+                'Vous testez 14 jours, sans carte bancaire.',
+              ].map((t, i) => (
+                <li key={t} className="flex items-start gap-3">
+                  <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-bold" style={{ backgroundColor: GREEN, color: '#fff' }}>{i + 1}</span>
+                  <span className="text-sm" style={{ color: '#14211D' }}>{t}</span>
+                </li>
+              ))}
+            </ol>
+            <p className="mt-4 pt-4 text-xs" style={{ color: '#5A625E', borderTop: `1px solid ${BORDER}` }}>
+              Sans engagement · Réponse sous 24 h ouvrées · Vos données restent les vôtres.
+            </p>
+          </div>
+
           <div className="rounded-2xl p-5" style={{ backgroundColor: GREEN, color: '#fff' }}>
             <div className="text-xs font-semibold uppercase tracking-widest" style={{ color: GOLD }}>Déjà client ?</div>
             <p className="mt-2 text-sm" style={{ color: 'rgba(234,230,220,0.85)' }}>

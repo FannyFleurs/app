@@ -53,7 +53,7 @@ export default async function PricingPage() {
       </section>
 
       <section className="max-w-6xl mx-auto px-5 sm:px-6 -mt-10 md:-mt-12 pb-16 md:pb-24">
-        <div className="grid gap-5 md:grid-cols-3 items-start">
+        <div className="grid gap-5 md:grid-cols-3">
           {PLANS.map((p, i) => {
             const isNum = /^[0-9]+([.,][0-9]+)?$/.test(String(price(i, p.price)).trim());
             return (

@@ -103,7 +103,7 @@ export default function FeaturesPage() {
       </section>
 
       <section style={{ backgroundColor: GREEN_DEEP }}>
-        <div className="max-w-4xl mx-auto px-5 sm:px-6 py-16 text-center">
+        <div className="max-w-4xl mx-auto px-5 sm:px-6 py-16 md:py-20 text-center">
           <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-white">Voyez-la en action.</h2>
           <p className="mt-4 text-lg" style={{ color: 'rgba(234,230,220,0.8)' }}>
             On vous montre HelloPos sur votre propre catalogue, en 20 minutes.
