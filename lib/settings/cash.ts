@@ -22,11 +22,12 @@ export interface CashSettings {
   /**
    * Fonds de caisse COMMUN à toutes les caisses de la boutique.
    *
-   * false (défaut) : chaque caisse a son propre fonds — elle l'ouvre et le
-   *   ferme indépendamment des autres.
-   * true : la boutique n'a qu'un seul fonds. La première caisse ouverte le
-   *   déclare pour toute la boutique ; les autres n'ont rien à ouvrir. La
-   *   première fermeture referme la caisse pour tous les postes.
+   * true (défaut) : la boutique n'a qu'UN SEUL fonds. La première caisse
+   *   ouverte le déclare pour toute la boutique ; les autres postes n'ont rien
+   *   à ouvrir, ils encaissent directement. La première fermeture referme la
+   *   caisse pour tous les postes. Une seule demande d'ouverture par jour.
+   * false : chaque caisse a son propre fonds — à activer dans les réglages
+   *   pour un fonctionnement par poste (chaque poste ouvre et ferme le sien).
    */
   shared_float: boolean;
 }
@@ -38,7 +39,7 @@ export const CASH_DEFAULTS: CashSettings = {
   bank_deposit_required: false,
   print_bank_deposit_receipt: true,
   minimum_float: 0,
-  shared_float: false,
+  shared_float: true,
 };
 
 export function mergeCashDefaults(partial: Partial<CashSettings> | null | undefined): CashSettings {
