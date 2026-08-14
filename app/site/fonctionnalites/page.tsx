@@ -6,18 +6,18 @@ import {
 export const metadata = {
   title: 'Fonctionnalités — HelloPos',
   description:
-    'Caisse iPad, catalogue et stock, clients et fidélité, commande différée, pilotage à distance et conformité fiscale. Le détail de ce que fait HelloPos.',
+    'Caisse tactile, catalogue et stock, clients et fidélité, commande différée, pilotage à distance et conformité fiscale. Le détail de ce que fait HelloPos.',
 };
 
 const BLOCKS = [
   {
     eyebrow: 'Le comptoir',
-    title: 'Une caisse iPad taillée pour le rythme de la boutique',
+    title: 'Une caisse taillée pour le rythme de la boutique',
     text:
       'Tuiles par famille, recherche et scan, prix libres, remises ligne ou ticket, paniers en attente pour servir deux clients à la fois. Le rendu monnaie, les tickets numériques et l’impression sont intégrés.',
     points: ['Encaissement en quelques gestes', 'Paniers en attente & reprise', 'Tickets numériques, sans prix, par email'],
-    img: '/site/screens/ma-journee.png',
-    alt: 'Écran caisse Ma journée',
+    img: '/site/screens/caisse.png',
+    alt: 'Écran de caisse',
   },
   {
     eyebrow: 'Pilotage',

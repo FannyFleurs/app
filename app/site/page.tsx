@@ -8,12 +8,12 @@ export const dynamic = 'force-dynamic';
 export const metadata = {
   title: 'HelloPos — La caisse des fleuristes',
   description:
-    'Caisse iPad, catalogue, stock, fidélité, commande différée et pilotage à distance. Une seule application pour fleuristes et commerces végétaux, conforme à la réglementation française.',
+    'Caisse tactile, catalogue, stock, fidélité, commande différée et pilotage à distance. Une seule application pour fleuristes et commerces végétaux, conforme à la réglementation française.',
 };
 
 const FEATURES = [
   {
-    title: 'Caisse iPad rapide',
+    title: 'Caisse tactile rapide',
     icon: <Icon path={<><rect x="3" y="4" width="18" height="14" rx="2" /><path d="M3 9h18M7 21h10" /></>} />,
     desc: 'Encaissement en quelques gestes, paniers en attente, prix libres, remises, tickets numériques et impression.',
   },
@@ -70,7 +70,7 @@ export default async function HomePage() {
               La caisse pensée pour votre boutique de fleurs.
             </h1>
             <p className="mt-5 text-lg md:text-xl leading-relaxed" style={{ color: 'rgba(234,230,220,0.85)' }}>
-              Encaissement iPad, catalogue, stock, fidélité, commande différée et
+              Encaissement tactile, catalogue, stock, fidélité, commande différée et
               pilotage à distance. Une seule application, conforme à la
               réglementation française.
             </p>
