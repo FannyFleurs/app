@@ -142,10 +142,10 @@ export default async function ReviewsPage() {
         <div className="max-w-4xl mx-auto px-5 sm:px-6 py-16 md:py-20 text-center">
           <h2 className="text-3xl md:text-4xl font-bold tracking-tight">Envie de faire partie d’eux ?</h2>
           <p className="mt-4 text-lg" style={{ color: '#5A625E' }}>
-            Demandez une démonstration : on vous montre {brand} sur votre propre catalogue.
+            Réservez une démo : on vous montre {brand} sur votre propre catalogue, en 20 minutes.
           </p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-            <ButtonPrimary href="/contact">Demander une démo</ButtonPrimary>
+            <ButtonPrimary href="/contact">Réserver une démo gratuite</ButtonPrimary>
             <ButtonGhost href="/tarifs">Voir les tarifs</ButtonGhost>
           </div>
         </div>

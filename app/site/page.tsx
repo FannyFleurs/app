@@ -6,48 +6,48 @@ import {
 
 export const dynamic = 'force-dynamic';
 export const metadata = {
-  title: 'HelloPos — La caisse de votre boutique',
+  title: 'HelloPos — Vendez vite, gérez sans effort',
   description:
-    'Caisse tactile, catalogue, stock, fidélité, commande différée et pilotage à distance. Une seule application pour votre commerce, conforme à la réglementation française.',
+    'Encaissez en quelques gestes, ne manquez plus de stock, faites revenir vos clients et pilotez votre boutique à distance. Une seule application, conforme, prête dès le premier jour.',
 };
 
 const FEATURES = [
   {
-    title: 'Caisse tactile rapide',
+    title: 'Servez vos clients plus vite',
     icon: <Icon path={<><rect x="3" y="4" width="18" height="14" rx="2" /><path d="M3 9h18M7 21h10" /></>} />,
-    desc: 'Encaissement en quelques gestes, paniers en attente, prix libres, remises, tickets numériques et impression.',
+    desc: 'Encaissez en quelques gestes : paniers en attente, prix libres, remises, tickets numériques. La file avance, vos clients repartent contents.',
   },
   {
-    title: 'Catalogue & stock',
+    title: 'Ne tombez plus en rupture',
     icon: <Icon path={<><path d="M20 7 12 3 4 7l8 4 8-4Z" /><path d="M4 7v10l8 4 8-4V7" /><path d="M12 11v10" /></>} />,
-    desc: 'Familles, variantes, codes-barres, étiquettes imprimées, inventaire par boutique et transferts de stock.',
+    desc: 'Stock à jour par boutique, codes-barres et étiquettes imprimées : vous savez toujours ce qu’il vous reste, sans rien compter à la main.',
   },
   {
-    title: 'Fidélité & Wallet',
+    title: 'Faites revenir vos clients',
     icon: <Icon path={<><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 10h18" /></>} />,
-    desc: 'Programme de fidélité, cartes Apple Wallet dématérialisées, avoirs et cartes cadeaux suivis au client.',
+    desc: 'Fidélité, cartes dans Apple Wallet, avoirs et cartes cadeaux suivis au client : chaque visite prépare la prochaine.',
   },
   {
-    title: 'Commande différée',
+    title: 'Gérez les commandes sans stress',
     icon: <Icon path={<><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></>} />,
-    desc: 'Retrait à date et livraison, écran de préparation mural — pensé pour les commandes à l’avance et les comptes entreprises.',
+    desc: 'Retraits à date, livraisons et écran de préparation : les commandes à l’avance et les comptes entreprises ne vous échappent plus.',
   },
   {
-    title: 'Pilotage à distance',
+    title: 'Gardez l’œil, même à distance',
     icon: <Icon path={<><path d="M3 3v18h18" /><path d="m7 14 4-4 3 3 5-6" /></>} />,
-    desc: 'Chiffre d’affaires en direct, marge, TVA, top produits, historiques. Sur mobile comme sur ordinateur.',
+    desc: 'Chiffre d’affaires, marge et top produits en direct, sur mobile comme sur ordinateur. Votre boutique reste sous contrôle, où que vous soyez.',
   },
   {
-    title: 'Conforme, sereine',
+    title: 'Restez en règle sans y penser',
     icon: <Icon path={<><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3Z" /><path d="m9 12 2 2 4-4" /></>} />,
-    desc: 'Chaîne fiscale scellée (art. 286 CGI), rapport Z, exports comptables. La conformité, sans y penser.',
+    desc: 'Chaîne fiscale scellée (art. 286 CGI), rapport Z, exports comptables : la conformité est intégrée, vous n’avez rien à gérer.',
   },
 ];
 
 const STEPS = [
-  { n: '1', t: 'On installe avec vous', d: 'Catalogue, boutiques, caisses, imprimantes : votre configuration est prête le premier jour.' },
-  { n: '2', t: 'Votre équipe encaisse', d: 'Connexion par code, tuiles familles, encaissement immédiat. Rien à apprendre.' },
-  { n: '3', t: 'Vous pilotez à distance', d: 'Le back-office suit le CA, le stock et la caisse depuis n’importe où.' },
+  { n: '1', t: 'On installe tout avec vous', d: 'Catalogue, boutiques, caisses, imprimantes : vous démarrez prêt, sans y passer vos soirées.' },
+  { n: '2', t: 'Votre équipe encaisse tout de suite', d: 'Connexion par code, tuiles claires, rien à apprendre. La prise en main tient en une matinée.' },
+  { n: '3', t: 'Vous pilotez d’où vous voulez', d: 'Le back-office suit vos ventes, votre stock et votre caisse, depuis votre téléphone comme votre bureau.' },
 ];
 
 export default async function HomePage() {
@@ -64,22 +64,22 @@ export default async function HomePage() {
               className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-widest"
               style={{ backgroundColor: 'rgba(255,239,179,0.15)', color: GOLD }}
             >
-              Commerçants indépendants
+              Pour les commerçants indépendants
             </span>
             <h1 className="mt-5 text-4xl md:text-6xl font-bold tracking-tight text-white" style={{ textWrap: 'balance' } as React.CSSProperties}>
-              La caisse pensée pour votre boutique.
+              Vendez vite, gérez sans effort.
             </h1>
             <p className="mt-5 text-lg md:text-xl leading-relaxed" style={{ color: 'rgba(234,230,220,0.85)' }}>
-              Encaissement tactile, catalogue, stock, fidélité, commande différée et
-              pilotage à distance. Une seule application, conforme à la
-              réglementation française.
+              {brand} réunit caisse, stock, fidélité et pilotage à distance dans
+              une seule application. Vos ventes accélèrent, votre gestion se fait
+              presque toute seule, et vous restez conforme sans y penser.
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
-              <ButtonPrimary href="/contact" onDark>Demander une démo</ButtonPrimary>
-              <ButtonGhost href="/fonctionnalites" onDark>Voir les fonctionnalités</ButtonGhost>
+              <ButtonPrimary href="/contact" onDark>Réserver une démo gratuite</ButtonPrimary>
+              <ButtonGhost href="/fonctionnalites" onDark>Voir ce que ça change</ButtonGhost>
             </div>
             <p className="mt-4 text-sm" style={{ color: 'rgba(234,230,220,0.6)' }}>
-              Installation accompagnée · essai de 14 jours · sans engagement
+              Installation accompagnée · 14 jours d’essai · sans engagement
             </p>
           </div>
 
@@ -94,11 +94,11 @@ export default async function HomePage() {
         <div className="max-w-2xl">
           <Eyebrow>Tout au même endroit</Eyebrow>
           <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">
-            Du comptoir au back-office, sans logiciel en plus.
+            Tout votre commerce dans une appli.
           </h2>
           <p className="mt-3 text-base md:text-lg" style={{ color: '#5A625E' }}>
-            {brand} réunit la caisse, le catalogue, la fidélité, la commande
-            différée et la comptabilité. Une équipe, une application.
+            Fini les logiciels qui ne se parlent pas. Caisse, stock, fidélité,
+            commandes et compta avancent ensemble — pour vous et pour votre équipe.
           </p>
         </div>
         <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
@@ -112,20 +112,20 @@ export default async function HomePage() {
       <section style={{ backgroundColor: '#fff', borderTop: `1px solid ${BORDER}`, borderBottom: `1px solid ${BORDER}` }}>
         <div className="max-w-6xl mx-auto px-5 sm:px-6 py-16 md:py-24 grid gap-12 lg:grid-cols-2 lg:items-center">
           <div>
-            <Eyebrow>Le comptoir</Eyebrow>
+            <Eyebrow>Au quotidien</Eyebrow>
             <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">
-              « Ma journée » : tout ce qui compte, en un écran.
+              Pilotez votre journée d’un coup d’œil.
             </h2>
             <p className="mt-4 text-base md:text-lg" style={{ color: '#5A625E' }}>
-              Chiffre d’affaires du jour, panier moyen, répartition des règlements,
-              trésorerie espèces et actions rapides. Ouvrez, encaissez, clôturez —
-              la caisse suit, vous gardez la main.
+              Chiffre d’affaires, panier moyen, encaissements et trésorerie : tout
+              est là, en clair. Vous ouvrez, vous encaissez, vous clôturez — sans
+              jamais perdre le fil.
             </p>
             <ul className="mt-6 space-y-3 text-sm">
               {[
-                'Ouverture de la journée en un montant, partagée par tous les postes.',
-                'Répartition des ventes par moyen de paiement, en direct.',
-                'Clôture guidée, rapport Z imprimé sur l’imprimante ticket.',
+                'Une seule ouverture de caisse, partagée par tous les postes : fini le double comptage.',
+                'Vos ventes ventilées par moyen de paiement, en temps réel.',
+                'Clôture guidée et rapport Z imprimé : votre journée bouclée en une minute.',
               ].map((l) => (
                 <li key={l} className="flex items-start gap-2.5">
                   <span className="mt-0.5" style={{ color: GREEN }}>
@@ -144,7 +144,7 @@ export default async function HomePage() {
       <section className="max-w-6xl mx-auto px-5 sm:px-6 py-16 md:py-24">
         <div className="max-w-2xl">
           <Eyebrow>En pratique</Eyebrow>
-          <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">Prête à encaisser, dès le premier jour.</h2>
+          <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">Opérationnel dès le premier jour.</h2>
         </div>
         <div className="mt-10 grid gap-5 md:grid-cols-3">
           {STEPS.map((s) => (
@@ -167,14 +167,14 @@ export default async function HomePage() {
       <section style={{ backgroundColor: GREEN_DEEP }}>
         <div className="max-w-4xl mx-auto px-5 sm:px-6 py-16 md:py-20 text-center">
           <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-white">
-            Envie de voir {brand} sur votre comptoir ?
+            Voyez ce que ça donne chez vous.
           </h2>
           <p className="mt-4 text-lg" style={{ color: 'rgba(234,230,220,0.8)' }}>
-            Une démonstration de 20 minutes, adaptée à votre boutique. On vous
-            montre l’encaissement, le pilotage et la conformité.
+            20 minutes, sur votre propre catalogue. On vous montre l’encaissement,
+            le pilotage et la conformité — vous jugez sur pièces.
           </p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-            <ButtonPrimary href="/contact" onDark>Demander une démo</ButtonPrimary>
+            <ButtonPrimary href="/contact" onDark>Réserver une démo gratuite</ButtonPrimary>
             <ButtonGhost href="/tarifs" onDark>Voir les tarifs</ButtonGhost>
           </div>
         </div>
