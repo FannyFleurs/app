@@ -13,6 +13,7 @@ import { loadPlatform } from '@/lib/site/platform';
 const NAV = [
   { href: '/fonctionnalites', label: 'Fonctionnalités' },
   { href: '/tarifs', label: 'Tarifs' },
+  { href: '/avis', label: 'Avis' },
   { href: '/conformite', label: 'Conformité' },
   { href: '/contact', label: 'Contact' },
 ];
@@ -89,9 +90,8 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
               )}
             </div>
             <p className="mt-3 text-sm max-w-sm" style={{ color: 'rgba(234,230,220,0.75)' }}>
-              La caisse pensée pour les fleuristes et les commerces végétaux.
-              Du comptoir au back-office, une seule application, conforme à la
-              réglementation française.
+              La caisse pensée pour votre boutique. Du comptoir au back-office,
+              une seule application, conforme à la réglementation française.
             </p>
           </div>
 
