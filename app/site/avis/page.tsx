@@ -1,5 +1,5 @@
 import { loadPlatform } from '@/lib/site/platform';
-import { REVIEWS, REVIEW_AVG } from '@/lib/site/reviews';
+import { REVIEWS } from '@/lib/site/reviews';
 import { pageMeta } from '@/lib/site/meta';
 import {
   Eyebrow, ButtonPrimary, ButtonGhost, Stars, initials, GREEN_DEEP, GOLD, BORDER, IVORY, GREEN,
@@ -9,14 +9,13 @@ export const dynamic = 'force-dynamic';
 export const metadata = pageMeta({
   title: 'Avis clients — HelloPos',
   description:
-    'Ce que les commerçants disent de HelloPos : encaissement rapide, commande différée, pilotage à distance, clôture guidée et conformité. Une note moyenne de 4,9 sur 5.',
+    'Ce que les commerçants disent de HelloPos : encaissement rapide, commande différée, pilotage à distance, clôture guidée et conformité.',
   path: '/avis',
 });
 
 export default async function ReviewsPage() {
   const platform = await loadPlatform();
   const brand = platform.brand_name || 'HelloPos';
-  const avg = REVIEW_AVG;
 
   return (
     <>
@@ -32,13 +31,6 @@ export default async function ReviewsPage() {
               Des commerçants de tous horizons utilisent {brand} au quotidien.
               Voici, avec leurs mots, ce qui les a convaincus.
             </p>
-            <div className="mt-6 inline-flex items-center gap-3 rounded-full px-4 py-2"
-                 style={{ backgroundColor: 'rgba(255,239,179,0.15)' }}>
-              <Stars n={5} />
-              <span className="text-sm font-semibold" style={{ color: GOLD }}>
-                {avg} / 5 · note moyenne
-              </span>
-            </div>
           </div>
         </div>
       </section>
@@ -70,7 +62,7 @@ export default async function ReviewsPage() {
           ))}
         </div>
         <p className="mt-8 text-center text-xs" style={{ color: '#5A625E' }}>
-          Témoignages de commerçants utilisateurs. Prénoms abrégés pour préserver leur confidentialité.
+          Retours d’utilisateurs présentés à titre d’exemple. Prénoms abrégés pour préserver leur confidentialité.
         </p>
       </section>
 
