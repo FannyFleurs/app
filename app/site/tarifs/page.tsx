@@ -8,23 +8,51 @@ export const dynamic = 'force-dynamic';
 export const metadata = pageMeta({
   title: 'Tarifs — HelloPos',
   description:
-    'Un forfait mensuel par boutique, sans engagement. Trois formules : Essentiel, Croissance et Réseau. Essai de 14 jours, installation accompagnée.',
+    'Un forfait mensuel par boutique, sans engagement. Trois formules : Smart, Pro et Réseau. Essai de 14 jours, installation accompagnée.',
   path: '/tarifs',
 });
 
 const PLANS = [
   {
-    name: 'Essentiel', price: '29', tag: 'Boutique unique', highlight: false,
+    name: 'Smart', price: '29', tag: 'Boutique unique', highlight: false,
     features: ['1 boutique · 1 caisse', 'Catalogue illimité', 'Fidélité de base', 'Conformité fiscale incluse', 'Support par email'],
   },
   {
-    name: 'Croissance', price: '59', tag: 'Le plus choisi', highlight: true,
+    name: 'Pro', price: '39', tag: 'Le plus choisi', highlight: true,
     features: ['1 boutique · jusqu’à 5 caisses', 'Multi-postes + affichage client', 'Écran & Livraison (commande différée)', 'Wallet Apple, avoirs, cartes cadeaux', 'Exports comptables', 'Support prioritaire'],
   },
   {
-    name: 'Réseau', price: 'Sur mesure', tag: 'Multi-boutiques', highlight: false,
+    name: 'Réseau', price: '69', tag: 'Multi-boutiques', highlight: false,
     features: ['Boutiques illimitées', 'Transferts de stock', 'Rapports consolidés', 'Onboarding + formation', 'Accompagnement dédié'],
   },
+];
+
+/**
+ * Tableau comparatif. Valeurs issues des listes d'offres du projet :
+ *   true = inclus · false = non inclus · 'texte' = précision · null = à préciser.
+ * Les `null` sont des PLACEHOLDERS assumés : la disponibilité par offre n'est
+ * pas connue à ce jour et doit être renseignée (ne rien inventer).
+ */
+type Cell = boolean | string | null;
+const CMP_ROWS: { label: string; v: [Cell, Cell, Cell] }[] = [
+  { label: 'Encaissement tactile', v: [true, true, true] },
+  { label: 'Catalogue articles', v: [true, true, true] },
+  { label: 'Conformité fiscale', v: [true, true, true] },
+  { label: 'Nombre de caisses', v: ['1', 'Jusqu’à 5', null] },
+  { label: 'Multi-postes + affichage client', v: [false, true, true] },
+  { label: 'Utilisateurs', v: [null, null, null] },
+  { label: 'Fidélité', v: ['De base', true, true] },
+  { label: 'Cartes Apple Wallet', v: [null, true, true] },
+  { label: 'Cartes cadeaux', v: [null, true, true] },
+  { label: 'Avoirs', v: [null, true, true] },
+  { label: 'Commandes · retraits · livraisons', v: [null, true, true] },
+  { label: 'Facturation', v: [null, null, null] },
+  { label: 'Comptes professionnels', v: [null, null, null] },
+  { label: 'Exports comptables', v: [null, true, true] },
+  { label: 'Multi-boutiques', v: [false, false, true] },
+  { label: 'Transferts de stock', v: [false, false, true] },
+  { label: 'Rapports', v: [true, true, 'Consolidés'] },
+  { label: 'Support', v: ['Email', 'Prioritaire', 'Dédié'] },
 ];
 
 const FAQ = [
@@ -34,12 +62,31 @@ const FAQ = [
   { q: 'Est-ce conforme à la loi française ?', a: 'Oui : chaîne fiscale scellée (art. 286 CGI), rapport Z, exports comptables. La conformité est intégrée, pas en option.' },
 ];
 
+/** Équivalent journalier (≈ prix / 30) pour un prix mensuel numérique. */
+function perDay(price: string): string | null {
+  const n = Number(String(price).replace(',', '.'));
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return `≈ ${(n / 30).toFixed(2).replace('.', ',')} € / jour`;
+}
+
+function Check() {
+  return <span className="inline-flex" style={{ color: GREEN }} aria-label="inclus"><Icon path={<path d="m5 12 4 4L19 6" />} /></span>;
+}
+
+function Cellule({ value }: { value: Cell }) {
+  if (value === true) return <Check />;
+  if (value === false) return <span className="text-sm" style={{ color: '#C7C2B4' }} aria-label="non inclus">—</span>;
+  if (value === null) return <span className="text-xs italic" style={{ color: '#9A968A' }}>à préciser</span>;
+  return <span className="text-sm" style={{ color: '#14211D' }}>{value}</span>;
+}
+
 export default async function PricingPage() {
   const platform = await loadPlatform();
   const label = (i: number, d: string) =>
     (i === 0 ? platform.plan_essentiel_name : i === 1 ? platform.plan_croissance_name : platform.plan_reseau_name) || d;
   const price = (i: number, d: string) =>
     (i === 0 ? platform.plan_essentiel_price : i === 1 ? platform.plan_croissance_price : platform.plan_reseau_price) || d;
+  const names = PLANS.map((p, i) => label(i, p.name));
 
   return (
     <>
@@ -57,7 +104,9 @@ export default async function PricingPage() {
       <section className="max-w-6xl mx-auto px-5 sm:px-6 -mt-10 md:-mt-12 pb-16 md:pb-24">
         <div className="grid gap-5 md:grid-cols-3">
           {PLANS.map((p, i) => {
-            const isNum = /^[0-9]+([.,][0-9]+)?$/.test(String(price(i, p.price)).trim());
+            const shownPrice = price(i, p.price);
+            const isNum = /^[0-9]+([.,][0-9]+)?$/.test(String(shownPrice).trim());
+            const daily = isNum ? perDay(shownPrice) : null;
             return (
               <div
                 key={p.name}
@@ -78,9 +127,10 @@ export default async function PricingPage() {
                 </div>
                 <h2 className="mt-2 text-2xl font-bold">{label(i, p.name)}</h2>
                 <div className="mt-4 flex items-baseline gap-1.5">
-                  <span className="text-4xl font-bold">{price(i, p.price)}</span>
+                  <span className="text-4xl font-bold">{shownPrice}</span>
                   {isNum && <span style={{ color: '#5A625E' }}>€ HT / mois</span>}
                 </div>
+                {daily && <div className="mt-1 text-sm" style={{ color: '#5A625E' }}>{daily}</div>}
                 <ul className="mt-6 space-y-2.5 text-sm flex-1">
                   {p.features.map((f) => (
                     <li key={f} className="flex items-start gap-2.5">
@@ -107,23 +157,63 @@ export default async function PricingPage() {
         </p>
       </section>
 
-      <section style={{ backgroundColor: IVORY, borderTop: `1px solid ${BORDER}` }}>
-        <div className="max-w-4xl mx-auto px-5 sm:px-6 py-16 md:py-24">
+      {/* ------------------------------------------------ TABLEAU COMPARATIF */}
+      <section style={{ backgroundColor: IVORY, borderTop: `1px solid ${BORDER}`, borderBottom: `1px solid ${BORDER}` }}>
+        <div className="max-w-6xl mx-auto px-5 sm:px-6 py-16 md:py-24">
           <div className="text-center max-w-2xl mx-auto">
-            <Eyebrow>Questions fréquentes</Eyebrow>
-            <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">Ce qu’on nous demande souvent.</h2>
+            <Eyebrow>Comparatif</Eyebrow>
+            <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">Comparez les offres.</h2>
           </div>
-          <div className="mt-10 grid gap-4 sm:grid-cols-2">
-            {FAQ.map((f) => (
-              <div key={f.q} className="rounded-2xl bg-white p-6" style={{ border: `1px solid ${BORDER}` }}>
-                <h3 className="font-semibold">{f.q}</h3>
-                <p className="mt-2 text-sm" style={{ color: '#5A625E' }}>{f.a}</p>
-              </div>
-            ))}
+
+          <div className="mt-10 overflow-x-auto rounded-2xl bg-white" style={{ border: `1px solid ${BORDER}` }}>
+            <table className="w-full min-w-[560px] text-left border-collapse">
+              <thead>
+                <tr style={{ borderBottom: `1px solid ${BORDER}` }}>
+                  <th className="sticky left-0 bg-white px-4 py-4 text-sm font-semibold" style={{ minWidth: 220 }}>Fonctionnalités</th>
+                  {names.map((n, i) => (
+                    <th key={n} className="px-4 py-4 text-center text-sm font-semibold" style={{ color: i === 1 ? GREEN : '#14211D' }}>
+                      {n}{i === 1 && <span className="ml-1.5 align-middle rounded-full px-1.5 py-0.5 text-[10px] font-semibold" style={{ backgroundColor: GOLD, color: GREEN_DEEP }}>Reco</span>}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {CMP_ROWS.map((row, ri) => (
+                  <tr key={row.label} style={{ borderTop: ri === 0 ? 'none' : `1px solid ${BORDER}`, backgroundColor: ri % 2 ? 'rgba(248,246,240,0.5)' : '#fff' }}>
+                    <th scope="row" className="sticky left-0 px-4 py-3 text-sm font-medium text-left" style={{ backgroundColor: ri % 2 ? '#FBFAF6' : '#fff', color: '#14211D' }}>
+                      {row.label}
+                    </th>
+                    {row.v.map((cell, ci) => (
+                      <td key={ci} className="px-4 py-3 text-center">
+                        <div className="flex justify-center"><Cellule value={cell} /></div>
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-          <div className="mt-12 text-center">
-            <ButtonPrimary href="/contact">Réserver une démo gratuite</ButtonPrimary>
-          </div>
+          <p className="mt-4 text-xs" style={{ color: '#5A625E' }}>
+            ✓ inclus · — non inclus · « à préciser » : détail communiqué sur demande. Faites défiler horizontalement le tableau sur mobile.
+          </p>
+        </div>
+      </section>
+
+      <section className="max-w-4xl mx-auto px-5 sm:px-6 py-16 md:py-24">
+        <div className="text-center max-w-2xl mx-auto">
+          <Eyebrow>Questions fréquentes</Eyebrow>
+          <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">Ce qu’on nous demande souvent.</h2>
+        </div>
+        <div className="mt-10 grid gap-4 sm:grid-cols-2">
+          {FAQ.map((f) => (
+            <div key={f.q} className="rounded-2xl bg-white p-6" style={{ border: `1px solid ${BORDER}` }}>
+              <h3 className="font-semibold">{f.q}</h3>
+              <p className="mt-2 text-sm" style={{ color: '#5A625E' }}>{f.a}</p>
+            </div>
+          ))}
+        </div>
+        <div className="mt-12 text-center">
+          <ButtonPrimary href="/contact">Réserver une démo gratuite</ButtonPrimary>
         </div>
       </section>
     </>
