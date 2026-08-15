@@ -116,9 +116,9 @@ export default async function HomePage() {
   const startPrice = platform.plan_essentiel_price || '29';
 
   const plans = [
-    { name: platform.plan_essentiel_name || 'Essentiel', price: platform.plan_essentiel_price || '29', tag: 'Boutique unique' },
-    { name: platform.plan_croissance_name || 'Croissance', price: platform.plan_croissance_price || '59', tag: 'Le plus choisi', highlight: true },
-    { name: platform.plan_reseau_name || 'Réseau', price: platform.plan_reseau_price || 'Sur mesure', tag: 'Multi-boutiques' },
+    { name: platform.plan_essentiel_name || 'Smart', price: platform.plan_essentiel_price || '29', tag: 'Boutique unique' },
+    { name: platform.plan_croissance_name || 'Pro', price: platform.plan_croissance_price || '39', tag: 'Le plus choisi', highlight: true },
+    { name: platform.plan_reseau_name || 'Réseau', price: platform.plan_reseau_price || '69', tag: 'Multi-boutiques' },
   ];
 
   // Donnees structurees : SoftwareApplication + Offer. Pas d'AggregateRating :
