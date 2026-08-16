@@ -1467,6 +1467,67 @@ button:hover .hp-arrow {
   }
 }
 
+/* --- Fenêtre modale (formulaire de contact de la page d'attente) --- */
+.hp-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0;
+  background: rgba(1, 34, 31, 0.55);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+@media (min-width: 640px) {
+  .hp-modal {
+    align-items: center;
+    padding: var(--gutter);
+  }
+}
+.hp-modal-panel {
+  width: 100%;
+  max-width: 34rem;
+  background: var(--cream);
+  color: var(--ink);
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+  padding: clamp(1.25rem, 1rem + 1.5vw, 2rem);
+  box-shadow: var(--sh-3);
+  max-height: 92svh;
+  overflow-y: auto;
+}
+@media (min-width: 640px) {
+  .hp-modal-panel {
+    border-radius: var(--r-lg);
+  }
+}
+.hp-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+/* La fenêtre s'ouvre au-dessus d'une page sombre : sans cela, les textes
+   secondaires et les liens hériteraient des couleurs prévues pour le fond
+   vert, illisibles sur le panneau crème. */
+.hp-modal-panel .hp-small,
+.hp-modal-panel .hp-fine,
+.hp-modal-panel .hp-hint,
+.hp-modal-panel .hp-form-note,
+.hp-modal-panel .hp-lede {
+  color: var(--ink-soft);
+}
+.hp-modal-panel .hp-link {
+  color: var(--green);
+}
+.hp-modal-panel :focus-visible {
+  outline-color: var(--green);
+}
+
 /* --- Formulaires --- */
 .hp-field {
   display: grid;
