@@ -1,0 +1,18 @@
+Polices utilisées par le site public HelloPos
+=============================================
+
+Fraunces (fraunces-latin.woff2, fraunces-latin-ext.woff2)
+  Auteurs : Phaedra Charles, Flavia Zimbardi, Undercase Type
+  Licence : SIL Open Font License, Version 1.1
+  Source  : https://fonts.google.com/specimen/Fraunces
+
+Inter (inter-latin.woff2, inter-latin-ext.woff2)
+  Auteur  : Rasmus Andersson
+  Licence : SIL Open Font License, Version 1.1
+  Source  : https://fonts.google.com/specimen/Inter
+
+Les fichiers sont des sous-ensembles (latin et latin étendu) au format WOFF2,
+servis depuis nos propres serveurs : aucune requête n'est adressée à un tiers
+lors de l'affichage des pages.
+
+Texte complet de la licence : https://openfontlicense.org

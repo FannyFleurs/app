@@ -48,6 +48,11 @@ export interface PlatformSettings {
   contact_phone: string;
   website: string;
   /**
+   * Publication du site public hellopos.fr. `false` = seule la page d'attente
+   * est en ligne ; les espaces applicatifs ne sont jamais concernés.
+   */
+  site_public: boolean;
+  /**
    * URL d'une vidéo de démonstration (YouTube, Vimeo, Loom ou fichier .mp4).
    * Si renseignée, un encart vidéo apparaît sur la page d'accueil du site
    * vitrine. Vide = l'encart n'est pas affiché.
@@ -113,6 +118,9 @@ export const PLATFORM_DEFAULTS: PlatformSettings = {
   contact_phone: '',
   website: '',
   demo_video_url: '',
+  // Le site public n'est pas en ligne tant qu'il n'a pas été activé depuis la
+  // console d'administration.
+  site_public: false,
   stripe_secret_key: '',
   stripe_publishable_key: '',
   stripe_webhook_secret: '',

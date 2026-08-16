@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { isMarketingPath } from '@/lib/site/routes';
 
 /**
  * Routage par sous-domaine :
@@ -52,12 +53,29 @@ function isStaticOrApi(pathname: string): boolean {
 
 /**
  * Pages du site vitrine, servies sous /site/*. L'apex les expose à des URLs
- * propres (hellopos.fr/tarifs → /site/tarifs) ; les captures et autres assets
- * du site vivent sous /site/… et passent tels quels.
+ * propres (hellopos.fr/tarifs → /site/tarifs) ; les captures, polices et
+ * autres assets du site vivent sous /site/… et passent tels quels.
+ *
+ * La liste des URLs publiques est tenue dans lib/site/routes.ts, partagée
+ * avec le plan du site : une page ajoutée là est servie ici sans autre
+ * modification.
  */
-const MARKETING_PATHS = new Set(['/fonctionnalites', '/tarifs', '/avis', '/conformite', '/contact', '/mentions-legales', '/confidentialite']);
 function isSitePath(pathname: string): boolean {
   return pathname === '/site' || pathname.startsWith('/site/');
+}
+
+/** Page d'attente affichée quand le site public n'est pas activé. */
+const HOLDING_PATH = '/indisponible';
+
+/**
+ * Recopie les en-têtes de la requête en y ajoutant le chemin d'origine.
+ * Après réécriture, le rendu ne voit plus que `/site/...` : sans cela, il ne
+ * pourrait pas distinguer l'accueil (`/`) d'une page intérieure.
+ */
+function withPath(req: NextRequest, pathname: string): Headers {
+  const h = new Headers(req.headers);
+  h.set('x-hp-path', pathname);
+  return h;
 }
 
 export function middleware(req: NextRequest) {
@@ -168,18 +186,24 @@ export function middleware(req: NextRequest) {
     // apex (hellopos.fr) -> UNIQUEMENT la vitrine + onboarding.
     // La racine affiche la vitrine ; /site et /setup restent servis ;
     // tout le reste (caisse, dashboard, login…) part sur app.<domaine>.
+    //
+    // La PUBLICATION du site est un réglage en base (Configuration → Site
+    // public) : le middleware s'exécute sur l'edge, sans accès à Postgres,
+    // c'est donc le rendu qui décide d'afficher le site ou la page d'attente.
+    // Le chemin d'origine est transmis dans `x-hp-path` pour que le gabarit
+    // du site sache s'il sert l'accueil ou une page intérieure.
     if (pathname === '/') {
       url.pathname = '/site';
-      return NextResponse.rewrite(url);
+      return NextResponse.rewrite(url, { request: { headers: withPath(req, pathname) } });
     }
     // URLs propres du site vitrine (hellopos.fr/tarifs…) → /site/tarifs.
-    if (MARKETING_PATHS.has(pathname)) {
+    if (isMarketingPath(pathname)) {
       url.pathname = '/site' + pathname;
-      return NextResponse.rewrite(url);
+      return NextResponse.rewrite(url, { request: { headers: withPath(req, pathname) } });
     }
     // /site/* (accès direct + captures) et /setup servis tels quels.
-    if (isSitePath(pathname) || pathname === '/setup' || pathname.startsWith('/setup/')) {
-      return NextResponse.next();
+    if (isSitePath(pathname) || pathname === HOLDING_PATH || pathname === '/setup' || pathname.startsWith('/setup/')) {
+      return NextResponse.next({ request: { headers: withPath(req, pathname) } });
     }
     const to = url.clone();
     to.host = `app.${base}`;
@@ -192,9 +216,12 @@ export function middleware(req: NextRequest) {
 
   // Site vitrine : URLs propres → /site/* (comme sur l'apex réel), pour que
   // la navigation du site fonctionne aussi en local / preview.
-  if (MARKETING_PATHS.has(pathname)) {
+  if (isMarketingPath(pathname)) {
     url.pathname = '/site' + pathname;
-    return NextResponse.rewrite(url);
+    return NextResponse.rewrite(url, { request: { headers: withPath(req, pathname) } });
+  }
+  if (isSitePath(pathname)) {
+    return NextResponse.next({ request: { headers: withPath(req, pathname) } });
   }
 
   // Sortie du back-office

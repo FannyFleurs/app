@@ -1,106 +1,104 @@
 import { loadPlatform } from '@/lib/site/platform';
-import { pageMeta } from '@/lib/site/meta';
-import { Eyebrow, Icon, GREEN, GREEN_DEEP, GOLD, BORDER } from '../_ui';
+import { pageMeta, SITE_URL } from '@/lib/site/meta';
+import { ONBOARDING } from '@/lib/site/content/home';
+import { Eyebrow, PageHeader, TextLink } from '../_components/ui';
+import { Icon } from '../_components/icons';
 import ContactForm from './ContactForm';
 
-export const dynamic = 'force-dynamic';
 export const metadata = pageMeta({
   title: 'Contact — HelloPos',
   description:
-    'Réservez une démo gratuite de HelloPos, la caisse tout-en-un des commerçants. 20 minutes, sur votre propre catalogue.',
+    'Réserver une démonstration de HelloPos, vérifier votre matériel, poser une question sur les tarifs ou le multi-boutiques. Une réponse d’une personne, pas d’un robot.',
   path: '/contact',
 });
 
-export default async function ContactPage() {
+/** Sujets pré-remplis depuis les liens du site (ex. /contact?sujet=materiel). */
+const SUBJECT_BY_KEY: Record<string, string> = {
+  demo: 'Découvrir HelloPos (démo)',
+  materiel: 'Vérifier mon matériel',
+  tarifs: 'Question sur les tarifs',
+  reseau: 'Plusieurs boutiques',
+};
+
+export default async function ContactPage({
+  searchParams,
+}: {
+  searchParams?: { sujet?: string };
+}) {
   const platform = await loadPlatform();
-  const email = platform.contact_email || 'contact@hellopos.fr';
-  const phone = platform.contact_phone || '';
+  const brand = platform.brand_name || 'HelloPos';
+  const defaultSubject = SUBJECT_BY_KEY[searchParams?.sujet ?? ''] ?? undefined;
 
   return (
     <>
-      <section style={{ backgroundColor: GREEN }}>
-        <div className="max-w-6xl mx-auto px-5 sm:px-6 py-16 md:py-20">
-          <div className="max-w-3xl">
-            <Eyebrow onDark>Contact</Eyebrow>
-            <h1 className="mt-3 text-4xl md:text-5xl font-bold tracking-tight text-white">Parlons de votre boutique.</h1>
-            <p className="mt-4 text-lg" style={{ color: 'rgba(234,230,220,0.85)' }}>
-              Une démonstration de 20 minutes, sur votre propre catalogue. On
-              vous montre l’encaissement, le pilotage et la conformité — et on
-              répond à toutes vos questions.
-            </p>
-          </div>
-        </div>
-      </section>
+      <PageHeader
+        eyebrow="Contact"
+        title={<>Parlons de votre commerce.</>}
+        lede={`Une démonstration, une question de matériel, un projet à plusieurs boutiques : écrivez-nous, nous répondons.`}
+        crumbs={[
+          { href: '/', label: 'Accueil' },
+          { href: '/contact', label: 'Contact' },
+        ]}
+        siteUrl={SITE_URL}
+      />
 
-      <section className="max-w-6xl mx-auto px-5 sm:px-6 py-16 md:py-24 grid gap-10 lg:grid-cols-[1.4fr_1fr] lg:items-start">
-        <div className="rounded-2xl bg-white p-6 md:p-8" style={{ border: `1px solid ${BORDER}` }}>
-          <h2 className="text-xl font-bold">Réservez votre démo</h2>
-          <p className="mt-1 text-sm" style={{ color: '#5A625E' }}>Gratuite, 20 minutes, sur votre catalogue. On vous rappelle sous 24 h ouvrées.</p>
-          <div className="mt-6">
-            <ContactForm />
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          <a
-            href={`mailto:${email}`}
-            className="flex items-center gap-4 rounded-2xl bg-white p-5 transition-colors hover:bg-black/[0.02]"
-            style={{ border: `1px solid ${BORDER}` }}
-          >
-            <span className="grid h-11 w-11 place-items-center rounded-xl" style={{ backgroundColor: GOLD, color: GREEN_DEEP }}>
-              <Icon path={<><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></>} />
-            </span>
-            <span>
-              <span className="block text-xs font-semibold uppercase tracking-widest" style={{ color: '#5A625E' }}>Email</span>
-              <span className="block font-medium" style={{ color: GREEN }}>{email}</span>
-            </span>
-          </a>
-
-          {phone && (
-            <a
-              href={`tel:${phone.replace(/\s/g, '')}`}
-              className="flex items-center gap-4 rounded-2xl bg-white p-5 transition-colors hover:bg-black/[0.02]"
-              style={{ border: `1px solid ${BORDER}` }}
-            >
-              <span className="grid h-11 w-11 place-items-center rounded-xl" style={{ backgroundColor: GOLD, color: GREEN_DEEP }}>
-                <Icon path={<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3-8.6A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.6a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.5-1.2a2 2 0 0 1 2.1-.5c.8.3 1.7.6 2.6.7a2 2 0 0 1 1.7 2Z" />} />
-              </span>
-              <span>
-                <span className="block text-xs font-semibold uppercase tracking-widest" style={{ color: '#5A625E' }}>Téléphone</span>
-                <span className="block font-medium" style={{ color: GREEN }}>{phone}</span>
-              </span>
-            </a>
-          )}
-
-          <div className="rounded-2xl bg-white p-5" style={{ border: `1px solid ${BORDER}` }}>
-            <div className="text-xs font-semibold uppercase tracking-widest" style={{ color: '#5A625E' }}>Comment ça se passe</div>
-            <ol className="mt-4 space-y-3.5">
-              {[
-                'On échange 20 minutes sur votre boutique et vos besoins.',
-                'On prépare la démo sur votre propre catalogue.',
-                'Vous testez 14 jours, sans carte bancaire.',
-              ].map((t, i) => (
-                <li key={t} className="flex items-start gap-3">
-                  <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-bold" style={{ backgroundColor: GREEN, color: '#fff' }}>{i + 1}</span>
-                  <span className="text-sm" style={{ color: '#14211D' }}>{t}</span>
-                </li>
-              ))}
-            </ol>
-            <p className="mt-4 pt-4 text-xs" style={{ color: '#5A625E', borderTop: `1px solid ${BORDER}` }}>
-              Sans engagement · Réponse sous 24 h ouvrées · Vos données restent les vôtres.
-            </p>
+      <section className="hp-section--tight" id="demo" style={{ scrollMarginTop: '5.5rem' }}>
+        <div className="hp-container hp-cols hp-cols--sidebar-rev" style={{ marginTop: '2rem', alignItems: 'start' }}>
+          <div>
+            <ContactForm defaultSubject={defaultSubject} />
           </div>
 
-          <div className="rounded-2xl p-5" style={{ backgroundColor: GREEN, color: '#fff' }}>
-            <div className="text-xs font-semibold uppercase tracking-widest" style={{ color: GOLD }}>Déjà client ?</div>
-            <p className="mt-2 text-sm" style={{ color: 'rgba(234,230,220,0.85)' }}>
-              Accédez à votre caisse ou à votre back-office.
-            </p>
-            <div className="mt-4 flex gap-2">
-              <a href="/login" className="inline-flex items-center h-10 px-4 rounded-xl text-sm font-semibold" style={{ backgroundColor: GOLD, color: GREEN_DEEP }}>Caisse</a>
-              <a href="/bo" className="inline-flex items-center h-10 px-4 rounded-xl text-sm font-medium" style={{ color: GOLD, border: `1px solid rgba(255,239,179,0.4)` }}>Back-office</a>
+          <aside style={{ display: 'grid', gap: '2rem' }}>
+            <div>
+              <Eyebrow>Comment ça se passe</Eyebrow>
+              <ol style={{ listStyle: 'none', margin: '1.25rem 0 0', padding: 0, display: 'grid', gap: '1rem' }}>
+                {ONBOARDING.map((s) => (
+                  <li key={s.index} style={{ display: 'flex', gap: '0.9rem' }}>
+                    <span className="hp-story-index">{s.index}</span>
+                    <span>
+                      <b style={{ fontWeight: 550 }}>{s.title}</b>
+                      <span className="hp-small" style={{ display: 'block' }}>{s.text}</span>
+                    </span>
+                  </li>
+                ))}
+              </ol>
             </div>
-          </div>
+
+            <div className="hp-card">
+              <h2 className="hp-h4">Nous joindre directement</h2>
+              <ul style={{ listStyle: 'none', margin: '1rem 0 0', padding: 0, display: 'grid', gap: '0.6rem' }}>
+                {platform.contact_email ? (
+                  <li style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
+                    <span aria-hidden="true" style={{ color: 'var(--green)' }}><Icon name="mail" size={18} /></span>
+                    <a className="hp-link" href={`mailto:${platform.contact_email}`}>{platform.contact_email}</a>
+                  </li>
+                ) : null}
+                {platform.contact_phone ? (
+                  <li style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
+                    <span aria-hidden="true" style={{ color: 'var(--green)' }}><Icon name="phone" size={18} /></span>
+                    <a className="hp-link" href={`tel:${platform.contact_phone.replace(/\s/g, '')}`}>
+                      {platform.contact_phone}
+                    </a>
+                  </li>
+                ) : null}
+                {!platform.contact_email && !platform.contact_phone ? (
+                  <li className="hp-small">
+                    Le formulaire est le moyen le plus sûr de nous joindre : chaque demande est
+                    enregistrée, aucune ne se perd.
+                  </li>
+                ) : null}
+              </ul>
+            </div>
+
+            <div>
+              <p className="hp-small">
+                Vous préférez essayer d’abord ? La création de votre espace prend quelques minutes.
+              </p>
+              <p style={{ marginTop: '0.75rem' }}>
+                <TextLink href="/setup" track="essai_hellopos">Créer mon espace {brand}</TextLink>
+              </p>
+            </div>
+          </aside>
         </div>
       </section>
     </>

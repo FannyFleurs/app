@@ -1,166 +1,93 @@
-import Link from 'next/link';
+import type { Metadata, Viewport } from 'next';
+import { headers } from 'next/headers';
+import { redirect } from 'next/navigation';
 import { loadPlatform } from '@/lib/site/platform';
-import SiteInteractions from './SiteInteractions';
-import MobileMenu from './MobileMenu';
-import EmailCapture from './EmailCapture';
-import { SITE_URL } from '@/lib/site/meta';
-import './interactions.css';
+import { isSitePublic, isSiteHome } from '@/lib/site/publication';
+import HoldingScreen from './_components/HoldingScreen';
+import { organizationLd, softwareLd, SITE_NAME, SITE_URL } from '@/lib/site/meta';
+import Header from './_components/Header';
+import Footer from './_components/Footer';
+import SiteRuntime from './_components/SiteRuntime';
+import './site.css';
 
 /**
- * Habillage commun du site vitrine hellopos.fr : en-tête collant et pied de
- * page, aux couleurs de la marque (vert profond #013E37, or #FFEFB3, ivoire
- * #F8F6F0). Chaque page marketing s'inscrit à l'intérieur.
+ * Habillage du site public hellopos.fr.
  *
- * Le lien « Créer une boutique » a été retiré du menu : l'entrée dans le
- * produit se fait par une démonstration (contact), pas en libre-service.
+ * L'application (caisse, back-office) interdit le zoom pour éviter les
+ * gestes tactiles parasites au comptoir. Un site public, lui, doit rester
+ * zoomable : on rétablit ici le comportement standard, conformément au
+ * critère WCAG 1.4.4.
+ *
+ * C'est également ici que se joue la publication du site (Configuration →
+ * Site public dans la console d'administration) : tant qu'il n'est pas
+ * activé, la racine affiche l'écran d'attente et les autres pages y
+ * ramènent. `force-dynamic` garantit que l'interrupteur prend effet à la
+ * requête suivante, sans redéploiement.
  */
 
-const NAV = [
-  { href: '/fonctionnalites', label: 'Fonctionnalités' },
-  { href: '/tarifs', label: 'Tarifs' },
-  { href: '/avis', label: 'Avis' },
-  { href: '/conformite', label: 'Conformité' },
-  { href: '/contact', label: 'Contact' },
-];
+export const dynamic = 'force-dynamic';
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+  userScalable: true,
+  themeColor: '#FBF9F2',
+};
+
+export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: 'HelloPos — La caisse qui fait beaucoup plus que la caisse',
+    template: '%s',
+  },
+  applicationName: SITE_NAME,
+  authors: [{ name: SITE_NAME }],
+  formatDetection: { telephone: false, email: false, address: false },
+};
 
 export default async function SiteLayout({ children }: { children: React.ReactNode }) {
-  const platform = await loadPlatform();
-  const brand = platform.brand_name || 'HelloPos';
-  const year = new Date().getFullYear();
+  // ---- Site non publié : rien du site n'est servi, sauf l'écran d'attente.
+  if (!(await isSitePublic())) {
+    // Le chemin d'origine est posé par le middleware avant la réécriture.
+    const path = headers().get('x-hp-path') ?? '/';
+    if (!isSiteHome(path)) redirect('/');
+    return (
+      <div className="hp hp-dark hp-on-green">
+        <HoldingScreen />
+      </div>
+    );
+  }
 
-  const orgLd = {
-    '@context': 'https://schema.org',
-    '@type': 'Organization',
-    name: brand,
-    url: SITE_URL,
-    logo: platform.logo_url || `${SITE_URL}/site/og.png`,
-    ...(platform.contact_email
-      ? { contactPoint: { '@type': 'ContactPoint', email: platform.contact_email, contactType: 'sales', areaServed: 'FR' } }
-      : {}),
-  };
+  const platform = await loadPlatform();
+  const brand = platform.brand_name || SITE_NAME;
+
+  const orgLd = organizationLd({
+    brand,
+    logoUrl: platform.logo_url || undefined,
+    email: platform.contact_email || undefined,
+    phone: platform.contact_phone || undefined,
+    legalName: platform.company_legal_name || undefined,
+    address: {
+      street: platform.address_line1 || undefined,
+      zip: platform.address_zip || undefined,
+      city: platform.address_city || undefined,
+      country: platform.address_country || 'FR',
+    },
+  });
+  const appLd = softwareLd({ brand, priceFrom: platform.plan_essentiel_price || '29' });
 
   return (
-    <div className="site-root min-h-screen flex flex-col" style={{ backgroundColor: '#F8F6F0', color: '#14211D' }}>
+    <div className="hp">
+      <a className="hp-skip" href="#contenu">
+        Aller au contenu
+      </a>
+      <SiteRuntime />
+      <Header brand={brand} logoUrl={platform.logo_url || undefined} />
+      <main id="contenu">{children}</main>
+      <Footer platform={platform} brand={brand} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(orgLd) }} />
-      <SiteInteractions />
-      {/* En-tête */}
-      <header
-        className="sticky top-0 z-40 border-b backdrop-blur"
-        style={{ borderColor: '#E7E3D8', backgroundColor: 'rgba(248,246,240,0.85)' }}
-      >
-        <div className="site-header-inner max-w-6xl mx-auto flex items-center justify-between px-5 sm:px-6">
-          <Link href="/" className="site-logo flex items-center gap-2.5 shrink-0">
-            {platform.logo_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={platform.logo_url} alt={brand} className="h-9 w-auto max-w-[170px] object-contain" />
-            ) : (
-              <>
-                <span
-                  className="grid h-9 w-9 place-items-center rounded-xl font-semibold text-white"
-                  style={{ backgroundColor: '#013E37' }}
-                >
-                  {brand.charAt(0)}
-                </span>
-                <span className="font-semibold tracking-tight text-lg">{brand}</span>
-              </>
-            )}
-          </Link>
-
-          <nav className="hidden lg:flex items-center gap-7 text-sm font-medium">
-            {NAV.map((n) => (
-              <Link key={n.href} href={n.href} className="text-ink-soft hover:text-ink transition-colors">
-                {n.label}
-              </Link>
-            ))}
-          </nav>
-
-          <div className="flex items-center gap-2">
-            <a
-              href="/login"
-              className="site-btn hidden sm:inline-flex items-center h-10 px-4 rounded-xl text-sm font-medium hover:bg-black/5"
-              style={{ color: '#013E37' }}
-            >
-              Se connecter
-            </a>
-            <Link
-              href="/contact"
-              className="site-btn hidden sm:inline-flex items-center h-10 px-4 rounded-xl text-sm font-semibold text-white"
-              style={{ backgroundColor: '#013E37' }}
-            >
-              Réserver une démo
-            </Link>
-            <MobileMenu nav={NAV} />
-          </div>
-        </div>
-      </header>
-
-      <main className="flex-1">{children}</main>
-
-      {/* Collecte email (bas de page, sur toutes les pages du site) */}
-      <EmailCapture />
-
-      {/* Pied de page */}
-      <footer style={{ backgroundColor: '#013E37', color: '#EAE6DC' }}>
-        <div className="max-w-6xl mx-auto px-5 sm:px-6 py-14 grid gap-10 md:grid-cols-4">
-          <div className="md:col-span-2">
-            <div className="flex items-center gap-2.5">
-              {platform.logo_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={platform.logo_url} alt={brand} className="h-8 w-auto max-w-[150px] object-contain" />
-              ) : (
-                <span className="text-xl font-semibold tracking-tight" style={{ color: '#FFEFB3' }}>{brand}</span>
-              )}
-            </div>
-            <p className="mt-3 text-sm max-w-sm" style={{ color: 'rgba(234,230,220,0.75)' }}>
-              Vendez plus vite et gérez sans effort. Du comptoir au back-office,
-              une seule application, conforme à la loi française.
-            </p>
-          </div>
-
-          <div>
-            <div className="text-xs font-semibold uppercase tracking-widest" style={{ color: '#FFEFB3' }}>
-              Produit
-            </div>
-            <ul className="mt-3 space-y-2 text-sm">
-              {NAV.map((n) => (
-                <li key={n.href}>
-                  <Link href={n.href} className="hover:text-white transition-colors" style={{ color: 'rgba(234,230,220,0.85)' }}>
-                    {n.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div>
-            <div className="text-xs font-semibold uppercase tracking-widest" style={{ color: '#FFEFB3' }}>
-              Accès
-            </div>
-            <ul className="mt-3 space-y-2 text-sm">
-              <li><a href="/login" className="hover:text-white transition-colors" style={{ color: 'rgba(234,230,220,0.85)' }}>Caisse</a></li>
-              <li><a href="/bo" className="hover:text-white transition-colors" style={{ color: 'rgba(234,230,220,0.85)' }}>Back-office</a></li>
-              {platform.contact_email && (
-                <li><a href={`mailto:${platform.contact_email}`} className="hover:text-white transition-colors" style={{ color: 'rgba(234,230,220,0.85)' }}>Nous écrire</a></li>
-              )}
-            </ul>
-          </div>
-        </div>
-
-        <div className="border-t" style={{ borderColor: 'rgba(255,255,255,0.1)' }}>
-          <div className="max-w-6xl mx-auto px-5 sm:px-6 py-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs" style={{ color: 'rgba(234,230,220,0.6)' }}>
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-              <span>© {year} {brand}{platform.company_legal_name && ` — ${platform.company_legal_name}`}</span>
-              <Link href="/mentions-legales" className="hover:text-white transition-colors">Mentions légales</Link>
-              <Link href="/confidentialite" className="hover:text-white transition-colors">Confidentialité</Link>
-            </div>
-            <div className="flex flex-wrap gap-x-4 gap-y-1">
-              {platform.company_siret && <span>SIRET {platform.company_siret}</span>}
-              {platform.company_vat && <span>TVA {platform.company_vat}</span>}
-              {platform.contact_phone && <span>{platform.contact_phone}</span>}
-            </div>
-          </div>
-        </div>
-      </footer>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(appLd) }} />
     </div>
   );
 }
