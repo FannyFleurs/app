@@ -1,5 +1,9 @@
 import type { Metadata, Viewport } from 'next';
+import { headers } from 'next/headers';
+import { redirect } from 'next/navigation';
 import { loadPlatform } from '@/lib/site/platform';
+import { isSitePublic, isSiteHome } from '@/lib/site/publication';
+import HoldingScreen from './_components/HoldingScreen';
 import { organizationLd, softwareLd, SITE_NAME, SITE_URL } from '@/lib/site/meta';
 import Header from './_components/Header';
 import Footer from './_components/Footer';
@@ -13,7 +17,15 @@ import './site.css';
  * gestes tactiles parasites au comptoir. Un site public, lui, doit rester
  * zoomable : on rétablit ici le comportement standard, conformément au
  * critère WCAG 1.4.4.
+ *
+ * C'est également ici que se joue la publication du site (Configuration →
+ * Site public dans la console d'administration) : tant qu'il n'est pas
+ * activé, la racine affiche l'écran d'attente et les autres pages y
+ * ramènent. `force-dynamic` garantit que l'interrupteur prend effet à la
+ * requête suivante, sans redéploiement.
  */
+
+export const dynamic = 'force-dynamic';
 
 export const viewport: Viewport = {
   width: 'device-width',
@@ -35,6 +47,18 @@ export const metadata: Metadata = {
 };
 
 export default async function SiteLayout({ children }: { children: React.ReactNode }) {
+  // ---- Site non publié : rien du site n'est servi, sauf l'écran d'attente.
+  if (!(await isSitePublic())) {
+    // Le chemin d'origine est posé par le middleware avant la réécriture.
+    const path = headers().get('x-hp-path') ?? '/';
+    if (!isSiteHome(path)) redirect('/');
+    return (
+      <div className="hp hp-dark hp-on-green">
+        <HoldingScreen />
+      </div>
+    );
+  }
+
   const platform = await loadPlatform();
   const brand = platform.brand_name || SITE_NAME;
 

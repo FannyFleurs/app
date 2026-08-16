@@ -1,27 +1,30 @@
+import 'server-only';
+import { loadPlatform } from './platform';
+
 /**
  * Publication du site public hellopos.fr.
  *
- * Un seul interrupteur, lu par le middleware, le plan du site et robots.txt.
+ * L'état est un réglage de la plateforme (`platform_settings.site_public`),
+ * piloté depuis la console d'administration → Configuration → Site public.
+ * Il n'y a rien à redéployer : le site bascule à la requête suivante.
  *
- *   SITE_PUBLIC=on   -> le site public est servi normalement
- *   (absent / autre) -> le site est DÉPUBLIÉ : l'apex n'affiche qu'une page
- *                       d'attente, et la création de compte est fermée.
+ * Par défaut, le site n'est PAS publié : une plateforme fraîchement installée
+ * n'expose que la page d'attente tant que quelqu'un n'a pas activé le site.
  *
- * La valeur par défaut est volontairement « dépublié » : si la variable
- * disparaît d'un environnement, le site reste hors ligne plutôt que de se
- * publier tout seul.
+ * ⚠️ Ce réglage ne concerne QUE le site public. Les espaces applicatifs —
+ * app., bo., ca., ecran., pda., admin. — ne sont jamais affectés : les
+ * commerçants continuent d'encaisser et de piloter leur activité.
  *
- * ⚠️ Ce réglage ne concerne QUE l'apex (hellopos.fr / www). Les espaces
- * applicatifs — app., bo., ca., ecran., pda., admin. — ne sont pas touchés :
- * les commerçants continuent d'encaisser, de piloter et de se connecter
- * exactement comme avant.
- *
- * Les préversions (*.vercel.app) et le développement local servent toujours
- * le site complet, pour pouvoir le relire pendant qu'il est hors ligne.
+ * `SITE_PUBLIC=on` reste un forçage d'environnement, utile pour relire le
+ * site complet sur une préversion pendant qu'il est hors ligne en production.
  */
-export const SITE_PUBLIC = process.env.SITE_PUBLIC === 'on';
+export async function isSitePublic(): Promise<boolean> {
+  if (process.env.SITE_PUBLIC === 'on') return true;
+  const platform = await loadPlatform();
+  return platform.site_public === true;
+}
 
-/** Chemin de la page d'attente affichée à la racine quand le site est hors ligne. */
+/** Route de la page d'attente (également servie à la racine quand le site est hors ligne). */
 export const HOLDING_PATH = '/indisponible';
 
 /**
@@ -35,4 +38,9 @@ export function isSiteAsset(pathname: string): boolean {
     pathname.startsWith('/site/photos/') ||
     pathname === '/site/og.png'
   );
+}
+
+/** Vrai si le chemin demandé est l'accueil du site (apex ou préversion). */
+export function isSiteHome(pathname: string): boolean {
+  return pathname === '/' || pathname === '/site' || pathname === '/site/';
 }

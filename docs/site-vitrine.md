@@ -18,6 +18,8 @@ lui sont propres.
 | `lib/site/analytics.ts` | Plan de taggage et fonction `track()` |
 | `lib/site/content/` | **Tout le contenu éditorial**, en TypeScript typé |
 | `lib/site/media.ts` | Emplacements photo déclarés |
+| `lib/site/publication.ts` | État de publication du site (voir § 6) |
+| `app/site/_components/HoldingScreen.tsx` | Écran affiché quand le site n'est pas publié |
 | `public/site/screens/` | Captures réelles du logiciel (PNG + WebP 1600 et 800 px) |
 | `public/site/fonts/` | Fraunces et Inter, auto-hébergées (OFL 1.1) |
 
@@ -167,50 +169,57 @@ Les éléments cliquables portent `data-track="<événement>"` et, au besoin,
 
 ## 6. Publier / dépublier le site public
 
-Un seul interrupteur : la variable d'environnement **`SITE_PUBLIC`**
-(`lib/site/publication.ts`).
+L'interrupteur est dans la console d'administration :
+**Configuration → Site public**, deux boutons `Off` / `On`.
 
-| Valeur | Effet sur hellopos.fr | Effet sur app. / bo. / ca. / ecran. / pda. / admin. |
-| --- | --- | --- |
-| `on` | Site public servi normalement | Aucun |
-| absente ou autre | Site **dépublié** : page d'attente | Aucun |
+Le réglage est enregistré en base (`platform_settings.site_public`) et pris en
+compte à la requête suivante : pas de redéploiement, pas de délai de cache. Le
+gabarit du site est rendu à la demande (`force-dynamic`), c'est ce qui rend la
+bascule immédiate.
 
-La valeur par défaut est « dépublié » : si la variable disparaît d'un
-environnement, le site reste hors ligne plutôt que de se publier tout seul.
+Par défaut, une plateforme n'a pas son site publié : il faut l'activer.
 
-### Ce qui se passe quand le site est dépublié
+### Off — seule la page d'attente est en ligne
 
-- `hellopos.fr/` affiche la page d'attente (`app/indisponible`) : logo, une
-  phrase, les accès caisse et back-office, les coordonnées si elles sont
-  renseignées, les mentions de l'éditeur. Elle est en `noindex, follow`.
-- Toutes les URLs du site (`/tarifs`, `/solutions/…`, `/logiciel-caisse-…`,
-  `/site/*`) et la création de compte (`/setup`) répondent en **307** vers la
-  page d'attente. Une redirection temporaire : republier ne demande aucun
-  travail de redirection derrière.
-- `sitemap.xml` ne liste plus aucune URL et `robots.txt` ne l'annonce plus.
-  L'exploration reste autorisée, pour que les moteurs lisent le `noindex` et
+- La racine du domaine affiche l'écran d'attente (`HoldingScreen`) : logo,
+  bouton de connexion, une phrase, les accès caisse et back-office, les
+  coordonnées et les mentions de l'éditeur si elles sont renseignées.
+  L'URL ne change pas, la réponse est en `200` et la page est en `noindex`.
+- Toutes les autres adresses du site (`/tarifs`, `/solutions/…`,
+  `/logiciel-caisse-…`, `/site/*`) répondent en **307** vers la racine.
+- La création de compte est fermée : `/setup` renvoie sur la page d'attente et
+  `POST /api/auth/setup` répond `403`. Une interface fermée sans serveur fermé
+  ne serait qu'un décor.
+- `sitemap.xml` ne liste plus aucune URL, `robots.txt` ne l'annonce plus.
+  L'exploration reste autorisée pour que les moteurs lisent le `noindex` et
   retirent les pages de leurs résultats.
 - Les polices, captures et l'image de partage (`/site/fonts/…`,
-  `/site/screens/…`, `/site/photos/…`, `/site/og.png`) restent servies : la
-  page d'attente s'en sert.
-- **Les espaces applicatifs ne sont pas touchés.** `app.`, `bo.`, `ca.`,
-  `ecran.`, `pda.` et `admin.` fonctionnent exactement comme avant, y compris
-  `hellopos.fr/caisse` qui continue de rediriger vers `app.hellopos.fr`.
-- Les préversions (`*.vercel.app`) et le développement local servent toujours
-  le site complet : on peut continuer à le relire pendant qu'il est hors ligne.
+  `/site/screens/…`, `/site/photos/…`, `/site/og.png`) restent servies.
 
-### Republier
+### On — le site complet
 
-1. Définir `SITE_PUBLIC=on` sur l'environnement de production.
-2. Redéployer.
+Toutes les pages redeviennent accessibles et indexables, le plan du site est de
+nouveau annoncé, la création de compte est rouverte.
 
-Rien d'autre : aucune page, aucun contenu, aucune redirection à défaire.
+### Ce qui n'est jamais affecté
+
+`app.`, `bo.`, `ca.`, `ecran.`, `pda.` et `admin.` fonctionnent à l'identique
+dans les deux états, y compris `hellopos.fr/caisse` qui continue de rediriger
+vers `app.<domaine>`. Le middleware ne consulte pas ce réglage : il tourne sur
+l'edge, sans accès à la base, et se contente de transmettre le chemin d'origine
+(`x-hp-path`) au rendu, qui décide.
+
+### Forçage d'environnement
+
+`SITE_PUBLIC=on` publie le site quel que soit le réglage en base. Utile sur une
+préversion pour relire le site pendant qu'il est hors ligne en production. À ne
+pas définir en production, où c'est la console qui commande.
 
 ### Vérifier l'état
 
 ```bash
-curl -sI https://hellopos.fr/tarifs      # 307 -> / si dépublié, 200 sinon
-curl -s  https://hellopos.fr/sitemap.xml # aucune <url> si dépublié
+curl -sI https://hellopos.fr/tarifs      # 307 -> / si non publié, 200 sinon
+curl -s  https://hellopos.fr/robots.txt  # ligne Sitemap présente si publié
 curl -sI https://app.hellopos.fr/login   # doit répondre dans les deux cas
 ```
 

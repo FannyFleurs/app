@@ -1,6 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { isMarketingPath } from '@/lib/site/routes';
-import { HOLDING_PATH, SITE_PUBLIC, isSiteAsset } from '@/lib/site/publication';
 
 /**
  * Routage par sous-domaine :
@@ -63,6 +62,20 @@ function isStaticOrApi(pathname: string): boolean {
  */
 function isSitePath(pathname: string): boolean {
   return pathname === '/site' || pathname.startsWith('/site/');
+}
+
+/** Page d'attente affichée quand le site public n'est pas activé. */
+const HOLDING_PATH = '/indisponible';
+
+/**
+ * Recopie les en-têtes de la requête en y ajoutant le chemin d'origine.
+ * Après réécriture, le rendu ne voit plus que `/site/...` : sans cela, il ne
+ * pourrait pas distinguer l'accueil (`/`) d'une page intérieure.
+ */
+function withPath(req: NextRequest, pathname: string): Headers {
+  const h = new Headers(req.headers);
+  h.set('x-hp-path', pathname);
+  return h;
 }
 
 export function middleware(req: NextRequest) {
@@ -170,52 +183,27 @@ export function middleware(req: NextRequest) {
       return NextResponse.next();
     }
 
-    // ------------------------------------------------------------------
-    // Site public dépublié (SITE_PUBLIC != 'on') : l'apex n'affiche plus
-    // qu'une page d'attente. Les sous-domaines applicatifs, traités plus
-    // haut, ne sont pas concernés — la caisse et le back-office continuent
-    // de fonctionner normalement.
-    // ------------------------------------------------------------------
-    if (!SITE_PUBLIC) {
-      // Polices, captures et image de partage : la page d'attente en a besoin.
-      if (isSiteAsset(pathname)) return NextResponse.next();
-      // La page d'attente elle-même, servie à la racine.
-      if (pathname === HOLDING_PATH) return NextResponse.next();
-      if (pathname === '/') {
-        url.pathname = HOLDING_PATH;
-        return NextResponse.rewrite(url);
-      }
-      // Pages du site et création de compte : tout revient à la page
-      // d'attente, en redirection TEMPORAIRE (307) — republier ne demandera
-      // qu'un changement de variable.
-      const isSitePage = isMarketingPath(pathname) || isSitePath(pathname);
-      const isOnboarding = pathname === '/setup' || pathname.startsWith('/setup/');
-      if (isSitePage || isOnboarding) {
-        const home = url.clone();
-        home.pathname = '/';
-        home.search = '';
-        return NextResponse.redirect(home, 307);
-      }
-      // Tout autre chemin (caisse, dashboard…) part sur app.<domaine>,
-      // comme d'habitude : voir la fin de ce bloc.
-    }
-
     // apex (hellopos.fr) -> UNIQUEMENT la vitrine + onboarding.
     // La racine affiche la vitrine ; /site et /setup restent servis ;
     // tout le reste (caisse, dashboard, login…) part sur app.<domaine>.
-    if (SITE_PUBLIC && pathname === '/') {
+    //
+    // La PUBLICATION du site est un réglage en base (Configuration → Site
+    // public) : le middleware s'exécute sur l'edge, sans accès à Postgres,
+    // c'est donc le rendu qui décide d'afficher le site ou la page d'attente.
+    // Le chemin d'origine est transmis dans `x-hp-path` pour que le gabarit
+    // du site sache s'il sert l'accueil ou une page intérieure.
+    if (pathname === '/') {
       url.pathname = '/site';
-      return NextResponse.rewrite(url);
+      return NextResponse.rewrite(url, { request: { headers: withPath(req, pathname) } });
     }
     // URLs propres du site vitrine (hellopos.fr/tarifs…) → /site/tarifs.
-    if (SITE_PUBLIC && isMarketingPath(pathname)) {
+    if (isMarketingPath(pathname)) {
       url.pathname = '/site' + pathname;
-      return NextResponse.rewrite(url);
+      return NextResponse.rewrite(url, { request: { headers: withPath(req, pathname) } });
     }
     // /site/* (accès direct + captures) et /setup servis tels quels.
-    if (isSiteAsset(pathname)) return NextResponse.next();
-    if (SITE_PUBLIC && (isSitePath(pathname) || pathname === '/setup' || pathname.startsWith('/setup/'))) {
-      return NextResponse.next();
+    if (isSitePath(pathname) || pathname === HOLDING_PATH || pathname === '/setup' || pathname.startsWith('/setup/')) {
+      return NextResponse.next({ request: { headers: withPath(req, pathname) } });
     }
     const to = url.clone();
     to.host = `app.${base}`;
@@ -230,7 +218,10 @@ export function middleware(req: NextRequest) {
   // la navigation du site fonctionne aussi en local / preview.
   if (isMarketingPath(pathname)) {
     url.pathname = '/site' + pathname;
-    return NextResponse.rewrite(url);
+    return NextResponse.rewrite(url, { request: { headers: withPath(req, pathname) } });
+  }
+  if (isSitePath(pathname)) {
+    return NextResponse.next({ request: { headers: withPath(req, pathname) } });
   }
 
   // Sortie du back-office

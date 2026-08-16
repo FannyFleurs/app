@@ -8,6 +8,7 @@ const TABS = [
   { href: '/admin/configuration', label: 'Marque & logos' },
   { href: '/admin/configuration/societe', label: 'Société & contact' },
   { href: '/admin/configuration/facturation', label: 'Facturation Stripe' },
+  { href: '/admin/configuration/site', label: 'Site public' },
 ];
 
 export default function ConfigSubNav() {

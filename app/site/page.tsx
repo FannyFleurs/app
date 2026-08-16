@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { loadPlatform } from '@/lib/site/platform';
 import { pageMeta } from '@/lib/site/meta';
+import { isSitePublic } from '@/lib/site/publication';
 import { FEATURE_GROUPS } from '@/lib/site/content/features';
 import { DAY_MOMENTS, ONBOARDING, COMPLIANCE_POINTS } from '@/lib/site/content/home';
 import { FAQ } from '@/lib/site/content/faq';
@@ -16,12 +17,26 @@ import TradeSwitcher from './_components/TradeSwitcher';
 import DemoVideo from './_components/DemoVideo';
 import Faq from './_components/Faq';
 
-export const metadata = pageMeta({
-  title: 'HelloPos — La caisse qui fait beaucoup plus que la caisse',
-  description:
-    'HelloPos réunit caisse, stocks, commandes, clients et pilotage dans une seule application pensée pour les commerçants. Dès 29 € HT/mois, 14 jours d’essai, sans engagement.',
-  path: '/',
-});
+/**
+ * Métadonnées de l'accueil. Quand le site n'est pas publié, c'est l'écran
+ * d'attente qui s'affiche à cette adresse : le titre et le `noindex` doivent
+ * suivre, sinon les moteurs indexeraient une page qui n'est pas là.
+ */
+export async function generateMetadata() {
+  if (!(await isSitePublic())) {
+    return {
+      title: 'HelloPos',
+      description: 'Le site HelloPos n’est pas accessible pour le moment.',
+      robots: { index: false, follow: true },
+    };
+  }
+  return pageMeta({
+    title: 'HelloPos — La caisse qui fait beaucoup plus que la caisse',
+    description:
+      'HelloPos réunit caisse, stocks, commandes, clients et pilotage dans une seule application pensée pour les commerçants. Dès 29 € HT/mois, 14 jours d’essai, sans engagement.',
+    path: '/',
+  });
+}
 
 export default async function HomePage() {
   const platform = await loadPlatform();
