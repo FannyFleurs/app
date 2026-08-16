@@ -33,7 +33,21 @@ const SUBJECTS = [
   'Autre sujet',
 ];
 
-export default function ContactForm({ defaultSubject }: { defaultSubject?: string }) {
+export default function ContactForm({
+  defaultSubject,
+  /**
+   * Proposer la création d'espace après l'envoi. Désactivé sur la page
+   * d'attente : l'inscription en ligne y est fermée, le bouton mènerait
+   * à une impasse.
+   */
+  showTrialCta = true,
+  /** Masque la boutique et le sujet : version courte, pour une fenêtre. */
+  compact = false,
+}: {
+  defaultSubject?: string;
+  showTrialCta?: boolean;
+  compact?: boolean;
+}) {
   const [f, setF] = useState<State>({
     name: '',
     shop: '',
@@ -90,14 +104,16 @@ export default function ContactForm({ defaultSubject }: { defaultSubject?: strin
         </span>
         <h2 className="hp-h3" style={{ marginTop: '1rem' }}>Message envoyé.</h2>
         <p className="hp-small" style={{ marginTop: '0.75rem' }}>
-          Nous revenons vers vous rapidement, à l’adresse indiquée. En attendant, vous pouvez déjà
-          créer votre espace et commencer l’essai.
+          Nous revenons vers vous rapidement, à l’adresse indiquée.
+          {showTrialCta ? ' En attendant, vous pouvez déjà créer votre espace et commencer l’essai.' : ''}
         </p>
-        <p style={{ marginTop: '1.5rem' }}>
-          <a className="hp-btn hp-btn--primary" href="/setup" data-track="essai_hellopos">
-            Créer mon espace
-          </a>
-        </p>
+        {showTrialCta ? (
+          <p style={{ marginTop: '1.5rem' }}>
+            <a className="hp-btn hp-btn--primary" href="/setup" data-track="essai_hellopos">
+              Créer mon espace
+            </a>
+          </p>
+        ) : null}
       </div>
     );
   }
@@ -116,16 +132,18 @@ export default function ContactForm({ defaultSubject }: { defaultSubject?: strin
             onChange={(e) => set('name', e.target.value)}
           />
         </div>
-        <div className="hp-field">
-          <label htmlFor="c-shop">Votre boutique</label>
-          <input
-            id="c-shop"
-            className="hp-input"
-            autoComplete="organization"
-            value={f.shop}
-            onChange={(e) => set('shop', e.target.value)}
-          />
-        </div>
+        {compact ? null : (
+          <div className="hp-field">
+            <label htmlFor="c-shop">Votre boutique</label>
+            <input
+              id="c-shop"
+              className="hp-input"
+              autoComplete="organization"
+              value={f.shop}
+              onChange={(e) => set('shop', e.target.value)}
+            />
+          </div>
+        )}
       </div>
 
       <div className="hp-cols hp-cols--2" style={{ gap: '1.25rem' }}>
@@ -156,19 +174,21 @@ export default function ContactForm({ defaultSubject }: { defaultSubject?: strin
         </div>
       </div>
 
-      <div className="hp-field">
-        <label htmlFor="c-subject">Sujet</label>
-        <select
-          id="c-subject"
-          className="hp-select"
-          value={f.subject}
-          onChange={(e) => set('subject', e.target.value)}
-        >
-          {SUBJECTS.map((s) => (
-            <option key={s} value={s}>{s}</option>
-          ))}
-        </select>
-      </div>
+      {compact ? null : (
+        <div className="hp-field">
+          <label htmlFor="c-subject">Sujet</label>
+          <select
+            id="c-subject"
+            className="hp-select"
+            value={f.subject}
+            onChange={(e) => set('subject', e.target.value)}
+          >
+            {SUBJECTS.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <div className="hp-field">
         <label htmlFor="c-message">Votre message</label>

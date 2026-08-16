@@ -2,8 +2,9 @@ import type { Metadata, Viewport } from 'next';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { loadPlatform } from '@/lib/site/platform';
-import { isSitePublic, isSiteHome } from '@/lib/site/publication';
+import { isSitePublic, isSiteHome, isLegalPath } from '@/lib/site/publication';
 import HoldingScreen from './_components/HoldingScreen';
+import MinimalHeader from './_components/MinimalHeader';
 import { organizationLd, softwareLd, SITE_NAME, SITE_URL } from '@/lib/site/meta';
 import Header from './_components/Header';
 import Footer from './_components/Footer';
@@ -51,6 +52,19 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
   if (!(await isSitePublic())) {
     // Le chemin d'origine est posé par le middleware avant la réécriture.
     const path = headers().get('x-hp-path') ?? '/';
+    // Mentions légales et confidentialité restent accessibles : le
+    // formulaire de contact de la page d'attente y renvoie, et une page qui
+    // collecte des coordonnées doit dire ce qu'elle en fait.
+    if (isLegalPath(path)) {
+      return (
+        <div className="hp">
+          <div style={{ paddingTop: 'clamp(1.5rem, 4vh, 2.5rem)' }}>
+            <MinimalHeader />
+          </div>
+          <main>{children}</main>
+        </div>
+      );
+    }
     if (!isSiteHome(path)) redirect('/');
     return (
       <div className="hp hp-dark hp-on-green">

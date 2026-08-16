@@ -40,6 +40,16 @@ export function isSiteAsset(pathname: string): boolean {
   );
 }
 
+/**
+ * Pages légales, servies même quand le site n'est pas publié : la page
+ * d'attente propose un formulaire de contact, qui doit pouvoir renvoyer vers
+ * la politique de confidentialité.
+ */
+export function isLegalPath(pathname: string): boolean {
+  const p = pathname.replace(/^\/site/, '') || '/';
+  return p === '/mentions-legales' || p === '/confidentialite';
+}
+
 /** Vrai si le chemin demandé est l'accueil du site (apex ou préversion). */
 export function isSiteHome(pathname: string): boolean {
   return pathname === '/' || pathname === '/site' || pathname === '/site/';
