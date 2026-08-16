@@ -1,462 +1,537 @@
+import Link from 'next/link';
 import { loadPlatform } from '@/lib/site/platform';
-import { REVIEWS } from '@/lib/site/reviews';
-import { pageMeta, SITE_URL } from '@/lib/site/meta';
-import DemoVideo from './DemoVideo';
-import {
-  Eyebrow, ButtonPrimary, ButtonGhost, BrowserFrame, FeatureCard, Icon, initials,
-  GREEN, GREEN_DEEP, GOLD, BORDER, IVORY,
-} from './_ui';
+import { pageMeta } from '@/lib/site/meta';
+import { FEATURE_GROUPS } from '@/lib/site/content/features';
+import { DAY_MOMENTS, ONBOARDING, COMPLIANCE_POINTS } from '@/lib/site/content/home';
+import { FAQ } from '@/lib/site/content/faq';
+import { TESTIMONIALS } from '@/lib/site/content/showcase';
+import { Button, Eyebrow, Reassurance, TextLink } from './_components/ui';
+import { Icon } from './_components/icons';
+import Screen from './_components/Screen';
+import Photo from './_components/Photo';
+import Visual from './_components/Visual';
+import LinkedWeb from './_components/LinkedWeb';
+import ProductStory from './_components/ProductStory';
+import TradeSwitcher from './_components/TradeSwitcher';
+import DemoVideo from './_components/DemoVideo';
+import Faq from './_components/Faq';
 
-export const dynamic = 'force-dynamic';
 export const metadata = pageMeta({
-  title: 'HelloPos — Le logiciel de caisse et de gestion des commerces',
+  title: 'HelloPos — La caisse qui fait beaucoup plus que la caisse',
   description:
-    'Caisse, stocks, commandes, fidélité, facturation et pilotage réunis dans une seule application pensée pour les commerces indépendants. Réservez une démo gratuite.',
+    'HelloPos réunit caisse, stocks, commandes, clients et pilotage dans une seule application pensée pour les commerçants. Dès 29 € HT/mois, 14 jours d’essai, sans engagement.',
   path: '/',
 });
-
-// ---- Section « produit » : captures réelles du logiciel ----------------------
-const PRODUCT_SHOTS = [
-  { label: 'Encaissement', src: '/site/screens/caisse-paiement.png', alt: 'Écran d’encaissement', desc: 'Tout ce dont votre équipe a besoin pour vendre rapidement. Rien de plus.' },
-  { label: 'Back-office', src: '/site/screens/dashboard.png', alt: 'Tableau de bord back-office', desc: 'Suivez votre activité et gérez votre commerce où que vous soyez.' },
-  { label: 'Commandes', src: '/site/screens/commandes.png', alt: 'Gestion des commandes', desc: 'Centralisez les commandes à préparer, retraits et livraisons.' },
-  { label: 'Stocks', src: '/site/screens/stock.png', alt: 'Gestion des stocks', desc: 'Réceptionnez, transférez, inventoriez et étiquetez depuis le même environnement.' },
-];
-
-// ---- Problème -> solution ----------------------------------------------------
-const WITHOUT = [
-  'Plusieurs outils différents à faire cohabiter',
-  'Des commandes sur papier ou dans des notes',
-  'Des stocks difficiles à suivre',
-  'Une fidélité séparée de la caisse',
-  'Des informations dispersées',
-  'Des chiffres consultables depuis certains postes seulement',
-  'Des ressaisies inutiles',
-];
-const WITH = ['Caisse', 'Stocks', 'Commandes', 'Clients', 'Fidélité', 'Facturation', 'Pilotage'];
-
-// ---- Grandes fonctionnalités (catégories) ------------------------------------
-const CATEGORIES = [
-  {
-    title: 'Encaisser',
-    icon: <Icon path={<><rect x="3" y="4" width="18" height="14" rx="2" /><path d="M3 9h18M7 21h10" /></>} />,
-    items: ['Caisse tactile', 'Recherche & scan articles', 'Plusieurs modes de règlement', 'Tickets, avoirs, cartes cadeaux', 'Comptes utilisateurs'],
-  },
-  {
-    title: 'Produits & stocks',
-    icon: <Icon path={<><path d="M20 7 12 3 4 7l8 4 8-4Z" /><path d="M4 7v10l8 4 8-4V7" /><path d="M12 11v10" /></>} />,
-    items: ['Catalogue & variantes', 'Stock par boutique', 'Entrées & inventaires', 'Transferts', 'Étiquettes & PDA'],
-  },
-  {
-    title: 'Commandes',
-    icon: <Icon path={<><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></>} />,
-    items: ['Commandes différées', 'Retraits à date', 'Livraisons', 'Suivi des statuts', 'Préparation'],
-  },
-  {
-    title: 'Relation client',
-    icon: <Icon path={<><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.9" /></>} />,
-    items: ['Fichiers clients & historique', 'Programme de fidélité', 'Avantages', 'Cartes Apple Wallet', 'Avoirs suivis au client'],
-  },
-  {
-    title: 'Piloter',
-    icon: <Icon path={<><path d="M3 3v18h18" /><path d="m7 14 4-4 3 3 5-6" /></>} />,
-    items: ['Chiffre d’affaires en direct', 'Indicateurs & rapports', 'Clôtures & rapport Z', 'Suivi à distance', 'Exports comptables'],
-  },
-  {
-    title: 'Développer son réseau',
-    icon: <Icon path={<><path d="M3 21h18" /><path d="M5 21V8l7-5 7 5v13" /><path d="M9 21v-6h6v6" /></>} />,
-    items: ['Plusieurs boutiques', 'Stocks par boutique', 'Transferts inter-boutiques', 'Utilisateurs & droits', 'Vision consolidée'],
-  },
-];
-
-// ---- Pourquoi HelloPos -------------------------------------------------------
-const WHY = [
-  {
-    title: 'Un outil qui évolue avec vous',
-    icon: <Icon path={<><path d="M3 3v18h18" /><path d="m19 9-5 5-4-4-3 3" /></>} />,
-    desc: 'Une boutique aujourd’hui, plusieurs demain : HelloPos accompagne le développement de votre activité sans vous obliger à changer d’environnement.',
-  },
-  {
-    title: 'Votre activité au même endroit',
-    icon: <Icon path={<><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /></>} />,
-    desc: 'Caisse, stocks, commandes, fidélité, facturation et pilotage fonctionnent ensemble, sans double saisie ni logiciel en plus.',
-  },
-  {
-    title: 'Un tarif clair',
-    icon: <Icon path={<><circle cx="12" cy="12" r="9" /><path d="M12 7v10M9.5 9.5h4a1.5 1.5 0 0 1 0 3h-3a1.5 1.5 0 0 0 0 3h4" /></>} />,
-    desc: 'Des abonnements simples et lisibles, adaptés à la taille et aux besoins de votre commerce.',
-  },
-  {
-    title: 'Pensé pour le quotidien',
-    icon: <Icon path={<><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3Z" /><path d="m9 12 2 2 4-4" /></>} />,
-    desc: 'Une interface conçue pour rester rapide en boutique, tout en proposant un back-office complet.',
-  },
-];
-
-// ---- Commerces (aperçu ; les pages métier dédiées arrivent) ------------------
-const TRADES = [
-  { name: 'Fleuristes', desc: 'Commandes à préparer, livraisons, comptes pros.' },
-  { name: 'Cavistes', desc: 'Catalogue riche, étiquettes, fidélité.' },
-  { name: 'Jardineries', desc: 'Stocks, transferts, multi-rayons.' },
-  { name: 'Concept stores', desc: 'Multi-familles, cartes cadeaux, réseau.' },
-  { name: 'Épiceries fines', desc: 'Scan rapide, comptes clients, factures.' },
-];
-
-function ReassuranceLine({ price }: { price: string }) {
-  return (
-    <p className="mt-4 text-sm" style={{ color: 'rgba(234,230,220,0.6)' }}>
-      Dès {price} € HT/mois · 14 jours gratuits · Sans engagement
-    </p>
-  );
-}
 
 export default async function HomePage() {
   const platform = await loadPlatform();
   const brand = platform.brand_name || 'HelloPos';
-  const startPrice = platform.plan_essentiel_price || '29';
-
-  const plans = [
-    { name: platform.plan_essentiel_name || 'Smart', price: platform.plan_essentiel_price || '29', tag: 'Boutique unique' },
-    { name: platform.plan_croissance_name || 'Pro', price: platform.plan_croissance_price || '39', tag: 'Le plus choisi', highlight: true },
-    { name: platform.plan_reseau_name || 'Réseau', price: platform.plan_reseau_price || '69', tag: 'Multi-boutiques' },
-  ];
-
-  // Donnees structurees : SoftwareApplication + Offer. Pas d'AggregateRating :
-  // aucune note verifiable a ce jour (on ne publie pas de note fabriquee).
-  const appLd = {
-    '@context': 'https://schema.org',
-    '@type': 'SoftwareApplication',
-    name: brand,
-    applicationCategory: 'BusinessApplication',
-    operatingSystem: 'iPadOS, Web',
-    url: SITE_URL,
-    offers: { '@type': 'Offer', price: (startPrice || '29').replace(',', '.'), priceCurrency: 'EUR' },
-  };
+  const price = platform.plan_essentiel_price || '29';
+  const trialDays = platform.trial_days || 14;
+  const demoUrl = platform.demo_video_url || '';
+  const demoHref = demoUrl ? '#demo' : '/contact#demo';
 
   return (
     <>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(appLd) }} />
-
-      {/* 2. HERO ------------------------------------------------------------- */}
-      <section style={{ backgroundColor: GREEN }}>
-        <div className="max-w-6xl mx-auto px-5 sm:px-6 pt-16 pb-14 md:pt-24 md:pb-20 grid lg:grid-cols-2 lg:gap-12 lg:items-center">
-          <div className="max-w-2xl">
-            <span
-              className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-widest"
-              style={{ backgroundColor: 'rgba(255,239,179,0.15)', color: GOLD }}
-            >
-              Pour les commerçants indépendants
-            </span>
-            <h1 className="mt-5 text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight text-white" style={{ textWrap: 'balance' } as React.CSSProperties}>
-              Vendez vite. Gérez tout votre commerce sans effort.
+      {/* ---------------------------------------------------------------- */}
+      {/* 02 — Hero                                                        */}
+      {/* ---------------------------------------------------------------- */}
+      <section className="hp-hero">
+        <div className="hp-container hp-hero-grid">
+          <div>
+            <Eyebrow>{brand}</Eyebrow>
+            <h1 className="hp-display" style={{ marginTop: '1.25rem' }}>
+              La caisse qui
+              <br />
+              fait <span className="hp-em">beaucoup plus</span>
+              <br />
+              que la caisse.
             </h1>
-            <p className="mt-5 text-lg md:text-xl leading-relaxed" style={{ color: 'rgba(234,230,220,0.85)' }}>
-              Caisse, stocks, commandes, fidélité, facturation et pilotage réunis
-              dans une seule application pensée pour les commerces indépendants.
+            <p className="hp-h4" style={{ marginTop: '1.75rem' }}>
+              Encaissez. Gérez. Pilotez. Grandissez.
             </p>
-            <div className="mt-8 flex flex-wrap items-center gap-3">
-              <ButtonPrimary href="/contact" onDark>Réserver une démo gratuite</ButtonPrimary>
-              <ButtonGhost href="#produit" onDark>Découvrir HelloPos</ButtonGhost>
+            <p className="hp-lede" style={{ marginTop: '0.75rem' }}>
+              {brand} réunit caisse, stocks, commandes, clients et pilotage dans une seule
+              application pensée pour les commerçants.
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.9rem', marginTop: '2rem' }}>
+              <Button href="/setup" size="lg" track="essai_hellopos" trackProps={{ emplacement: 'hero' }}>
+                Essayer {brand}
+              </Button>
+              <Button href={demoHref} variant="ghost" size="lg" track="voir_demo" trackProps={{ emplacement: 'hero' }}>
+                Voir la démo
+              </Button>
             </div>
-            <ReassuranceLine price={startPrice} />
+            <Reassurance
+              className="mt-6"
+              items={[`Dès ${price} € HT/mois`, `${trialDays} jours gratuits`, 'Sans engagement']}
+            />
           </div>
 
-          <div className="mt-12 lg:mt-0">
-            <BrowserFrame src="/site/screens/caisse.png" alt={`Écran de caisse ${brand}`} priority />
+          <div className="hp-hero-media">
+            <span className="hp-hero-rule" aria-hidden="true" />
+            <div className="hp-hero-back">
+              <Screen
+                src="/site/screens/dashboard.png"
+                alt=""
+                frame="window"
+                sizes="(max-width: 1000px) 60vw, 480px"
+              />
+            </div>
+            <div className="hp-hero-front">
+              <Screen
+                src="/site/screens/caisse.png"
+                alt={`Écran de caisse ${brand} : familles d’articles, recherche et panier en cours`}
+                frame="tablet"
+                priority
+                sizes="(max-width: 1000px) 92vw, 700px"
+              />
+            </div>
           </div>
         </div>
       </section>
 
-      {/* 3. TRUST STRIP ----------------------------------------------------- */}
-      <section style={{ backgroundColor: '#fff', borderBottom: `1px solid ${BORDER}` }}>
-        <div className="max-w-6xl mx-auto px-5 sm:px-6 py-5 text-center">
-          <span className="text-sm" style={{ color: '#5A625E' }}>
-            Utilisé au quotidien par des fleuristes, cavistes, jardineries, concept stores et épiceries fines.
-          </span>
-        </div>
-      </section>
-
-      {/* 4-5. PRODUIT : caisse devant, puissance derrière ------------------- */}
-      <section id="produit" className="max-w-6xl mx-auto px-5 sm:px-6 py-16 md:py-24 scroll-mt-20">
-        <div className="max-w-2xl">
-          <Eyebrow>Le produit</Eyebrow>
-          <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">
-            Une caisse simple devant. Toute la puissance derrière.
-          </h2>
-          <p className="mt-3 text-base md:text-lg" style={{ color: '#5A625E' }}>
-            HelloPos simplifie le quotidien en boutique sans sacrifier les outils
-            dont vous avez besoin pour gérer votre activité.
-          </p>
-        </div>
-
-        <div className="mt-10">
-          <BrowserFrame src="/site/screens/caisse.png" alt="Écran de caisse HelloPos" />
-        </div>
-
-        <div className="mt-6 grid gap-6 sm:grid-cols-2">
-          {PRODUCT_SHOTS.map((s) => (
-            <div key={s.label}>
-              <BrowserFrame src={s.src} alt={s.alt} />
-              <h3 className="mt-4 font-semibold text-lg">{s.label}</h3>
-              <p className="mt-1 text-sm" style={{ color: '#5A625E' }}>{s.desc}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* 6. PROBLÈME -> SOLUTION -------------------------------------------- */}
-      <section style={{ backgroundColor: IVORY, borderTop: `1px solid ${BORDER}`, borderBottom: `1px solid ${BORDER}` }}>
-        <div className="max-w-6xl mx-auto px-5 sm:px-6 py-16 md:py-24">
-          <div className="max-w-3xl">
-            <Eyebrow>La simplification</Eyebrow>
-            <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">
-              Moins d’outils, moins de manipulations, plus de temps.
+      {/* ---------------------------------------------------------------- */}
+      {/* 03 — Tout est lié                                                */}
+      {/* ---------------------------------------------------------------- */}
+      <section className="hp-section hp-on-green hp-dark">
+        <div className="hp-container">
+          <div data-reveal>
+            <Eyebrow>Tout est lié</Eyebrow>
+            <h2 className="hp-h1" style={{ marginTop: '1.25rem' }}>
+              Votre commerce
+              <br />
+              ne s’arrête pas
+              <br />
+              au ticket de caisse.
             </h2>
           </div>
-          <div className="mt-10 grid gap-5 lg:grid-cols-2 lg:items-stretch">
-            <div className="rounded-2xl bg-white p-6 md:p-8" style={{ border: `1px solid ${BORDER}` }}>
-              <div className="text-xs font-semibold uppercase tracking-widest" style={{ color: '#5A625E' }}>Sans HelloPos</div>
-              <ul className="mt-4 space-y-3 text-sm">
-                {WITHOUT.map((w) => (
-                  <li key={w} className="flex items-start gap-3" style={{ color: '#5A625E' }}>
-                    <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: '#C7C2B4' }} />
-                    <span>{w}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <div className="rounded-2xl p-6 md:p-8 flex flex-col justify-center" style={{ backgroundColor: GREEN, color: '#fff' }}>
-              <div className="text-xs font-semibold uppercase tracking-widest" style={{ color: GOLD }}>Avec HelloPos</div>
-              <p className="mt-4 text-3xl md:text-4xl font-bold tracking-tight">Une seule application.</p>
-              <div className="mt-6 flex flex-wrap gap-2">
-                {WITH.map((w) => (
-                  <span key={w} className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium" style={{ backgroundColor: 'rgba(255,239,179,0.15)', color: GOLD }}>
-                    <Icon path={<path d="m5 12 4 4L19 6" />} />{w}
-                  </span>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
 
-      {/* 7. GRANDES FONCTIONNALITÉS ----------------------------------------- */}
-      <section className="max-w-6xl mx-auto px-5 sm:px-6 py-16 md:py-24">
-        <div className="max-w-2xl">
-          <Eyebrow>Tout le métier, réuni</Eyebrow>
-          <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">
-            De l’encaissement au réseau de boutiques.
-          </h2>
-          <p className="mt-3 text-base md:text-lg" style={{ color: '#5A625E' }}>
-            Chaque besoin de votre commerce, traité au bon endroit, sans quitter HelloPos.
-          </p>
-        </div>
-        <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {CATEGORIES.map((c) => (
-            <div key={c.title} className="site-card rounded-2xl bg-white p-6 border" style={{ borderColor: BORDER }}>
-              <div className="grid h-11 w-11 place-items-center rounded-xl" style={{ backgroundColor: GOLD, color: GREEN_DEEP }}>
-                {c.icon}
-              </div>
-              <h3 className="mt-4 font-semibold text-lg">{c.title}</h3>
-              <ul className="mt-3 space-y-1.5 text-sm" style={{ color: '#5A625E' }}>
-                {c.items.map((it) => (
-                  <li key={it} className="flex items-start gap-2">
-                    <span className="mt-0.5" style={{ color: GREEN }}><Icon path={<path d="m5 12 4 4L19 6" />} /></span>
-                    <span>{it}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </div>
-        <div className="mt-8">
-          <ButtonGhost href="/fonctionnalites">Voir toutes les fonctionnalités</ButtonGhost>
-        </div>
-      </section>
+          <LinkedWeb />
 
-      {/* DEMO VIDEO (si configurée) ----------------------------------------- */}
-      {platform.demo_video_url && (
-        <section style={{ backgroundColor: IVORY, borderTop: `1px solid ${BORDER}` }}>
-          <div className="max-w-6xl mx-auto px-5 sm:px-6 py-16 md:py-24">
-            <div className="max-w-2xl mx-auto text-center">
-              <Eyebrow>En 2 minutes</Eyebrow>
-              <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">Voir HelloPos en 2 minutes.</h2>
-              <p className="mt-3 text-base md:text-lg" style={{ color: '#5A625E' }}>
-                Un aperçu de l’encaissement, des commandes, des stocks et du pilotage.
+          <div className="hp-cols hp-cols--sidebar-rev" style={{ marginTop: 'clamp(3rem, 5vw, 5rem)' }}>
+            <div data-reveal>
+              <Screen
+                src="/site/screens/dashboard.png"
+                alt={`Tableau de bord ${brand} : chiffre d’affaires, ticket moyen, marge et TVA collectée`}
+                frame="window"
+                caption="Capture réalisée sur un environnement de démonstration."
+                sizes="(max-width: 900px) 100vw, 700px"
+              />
+            </div>
+            <div data-reveal>
+              <p className="hp-lede">
+                Chaque vente touche le stock, la fiche client, la TVA et vos chiffres du jour.
+                {' '}
+                {brand} enregistre tout au même endroit — et vous le rend lisible.
+              </p>
+              <p style={{ marginTop: '1.5rem' }}>
+                <TextLink href="/fonctionnalites">Voir tout ce que fait {brand}</TextLink>
               </p>
             </div>
-            <div className="mt-10 max-w-4xl mx-auto">
-              <DemoVideo url={platform.demo_video_url} poster="/site/screens/caisse.png" />
-            </div>
-            <div className="mt-8 flex flex-wrap justify-center gap-3">
-              <ButtonPrimary href="/contact">Réserver une démo</ButtonPrimary>
-            </div>
           </div>
-        </section>
-      )}
+        </div>
+      </section>
 
-      {/* 8. POURQUOI HELLOPOS ----------------------------------------------- */}
-      <section style={{ backgroundColor: IVORY, borderTop: `1px solid ${BORDER}` }}>
-        <div className="max-w-6xl mx-auto px-5 sm:px-6 py-16 md:py-24">
-          <div className="max-w-2xl">
-            <Eyebrow>Pourquoi HelloPos</Eyebrow>
-            <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">Pourquoi choisir HelloPos ?</h2>
-            <p className="mt-3 text-base md:text-lg" style={{ color: '#5A625E' }}>
-              Parce qu’un logiciel de caisse doit simplifier votre commerce, pas lui ajouter des contraintes.
+      {/* ---------------------------------------------------------------- */}
+      {/* 04 — HelloPos en action                                          */}
+      {/* ---------------------------------------------------------------- */}
+      <section className="hp-section hp-on-paper" id="en-action">
+        <div className="hp-container">
+          <div style={{ maxWidth: '30ch' }} data-reveal>
+            <Eyebrow>{brand} en action</Eyebrow>
+            <h2 className="hp-h2" style={{ marginTop: '1.25rem' }}>
+              Le logiciel, écran par écran.
+            </h2>
+          </div>
+          <div style={{ marginTop: 'clamp(2rem, 4vw, 4rem)' }}>
+            <ProductStory />
+          </div>
+
+          {demoUrl ? (
+            <div id="demo" style={{ marginTop: 'clamp(3rem, 5vw, 5rem)', maxWidth: '900px', marginInline: 'auto' }}>
+              <DemoVideo url={demoUrl} poster="/site/screens/caisse.png" />
+            </div>
+          ) : null}
+        </div>
+      </section>
+
+      {/* ---------------------------------------------------------------- */}
+      {/* 05 — Index fonctionnel                                           */}
+      {/* ---------------------------------------------------------------- */}
+      <section className="hp-section" id="fonctions">
+        <div className="hp-container">
+          <div className="hp-cols hp-cols--2" style={{ alignItems: 'end' }}>
+            <div data-reveal>
+              <Eyebrow>Index</Eyebrow>
+              <h2 className="hp-h2" style={{ marginTop: '1.25rem' }}>
+                Tout ce qu’il faut.
+                <br />
+                Là où il faut.
+              </h2>
+            </div>
+            <p className="hp-lede" data-reveal>
+              Six moments dans la journée d’un commerce. {brand} les couvre tous, sans logiciel
+              supplémentaire.
             </p>
           </div>
-          <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            {WHY.map((w) => (
-              <FeatureCard key={w.title} icon={w.icon} title={w.title}>{w.desc}</FeatureCard>
-            ))}
-          </div>
-        </div>
-      </section>
 
-      {/* 9. COMMERCES ------------------------------------------------------- */}
-      <section className="max-w-6xl mx-auto px-5 sm:px-6 py-16 md:py-24">
-        <div className="max-w-2xl">
-          <Eyebrow>Pour votre métier</Eyebrow>
-          <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">Adapté à votre commerce.</h2>
-          <p className="mt-3 text-base md:text-lg" style={{ color: '#5A625E' }}>
-            Les mêmes fondations, des usages qui collent à votre activité.
-          </p>
-        </div>
-        <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {TRADES.map((t) => (
-            <a key={t.name} href="/fonctionnalites" className="site-card rounded-2xl bg-white p-6 border block" style={{ borderColor: BORDER }}>
-              <h3 className="font-semibold text-lg" style={{ color: GREEN }}>{t.name}</h3>
-              <p className="mt-1.5 text-sm" style={{ color: '#5A625E' }}>{t.desc}</p>
-            </a>
-          ))}
-        </div>
-      </section>
-
-      {/* 10. TÉMOIGNAGES ---------------------------------------------------- */}
-      <section style={{ backgroundColor: IVORY, borderTop: `1px solid ${BORDER}` }}>
-        <div className="max-w-6xl mx-auto px-5 sm:px-6 py-16 md:py-24">
-          <div className="max-w-2xl">
-            <Eyebrow>Ils l’utilisent</Eyebrow>
-            <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">Des commerçants comme vous.</h2>
-          </div>
-          <div className="mt-10 grid gap-5 md:grid-cols-3">
-            {REVIEWS.slice(0, 3).map((r) => (
-              <figure key={r.name + r.shop} className="rounded-2xl bg-white p-6" style={{ border: `1px solid ${BORDER}` }}>
-                <blockquote className="text-[15px] leading-relaxed" style={{ color: '#14211D' }}>« {r.quote} »</blockquote>
-                <figcaption className="mt-5 flex items-center gap-3">
-                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-sm font-semibold" style={{ backgroundColor: GOLD, color: GREEN_DEEP }}>
-                    {initials(r.name)}
-                  </span>
-                  <span className="leading-tight">
-                    <span className="block font-semibold text-sm" style={{ color: '#14211D' }}>{r.name}</span>
-                    <span className="block text-sm" style={{ color: '#5A625E' }}>{r.shop} · {r.city}</span>
-                  </span>
-                </figcaption>
-              </figure>
-            ))}
-          </div>
-          <p className="mt-6 text-xs" style={{ color: '#5A625E' }}>
-            Retours d’utilisateurs, présentés à titre d’exemple. Prénoms abrégés pour préserver leur confidentialité.
-          </p>
-        </div>
-      </section>
-
-      {/* 11. TARIFS (aperçu) ------------------------------------------------ */}
-      <section className="max-w-6xl mx-auto px-5 sm:px-6 py-16 md:py-24">
-        <div className="max-w-2xl">
-          <Eyebrow>Tarifs</Eyebrow>
-          <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">Simple, par boutique, sans surprise.</h2>
-          <p className="mt-3 text-base md:text-lg" style={{ color: '#5A625E' }}>
-            Un forfait mensuel, sans engagement. La conformité fiscale est comprise.
-          </p>
-        </div>
-        <div className="mt-10 grid gap-5 md:grid-cols-3">
-          {plans.map((p) => {
-            const isNum = /^[0-9]+([.,][0-9]+)?$/.test(String(p.price).trim());
-            return (
-              <div key={p.name} className="rounded-2xl bg-white p-6 flex flex-col"
-                   style={{ border: p.highlight ? `2px solid ${GREEN}` : `1px solid ${BORDER}` }}>
-                <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: GREEN }}>{p.tag}</span>
-                <h3 className="mt-2 text-xl font-bold">{p.name}</h3>
-                <div className="mt-3 flex items-baseline gap-1.5">
-                  <span className="text-3xl font-bold">{p.price}</span>
-                  {isNum && <span className="text-sm" style={{ color: '#5A625E' }}>€ HT / mois</span>}
+          <div className="hp-index" style={{ marginTop: 'clamp(2.5rem, 4vw, 4rem)' }}>
+            {FEATURE_GROUPS.map((g) => (
+              <div key={g.title} className="hp-index-group" data-reveal>
+                <div>
+                  <div className="hp-index-title">
+                    <span aria-hidden="true" style={{ color: 'var(--green)' }}>
+                      <Icon name={g.icon} size={20} />
+                    </span>
+                    <h3 className="hp-h3">{g.title}</h3>
+                  </div>
+                  <p className="hp-small" style={{ marginTop: '0.35rem' }}>{g.intro}</p>
                 </div>
+                <ul className="hp-index-items">
+                  {g.items.map((item) => (
+                    <li key={item.label} className="hp-index-item">
+                      <span aria-hidden="true" style={{ color: 'var(--ink-faint)' }}>
+                        <Icon name={item.icon} size={16} />
+                      </span>
+                      <span>
+                        <b>{item.label}</b>
+                        {item.hint ? <span> {item.hint}</span> : null}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
               </div>
-            );
-          })}
-        </div>
-        <div className="mt-8 flex flex-wrap gap-3">
-          <ButtonPrimary href="/tarifs">Voir les tarifs en détail</ButtonPrimary>
-          <ButtonGhost href="/contact">Réserver une démo</ButtonGhost>
-        </div>
-      </section>
-
-      {/* 12. ÉTUDE DE CAS --------------------------------------------------- */}
-      <section style={{ backgroundColor: IVORY, borderTop: `1px solid ${BORDER}` }}>
-        <div className="max-w-6xl mx-auto px-5 sm:px-6 py-16 md:py-24">
-          <div className="max-w-2xl">
-            <Eyebrow>Sur le terrain</Eyebrow>
-            <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">HelloPos dans de vrais commerces.</h2>
+            ))}
           </div>
-          <div className="mt-10 grid gap-5 lg:grid-cols-3">
-            <div className="rounded-2xl bg-white p-6 lg:col-span-2" style={{ border: `1px solid ${BORDER}` }}>
-              <div className="text-xs font-semibold uppercase tracking-widest" style={{ color: GREEN }}>Fleuriste</div>
-              <h3 className="mt-2 text-xl font-bold">Fanny Fleurs</h3>
-              <p className="mt-2 text-sm md:text-base" style={{ color: '#5A625E' }}>
-                Comment HelloPos réunit caisse, commandes, livraisons, stocks et
-                pilotage dans un commerce aux besoins opérationnels variés.
-              </p>
-              {/* Étude de cas détaillée à venir (contenu réel, sans chiffres inventés). */}
-              <div className="mt-5">
-                <ButtonGhost href="/contact">Parler de votre commerce</ButtonGhost>
-              </div>
-            </div>
-            <div className="rounded-2xl p-6 flex flex-col justify-center" style={{ backgroundColor: GREEN, color: '#fff' }}>
-              <p className="text-lg font-semibold">Un cas proche du vôtre ?</p>
-              <p className="mt-2 text-sm" style={{ color: 'rgba(234,230,220,0.85)' }}>
-                On vous montre HelloPos sur votre propre organisation, en 20 minutes.
-              </p>
-              <div className="mt-5">
-                <ButtonPrimary href="/contact" onDark>Réserver une démo</ButtonPrimary>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
 
-      {/* 13. CONFORMITÉ / ACCOMPAGNEMENT ------------------------------------ */}
-      <section className="max-w-6xl mx-auto px-5 sm:px-6 py-16 md:py-24">
-        <div className="grid gap-5 sm:grid-cols-3">
-          {[
-            { t: 'Conforme à la loi', d: 'Chaîne fiscale scellée (art. 286 CGI), rapport Z et exports comptables intégrés.', href: '/conformite', cta: 'La conformité' },
-            { t: 'Installation accompagnée', d: 'Catalogue, boutiques, caisses et imprimantes : vous démarrez prêt.', href: '/contact', cta: 'En savoir plus' },
-            { t: 'Vos données protégées', d: 'Sauvegardes et hébergement en France via nos prestataires. Vous restez maître de vos données.', href: '/confidentialite', cta: 'Confidentialité' },
-          ].map((c) => (
-            <div key={c.t} className="site-card rounded-2xl bg-white p-6 border flex flex-col" style={{ borderColor: BORDER }}>
-              <h3 className="font-semibold text-lg">{c.t}</h3>
-              <p className="mt-2 text-sm flex-1" style={{ color: '#5A625E' }}>{c.d}</p>
-              <a href={c.href} className="mt-4 text-sm font-semibold inline-flex items-center gap-1" style={{ color: GREEN }}>
-                {c.cta}
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
-              </a>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* 15. CTA FINAL ------------------------------------------------------ */}
-      <section style={{ backgroundColor: GREEN_DEEP }}>
-        <div className="max-w-4xl mx-auto px-5 sm:px-6 py-16 md:py-20 text-center">
-          <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-white">Prêt à découvrir HelloPos ?</h2>
-          <p className="mt-4 text-lg" style={{ color: 'rgba(234,230,220,0.8)' }}>
-            Voyez en quelques minutes comment HelloPos peut s’adapter à votre commerce.
+          <p style={{ marginTop: '2rem' }}>
+            <TextLink href="/fonctionnalites">Le détail, écran par écran</TextLink>
           </p>
-          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-            <ButtonPrimary href="/contact" onDark>Réserver une démo gratuite</ButtonPrimary>
-            <ButtonGhost href="/tarifs" onDark>Voir les tarifs</ButtonGhost>
+        </div>
+      </section>
+
+      {/* ---------------------------------------------------------------- */}
+      {/* 06 — Dès 29 €                                                    */}
+      {/* ---------------------------------------------------------------- */}
+      <section className="hp-section hp-on-gold" id="prix">
+        <div className="hp-container">
+          <div className="hp-cols hp-cols--sidebar" style={{ alignItems: 'center' }}>
+            <div>
+              <p className="hp-price-figure" data-reveal>
+                <span className="hp-price-amount">{price} €</span>
+                <span className="hp-price-unit">
+                  HT
+                  <br />
+                  / mois
+                </span>
+              </p>
+            </div>
+            <div data-reveal>
+              <h2 className="hp-h2">Oui, vraiment.</h2>
+              <p className="hp-lede" style={{ marginTop: '1rem', color: 'var(--green-deep)', opacity: 0.8 }}>
+                L’offre d’entrée n’est pas une version réduite : c’est {brand}, pour une boutique
+                et une caisse.
+              </p>
+              <ul
+                style={{
+                  listStyle: 'none',
+                  margin: '2rem 0 0',
+                  padding: 0,
+                  display: 'grid',
+                  gap: '0.6rem',
+                  maxWidth: '34rem',
+                }}
+              >
+                {[
+                  'Encaissement, tickets, avoirs et cartes cadeaux',
+                  'Catalogue, stocks, inventaires et étiquettes',
+                  'Commandes avec date de retrait et acompte',
+                  'Clients, fidélité et carte dans Apple Wallet',
+                  'Rapports, clôtures, rapport Z et exports comptables',
+                  'Utilisateurs, rôles et permissions',
+                ].map((line) => (
+                  <li key={line} style={{ display: 'flex', gap: '0.65rem', alignItems: 'baseline' }}>
+                    <span aria-hidden="true" style={{ color: 'var(--green)' }}>
+                      <Icon name="check" size={16} />
+                    </span>
+                    <span>{line}</span>
+                  </li>
+                ))}
+              </ul>
+              <div style={{ marginTop: '2rem' }}>
+                <Button href="/tarifs" track="voir_tarifs" trackProps={{ emplacement: 'accueil' }} arrow>
+                  Découvrir les formules
+                </Button>
+              </div>
+            </div>
           </div>
-          <p className="mt-4 text-sm" style={{ color: 'rgba(234,230,220,0.6)' }}>14 jours gratuits · Sans engagement</p>
+        </div>
+      </section>
+
+      {/* ---------------------------------------------------------------- */}
+      {/* 07 — Une journée avec HelloPos                                   */}
+      {/* ---------------------------------------------------------------- */}
+      <section className="hp-section hp-on-green-deep hp-dark">
+        <div className="hp-container">
+          <div data-reveal>
+            <Eyebrow>Une journée</Eyebrow>
+            <h2 className="hp-h1" style={{ marginTop: '1.25rem' }}>
+              Conçu pour les gens
+              <br />
+              qui ouvrent leur boutique
+              <br />
+              le matin.
+            </h2>
+          </div>
+
+          <div className="hp-day">
+            {DAY_MOMENTS.map((m, i) => (
+              <div key={m.time} className="hp-day-item" data-reveal style={{ ['--reveal-delay' as string]: `${i * 90}ms` }}>
+                <p className="hp-num" style={{ fontSize: '1.6rem', color: 'var(--gold)' }}>{m.time}</p>
+                <h3 className="hp-h4" style={{ marginTop: '0.5rem' }}>{m.title}</h3>
+                <p className="hp-small" style={{ marginTop: '0.4rem' }}>{m.text}</p>
+              </div>
+            ))}
+          </div>
+
+          <div
+            style={{ marginTop: 'clamp(2.5rem, 4vw, 4rem)', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '1.5rem' }}
+            data-reveal
+          >
+            <p className="hp-h3" style={{ color: 'var(--gold)' }}>{brand} était là toute la journée.</p>
+            <TextLink href="/fonctionnalites">Voir les fonctionnalités</TextLink>
+          </div>
+        </div>
+      </section>
+
+      {/* ---------------------------------------------------------------- */}
+      {/* 08 — Un même outil. Des commerces différents.                    */}
+      {/* ---------------------------------------------------------------- */}
+      <section className="hp-section" id="metiers">
+        <div className="hp-container">
+          <div data-reveal>
+            <Eyebrow>Métiers</Eyebrow>
+            <h2 className="hp-h2" style={{ marginTop: '1.25rem' }}>
+              Un même outil.
+              <br />
+              Des commerces différents.
+            </h2>
+          </div>
+          <div style={{ marginTop: 'clamp(2rem, 4vw, 3rem)' }}>
+            <TradeSwitcher />
+          </div>
+        </div>
+      </section>
+
+      {/* ---------------------------------------------------------------- */}
+      {/* 09 — Ils utilisent HelloPos au quotidien                         */}
+      {/* ---------------------------------------------------------------- */}
+      <section className="hp-section hp-on-warm" id="temoignages">
+        <div className="hp-container">
+          {TESTIMONIALS.length > 0 ? (
+            <div className="hp-cols hp-cols--sidebar-rev">
+              <div data-reveal>
+                <Photo slot={TESTIMONIALS[0]?.photoSlot ?? 'temoignage-1'} ratio="landscape" />
+              </div>
+              <div data-reveal>
+                <Eyebrow>Témoignage</Eyebrow>
+                <blockquote className="hp-h3" style={{ marginTop: '1.25rem' }}>
+                  « {TESTIMONIALS[0]?.quote} »
+                </blockquote>
+                <p className="hp-small" style={{ marginTop: '1.5rem' }}>
+                  <b>{TESTIMONIALS[0]?.shop}</b>
+                  <br />
+                  {TESTIMONIALS[0]?.city} · {TESTIMONIALS[0]?.activity}
+                  {TESTIMONIALS[0]?.person ? (
+                    <>
+                      <br />
+                      {TESTIMONIALS[0]?.person?.name} — {TESTIMONIALS[0]?.person?.role}
+                    </>
+                  ) : null}
+                </p>
+                <p style={{ marginTop: '1.5rem' }}>
+                  <TextLink href="/clients" track="cas_client">Découvrir leur expérience</TextLink>
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="hp-cols hp-cols--sidebar-rev">
+              <div data-reveal>
+                <Visual
+                  slot="temoignage-1"
+                  screen={{
+                    src: '/site/screens/ma-journee.png',
+                    alt: 'Écran « Ma journée » de HelloPos',
+                    caption: 'Capture réalisée sur un environnement de démonstration.',
+                  }}
+                  sizes="(max-width: 900px) 100vw, 600px"
+                />
+              </div>
+              <div data-reveal>
+                <Eyebrow>Ils utilisent {brand} au quotidien</Eyebrow>
+                <h2 className="hp-h2" style={{ marginTop: '1.25rem' }}>
+                  Les témoignages arrivent
+                  <br />
+                  de la boutique, pas d’ici.
+                </h2>
+                <p className="hp-lede" style={{ marginTop: '1rem' }}>
+                  Nous ne publions que des témoignages recueillis auprès de commerces qui utilisent
+                  réellement {brand}, avec leur accord. Cette page se remplira avec eux.
+                </p>
+                <p style={{ marginTop: '1.5rem' }}>
+                  <TextLink href="/contact">Vous utilisez {brand} ? Racontez-nous</TextLink>
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* ---------------------------------------------------------------- */}
+      {/* 10 — Accompagnement                                              */}
+      {/* ---------------------------------------------------------------- */}
+      <section className="hp-section hp-on-paper" id="accompagnement">
+        <div className="hp-container">
+          <div className="hp-cols hp-cols--2" style={{ alignItems: 'end' }}>
+            <div data-reveal>
+              <Eyebrow>Accompagnement</Eyebrow>
+              <h2 className="hp-h2" style={{ marginTop: '1.25rem' }}>
+                Vous n’installez pas
+                <br />
+                votre caisse tout seul.
+              </h2>
+            </div>
+            <p className="hp-lede" data-reveal>
+              Une caisse qui démarre mal se paie pendant des mois. On préfère commencer par
+              comprendre votre commerce.
+            </p>
+          </div>
+
+          <ol
+            style={{
+              listStyle: 'none',
+              margin: 'clamp(2.5rem, 4vw, 4rem) 0 0',
+              padding: 0,
+              display: 'grid',
+              gap: '1px',
+              background: 'var(--line)',
+              border: '1px solid var(--line)',
+              borderRadius: 'var(--r-lg)',
+              overflow: 'hidden',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 15rem), 1fr))',
+            }}
+          >
+            {ONBOARDING.map((s) => (
+              <li key={s.index} style={{ background: 'var(--paper)', padding: 'clamp(1.25rem, 2vw, 2rem)' }}>
+                <p className="hp-story-index">{s.index}</p>
+                <h3 className="hp-h4" style={{ marginTop: '0.75rem' }}>{s.title}</h3>
+                <p className="hp-small" style={{ marginTop: '0.5rem' }}>{s.text}</p>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </section>
+
+      {/* ---------------------------------------------------------------- */}
+      {/* 11 — Conformité                                                  */}
+      {/* ---------------------------------------------------------------- */}
+      <section className="hp-section" id="conformite">
+        <div className="hp-container hp-cols hp-cols--sidebar">
+          <div data-reveal>
+            <Eyebrow>Conformité</Eyebrow>
+            <h2 className="hp-h2" style={{ marginTop: '1.25rem' }}>
+              Une caisse pensée aussi
+              <br />
+              pour les obligations
+              <br />
+              qui vont avec.
+            </h2>
+            <p className="hp-lede" style={{ marginTop: '1.25rem' }}>
+              L’inaltérabilité, la sécurisation, la conservation et l’archivage des données de
+              caisse sont intégrés au produit. Vous n’avez rien à cocher.
+            </p>
+            <p style={{ marginTop: '1.5rem' }}>
+              <TextLink href="/conformite">Comprendre la conformité {brand}</TextLink>
+            </p>
+          </div>
+          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: '1rem' }}>
+            {COMPLIANCE_POINTS.map((p, i) => (
+              <li
+                key={p.title}
+                className="hp-card"
+                data-reveal
+                style={{ ['--reveal-delay' as string]: `${i * 70}ms`, display: 'flex', gap: '1rem' }}
+              >
+                <span aria-hidden="true" style={{ color: 'var(--green)', flex: '0 0 auto' }}>
+                  <Icon name="shield" size={22} />
+                </span>
+                <span>
+                  <b className="hp-h4">{p.title}</b>
+                  <span className="hp-small" style={{ display: 'block', marginTop: '0.35rem' }}>{p.text}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+
+      {/* ---------------------------------------------------------------- */}
+      {/* 12 — FAQ                                                         */}
+      {/* ---------------------------------------------------------------- */}
+      <section className="hp-section hp-on-paper" id="faq">
+        <div className="hp-container hp-cols hp-cols--sidebar">
+          <div data-reveal>
+            <Eyebrow>Questions</Eyebrow>
+            <h2 className="hp-h2" style={{ marginTop: '1.25rem' }}>
+              Ce qu’on nous demande
+              <br />
+              le plus souvent.
+            </h2>
+            <p className="hp-lede" style={{ marginTop: '1.25rem' }}>
+              Une question qui n’est pas là ? Écrivez-nous, la réponse arrive d’une personne.
+            </p>
+            <p style={{ marginTop: '1.5rem' }}>
+              <TextLink href="/contact">Poser votre question</TextLink>
+            </p>
+          </div>
+          <div>
+            <Faq items={FAQ} withSchema />
+          </div>
+        </div>
+      </section>
+
+      {/* ---------------------------------------------------------------- */}
+      {/* 13 — CTA final                                                   */}
+      {/* ---------------------------------------------------------------- */}
+      <section className="hp-section hp-on-green hp-dark">
+        <div className="hp-container" style={{ textAlign: 'center' }}>
+          <h2 className="hp-display" data-reveal>
+            Votre commerce.
+            <br />
+            Une seule application.
+          </h2>
+          <p className="hp-lede" style={{ marginTop: '1.5rem', marginInline: 'auto', maxWidth: '32ch' }} data-reveal>
+            Essayez {brand} pendant {trialDays} jours.
+          </p>
+          <div
+            style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '0.9rem', marginTop: '2.5rem' }}
+            data-reveal
+          >
+            <Button href="/setup" variant="gold" size="lg" track="essai_hellopos" trackProps={{ emplacement: 'cta-final' }}>
+              Commencer gratuitement
+            </Button>
+            <Button href="/contact#demo" variant="ghost" size="lg" track="reserver_demo" trackProps={{ emplacement: 'cta-final' }}>
+              Réserver une démo
+            </Button>
+          </div>
+          <Reassurance
+            className="mt-6"
+            items={[`Dès ${price} € HT/mois`, 'Sans engagement']}
+          />
+          <p className="hp-fine" style={{ marginTop: '2.5rem' }}>
+            Déjà client ? <Link className="hp-link" href="/connexion">Se connecter</Link>
+          </p>
         </div>
       </section>
     </>

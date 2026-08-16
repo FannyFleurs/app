@@ -1,118 +1,214 @@
 'use client';
 
 import { useState } from 'react';
-import { GREEN, GREEN_DEEP, GOLD, BORDER } from '../_ui';
+import { track } from '@/lib/site/analytics';
+import { Icon } from '../_components/icons';
 
 /**
- * Formulaire de demande de démo. À l'envoi, il POSTe réellement les données
- * vers /api/contact : la demande est enregistrée côté serveur et une
- * notification email part vers l'équipe. Aucune ouverture de la messagerie
- * du visiteur (fini le mailto).
+ * Formulaire de contact et de démonstration.
+ *
+ * Envoi vers /api/contact : la demande est enregistrée en base et notifiée
+ * par email. Le champ « company » est un piège à robots — invisible à
+ * l'écran, ignoré côté serveur s'il est rempli.
+ *
+ * Accessibilité : chaque champ a son <label>, les erreurs sont annoncées
+ * dans une zone `role="alert"`, et le succès dans une zone `role="status"`.
  */
-export default function ContactForm() {
-  const [name, setName] = useState('');
-  const [shop, setShop] = useState('');
-  const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
-  const [message, setMessage] = useState('');
-  const [company, setCompany] = useState(''); // honeypot
-  const [state, setState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
 
-  async function submit(e: React.FormEvent) {
+interface State {
+  name: string;
+  shop: string;
+  email: string;
+  phone: string;
+  subject: string;
+  message: string;
+  company: string;
+}
+
+const SUBJECTS = [
+  'Découvrir HelloPos (démo)',
+  'Vérifier mon matériel',
+  'Question sur les tarifs',
+  'Plusieurs boutiques',
+  'Autre sujet',
+];
+
+export default function ContactForm({ defaultSubject }: { defaultSubject?: string }) {
+  const [f, setF] = useState<State>({
+    name: '',
+    shop: '',
+    email: '',
+    phone: '',
+    subject: defaultSubject && SUBJECTS.includes(defaultSubject) ? defaultSubject : SUBJECTS[0]!,
+    message: '',
+    company: '',
+  });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [sent, setSent] = useState(false);
+
+  function set<K extends keyof State>(key: K, value: State[K]) {
+    setF((prev) => ({ ...prev, [key]: value }));
+  }
+
+  async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (state === 'sending') return;
-    setState('sending');
+    setBusy(true);
+    setError(null);
     try {
       const res = await fetch('/api/contact', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, shop, email, phone, message, company }),
+        body: JSON.stringify({
+          name: f.name,
+          shop: f.shop,
+          email: f.email,
+          phone: f.phone,
+          message: `[${f.subject}]\n\n${f.message}`,
+          company: f.company,
+        }),
       });
-      if (!res.ok) throw new Error('bad status');
-      setState('sent');
+      if (!res.ok) {
+        setError('L’envoi n’a pas abouti. Réessayez, ou écrivez-nous directement par email.');
+        return;
+      }
+      setSent(true);
+      track('formulaire_envoye', { sujet: f.subject });
+      track('reserver_demo', { source: 'formulaire' });
     } catch {
-      setState('error');
+      setError('Connexion interrompue. Vérifiez votre réseau et réessayez.');
+    } finally {
+      setBusy(false);
     }
   }
 
-  const field = 'w-full rounded-xl border px-3.5 h-12 text-base outline-none bg-white';
-  const style = { borderColor: BORDER } as React.CSSProperties;
-
-  if (state === 'sent') {
+  if (sent) {
     return (
-      <div className="rounded-2xl p-6 text-center" style={{ backgroundColor: GREEN, color: '#fff' }}>
-        <div className="mx-auto grid h-12 w-12 place-items-center rounded-full" style={{ backgroundColor: GOLD, color: GREEN_DEEP }}>
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="m5 12 4 4L19 6" />
-          </svg>
-        </div>
-        <h3 className="mt-4 text-lg font-semibold">Demande envoyée</h3>
-        <p className="mt-2 text-sm" style={{ color: 'rgba(234,230,220,0.85)' }}>
-          Merci {name || ''} ! On revient vers vous sous 24 h ouvrées.
+      <div className="hp-card" role="status">
+        <span aria-hidden="true" className="hp-yes">
+          <Icon name="check" size={28} />
+        </span>
+        <h2 className="hp-h3" style={{ marginTop: '1rem' }}>Message envoyé.</h2>
+        <p className="hp-small" style={{ marginTop: '0.75rem' }}>
+          Nous revenons vers vous rapidement, à l’adresse indiquée. En attendant, vous pouvez déjà
+          créer votre espace et commencer l’essai.
+        </p>
+        <p style={{ marginTop: '1.5rem' }}>
+          <a className="hp-btn hp-btn--primary" href="/setup" data-track="essai_hellopos">
+            Créer mon espace
+          </a>
         </p>
       </div>
     );
   }
 
   return (
-    <form onSubmit={submit} className="space-y-4">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <label className="block">
-          <span className="text-sm font-medium" style={{ color: '#5A625E' }}>Votre nom</span>
-          <input className={`${field} mt-1`} style={style} value={name} onChange={(e) => setName(e.target.value)} required />
-        </label>
-        <label className="block">
-          <span className="text-sm font-medium" style={{ color: '#5A625E' }}>Votre boutique</span>
-          <input className={`${field} mt-1`} style={style} value={shop} onChange={(e) => setShop(e.target.value)} />
-        </label>
-        <label className="block">
-          <span className="text-sm font-medium" style={{ color: '#5A625E' }}>Email</span>
-          <input type="email" className={`${field} mt-1`} style={style} value={email} onChange={(e) => setEmail(e.target.value)} required />
-        </label>
-        <label className="block">
-          <span className="text-sm font-medium" style={{ color: '#5A625E' }}>Téléphone</span>
-          <input className={`${field} mt-1`} style={style} value={phone} onChange={(e) => setPhone(e.target.value)} />
-        </label>
+    <form name="contact" onSubmit={onSubmit} noValidate={false} style={{ display: 'grid', gap: '1.25rem' }}>
+      <div className="hp-cols hp-cols--2" style={{ gap: '1.25rem' }}>
+        <div className="hp-field">
+          <label htmlFor="c-name">Votre nom *</label>
+          <input
+            id="c-name"
+            className="hp-input"
+            autoComplete="name"
+            required
+            value={f.name}
+            onChange={(e) => set('name', e.target.value)}
+          />
+        </div>
+        <div className="hp-field">
+          <label htmlFor="c-shop">Votre boutique</label>
+          <input
+            id="c-shop"
+            className="hp-input"
+            autoComplete="organization"
+            value={f.shop}
+            onChange={(e) => set('shop', e.target.value)}
+          />
+        </div>
       </div>
-      <label className="block">
-        <span className="text-sm font-medium" style={{ color: '#5A625E' }}>Votre message</span>
+
+      <div className="hp-cols hp-cols--2" style={{ gap: '1.25rem' }}>
+        <div className="hp-field">
+          <label htmlFor="c-email">Email *</label>
+          <input
+            id="c-email"
+            type="email"
+            className="hp-input"
+            autoComplete="email"
+            inputMode="email"
+            required
+            value={f.email}
+            onChange={(e) => set('email', e.target.value)}
+          />
+        </div>
+        <div className="hp-field">
+          <label htmlFor="c-phone">Téléphone</label>
+          <input
+            id="c-phone"
+            type="tel"
+            className="hp-input"
+            autoComplete="tel"
+            inputMode="tel"
+            value={f.phone}
+            onChange={(e) => set('phone', e.target.value)}
+          />
+        </div>
+      </div>
+
+      <div className="hp-field">
+        <label htmlFor="c-subject">Sujet</label>
+        <select
+          id="c-subject"
+          className="hp-select"
+          value={f.subject}
+          onChange={(e) => set('subject', e.target.value)}
+        >
+          {SUBJECTS.map((s) => (
+            <option key={s} value={s}>{s}</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="hp-field">
+        <label htmlFor="c-message">Votre message</label>
         <textarea
-          className="w-full rounded-xl border px-3.5 py-3 text-base outline-none bg-white mt-1 min-h-[120px]"
-          style={style}
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          placeholder="Combien de caisses ? Quel besoin ? Un créneau qui vous arrange ?"
+          id="c-message"
+          className="hp-textarea"
+          value={f.message}
+          onChange={(e) => set('message', e.target.value)}
+          placeholder="Ce que vous vendez, comment vous encaissez aujourd’hui, ce que vous cherchez à améliorer."
         />
-      </label>
-
-      {/* Honeypot anti-robot : masqué aux humains, doit rester vide. */}
-      <div aria-hidden className="absolute -left-[9999px] top-auto h-0 w-0 overflow-hidden">
-        <label>
-          Société
-          <input tabIndex={-1} autoComplete="off" value={company} onChange={(e) => setCompany(e.target.value)} />
-        </label>
+        <span className="hp-hint">Plus c’est concret, plus la réponse sera utile.</span>
       </div>
 
-      <button
-        type="submit"
-        disabled={state === 'sending'}
-        className="site-btn inline-flex items-center justify-center h-12 px-6 rounded-xl text-base font-semibold text-white disabled:opacity-70"
-        style={{ backgroundColor: GREEN }}
-      >
-        {state === 'sending' ? 'Envoi…' : 'Réserver ma démo gratuite'}
-      </button>
+      {/* Piège à robots : masqué visuellement et pour les lecteurs d'écran. */}
+      <div aria-hidden="true" style={{ position: 'absolute', left: '-9999px' }}>
+        <label htmlFor="c-company">Ne pas remplir</label>
+        <input
+          id="c-company"
+          tabIndex={-1}
+          autoComplete="off"
+          value={f.company}
+          onChange={(e) => set('company', e.target.value)}
+        />
+      </div>
 
-      {state === 'error' ? (
-        <p className="text-sm" style={{ color: '#B4342B' }}>
-          L’envoi a échoué. Réessayez, ou écrivez-nous directement par email.
+      {error ? (
+        <p role="alert" className="hp-small" style={{ color: '#a33a2c' }}>
+          {error}
         </p>
-      ) : (
-        <p className="text-xs" style={{ color: '#5A625E' }}>
-          En envoyant ce formulaire, vous acceptez que vos données soient utilisées
-          pour vous recontacter. Voir notre{' '}
-          <a href="/confidentialite" className="underline" style={{ color: GREEN }}>politique de confidentialité</a>.
+      ) : null}
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '1rem' }}>
+        <button type="submit" className="hp-btn hp-btn--primary hp-btn--lg" disabled={busy}>
+          {busy ? 'Envoi…' : 'Envoyer la demande'}
+        </button>
+        <p className="hp-form-note">
+          Vos coordonnées servent uniquement à vous répondre.{' '}
+          <a className="hp-link" href="/confidentialite">Confidentialité</a>
         </p>
-      )}
+      </div>
     </form>
   );
 }

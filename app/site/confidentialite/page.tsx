@@ -1,110 +1,129 @@
 import { loadPlatform } from '@/lib/site/platform';
-import { pageMeta } from '@/lib/site/meta';
-import { Eyebrow, GREEN, BORDER } from '../_ui';
+import { pageMeta, SITE_URL } from '@/lib/site/meta';
+import { PageHeader, TextLink } from '../_components/ui';
 
 export const dynamic = 'force-dynamic';
+
 export const metadata = pageMeta({
-  title: 'Politique de confidentialité — HelloPos',
+  title: 'Confidentialité — HelloPos',
   description:
-    'Comment HelloPos collecte, utilise et protège vos données personnelles. Vos droits et comment les exercer.',
+    'Quelles données le site HelloPos collecte, pourquoi, combien de temps elles sont conservées, et comment exercer vos droits.',
   path: '/confidentialite',
 });
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Block({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div>
-      <h2 className="text-xl font-bold">{title}</h2>
-      <div className="mt-3 space-y-3 text-sm md:text-base leading-relaxed" style={{ color: '#5A625E' }}>
-        {children}
-      </div>
-    </div>
+    <section style={{ marginTop: '2.5rem' }}>
+      <h2 className="hp-h3">{title}</h2>
+      <div className="hp-prose" style={{ marginTop: '1rem' }}>{children}</div>
+    </section>
   );
 }
 
 export default async function PrivacyPage() {
   const p = await loadPlatform();
   const brand = p.brand_name || 'HelloPos';
-  const editor = p.company_legal_name || brand;
-  const email = p.contact_email || 'contact@hellopos.fr';
+  const editor = p.company_legal_name || '';
+  const email = p.contact_email;
+
+  const contact = email ? (
+    <a className="hp-link" href={`mailto:${email}`}>{email}</a>
+  ) : (
+    <TextLink href="/contact" arrow={false}>le formulaire de contact</TextLink>
+  );
 
   return (
     <>
-      <section style={{ backgroundColor: GREEN }}>
-        <div className="max-w-6xl mx-auto px-5 sm:px-6 py-16 md:py-20">
-          <Eyebrow onDark>Vos données</Eyebrow>
-          <h1 className="mt-3 text-4xl md:text-5xl font-bold tracking-tight text-white">Politique de confidentialité</h1>
-          <p className="mt-4 text-lg max-w-2xl" style={{ color: 'rgba(234,230,220,0.85)' }}>
-            On ne collecte que ce qui est nécessaire pour vous répondre, et vous
-            gardez le contrôle sur vos données.
+      <PageHeader
+        eyebrow="Vos données"
+        title="Politique de confidentialité"
+        lede="Ce site ne collecte que ce que vous nous écrivez, pour vous répondre. Rien de plus."
+        crumbs={[
+          { href: '/', label: 'Accueil' },
+          { href: '/confidentialite', label: 'Confidentialité' },
+        ]}
+        siteUrl={SITE_URL}
+      />
+
+      <section className="hp-section--tight">
+        <div className="hp-container hp-container--text" style={{ marginTop: '1rem' }}>
+          <Block title="Responsable du traitement">
+            <p>
+              Les données transmises via ce site sont traitées par {editor || `l’éditeur de ${brand}`}.
+              Pour toute question relative à vos données, écrivez à {contact}.
+            </p>
+          </Block>
+
+          <Block title="Données collectées">
+            <p>Nous ne collectons que les informations que vous saisissez vous-même :</p>
+            <ul style={{ margin: '0.75rem 0 0', paddingLeft: '1.25rem', display: 'grid', gap: '0.4rem' }}>
+              <li>Formulaire de contact et de démonstration : nom, boutique, email, téléphone, sujet et message.</li>
+            </ul>
+            <p style={{ marginTop: '1rem' }}>
+              Aucune donnée n’est achetée, ni collectée à votre insu, ni revendue.
+            </p>
+          </Block>
+
+          <Block title="Finalité et base légale">
+            <p>
+              Ces informations servent uniquement à répondre à votre demande et, le cas échéant, à
+              préparer une relation contractuelle : démonstration, vérification de matériel, devis.
+              La base légale est l’exécution de mesures précontractuelles prises à votre demande,
+              ainsi que notre intérêt légitime à répondre aux sollicitations reçues.
+            </p>
+          </Block>
+
+          <Block title="Destinataires">
+            <p>
+              Vos données sont accessibles aux personnes en charge du suivi commercial et technique
+              de {brand}. Les notifications par email sont acheminées par le prestataire d’envoi
+              configuré par l’éditeur, agissant comme sous-traitant.
+            </p>
+          </Block>
+
+          <Block title="Durée de conservation">
+            <p>
+              Les demandes de contact sont conservées le temps du traitement puis pendant la durée
+              nécessaire au suivi de la relation commerciale, avant suppression ou archivage.
+            </p>
+          </Block>
+
+          <Block title="Vos droits">
+            <p>
+              Vous disposez d’un droit d’accès, de rectification, d’effacement, d’opposition, de
+              limitation et de portabilité de vos données. Vous pouvez les exercer à tout moment en
+              écrivant à {contact}.
+            </p>
+            <p>
+              Si vous estimez que vos droits ne sont pas respectés, vous pouvez saisir la
+              Commission nationale de l’informatique et des libertés (CNIL), 3 place de Fontenoy,
+              75007 Paris — cnil.fr.
+            </p>
+          </Block>
+
+          <Block title="Cookies et mesure d’audience">
+            <p>
+              Ce site ne dépose aucun cookie publicitaire et n’utilise aucun traceur à des fins de
+              profilage. Les pages du site sont servies sans cookie de suivi.
+            </p>
+            <p>
+              Les espaces applicatifs (caisse, back-office) utilisent, eux, des cookies strictement
+              nécessaires à votre session : ils sont indispensables à la connexion.
+            </p>
+          </Block>
+
+          <Block title="Polices et ressources externes">
+            <p>
+              Les polices de caractères et les images du site sont servies depuis nos propres
+              serveurs. Aucune requête n’est adressée à un tiers lors de l’affichage des pages.
+            </p>
+          </Block>
+
+          <p className="hp-fine" style={{ marginTop: '3rem', borderTop: '1px solid var(--line)', paddingTop: '1.5rem' }}>
+            Cette politique s’applique au site public. L’utilisation du logiciel {brand} par un
+            commerce fait l’objet de conditions distinctes, communiquées à la souscription.
           </p>
         </div>
-      </section>
-
-      <section className="max-w-3xl mx-auto px-5 sm:px-6 py-16 md:py-24 space-y-10">
-        <Section title="Responsable du traitement">
-          <p>
-            Les données collectées sur ce site sont traitées par {editor}. Pour
-            toute question, écrivez à{' '}
-            <a href={`mailto:${email}`} className="font-medium underline" style={{ color: GREEN }}>{email}</a>.
-          </p>
-        </Section>
-
-        <Section title="Données collectées">
-          <p>Nous collectons uniquement les données que vous nous transmettez :</p>
-          <ul className="list-disc pl-5 space-y-1.5">
-            <li>Formulaire de démo / contact : nom, boutique, email, téléphone et message.</li>
-            <li>Inscription à la liste email : votre adresse email.</li>
-          </ul>
-          <p>Aucune donnée n’est achetée ni collectée à votre insu.</p>
-        </Section>
-
-        <Section title="Finalités et base légale">
-          <ul className="list-disc pl-5 space-y-1.5">
-            <li>Répondre à vos demandes de démonstration et de contact (intérêt légitime / mesures précontractuelles).</li>
-            <li>Vous envoyer nos conseils et nouveautés si vous vous êtes inscrit (consentement).</li>
-          </ul>
-        </Section>
-
-        <Section title="Destinataires">
-          <p>
-            Vos données sont accessibles à l’équipe {brand}. Nos emails sont
-            envoyés via notre prestataire d’emailing Brevo (Sendinblue SAS, France),
-            en qualité de sous-traitant. Aucune donnée n’est revendue.
-          </p>
-        </Section>
-
-        <Section title="Durée de conservation">
-          <p>
-            Les demandes de contact sont conservées le temps nécessaire au suivi
-            commercial, puis archivées ou supprimées. Les inscriptions email sont
-            conservées jusqu’à votre désinscription.
-          </p>
-        </Section>
-
-        <Section title="Vos droits">
-          <p>
-            Vous disposez d’un droit d’accès, de rectification, d’effacement,
-            d’opposition, de limitation et de portabilité de vos données. Vous
-            pouvez les exercer à tout moment en écrivant à{' '}
-            <a href={`mailto:${email}`} className="font-medium underline" style={{ color: GREEN }}>{email}</a>.
-            Chaque email d’information contient également un lien de désinscription.
-          </p>
-          <p>
-            Vous pouvez introduire une réclamation auprès de la CNIL (www.cnil.fr)
-            si vous estimez que vos droits ne sont pas respectés.
-          </p>
-        </Section>
-
-        <Section title="Cookies">
-          <p>
-            Ce site n’utilise que des cookies strictement nécessaires à son
-            fonctionnement. Aucun cookie de traçage publicitaire n’est déposé.
-          </p>
-        </Section>
-
-        <p className="text-xs pt-6" style={{ color: '#5A625E', borderTop: `1px solid ${BORDER}` }}>
-          Dernière mise à jour : 2026.
-        </p>
       </section>
     </>
   );

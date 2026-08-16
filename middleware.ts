@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { isMarketingPath } from '@/lib/site/routes';
 
 /**
  * Routage par sous-domaine :
@@ -52,10 +53,13 @@ function isStaticOrApi(pathname: string): boolean {
 
 /**
  * Pages du site vitrine, servies sous /site/*. L'apex les expose à des URLs
- * propres (hellopos.fr/tarifs → /site/tarifs) ; les captures et autres assets
- * du site vivent sous /site/… et passent tels quels.
+ * propres (hellopos.fr/tarifs → /site/tarifs) ; les captures, polices et
+ * autres assets du site vivent sous /site/… et passent tels quels.
+ *
+ * La liste des URLs publiques est tenue dans lib/site/routes.ts, partagée
+ * avec le plan du site : une page ajoutée là est servie ici sans autre
+ * modification.
  */
-const MARKETING_PATHS = new Set(['/fonctionnalites', '/tarifs', '/avis', '/conformite', '/contact', '/mentions-legales', '/confidentialite']);
 function isSitePath(pathname: string): boolean {
   return pathname === '/site' || pathname.startsWith('/site/');
 }
@@ -173,7 +177,7 @@ export function middleware(req: NextRequest) {
       return NextResponse.rewrite(url);
     }
     // URLs propres du site vitrine (hellopos.fr/tarifs…) → /site/tarifs.
-    if (MARKETING_PATHS.has(pathname)) {
+    if (isMarketingPath(pathname)) {
       url.pathname = '/site' + pathname;
       return NextResponse.rewrite(url);
     }
@@ -192,7 +196,7 @@ export function middleware(req: NextRequest) {
 
   // Site vitrine : URLs propres → /site/* (comme sur l'apex réel), pour que
   // la navigation du site fonctionne aussi en local / preview.
-  if (MARKETING_PATHS.has(pathname)) {
+  if (isMarketingPath(pathname)) {
     url.pathname = '/site' + pathname;
     return NextResponse.rewrite(url);
   }
