@@ -1528,6 +1528,108 @@ button:hover .hp-arrow {
   outline-color: var(--green);
 }
 
+/* --- Questionnaire de contact --- */
+.hp-steps-label {
+  font-size: var(--fs-sm);
+  color: var(--ink-soft);
+}
+.hp-steps-label b {
+  color: var(--ink);
+  font-weight: 600;
+}
+.hp-steps-bar {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 0.35rem;
+  list-style: none;
+  margin: 0.6rem 0 0;
+  padding: 0;
+}
+.hp-steps-bar li {
+  height: 4px;
+  border-radius: var(--r-pill);
+  background: var(--line);
+  transition: background-color 320ms var(--ease);
+}
+.hp-steps-bar li[data-done='true'] {
+  background: var(--green);
+}
+.hp-fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.hp-fieldset > legend {
+  padding: 0;
+  font-size: var(--fs-body);
+  font-weight: 550;
+  color: var(--ink);
+}
+.hp-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+}
+/* Vrais boutons radio et cases à cocher, visuellement masqués : la
+   navigation au clavier et les lecteurs d'écran fonctionnent nativement. */
+.hp-choice input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.hp-choice > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.55rem 1rem;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line);
+  background: var(--paper);
+  font-size: var(--fs-sm);
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: border-color 180ms var(--ease), background-color 180ms var(--ease),
+    color 180ms var(--ease);
+}
+.hp-choice > span:hover {
+  border-color: var(--ink-faint);
+  color: var(--ink);
+}
+.hp-choice input:checked + span {
+  background: var(--green);
+  border-color: var(--green);
+  color: var(--gold);
+}
+/* Le survol ne doit jamais atténuer une réponse déjà choisie. */
+.hp-choice input:checked + span:hover {
+  background: var(--green);
+  border-color: var(--green);
+  color: var(--gold);
+}
+.hp-choice input:focus-visible + span {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+.hp-consent {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+  font-size: var(--fs-sm);
+  color: var(--ink-soft);
+}
+.hp-consent input {
+  margin-top: 0.25rem;
+  width: 1.15rem;
+  height: 1.15rem;
+  flex: 0 0 auto;
+  accent-color: var(--green);
+}
+
 /* --- Formulaires --- */
 .hp-field {
   display: grid;

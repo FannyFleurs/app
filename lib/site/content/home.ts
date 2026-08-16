@@ -156,8 +156,7 @@ export const ONBOARDING: OnboardingStep[] = [
     index: '01',
     title: 'On découvre votre commerce.',
     text:
-      'Ce que vous vendez, comment vous encaissez, ce qui vous fait perdre du temps aujourd’hui. ' +
-      'Un échange, pas un questionnaire.',
+      'Ce que vous vendez, comment vous encaissez, ce qui vous fait perdre du temps aujourd’hui.',
   },
   {
     index: '02',

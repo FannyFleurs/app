@@ -1,16 +1,16 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import ContactForm from '../contact/ContactForm';
+import ContactWizard from './ContactWizard';
 import { Icon } from './icons';
 
 /**
  * Bouton « Nous contacter » de la page d'attente, et la fenêtre qui s'ouvre
  * dessus.
  *
- * Le formulaire est celui du site, en version courte : il poste sur
- * /api/contact, qui fonctionne que le site soit publié ou non. Aucune
- * navigation, donc aucun risque d'atterrir sur une page qui n'est pas servie.
+ * Le formulaire est celui du site : il poste sur /api/contact, qui fonctionne
+ * que le site soit publié ou non. Aucune navigation, donc aucun risque
+ * d'atterrir sur une page qui n'est pas servie.
  *
  * Accessibilité : `aria-modal`, fermeture par Échap et par le fond, focus
  * porté sur le premier champ à l'ouverture puis rendu au bouton à la
@@ -69,10 +69,10 @@ export default function HoldingContact() {
                 <Icon name="close" size={18} />
               </button>
             </div>
-            <p className="hp-small" style={{ marginBottom: '1.5rem' }}>
-              Dites-nous en deux lignes ce que vous cherchez : nous vous répondons par email.
+            <p className="hp-small" style={{ marginBottom: '0.5rem' }}>
+              Quelques questions pour vous répondre utilement, plutôt qu’avec un message type.
             </p>
-            <ContactForm defaultSubject="Autre sujet" compact showTrialCta={false} />
+            <ContactWizard source="page-attente" />
           </div>
         </div>
       ) : null}
