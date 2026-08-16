@@ -182,9 +182,11 @@ Par défaut, une plateforme n'a pas son site publié : il faut l'activer.
 ### Off — seule la page d'attente est en ligne
 
 - La racine du domaine affiche l'écran d'attente (`HoldingScreen`) : logo,
-  bouton de connexion, une phrase, les accès caisse et back-office, les
-  coordonnées et les mentions de l'éditeur si elles sont renseignées.
-  L'URL ne change pas, la réponse est en `200` et la page est en `noindex`.
+  bouton de connexion, le titre de l'accueil (`HOME_TITLE`, partagé avec la
+  vraie page), les accès caisse et back-office, les coordonnées et les
+  mentions de l'éditeur si elles sont renseignées. Aucun message
+  d'indisponibilité. L'URL ne change pas, la réponse est en `200` et la page
+  est en `noindex`.
 - Toutes les autres adresses du site (`/tarifs`, `/solutions/…`,
   `/logiciel-caisse-…`, `/site/*`) répondent en **307** vers la racine.
 - La création de compte est fermée : `/setup` renvoie sur la page d'attente et
