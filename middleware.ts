@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { isMarketingPath } from '@/lib/site/routes';
+import { HOLDING_PATH, SITE_PUBLIC, isSiteAsset } from '@/lib/site/publication';
 
 /**
  * Routage par sous-domaine :
@@ -169,20 +170,51 @@ export function middleware(req: NextRequest) {
       return NextResponse.next();
     }
 
+    // ------------------------------------------------------------------
+    // Site public dépublié (SITE_PUBLIC != 'on') : l'apex n'affiche plus
+    // qu'une page d'attente. Les sous-domaines applicatifs, traités plus
+    // haut, ne sont pas concernés — la caisse et le back-office continuent
+    // de fonctionner normalement.
+    // ------------------------------------------------------------------
+    if (!SITE_PUBLIC) {
+      // Polices, captures et image de partage : la page d'attente en a besoin.
+      if (isSiteAsset(pathname)) return NextResponse.next();
+      // La page d'attente elle-même, servie à la racine.
+      if (pathname === HOLDING_PATH) return NextResponse.next();
+      if (pathname === '/') {
+        url.pathname = HOLDING_PATH;
+        return NextResponse.rewrite(url);
+      }
+      // Pages du site et création de compte : tout revient à la page
+      // d'attente, en redirection TEMPORAIRE (307) — republier ne demandera
+      // qu'un changement de variable.
+      const isSitePage = isMarketingPath(pathname) || isSitePath(pathname);
+      const isOnboarding = pathname === '/setup' || pathname.startsWith('/setup/');
+      if (isSitePage || isOnboarding) {
+        const home = url.clone();
+        home.pathname = '/';
+        home.search = '';
+        return NextResponse.redirect(home, 307);
+      }
+      // Tout autre chemin (caisse, dashboard…) part sur app.<domaine>,
+      // comme d'habitude : voir la fin de ce bloc.
+    }
+
     // apex (hellopos.fr) -> UNIQUEMENT la vitrine + onboarding.
     // La racine affiche la vitrine ; /site et /setup restent servis ;
     // tout le reste (caisse, dashboard, login…) part sur app.<domaine>.
-    if (pathname === '/') {
+    if (SITE_PUBLIC && pathname === '/') {
       url.pathname = '/site';
       return NextResponse.rewrite(url);
     }
     // URLs propres du site vitrine (hellopos.fr/tarifs…) → /site/tarifs.
-    if (isMarketingPath(pathname)) {
+    if (SITE_PUBLIC && isMarketingPath(pathname)) {
       url.pathname = '/site' + pathname;
       return NextResponse.rewrite(url);
     }
     // /site/* (accès direct + captures) et /setup servis tels quels.
-    if (isSitePath(pathname) || pathname === '/setup' || pathname.startsWith('/setup/')) {
+    if (isSiteAsset(pathname)) return NextResponse.next();
+    if (SITE_PUBLIC && (isSitePath(pathname) || pathname === '/setup' || pathname.startsWith('/setup/'))) {
       return NextResponse.next();
     }
     const to = url.clone();

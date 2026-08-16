@@ -3,6 +3,7 @@ import { loadPlatform } from '@/lib/site/platform';
 import { pageMeta, SITE_URL } from '@/lib/site/meta';
 import { Button, Eyebrow, PageHeader, TextLink } from '../_components/ui';
 import { Icon } from '../_components/icons';
+import { spaceUrls } from '@/lib/site/spaces';
 
 export const metadata = pageMeta({
   title: 'Connexion — HelloPos',
@@ -12,36 +13,10 @@ export const metadata = pageMeta({
   noIndex: true,
 });
 
-const KNOWN_SUBS = ['app.', 'bo.', 'ca.', 'admin.', 'pda.', 'ecran.', 'www.'];
-
-/**
- * Adresses des espaces applicatifs.
- *
- * Sur un vrai domaine, chaque espace a son sous-domaine (app., bo., ca.,
- * ecran., pda.) — mêmes règles que le middleware. En préversion ou en local,
- * on retombe sur les chemins équivalents.
- */
-function accessUrls(rawHost: string | null) {
-  const host = (rawHost ?? '').toLowerCase().split(':')[0] ?? '';
-  const preview = !host || host === 'localhost' || host.endsWith('.vercel.app');
-  if (preview) {
-    return { preview, caisse: '/login', bo: '/bo', ca: null, ecran: null, pda: null };
-  }
-  const base = KNOWN_SUBS.reduce((h, sub) => (h.startsWith(sub) ? h.slice(sub.length) : h), host);
-  return {
-    preview,
-    caisse: `https://app.${base}`,
-    bo: `https://bo.${base}`,
-    ca: `https://ca.${base}`,
-    ecran: `https://ecran.${base}`,
-    pda: `https://pda.${base}`,
-  };
-}
-
 export default async function LoginChoicePage() {
   const platform = await loadPlatform();
   const brand = platform.brand_name || 'HelloPos';
-  const urls = accessUrls(headers().get('host'));
+  const urls = spaceUrls(headers().get('host'));
 
   const secondary = [
     { href: urls.ca, label: 'Suivi du chiffre d’affaires', text: 'L’écran qui affiche l’activité du jour en direct.', icon: 'chart' },

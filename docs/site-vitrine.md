@@ -165,7 +165,58 @@ Les éléments cliquables portent `data-track="<événement>"` et, au besoin,
 
 ---
 
-## 6. Contrôles avant mise en ligne
+## 6. Publier / dépublier le site public
+
+Un seul interrupteur : la variable d'environnement **`SITE_PUBLIC`**
+(`lib/site/publication.ts`).
+
+| Valeur | Effet sur hellopos.fr | Effet sur app. / bo. / ca. / ecran. / pda. / admin. |
+| --- | --- | --- |
+| `on` | Site public servi normalement | Aucun |
+| absente ou autre | Site **dépublié** : page d'attente | Aucun |
+
+La valeur par défaut est « dépublié » : si la variable disparaît d'un
+environnement, le site reste hors ligne plutôt que de se publier tout seul.
+
+### Ce qui se passe quand le site est dépublié
+
+- `hellopos.fr/` affiche la page d'attente (`app/indisponible`) : logo, une
+  phrase, les accès caisse et back-office, les coordonnées si elles sont
+  renseignées, les mentions de l'éditeur. Elle est en `noindex, follow`.
+- Toutes les URLs du site (`/tarifs`, `/solutions/…`, `/logiciel-caisse-…`,
+  `/site/*`) et la création de compte (`/setup`) répondent en **307** vers la
+  page d'attente. Une redirection temporaire : republier ne demande aucun
+  travail de redirection derrière.
+- `sitemap.xml` ne liste plus aucune URL et `robots.txt` ne l'annonce plus.
+  L'exploration reste autorisée, pour que les moteurs lisent le `noindex` et
+  retirent les pages de leurs résultats.
+- Les polices, captures et l'image de partage (`/site/fonts/…`,
+  `/site/screens/…`, `/site/photos/…`, `/site/og.png`) restent servies : la
+  page d'attente s'en sert.
+- **Les espaces applicatifs ne sont pas touchés.** `app.`, `bo.`, `ca.`,
+  `ecran.`, `pda.` et `admin.` fonctionnent exactement comme avant, y compris
+  `hellopos.fr/caisse` qui continue de rediriger vers `app.hellopos.fr`.
+- Les préversions (`*.vercel.app`) et le développement local servent toujours
+  le site complet : on peut continuer à le relire pendant qu'il est hors ligne.
+
+### Republier
+
+1. Définir `SITE_PUBLIC=on` sur l'environnement de production.
+2. Redéployer.
+
+Rien d'autre : aucune page, aucun contenu, aucune redirection à défaire.
+
+### Vérifier l'état
+
+```bash
+curl -sI https://hellopos.fr/tarifs      # 307 -> / si dépublié, 200 sinon
+curl -s  https://hellopos.fr/sitemap.xml # aucune <url> si dépublié
+curl -sI https://app.hellopos.fr/login   # doit répondre dans les deux cas
+```
+
+---
+
+## 7. Contrôles avant mise en ligne
 
 ```bash
 npm run typecheck   # types
