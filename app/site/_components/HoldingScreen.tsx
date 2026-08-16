@@ -5,9 +5,9 @@ import { spaceUrls } from '@/lib/site/spaces';
 /**
  * Écran affiché tant que le site public n'est pas activé.
  *
- * Il dit trois choses, et rien de plus : le site n'est pas accessible en ce
- * moment, les espaces applicatifs le sont toujours, et voici comment nous
- * joindre. Aucune promesse de date, aucun argument commercial.
+ * Il porte le titre de l'accueil — la marque, pas un message d'erreur — puis
+ * les accès applicatifs et les coordonnées. Aucun avis d'indisponibilité,
+ * aucune promesse de date.
  *
  * Servi à la racine du domaine public (le gabarit du site le rend à la place
  * de l'accueil) et sur la route /indisponible, qui permet de le relire depuis
@@ -62,12 +62,17 @@ export default async function HoldingScreen() {
       </div>
 
       <div className="hp-container">
-        <h1 className="hp-h1" style={{ maxWidth: '16ch' }}>
-          Le site {brand} n’est pas accessible pour le moment.
+        {/* Le titre de la marque, celui de l'accueil : la page tient debout
+            toute seule, sans message d'indisponibilité. */}
+        <h1 className="hp-display" style={{ maxWidth: '14ch' }}>
+          La caisse qui
+          <br />
+          fait <span className="hp-em">beaucoup plus</span>
+          <br />
+          que la caisse.
         </h1>
-        <p className="hp-lede" style={{ marginTop: '1.5rem', maxWidth: '48ch' }}>
-          Les boutiques équipées continuent d’encaisser et de piloter leur activité normalement :
-          la caisse, le back-office et les écrans ne sont pas concernés.
+        <p className="hp-h4" style={{ marginTop: '2.25rem' }}>
+          Encaissez. Gérez. Pilotez. Grandissez.
         </p>
 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.9rem', marginTop: '2.5rem' }}>

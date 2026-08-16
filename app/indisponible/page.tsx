@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { HOME_TITLE, HOME_DESCRIPTION } from '@/lib/site/meta';
 import HoldingScreen from '../site/_components/HoldingScreen';
 
 export const dynamic = 'force-dynamic';
@@ -10,13 +11,13 @@ export const dynamic = 'force-dynamic';
  * `app/site/layout.tsx`) ; cette route sert à le relire, notamment depuis la
  * console d'administration avant d'activer ou de désactiver le site.
  *
- * `noindex` : rien à indexer tant que le site n'est pas publié. Le suivi des
- * liens reste autorisé pour que les moteurs retrouvent les pages le jour de
- * la publication.
+ * Le titre est celui de l'accueil : seule l'indexation change. `noindex`
+ * tant que le site n'est pas publié, `follow` pour que les moteurs retrouvent
+ * les pages le jour de la publication.
  */
 export const metadata: Metadata = {
-  title: 'HelloPos',
-  description: 'Le site HelloPos n’est pas accessible pour le moment.',
+  title: HOME_TITLE,
+  description: HOME_DESCRIPTION,
   robots: { index: false, follow: true },
 };
 

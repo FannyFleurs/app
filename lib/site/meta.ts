@@ -11,6 +11,15 @@ import type { Metadata } from 'next';
  */
 export const SITE_URL = 'https://hellopos.fr';
 export const SITE_NAME = 'HelloPos';
+
+/**
+ * Titre et description de l'accueil. Repris tels quels par l'écran affiché
+ * tant que le site n'est pas publié : la page d'attente porte le titre de la
+ * vraie page, pas un message d'indisponibilité.
+ */
+export const HOME_TITLE = 'HelloPos — La caisse qui fait beaucoup plus que la caisse';
+export const HOME_DESCRIPTION =
+  'HelloPos réunit caisse, stocks, commandes, clients et pilotage dans une seule application pensée pour les commerçants. Dès 29 € HT/mois, 14 jours d’essai, sans engagement.';
 const OG_IMAGE = '/site/og.png';
 
 export function pageMeta({
