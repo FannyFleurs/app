@@ -707,7 +707,9 @@ button:hover .hp-arrow {
 .hp-hero-back {
   display: none;
 }
-@media (min-width: 640px) {
+/* La fenêtre du back-office ne se superpose à la tablette qu'en deux
+   colonnes : empilée, elle recouvrirait le texte qui la précède. */
+@media (min-width: 1000px) {
   .hp-hero-back {
     display: block;
     position: absolute;
