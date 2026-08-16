@@ -3,7 +3,7 @@ import { pageMeta, SITE_URL } from '@/lib/site/meta';
 import { ONBOARDING } from '@/lib/site/content/home';
 import { Eyebrow, PageHeader, TextLink } from '../_components/ui';
 import { Icon } from '../_components/icons';
-import ContactForm from './ContactForm';
+import ContactWizard from '../_components/ContactWizard';
 
 export const metadata = pageMeta({
   title: 'Contact — HelloPos',
@@ -12,14 +12,6 @@ export const metadata = pageMeta({
   path: '/contact',
 });
 
-/** Sujets pré-remplis depuis les liens du site (ex. /contact?sujet=materiel). */
-const SUBJECT_BY_KEY: Record<string, string> = {
-  demo: 'Découvrir HelloPos (démo)',
-  materiel: 'Vérifier mon matériel',
-  tarifs: 'Question sur les tarifs',
-  reseau: 'Plusieurs boutiques',
-};
-
 export default async function ContactPage({
   searchParams,
 }: {
@@ -27,7 +19,6 @@ export default async function ContactPage({
 }) {
   const platform = await loadPlatform();
   const brand = platform.brand_name || 'HelloPos';
-  const defaultSubject = SUBJECT_BY_KEY[searchParams?.sujet ?? ''] ?? undefined;
 
   return (
     <>
@@ -45,7 +36,7 @@ export default async function ContactPage({
       <section className="hp-section--tight" id="demo" style={{ scrollMarginTop: '5.5rem' }}>
         <div className="hp-container hp-cols hp-cols--sidebar-rev" style={{ marginTop: '2rem', alignItems: 'start' }}>
           <div>
-            <ContactForm defaultSubject={defaultSubject} />
+            <ContactWizard source={searchParams?.sujet ?? 'contact'} />
           </div>
 
           <aside style={{ display: 'grid', gap: '2rem' }}>
