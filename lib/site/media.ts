@@ -10,9 +10,13 @@
  *
  * Pour publier une photo :
  *   1. déposer les fichiers dans /public/site/photos
- *      (idéalement `<slot>.avif`, `<slot>.webp` et `<slot>.jpg`,
- *       en 1600 px de large, plus `<slot>-m.*` en 800 px) ;
+ *      (idéalement `<slot>.avif`, `<slot>.webp` et un repli `<slot>.jpg` —
+ *       `<slot>.png` si l'image a un fond transparent —, en 1600 px de large,
+ *       plus `<slot>-m.*` en 800 px) ;
  *   2. déclarer l'emplacement ci-dessous avec son texte alternatif.
+ *
+ * Les fichiers sources non optimisés (exports haute résolution) restent hors
+ * de /public : les ranger dans assets/site-sources, qui n'est pas déployé.
  *
  * Aucune autre modification n'est nécessaire : toutes les pages qui
  * utilisent l'emplacement basculent automatiquement sur la photo.
@@ -24,7 +28,13 @@ export interface PhotoAsset {
   /** Texte alternatif — décrire la scène, pas la marque. */
   alt: string;
   /** Extensions disponibles, dans l'ordre de préférence. */
-  formats?: ('avif' | 'webp' | 'jpg')[];
+  formats?: ('avif' | 'webp' | 'png' | 'jpg')[];
+  /**
+   * Extension du fichier de repli, servi aux navigateurs qui ne lisent aucun
+   * des formats ci-dessus. `png` pour une image à fond transparent — le JPEG
+   * aplatirait la transparence sur du blanc.
+   */
+  fallback?: 'jpg' | 'png';
   /** Variante 800 px disponible (`<base>-m.<ext>`). */
   mobile?: boolean;
   /** Crédit affiché discrètement sous l'image. */
@@ -32,26 +42,29 @@ export interface PhotoAsset {
 }
 
 /**
- * Photos publiées. Vide tant qu'aucune image n'a été validée : le site
- * n'affiche jamais une photo « d'ambiance » qui ne serait pas la sienne.
+ * Photos publiées. Un emplacement absent d'ici n'affiche pas une image
+ * générique : le site n'exhibe jamais une photo « d'ambiance » qui ne serait
+ * pas la sienne.
  *
- * Emplacement `attente-appareils` — la mise en scène du produit sur la page
- * d'attente (montage tablette + téléphone), à droite du texte sur grand
- * écran. Tant qu'il n'est pas déclaré, c'est l'écran de caisse réel qui
- * s'affiche dans une tablette. Pour le renseigner :
+ * `attente-appareils` — la mise en scène du produit sur la page d'attente
+ * (montage tablette + téléphone), à droite du texte sur grand écran. Export à
+ * fond transparent : le bloc est vert, un JPEG aplatirait le fond en blanc et
+ * poserait un rectangle clair sur la page. D'où `formats: ['webp', 'png']` et
+ * `fallback: 'png'`.
  *
- *   'attente-appareils': {
- *     base: '/site/photos/attente-appareils',
- *     alt: 'HelloPos sur une tablette et un téléphone',
- *     formats: ['webp', 'jpg'],   // ou ['avif', 'webp', 'jpg']
- *     mobile: true,               // si une variante -m existe
- *   },
- *
- * Le fond du bloc étant vert, préférer un export à fond transparent (PNG ou
- * WebP avec alpha) : sur un fond blanc, l'image apparaîtrait comme un
- * rectangle clair posé sur la page.
+ * Fichiers dérivés de assets/site-sources/attente-appareils.png (4500 × 3000,
+ * recadré sur les appareils) : 1600 px de large, plus la variante `-m` en
+ * 800 px pour les petits écrans.
  */
-export const PHOTOS: Record<string, PhotoAsset> = {};
+export const PHOTOS: Record<string, PhotoAsset> = {
+  'attente-appareils': {
+    base: '/site/photos/attente-appareils',
+    alt: 'HelloPos affiché sur une tablette et sur un téléphone',
+    formats: ['webp', 'png'],
+    fallback: 'png',
+    mobile: true,
+  },
+};
 
 export function photo(slot: string): PhotoAsset | undefined {
   return PHOTOS[slot];

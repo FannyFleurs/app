@@ -38,8 +38,9 @@ export default function Photo({
     return <div className={cls} aria-hidden="true"><span className="hp-photo-fallback" /></div>;
   }
 
-  const formats = asset.formats ?? ['avif', 'webp', 'jpg'];
-  const sources = formats.filter((f) => f !== 'jpg');
+  const fallback = asset.fallback ?? 'jpg';
+  const formats = asset.formats ?? ['avif', 'webp', fallback];
+  const sources = formats.filter((f) => f !== fallback);
   const srcSet = (ext: string) =>
     asset.mobile ? `${asset.base}-m.${ext} 800w, ${asset.base}.${ext} 1600w` : `${asset.base}.${ext} 1600w`;
 
@@ -51,7 +52,7 @@ export default function Photo({
         ))}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={`${asset.base}.jpg`}
+          src={`${asset.base}.${fallback}`}
           alt={asset.alt}
           loading={priority ? 'eager' : 'lazy'}
           decoding="async"
