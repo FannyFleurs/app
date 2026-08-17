@@ -30,6 +30,10 @@ describe('Demandes d’assistance', () => {
     // Ni boOnly ni appOnly : visible en caisse ET au back-office.
     expect(item!.boOnly).toBeUndefined();
     expect(item!.appOnly).toBeUndefined();
+    // Sa propre section : l'assistance n'est pas un réglage rangé sous
+    // « Système », on ne la cherche pas là quand la caisse s'arrête.
+    expect(item!.group).toBe('Assistance');
+    expect(SIDEBAR_ITEMS.filter((i) => i.group === 'Assistance')).toHaveLength(1);
   });
 
   it('une demande clôturée ne se rouvre pas', () => {

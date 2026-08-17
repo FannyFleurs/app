@@ -105,6 +105,25 @@ export default function TopBar({
         <SubscriptionChip subscription={subscription} />
       )}
 
+      {/* Assistance — permanente, y compris sur mobile où les onglets sont
+          masqués : signaler une panne ne doit pas commencer par ouvrir un
+          menu. */}
+      {permissions.has('support.request') ? (
+        <Link
+          href="/support"
+          title="Assistance"
+          aria-label="Assistance"
+          aria-current={path.startsWith('/support') ? 'page' : undefined}
+          className={`px-4 flex items-center justify-center border-l border-border transition-colors ${
+            path.startsWith('/support')
+              ? 'text-accent-deep bg-accent-soft'
+              : 'text-ink-soft hover:text-ink hover:bg-gray-50'
+          }`}
+        >
+          <Icon name="comment" size={20} />
+        </Link>
+      ) : null}
+
       {/* Hamburger */}
       <button
         onClick={onOpenMenu}

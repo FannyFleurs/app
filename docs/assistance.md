@@ -9,7 +9,7 @@ la demande est partie.
 
 | Étape | Où | Qui |
 | --- | --- | --- |
-| Envoi de la demande | Menu → Système → **Assistance** (`/support`) | tout utilisateur connecté |
+| Envoi de la demande | bouton **Assistance** du rail (ou de la barre du haut sur mobile), et Menu → **Assistance** (`/support`) | tout utilisateur connecté |
 | Réception | Console → **Demandes d'assistance** (`/admin/support`) + email | opérateur (`super_admin`) |
 | Traitement | même page : état, réponse, note interne | opérateur |
 | Retour au commerçant | fenêtre sur l'écran d'où la demande est partie | automatique |
@@ -90,6 +90,20 @@ La permission `support.request` est ouverte à **tous les rôles**, y compris
 comptoir, ce n'est pas forcément celle qui a les droits. L'entrée de menu est
 `required` — une boutique ne peut pas la masquer depuis Gestion d'accès, sinon
 elle n'aurait plus de chemin pour signaler la panne.
+
+## 6 bis. Accès
+
+Trois chemins, tous d'un seul clic :
+
+- **le rail gauche** (desktop / tablette) : bouton permanent au-dessus du menu,
+  quelle que soit la configuration des onglets ;
+- **la barre du haut** (mobile, où les onglets sont masqués) : même bouton, à
+  gauche du hamburger ;
+- **le menu** « Toutes les pages » : section **Assistance**, la sienne. Ce n'est
+  pas un réglage rangé sous « Système » — quand la caisse s'arrête, on ne va pas
+  chercher l'aide dans les paramètres.
+
+Les trois sont conditionnés à `support.request` et pointent sur `/support`.
 
 Côté opérateur, tout passe par `requireSuperAdmin`.
 

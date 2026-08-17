@@ -26,7 +26,7 @@ interface Props {
   backOffice?: boolean;
 }
 
-const BO_GROUP_ORDER = ['Vente', 'Relation', 'Catalogue', 'Pilotage', 'Système'];
+const BO_GROUP_ORDER = ['Vente', 'Relation', 'Catalogue', 'Pilotage', 'Système', 'Assistance'];
 
 /** Repli du rail : mémorisé par poste, pas par utilisateur. */
 const RAIL_COLLAPSED_KEY = 'webpos_bo_rail_collapsed';
@@ -274,8 +274,28 @@ export default function LeftRail({
         })}
       </nav>
 
-      {/* Hamburger + monogramme utilisateur en bas */}
+      {/* Assistance + hamburger + monogramme utilisateur en bas */}
       <div className="flex flex-col items-center gap-2 pb-3 border-t border-border pt-3 shrink-0">
+        {/* Toujours là, quelle que soit la configuration des onglets : quand la
+            caisse s'arrête, signaler la panne ne doit pas commencer par
+            ouvrir un menu. */}
+        {permissions.has('support.request') ? (
+          <Link
+            href="/support"
+            aria-current={path.startsWith('/support') ? 'page' : undefined}
+            className={`flex flex-col items-center justify-center gap-0.5 w-16 lg:w-[4.75rem] min-h-[56px] py-1.5 px-1 rounded-2xl transition-colors ${
+              path.startsWith('/support')
+                ? 'text-white shadow-sm font-semibold'
+                : 'text-ink-soft hover:text-ink hover:bg-gray-100'
+            }`}
+            style={path.startsWith('/support') ? { backgroundColor: 'var(--primary)' } : undefined}
+            title="Assistance"
+            aria-label="Assistance"
+          >
+            <Icon name="comment" size={22} />
+            <span className="text-[10px] leading-tight text-center max-w-full truncate">Assistance</span>
+          </Link>
+        ) : null}
         <button
           onClick={onOpenMenu}
           aria-label="Toutes les pages"
