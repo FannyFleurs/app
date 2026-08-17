@@ -15,13 +15,15 @@ type SocieteData = {
   contact_email: string;
   contact_phone: string;
   website: string;
+  company_website: string;
   demo_video_url: string;
 };
 
 const KEYS = Object.keys({
   company_legal_name: '', company_siren: '', company_siret: '', company_vat: '',
   address_line1: '', address_zip: '', address_city: '', address_country: '',
-  contact_email: '', contact_phone: '', website: '', demo_video_url: '',
+  contact_email: '', contact_phone: '', website: '', company_website: '',
+  demo_video_url: '',
 } as SocieteData) as (keyof SocieteData)[];
 
 export default function SocieteForm({ initial }: { initial: SocieteData }) {
@@ -113,10 +115,21 @@ export default function SocieteForm({ initial }: { initial: SocieteData }) {
                    onChange={(e) => patch('contact_phone', e.target.value)} />
           </div>
         </div>
-        <div>
-          <label className="text-sm font-medium text-ink-soft">Site web</label>
-          <input className="input mt-1" value={s.website}
-                 onChange={(e) => patch('website', e.target.value)} placeholder="https://…" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="text-sm font-medium text-ink-soft">Site du produit</label>
+            <input className="input mt-1" value={s.website}
+                   onChange={(e) => patch('website', e.target.value)} placeholder="https://…" />
+          </div>
+          <div>
+            <label className="text-sm font-medium text-ink-soft">Site de l&apos;éditeur</label>
+            <input className="input mt-1" value={s.company_website}
+                   onChange={(e) => patch('company_website', e.target.value)} placeholder="https://…" />
+            <p className="text-xs text-ink-soft mt-1">
+              Le nom de la société, dans le pied de page du site, renvoie ici.
+              Laissez vide pour l&apos;afficher sans lien.
+            </p>
+          </div>
         </div>
       </section>
 

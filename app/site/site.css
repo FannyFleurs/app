@@ -1479,6 +1479,23 @@ button:hover .hp-arrow {
   }
 }
 
+/* Nom de l'éditeur dans l'ours du pied de page. Souligné : posé au milieu
+   d'une phrase, sans cela il ne se distinguerait pas du texte autour et
+   personne ne saurait qu'il mène quelque part. */
+.hp-legal-link {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  text-decoration-thickness: 1px;
+}
+.hp-legal-link:hover {
+  color: var(--ink);
+}
+.hp-dark .hp-legal-link:hover,
+.hp-on-green .hp-legal-link:hover,
+.hp-on-green-deep .hp-legal-link:hover {
+  color: var(--on-green);
+}
+
 /* --- Bouton « Connexion » : le choix entre la caisse et le back-office --- */
 .hp-login {
   position: relative;

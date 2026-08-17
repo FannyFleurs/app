@@ -3,6 +3,7 @@ import { loadPlatform } from '@/lib/site/platform';
 import MinimalHeader from './MinimalHeader';
 import HoldingContact from './HoldingContact';
 import Visual from './Visual';
+import LegalLine from './LegalLine';
 
 /**
  * Écran affiché tant que le site public n'est pas activé.
@@ -27,13 +28,6 @@ import Visual from './Visual';
 export default async function HoldingScreen() {
   const platform = await loadPlatform();
   const brand = platform.brand_name || 'HelloPos';
-  const year = new Date().getFullYear();
-
-  const legal = [
-    platform.company_legal_name,
-    platform.company_siret ? `SIRET ${platform.company_siret}` : '',
-    platform.company_vat ? `TVA ${platform.company_vat}` : '',
-  ].filter(Boolean);
 
   return (
     <main
@@ -89,10 +83,7 @@ export default async function HoldingScreen() {
       <div className="hp-container">
         <hr className="hp-rule" style={{ marginBottom: '1.25rem' }} />
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem 1.5rem', justifyContent: 'space-between' }}>
-          <p className="hp-fine">
-            © {year} {brand}
-            {legal.length ? ` — ${legal.join(' · ')}` : ''}
-          </p>
+          <LegalLine platform={platform} brand={brand} />
           <p className="hp-fine" style={{ display: 'flex', gap: '1.25rem' }}>
             <Link href="/mentions-legales">Mentions légales</Link>
             <Link href="/confidentialite">Confidentialité</Link>

@@ -28,6 +28,7 @@ export default async function AdminConfigurationSocietePage() {
         contact_email: m.contact_email,
         contact_phone: m.contact_phone,
         website: m.website,
+        company_website: m.company_website,
         demo_video_url: m.demo_video_url,
       }}
     />

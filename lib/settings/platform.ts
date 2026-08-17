@@ -48,6 +48,12 @@ export interface PlatformSettings {
   contact_phone: string;
   website: string;
   /**
+   * Site de la société qui édite le logiciel. Distinct de `website`, qui est
+   * l'adresse du produit : le pied de page mentionne l'éditeur, et son nom
+   * renvoie chez lui.
+   */
+  company_website: string;
+  /**
    * Publication du site public hellopos.fr. `false` = seule la page d'attente
    * est en ligne ; les espaces applicatifs ne sont jamais concernés.
    */
@@ -117,6 +123,9 @@ export const PLATFORM_DEFAULTS: PlatformSettings = {
   contact_email: '',
   contact_phone: '',
   website: '',
+  // Éditeur du logiciel. Modifiable depuis Configuration → Société ; la valeur
+  // par défaut évite d'avoir à la ressaisir sur une installation neuve.
+  company_website: 'https://swebio.fr',
   demo_video_url: '',
   // Le site public n'est pas en ligne tant qu'il n'a pas été activé depuis la
   // console d'administration.
