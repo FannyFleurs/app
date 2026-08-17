@@ -71,7 +71,7 @@ export default function LoginMenu({ caisse, bo }: { caisse: string; bo: string }
             <span className="hp-login-icon" aria-hidden="true"><Icon name="cart" size={18} /></span>
             <span>
               <span className="hp-login-label">La caisse</span>
-              <span className="hp-login-hint">Écran de vente, code vendeur</span>
+              <span className="hp-login-hint">Écran de vente</span>
             </span>
           </a>
           <a href={bo} className="hp-login-choice">
