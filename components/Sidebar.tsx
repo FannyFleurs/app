@@ -66,6 +66,9 @@ export const SIDEBAR_ITEMS: SidebarItem[] = [
   // Système
   { href: '/settings/users', label: 'Utilisateurs',       icon: 'users',        group: 'Système',  perm: 'users.read' },
   { href: '/settings',     label: 'Paramètres',           icon: 'settings',     group: 'Système',  perm: 'settings.read', required: true },
+  // Assistance : ouverte à tous les rôles et non masquable. Une boutique qui
+  // aurait caché cette entrée n'aurait plus de chemin pour signaler la panne.
+  { href: '/support',      label: 'Assistance',           icon: 'comment',      group: 'Système',  perm: 'support.request', required: true },
 ];
 
 const GROUP_ORDER = ['Vente', 'Relation', 'Catalogue', 'Pilotage', 'Système'];

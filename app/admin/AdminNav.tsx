@@ -8,6 +8,7 @@ const ITEMS = [
   { href: '/admin', label: 'Dashboard' },
   { href: '/admin/organizations', label: 'Organisations' },
   { href: '/admin/messages', label: 'Demandes de contact' },
+  { href: '/admin/support', label: 'Demandes d’assistance' },
   { href: '/admin/promo-codes', label: 'Codes' },
   { href: '/admin/configuration', label: 'Configuration' },
   { href: '/admin/health', label: 'Santé & quota' },

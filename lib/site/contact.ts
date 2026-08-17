@@ -1,7 +1,7 @@
 import 'server-only';
 import { query } from '@/lib/db/client';
 import { loadPlatform } from './platform';
-import { sendOrgEmail } from '@/lib/email/send';
+import { notifyPlatform, escapeHtml } from '@/lib/email/platform';
 
 /**
  * Traitement d'une demande de contact / démo envoyée depuis le site vitrine.
@@ -21,37 +21,6 @@ export interface ContactInput {
   email: string;
   phone: string;
   message: string;
-}
-
-/**
- * Organisation dont la config email (Brevo) sert d'expéditeur pour les
- * notifications plateforme : la première dont la clé API et l'expéditeur
- * sont renseignés, en privilégiant celles où l'envoi est activé.
- */
-async function resolveSenderOrg(): Promise<{ organizationId: string; senderEmail: string } | null> {
-  try {
-    const { rows } = await query<{ organization_id: string; sender: string }>(
-      `SELECT organization_id, value->>'sender_email' AS sender
-         FROM settings
-        WHERE key LIKE 'email%'
-          AND COALESCE(value->>'api_key', '') <> ''
-          AND COALESCE(value->>'sender_email', '') <> ''
-        ORDER BY (COALESCE(value->>'enabled', 'false') = 'true') DESC, updated_at DESC
-        LIMIT 1`,
-    );
-    const r = rows[0];
-    return r ? { organizationId: r.organization_id, senderEmail: r.sender } : null;
-  } catch {
-    return null;
-  }
-}
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
 }
 
 function buildHtml(input: ContactInput, brand: string): string {
@@ -88,21 +57,13 @@ export async function saveAndNotifyContact(input: ContactInput): Promise<{ ok: b
   let emailed = false;
   try {
     const platform = await loadPlatform();
-    const sender = await resolveSenderOrg();
-    if (sender) {
-      const to = platform.contact_email || sender.senderEmail;
-      const brand = platform.brand_name || 'HelloPos';
-      const res = await sendOrgEmail({
-        organizationId: sender.organizationId,
-        to,
-        toName: brand,
-        subject: `Demande de démo — ${input.shop || input.name}`,
-        html: buildHtml(input, brand),
-        replyToEmail: input.email,
-        replyToName: input.name,
-      });
-      emailed = res.ok;
-    }
+    const brand = platform.brand_name || 'HelloPos';
+    emailed = await notifyPlatform({
+      subject: `Demande de démo — ${input.shop || input.name}`,
+      html: buildHtml(input, brand),
+      replyToEmail: input.email,
+      replyToName: input.name,
+    });
   } catch {
     // La demande est déjà enregistrée : on n'échoue pas côté visiteur.
   }
