@@ -142,9 +142,12 @@ export default function DashboardClient({ firstName, stores, lockedStoreId }: { 
         <Kpi icone="star" label="Marge"
              value={cur ? formatEUR(cur.marge) : '—'}
              delta={delta(cur?.marge, prev?.marge)} />
-        <Kpi icone="fiscal" label="TVA collectée"
-             value={cur ? formatEUR(cur.tva) : '—'}
-             delta={delta(cur?.tva, prev?.tva)} />
+        <Kpi icone="star" label="Taux de marge"
+             value={cur && cur.ca_ht > 0 ? `${((cur.marge / cur.ca_ht) * 100).toFixed(1).replace('.', ',')} %` : '—'}
+             delta={delta(
+               cur && cur.ca_ht > 0 ? (cur.marge / cur.ca_ht) * 100 : undefined,
+               prev && prev.ca_ht > 0 ? (prev.marge / prev.ca_ht) * 100 : undefined,
+             )} />
       </section>
 
       {/* Courbes CA & ticket moyen */}
