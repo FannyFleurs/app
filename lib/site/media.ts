@@ -34,6 +34,22 @@ export interface PhotoAsset {
 /**
  * Photos publiées. Vide tant qu'aucune image n'a été validée : le site
  * n'affiche jamais une photo « d'ambiance » qui ne serait pas la sienne.
+ *
+ * Emplacement `attente-appareils` — la mise en scène du produit sur la page
+ * d'attente (montage tablette + téléphone), à droite du texte sur grand
+ * écran. Tant qu'il n'est pas déclaré, c'est l'écran de caisse réel qui
+ * s'affiche dans une tablette. Pour le renseigner :
+ *
+ *   'attente-appareils': {
+ *     base: '/site/photos/attente-appareils',
+ *     alt: 'HelloPos sur une tablette et un téléphone',
+ *     formats: ['webp', 'jpg'],   // ou ['avif', 'webp', 'jpg']
+ *     mobile: true,               // si une variante -m existe
+ *   },
+ *
+ * Le fond du bloc étant vert, préférer un export à fond transparent (PNG ou
+ * WebP avec alpha) : sur un fond blanc, l'image apparaîtrait comme un
+ * rectangle clair posé sur la page.
  */
 export const PHOTOS: Record<string, PhotoAsset> = {};
 
