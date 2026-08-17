@@ -107,6 +107,23 @@ Le composant `<Visual>` affiche la photographie dès qu'elle existe et, tant
 qu'elle n'existe pas, montre une capture du logiciel. Aucune page n'est à
 modifier, et le site n'affiche jamais de cadre vide.
 
+Sur un fond de marque (page d'attente, sections vertes), exporter l'image
+avec un fond transparent et servir un repli PNG plutôt que JPEG :
+
+```ts
+formats: ['webp', 'png'],
+fallback: 'png',
+```
+
+Les exports haute résolution ne vont pas dans `public/` — ils sont rangés
+dans `assets/site-sources/`, qui n'est pas déployé. Les fichiers publiés en
+sont dérivés : recadrage sur le sujet, 1600 px et 800 px de large. Attention
+aux maquettes exportées avec un panneau de fond semi-transparent : il se voit
+comme un rectangle plus clair posé sur le vert. Ramener à zéro les valeurs
+d'opacité du fond avant de recadrer (le montage `attente-appareils` avait un
+dégradé jusqu'à alpha 102, les appareils et leurs ombres étant au-delà
+de 183).
+
 ### Un métier
 
 Ajouter le slug à `TRADE_SLUGS` (`lib/site/routes.ts`), son chemin SEO dans

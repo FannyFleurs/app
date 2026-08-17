@@ -67,9 +67,10 @@ export default async function HoldingScreen() {
           </div>
         </div>
 
-        {/* Mise en scène du produit. La photo déclarée sous l'emplacement
-            `attente-appareils` prend la place dès qu'elle existe ; d'ici là,
-            c'est l'écran de caisse réel, dans une tablette. */}
+        {/* Mise en scène du produit : le montage tablette + téléphone déclaré
+            sous l'emplacement `attente-appareils`. Si l'emplacement venait à
+            être vidé, c'est l'écran de caisse réel qui reprend la place, dans
+            une tablette dessinée. */}
         <div className="hp-holding-visual">
           <Visual
             slot="attente-appareils"
@@ -80,7 +81,7 @@ export default async function HoldingScreen() {
               src: '/site/screens/caisse.png',
               alt: `Écran de caisse ${brand} sur tablette`,
             }}
-            sizes="(max-width: 900px) 100vw, 55vw"
+            sizes="(max-width: 999px) 100vw, 45vw"
           />
         </div>
       </div>
