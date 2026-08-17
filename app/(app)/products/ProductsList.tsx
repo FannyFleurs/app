@@ -234,9 +234,13 @@ export default function ProductsList({
           subtitle="Bouquets, plantes, cache-pots, bougies, services, cartes cadeaux."
           actions={canEdit ? (
             <div className="flex gap-2">
-              {/* Import réservé au back-office (gestion catalogue multi-boutiques). */}
+              {/* Import + vue liste éditable : réservés au back-office (gestion
+                  catalogue multi-boutiques). */}
               {backOffice && (
-                <button className="btn-soft" onClick={() => setShowImport(true)}>⬆ Importer</button>
+                <>
+                  <button className="btn-soft" onClick={() => setShowImport(true)}>⬆ Importer</button>
+                  <a href="/products/liste" className="btn-soft">≣ Vue liste</a>
+                </>
               )}
               <button className="btn-primary" onClick={() => setEditing(null)}>+ Nouveau produit</button>
             </div>
