@@ -59,6 +59,15 @@ export const PERMISSIONS = {
   // Paramètres
   'settings.read': ['super_admin', 'owner', 'manager'],
   'settings.write': ['super_admin', 'owner'],
+  /**
+   * Demander de l'aide. Ouverte à TOUS les rôles, y compris ceux qui ne
+   * peuvent presque rien d'autre : la personne qui constate la panne est
+   * souvent celle qui tient le comptoir, pas celle qui a les droits.
+   */
+  'support.request': [
+    'super_admin', 'owner', 'manager', 'vendeur',
+    'comptable', 'lecture_seule', 'support_technique',
+  ],
 } satisfies Record<string, readonly Role[]>;
 
 export type Permission = keyof typeof PERMISSIONS;

@@ -66,9 +66,15 @@ export const SIDEBAR_ITEMS: SidebarItem[] = [
   // Système
   { href: '/settings/users', label: 'Utilisateurs',       icon: 'users',        group: 'Système',  perm: 'users.read' },
   { href: '/settings',     label: 'Paramètres',           icon: 'settings',     group: 'Système',  perm: 'settings.read', required: true },
+  // Assistance — sa propre section, pas un réglage rangé sous « Système ».
+  // Ouverte à tous les rôles et non masquable : une boutique qui aurait caché
+  // cette entrée n'aurait plus de chemin pour signaler la panne. Elle a par
+  // ailleurs son bouton permanent dans le rail et la barre du haut : signaler
+  // une caisse à l'arrêt ne doit pas commencer par ouvrir un menu.
+  { href: '/support',      label: 'Assistance',           icon: 'comment',      group: 'Assistance', perm: 'support.request', required: true },
 ];
 
-const GROUP_ORDER = ['Vente', 'Relation', 'Catalogue', 'Pilotage', 'Système'];
+const GROUP_ORDER = ['Vente', 'Relation', 'Catalogue', 'Pilotage', 'Système', 'Assistance'];
 
 export default function Sidebar({
   role, hiddenPaths = [], onItemClick,

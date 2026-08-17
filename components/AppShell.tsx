@@ -7,6 +7,7 @@ import LeftRail from './LeftRail';
 import AllPagesOverlay from './AllPagesOverlay';
 import WakeLockKeeper from './WakeLockKeeper';
 import PaidOrderNotifier from './PaidOrderNotifier';
+import SupportNotifier from './SupportNotifier';
 import SchoolModeBanner from './SchoolModeBanner';
 import SessionKeepAlive from './SessionKeepAlive';
 import type { Role, Permission } from '@/lib/auth/rbac';
@@ -190,6 +191,10 @@ export default function AppShell({
 
       {/* Notifications temps réel : paiement Stripe validé */}
       <PaidOrderNotifier />
+
+      {/* Réponse à une demande d'assistance : la fenêtre s'ouvre en priorité
+          sur l'écran d'où la demande est partie. */}
+      <SupportNotifier />
     </div>
   );
 }

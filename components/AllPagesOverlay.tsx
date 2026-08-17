@@ -18,7 +18,7 @@ interface Props {
   onLogout: () => void;
 }
 
-const GROUP_ORDER = ['Vente', 'Relation', 'Catalogue', 'Pilotage', 'Système'];
+const GROUP_ORDER = ['Vente', 'Relation', 'Catalogue', 'Pilotage', 'Système', 'Assistance'];
 
 export default function AllPagesOverlay({ role, hiddenPaths, permissions, backOffice = false, onClose, onLogout }: Props) {
   const schoolActive = useSchoolMode();
