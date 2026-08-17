@@ -37,6 +37,7 @@ const schema = z.object({
   contact_email: z.string().max(160).optional(),
   contact_phone: z.string().max(40).optional(),
   website: z.string().max(200).optional(),
+  company_website: z.string().max(200).optional(),
   demo_video_url: z.string().max(500).optional(),
   site_public: z.boolean().optional(),
   stripe_secret_key: z.string().max(200).optional(),

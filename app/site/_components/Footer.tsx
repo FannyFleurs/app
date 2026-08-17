@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { PlatformSettings } from '@/lib/settings/platform';
 import { TRADES } from '@/lib/site/content/trades';
 import Logo from './Logo';
+import LegalLine from './LegalLine';
 
 /**
  * Pied de page : plan du site, accès à l'application, mentions de l'éditeur.
@@ -11,13 +12,6 @@ import Logo from './Logo';
  * inventée pour « remplir » la ligne.
  */
 export default function Footer({ platform, brand }: { platform: PlatformSettings; brand: string }) {
-  const year = new Date().getFullYear();
-  const legalBits = [
-    platform.company_legal_name,
-    platform.company_siret ? `SIRET ${platform.company_siret}` : '',
-    platform.company_vat ? `TVA ${platform.company_vat}` : '',
-  ].filter(Boolean);
-
   return (
     <footer className="hp-footer hp-on-green-deep hp-dark">
       <div className="hp-container" style={{ paddingBlock: 'clamp(3rem, 2rem + 4vw, 5rem)' }}>
@@ -78,10 +72,7 @@ export default function Footer({ platform, brand }: { platform: PlatformSettings
           className="hp-container flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
           style={{ paddingBlock: '1.25rem' }}
         >
-          <p className="hp-fine">
-            © {year} {brand}
-            {legalBits.length ? ` — ${legalBits.join(' · ')}` : ''}
-          </p>
+          <LegalLine platform={platform} brand={brand} />
           <p className="hp-fine">
             {platform.contact_email ? (
               <a href={`mailto:${platform.contact_email}`}>{platform.contact_email}</a>
