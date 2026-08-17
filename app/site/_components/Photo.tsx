@@ -18,14 +18,20 @@ export default function Photo({
   priority = false,
 }: {
   slot: string;
-  ratio?: 'landscape' | 'portrait' | 'wide';
+  ratio?: 'landscape' | 'portrait' | 'wide' | 'auto';
   className?: string;
   sizes?: string;
   priority?: boolean;
 }) {
   const asset = photo(slot);
   const ratioClass =
-    ratio === 'portrait' ? ' hp-photo--tall' : ratio === 'wide' ? ' hp-photo--wide' : '';
+    ratio === 'portrait'
+      ? ' hp-photo--tall'
+      : ratio === 'wide'
+        ? ' hp-photo--wide'
+        : ratio === 'auto'
+          ? ' hp-photo--auto'
+          : '';
   const cls = `hp-photo${ratioClass} ${className}`.trim();
 
   if (!asset) {

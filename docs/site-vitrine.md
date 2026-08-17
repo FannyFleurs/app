@@ -192,6 +192,11 @@ Par défaut, une plateforme n'a pas son site publié : il faut l'activer.
 - `/mentions-legales` et `/confidentialite` restent servies, avec un en-tête
   réduit (logo + connexion) au lieu de la navigation du site : une page qui
   collecte des coordonnées doit pouvoir dire ce qu'elle en fait.
+- À droite du texte au-delà de 1000 px, le produit : la photo déclarée sous
+  l'emplacement `attente-appareils` (voir § 3) ou, à défaut, l'écran de caisse
+  réel dans une tablette. En dessous, le visuel passe sous le texte, pleine
+  largeur — un montage tablette + téléphone n'est plus lisible en colonne
+  étroite.
 - Toutes les autres adresses du site (`/tarifs`, `/solutions/…`,
   `/logiciel-caisse-…`, `/site/*`) répondent en **307** vers la racine.
 - La création de compte est fermée : `/setup` renvoie sur la page d'attente et

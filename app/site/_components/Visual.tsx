@@ -20,13 +20,16 @@ export default function Visual({
   sizes = '(max-width: 900px) 100vw, 50vw',
   priority = false,
   className = '',
+  frame = 'window',
 }: {
   slot: string;
   screen: { src: string; alt: string; crop?: 'top' | 'right' | 'left'; caption?: string };
-  ratio?: 'landscape' | 'portrait' | 'wide';
+  ratio?: 'landscape' | 'portrait' | 'wide' | 'auto';
   sizes?: string;
   priority?: boolean;
   className?: string;
+  /** Habillage de la capture affichée à défaut de photo. */
+  frame?: 'tablet' | 'window' | 'bare';
 }) {
   if (photo(slot)) {
     return <Photo slot={slot} ratio={ratio} sizes={sizes} priority={priority} className={className} />;
@@ -35,7 +38,7 @@ export default function Visual({
     <Screen
       src={screen.src}
       alt={screen.alt}
-      frame="window"
+      frame={frame}
       crop={screen.crop}
       caption={screen.caption}
       sizes={sizes}

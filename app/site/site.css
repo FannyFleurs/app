@@ -852,6 +852,18 @@ button:hover .hp-arrow {
 .hp-photo--wide {
   aspect-ratio: 16 / 9;
 }
+/* Ratio libre : l'image garde ses proportions, sans recadrage ni fond —
+   pour une mise en scène d'appareils, notamment sur fond transparent. */
+.hp-photo--auto {
+  aspect-ratio: auto;
+  background: transparent;
+  border-radius: 0;
+  overflow: visible;
+}
+.hp-photo--auto img {
+  height: auto;
+  object-fit: contain;
+}
 .hp-photo-fallback {
   position: absolute;
   inset: 0;
@@ -1464,6 +1476,34 @@ button:hover .hp-arrow {
   }
   .hp-compare-list {
     display: none;
+  }
+}
+
+/* --- Page d'attente : texte à gauche, produit à droite --- */
+.hp-holding {
+  display: grid;
+  gap: clamp(2.5rem, 2rem + 3vw, 4rem);
+  align-items: center;
+}
+@media (min-width: 1000px) {
+  .hp-holding {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+    gap: clamp(2rem, 4vw, 4.5rem);
+  }
+}
+/* Le titre partage la largeur avec le visuel : il tient ses trois lignes
+   au lieu d'en casser une quatrième. */
+.hp-holding h1 {
+  font-size: clamp(2.4rem, 1rem + 3.2vw, 4rem);
+}
+/* Sous 1000 px, le visuel prend toute la largeur de l'écran : quelques
+   pixels gagnés sur chaque bord, c'est de la lisibilité en plus. */
+@media (max-width: 640px) {
+  .hp-holding-visual {
+    margin-inline: calc(var(--gutter) * -1);
+  }
+  .hp-holding-visual .hp-device {
+    border-radius: 14px;
   }
 }
 
