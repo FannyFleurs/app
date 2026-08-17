@@ -55,7 +55,7 @@ const FILTERS: Array<{ key: string; label: string; statuses?: string[] }> = [
 export default function OrdersClient({ orgId: _orgId }: { orgId: string }) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('all');
+  const [filter, setFilter] = useState('today');
   const [selected, setSelected] = useState<Order | null>(null);
   const [busy, setBusy] = useState(false);
 
