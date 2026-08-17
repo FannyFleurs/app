@@ -30,7 +30,7 @@ export default function CreditNotesList() {
   const [items, setItems] = useState<CreditNote[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'used' | 'cancelled'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'used' | 'cancelled'>('open');
 
   useEffect(() => {
     setLoading(true);
