@@ -203,9 +203,13 @@ Par défaut, une plateforme n'a pas son site publié : il faut l'activer.
   courte, et un bouton « Nous contacter » qui ouvre le formulaire dans une
   fenêtre — sans navigation, donc sans risque d'atterrir sur une page qui
   n'est pas servie. Le formulaire poste sur `/api/contact`, qui fonctionne
-  dans les deux états. La connexion reste accessible, discrètement, dans
-  l'en-tête. Aucun message d'indisponibilité. L'URL ne change pas, la réponse
-  est en `200` et la page est en `noindex`.
+  dans les deux états. Aucun message d'indisponibilité. L'URL ne change pas,
+  la réponse est en `200` et la page est en `noindex`.
+- « Connexion », dans l'en-tête, ouvre le choix entre les deux espaces
+  (`LoginMenu`) : la caisse et le back-office, qui ne se connectent pas de la
+  même manière. La page `/connexion`, qui joue ce rôle sur le site publié,
+  n'est pas servie tant que le site est dépublié. Les adresses viennent de
+  `spaceUrls()` — sous-domaines sur un vrai domaine, chemins en préversion.
 - `/mentions-legales` et `/confidentialite` restent servies, avec un en-tête
   réduit (logo + connexion) au lieu de la navigation du site : une page qui
   collecte des coordonnées doit pouvoir dire ce qu'elle en fait.

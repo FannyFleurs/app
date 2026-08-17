@@ -1,6 +1,7 @@
 import { headers } from 'next/headers';
 import { loadPlatform } from '@/lib/site/platform';
 import { spaceUrls } from '@/lib/site/spaces';
+import LoginMenu from './LoginMenu';
 
 /**
  * En-tête réduit : le logo, et un accès à la connexion.
@@ -9,6 +10,10 @@ import { spaceUrls } from '@/lib/site/spaces';
  * sur les pages légales, qui restent servies. Aucune navigation vers des
  * pages qui ne répondent pas : il n'y a rien de pire qu'un menu qui ramène
  * toujours au même endroit.
+ *
+ * « Connexion » ouvre le choix entre les deux espaces plutôt que d'en
+ * supposer un : la page /connexion, qui joue ce rôle sur le site publié,
+ * n'est pas servie tant que le site est dépublié.
  */
 export default async function MinimalHeader({ onDark = false }: { onDark?: boolean }) {
   const platform = await loadPlatform();
@@ -36,9 +41,7 @@ export default async function MinimalHeader({ onDark = false }: { onDark?: boole
         )}
       </span>
 
-      <a className="hp-btn hp-btn--ghost hp-btn--sm" href={urls.caisse}>
-        Connexion
-      </a>
+      <LoginMenu caisse={urls.caisse} bo={urls.bo} />
     </div>
   );
 }
