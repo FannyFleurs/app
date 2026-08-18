@@ -154,9 +154,21 @@ function feedAndCut(enc: StarEnc): void {
   enc.cut();
 }
 
-/** Impulsion d'ouverture du tiroir-caisse (aucune impression). */
+/**
+ * Impulsion d'ouverture du tiroir-caisse : uniquement la commande d'impulsion,
+ * AUCUNE impression ni avance papier.
+ *
+ * On n'appelle volontairement PAS `initialize()` : sur ces imprimantes Star,
+ * l'initialisation insère un saut de ligne (octets `0a 0d`) juste avant
+ * l'impulsion. Comme l'ouverture du tiroir n'est jamais suivie d'une coupe,
+ * ce saut de ligne s'accumule à chaque ouverture et finit par produire une
+ * longue avance de papier blanc avant le ticket suivant. En n'envoyant que
+ * l'impulsion (`ESC BEL …`), le tiroir s'ouvre sans faire bouger le papier.
+ */
 export async function buildDrawerKickStarPrnt(): Promise<Buffer> {
-  const enc = await newEncoder();
+  const mod = await import('star-prnt-encoder');
+  const StarPrntEncoder = mod.default as unknown as new (opts: Record<string, unknown>) => StarEnc;
+  const enc = new StarPrntEncoder({});
   enc.pulse();
   return Buffer.from(enc.encode());
 }
