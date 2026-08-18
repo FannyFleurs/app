@@ -77,7 +77,7 @@ export default function DashboardClient({ firstName, stores, lockedStoreId }: { 
   return (
     <div className="p-6 md:p-8 space-y-5">
       <PageHeader
-        title={`Bonjour ${firstName} ✿`}
+        title={`Bonjour ${firstName}`}
         subtitle={data ? `${data.periodLabel} · comparé à ${data.prevLabel}` : 'Chargement…'}
         actions={
           <div className="inline-flex rounded-full border border-border bg-white p-0.5">
