@@ -12,6 +12,7 @@ public class HelloPosPrinterPlugin: CAPPlugin, CAPBridgedPlugin {
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "getSettings", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "saveSettings", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "openSettings", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "testConnection", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "printTest", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "printPdf", returnType: CAPPluginReturnPromise),
@@ -114,6 +115,19 @@ public class HelloPosPrinterPlugin: CAPPlugin, CAPBridgedPlugin {
             "label": label,
             "configured": true
         ])
+    }
+
+    /// Charge l'écran de réglages local (capacitor://localhost/) dans le
+    /// webview. Appelé depuis l'entrée « Imprimante réseau » injectée dans le
+    /// menu Paramètres de l'app hébergée.
+    @objc func openSettings(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            if let webView = self.bridge?.webView,
+               let url = URL(string: "capacitor://localhost/") {
+                webView.load(URLRequest(url: url))
+            }
+        }
+        call.resolve()
     }
 
     // MARK: - Connexion / impression

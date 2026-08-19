@@ -35,8 +35,14 @@ et ajoute l'impression directe sur imprimante ticket réseau (ESC/POS, port RAW
   avant test/enregistrement.
 - Au premier lancement (non configuré), l'app ouvre directement l'écran de
   réglages. Une fois enregistré, elle ouvre HelloPos.
-- Le bouton flottant (roue crantée, en bas à droite) permet de revenir aux
-  réglages à tout moment (changement d'IP, test).
+- On revient aux réglages à tout moment via :
+  - l'entrée **« Imprimante réseau »** injectée en bas du menu Paramètres. Elle
+    n'est présente que dans l'app native (script injecté côté coque iOS
+    uniquement) : les utilisateurs du site web ne la voient pas et **aucun code
+    serveur n'est modifié**. Un `MutationObserver` la ré-injecte si React
+    reconstruit le menu ;
+  - un bouton flottant (roue crantée, en bas à droite) en secours, toujours
+    présent quel que soit le rendu de la page.
 
 ## Build
 
@@ -60,8 +66,9 @@ modification de `native-shell/` ou de `capacitor.config.ts`.
 
 | Méthode          | Rôle                                                        |
 |------------------|-------------------------------------------------------------|
-| `getSettings`    | Lit les réglages mémorisés (`host`, `port`, `widthDots`, `configured`). |
+| `getSettings`    | Lit les réglages mémorisés (`host`, `port`, `widthDots`, `label`, `configured`). |
 | `saveSettings`   | Enregistre les réglages.                                    |
+| `openSettings`   | Ouvre l'écran de réglages (utilisé par l'entrée de menu injectée). |
 | `testConnection` | Test d'ouverture de socket TCP.                             |
 | `printTest`      | Imprime un ticket de test.                                  |
 | `printPdf`       | Rastérise un PDF (base64) et l'imprime (`GS v 0`).          |

@@ -285,6 +285,58 @@ final class HelloPosBridgeViewController: CAPBridgeViewController {
             return originalFetch(input, init);
           };
 
+          // Entrée « Imprimante réseau » ajoutée au menu Paramètres. Ce script
+          // n'étant injecté que par la coque iOS, l'entrée est invisible pour
+          // les utilisateurs du site web (aucune modification côté serveur).
+          function injectPrinterSettingsEntry() {
+            try {
+              const nav = document.querySelector('nav[class~="space-y-0.5"]');
+              if (!nav) return;
+              if (document.getElementById('hellopos-native-printer-entry')) return;
+
+              const entry = document.createElement('a');
+              entry.id = 'hellopos-native-printer-entry';
+              entry.href = '#';
+              entry.textContent = 'Imprimante réseau';
+              entry.style.cssText =
+                'display:flex;align-items:center;gap:12px;margin-top:2px;' +
+                'padding:10px 12px;border-radius:12px;font-size:14px;' +
+                'font-weight:500;color:#8a1538;text-decoration:none;cursor:pointer;';
+
+              entry.addEventListener('click', function (e) {
+                e.preventDefault();
+                try {
+                  window.Capacitor.Plugins.HelloPosPrinter.openSettings();
+                } catch (err) {
+                  console.log('### HELLOPOS OPEN SETTINGS ERROR ###', String(err));
+                }
+              });
+
+              nav.appendChild(entry);
+              console.log('### HELLOPOS PRINTER MENU ENTRY INJECTED ###');
+            } catch (err) {
+              console.log('### HELLOPOS MENU INJECT ERROR ###', String(err));
+            }
+          }
+
+          function startMenuObserver() {
+            injectPrinterSettingsEntry();
+            try {
+              const observer = new MutationObserver(function () {
+                injectPrinterSettingsEntry();
+              });
+              observer.observe(document.body, { childList: true, subtree: true });
+            } catch (err) {
+              console.log('### HELLOPOS OBSERVER ERROR ###', String(err));
+            }
+          }
+
+          if (document.body) {
+            startMenuObserver();
+          } else {
+            document.addEventListener('DOMContentLoaded', startMenuObserver);
+          }
+
           console.log(
             '### HELLOPOS NATIVE PRINT INTERCEPTOR INSTALLED ###'
           );
