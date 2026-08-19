@@ -3,6 +3,7 @@ import { confirmThemed } from '@/lib/ui/dialog';
 
 import { useCallback, useEffect, useState } from 'react';
 import PageHeader from '@/components/PageHeader';
+import IpPrinterSection from './IpPrinterSection';
 
 interface Printer {
   id: string;
@@ -227,6 +228,8 @@ export default function ReceiptPrinterForm({ stores, canWrite }: {
           </button>
         </div>
       )}
+
+      <IpPrinterSection stores={stores} canWrite={canWrite} />
     </div>
   );
 }
