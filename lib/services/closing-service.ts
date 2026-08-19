@@ -69,10 +69,10 @@ export class ClosingService {
       );
       const totals = totalsRes.rows[0]!;
 
-      // Réouverture sans nouvelle vente : rien à sceller.
-      if (seq > 1 && Number(totals.total_sales) === 0) {
-        throw new Error('NOTHING_TO_SEAL');
-      }
+      // Note : une réouverture sans nouvelle vente (ex. vente de test annulée)
+      // reste clôturable. On scelle alors une période vide (Z à 0 vente, comme
+      // une journée sans activité) : cela permet de refermer la journée et la
+      // session caisse, et documente honnêtement la période rouverte.
 
       // 2. Répartition TVA agrégée (parcours des sale_lines)
       const tvaRes = await client.query<{
