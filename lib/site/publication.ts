@@ -41,13 +41,16 @@ export function isSiteAsset(pathname: string): boolean {
 }
 
 /**
- * Pages légales, servies même quand le site n'est pas publié : la page
- * d'attente propose un formulaire de contact, qui doit pouvoir renvoyer vers
- * la politique de confidentialité.
+ * Pages servies même quand le site public n'est pas publié :
+ *  - mentions légales et confidentialité : le formulaire de la page d'attente
+ *    y renvoie, et une page qui collecte des coordonnées doit dire ce qu'elle
+ *    en fait ;
+ *  - support : c'est l'URL d'assistance déclarée sur l'App Store / Play Store,
+ *    qui doit rester joignable indépendamment de l'état du site vitrine.
  */
 export function isLegalPath(pathname: string): boolean {
   const p = pathname.replace(/^\/site/, '') || '/';
-  return p === '/mentions-legales' || p === '/confidentialite';
+  return p === '/mentions-legales' || p === '/confidentialite' || p === '/support';
 }
 
 /** Vrai si le chemin demandé est l'accueil du site (apex ou préversion). */
