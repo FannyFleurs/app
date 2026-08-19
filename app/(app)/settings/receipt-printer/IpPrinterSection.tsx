@@ -18,7 +18,9 @@ function isValidHost(h: string): boolean {
 export default function IpPrinterSection({ stores, canWrite }: {
   stores: { id: string; name: string }[]; canWrite: boolean;
 }) {
-  const [storeId, setStoreId] = useState('');
+  // Par défaut on cible une boutique (pas le niveau organisation) : chaque
+  // boutique a sa propre imprimante avec une IP différente.
+  const [storeId, setStoreId] = useState(stores[0]?.id ?? '');
   const [enabled, setEnabled] = useState(false);
   const [host, setHost] = useState('');
   const [port, setPort] = useState(9100);
@@ -76,6 +78,15 @@ export default function IpPrinterSection({ stores, canWrite }: {
         Sur navigateur web, la caisse ne peut pas piloter d’imprimante IP : le
         réglage se saisit ici mais l’impression a lieu depuis l’app installée.
       </div>
+
+      {stores.length > 1 && (
+        <p className="text-sm text-ink-soft">
+          Configuration <strong>par boutique</strong> : chaque boutique a sa propre
+          imprimante avec une IP différente. Sélectionne la boutique puis saisis
+          son adresse. « Toutes les boutiques » ne sert que de valeur par défaut
+          partagée, pour les boutiques sans réglage propre.
+        </p>
+      )}
 
       {msg && <div className="rounded-xl bg-success/10 px-4 py-3 text-sm text-success">{msg}</div>}
       {err && <div className="rounded-xl bg-danger/10 px-4 py-3 text-sm text-danger">{err}</div>}
