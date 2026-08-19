@@ -358,7 +358,7 @@ final class HelloPosBridgeViewController: CAPBridgeViewController {
           }
 
           console.log(
-            '### HELLOPOS NATIVE PRINT INTERCEPTOR INSTALLED ###'
+            '### HELLOPOS NATIVE PRINT INTERCEPTOR INSTALLED (build 6) ###'
           );
         })();
         """#
