@@ -5,6 +5,7 @@ import { formatEUR, round2 } from '@/lib/services/money';
 import PageHeader from '@/components/PageHeader';
 import Badge from '@/components/Badge';
 import EmptyState from '@/components/EmptyState';
+import TicketPrintButton from '@/components/TicketPrintButton';
 import { useRouter } from 'next/navigation';
 import { promptThemed } from '@/lib/ui/dialog';
 
@@ -181,10 +182,11 @@ export default function GiftCardsAdmin() {
                       {new Date(c.issued_at).toLocaleDateString('fr-FR')}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <a href={`/api/gift-cards/${c.id}/pdf`} target="_blank" rel="noreferrer"
-                         className="text-accent-deep text-xs hover:underline">
-                        PDF →
-                      </a>
+                      <TicketPrintButton
+                        url={`/api/gift-cards/${c.id}/print`}
+                        pdfUrl={`/api/gift-cards/${c.id}/pdf`}
+                        size="xs"
+                      />
                     </td>
                   </tr>
                 );

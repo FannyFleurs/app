@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Badge from '@/components/Badge';
 import EmptyState from '@/components/EmptyState';
+import TicketPrintButton from '@/components/TicketPrintButton';
 import { formatEUR } from '@/lib/services/money';
 
 interface CreditNote {
@@ -73,7 +74,7 @@ export default function CreditNotesList() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Avoirs</h1>
         <p className="mt-1 text-sm text-ink-soft">
-          Liste des avoirs émis (retours produits). Cliquez sur un avoir pour télécharger son PDF.
+          Liste des avoirs émis (retours produits). Réimprimez un avoir directement sur l’imprimante ticket (PDF en repli).
         </p>
       </div>
 
@@ -157,13 +158,10 @@ export default function CreditNotesList() {
                       {remaining > 0 ? formatEUR(remaining) : '—'}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <a
-                        href={`/api/credit-notes/${c.id}/pdf`}
-                        target="_blank" rel="noreferrer"
-                        className="text-accent-deep text-sm hover:underline"
-                      >
-                        PDF
-                      </a>
+                      <TicketPrintButton
+                        url={`/api/credit-notes/${c.id}/print`}
+                        pdfUrl={`/api/credit-notes/${c.id}/pdf`}
+                      />
                     </td>
                   </tr>
                 );
