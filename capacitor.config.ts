@@ -5,7 +5,7 @@ const config: CapacitorConfig = {
   appName: 'HelloPos',
   webDir: 'public',
   server: {
-    url: 'https://app.hellopos.fr',
+    url: 'https://hellopos-git-native-capacitor-poc-swebio1.vercel.app',
     cleartext: false
   }
 };
