@@ -96,6 +96,27 @@ final class HelloPosBridgeViewController: CAPBridgeViewController {
             });
           }
 
+          function sleep(ms) {
+            return new Promise(function (r) { setTimeout(r, ms); });
+          }
+
+          // Résilience : l'imprimante peut être en veille / le réseau instable.
+          // On réessaie quelques fois avec une petite attente croissante avant
+          // d'abandonner (réveil imprimante, TCP transitoire).
+          async function nativePrintWithRetry(params) {
+            let lastError;
+            for (let attempt = 1; attempt <= 3; attempt++) {
+              try {
+                return await window.Capacitor.Plugins.HelloPosPrinter.printPdf(params);
+              } catch (error) {
+                lastError = error;
+                console.log('### HELLOPOS PRINT RETRY ###', attempt, String(error));
+                if (attempt < 3) await sleep(attempt * 500);
+              }
+            }
+            throw lastError;
+          }
+
           window.fetch = async function(input, init) {
             try {
               const rawUrl = typeof input === 'string'
@@ -112,12 +133,13 @@ final class HelloPosBridgeViewController: CAPBridgeViewController {
 
               // Familles de documents thermiques (80 mm) imprimables en natif.
               // Chacune expose un endpoint /print (POST) et un /pdf (GET) frère.
-              // Le X/Z (/api/reports/day) et les factures sont en A4 : non
-              // rastérisables proprement en thermique, donc non interceptés.
+              // Le X/Z utilise le rendu ticket dédié (/pdf?ticket=1). Les
+              // factures restent en A4 : non interceptées.
               const printFamilies = [
                 { re: /^\/api\/receipts\/(?:by-sale\/[^/]+|[^/]+)\/print$/, gift: true },
                 { re: /^\/api\/credit-notes\/[^/]+\/print$/, copies: true },
-                { re: /^\/api\/gift-cards\/[^/]+\/print$/, copies: true }
+                { re: /^\/api\/gift-cards\/[^/]+\/print$/, copies: true },
+                { re: /^\/api\/reports\/day\/print$/, report: true }
               ];
 
               const printFamily = method === 'POST'
@@ -164,6 +186,13 @@ final class HelloPosBridgeViewController: CAPBridgeViewController {
                   if (Array.isArray(printBody.lines) && printBody.lines.length > 0) {
                     pdfUrl.searchParams.set('lines', printBody.lines.join(','));
                   }
+                }
+
+                // X/Z : rendu ticket 80 mm dédié, avec date/boutique du corps.
+                if (printFamily.report) {
+                  pdfUrl.searchParams.set('ticket', '1');
+                  if (printBody.date) pdfUrl.searchParams.set('date', String(printBody.date));
+                  if (printBody.store_id) pdfUrl.searchParams.set('store_id', String(printBody.store_id));
                 }
 
                 // Nombre d'exemplaires (avoirs / cartes cadeaux). 1 par défaut.
@@ -221,13 +250,12 @@ final class HelloPosBridgeViewController: CAPBridgeViewController {
 
                 try {
                   for (let copy = 0; copy < copies; copy++) {
-                    const nativeResult =
-                      await window.Capacitor.Plugins.HelloPosPrinter.printPdf({
-                        host: cfg.host,
-                        port: cfg.port,
-                        widthDots: cfg.widthDots,
-                        pdfBase64
-                      });
+                    const nativeResult = await nativePrintWithRetry({
+                      host: cfg.host,
+                      port: cfg.port,
+                      widthDots: cfg.widthDots,
+                      pdfBase64
+                    });
 
                     console.log(
                       '### HELLOPOS NATIVE PRINT SUCCESS ###',
@@ -382,7 +410,7 @@ final class HelloPosBridgeViewController: CAPBridgeViewController {
           }
 
           console.log(
-            '### HELLOPOS NATIVE PRINT INTERCEPTOR INSTALLED (build 8) ###'
+            '### HELLOPOS NATIVE PRINT INTERCEPTOR INSTALLED (build 9) ###'
           );
         })();
         """#
