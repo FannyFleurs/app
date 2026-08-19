@@ -28,9 +28,11 @@ et ajoute l'impression directe sur imprimante ticket réseau (ESC/POS, port RAW
 
 ## Réglages imprimante
 
-- Adresse IP, port et largeur papier (80 mm / 576 pts ou 58 mm / 384 pts) sont
-  saisis sur l'écran de réglages (`native-shell/index.html`) et **mémorisés sur
-  l'appareil** (`UserDefaults`, via `getSettings`/`saveSettings`).
+- Nom (optionnel), adresse IP, port et largeur papier (80 mm / 576 pts ou
+  58 mm / 384 pts) sont saisis sur l'écran de réglages
+  (`native-shell/index.html`) et **mémorisés sur l'appareil** (`UserDefaults`,
+  via `getSettings`/`saveSettings`). L'adresse est validée (IPv4 ou nom d'hôte)
+  avant test/enregistrement.
 - Au premier lancement (non configuré), l'app ouvre directement l'écran de
   réglages. Une fois enregistré, elle ouvre HelloPos.
 - Le bouton flottant (roue crantée, en bas à droite) permet de revenir aux

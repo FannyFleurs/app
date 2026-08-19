@@ -23,6 +23,7 @@ public class HelloPosPrinterPlugin: CAPPlugin, CAPBridgedPlugin {
     private static let hostKey = "hellopos.printer.host"
     private static let portKey = "hellopos.printer.port"
     private static let widthKey = "hellopos.printer.widthDots"
+    private static let labelKey = "hellopos.printer.label"
     private static let configuredKey = "hellopos.printer.configured"
 
     static let defaultPort = 9100
@@ -32,6 +33,7 @@ public class HelloPosPrinterPlugin: CAPPlugin, CAPBridgedPlugin {
         var host: String
         var port: Int
         var widthDots: Int
+        var label: String
         var configured: Bool
     }
 
@@ -40,8 +42,9 @@ public class HelloPosPrinterPlugin: CAPPlugin, CAPBridgedPlugin {
         let host = d.string(forKey: hostKey) ?? ""
         let port = d.object(forKey: portKey) as? Int ?? defaultPort
         let width = d.object(forKey: widthKey) as? Int ?? defaultWidthDots
+        let label = d.string(forKey: labelKey) ?? ""
         let configured = d.bool(forKey: configuredKey)
-        return PrinterSettings(host: host, port: port, widthDots: width, configured: configured)
+        return PrinterSettings(host: host, port: port, widthDots: width, label: label, configured: configured)
     }
 
     private func loadSettings() -> PrinterSettings {
@@ -76,6 +79,7 @@ public class HelloPosPrinterPlugin: CAPPlugin, CAPBridgedPlugin {
             "host": s.host,
             "port": s.port,
             "widthDots": s.widthDots,
+            "label": s.label,
             "configured": s.configured
         ])
     }
@@ -89,6 +93,7 @@ public class HelloPosPrinterPlugin: CAPPlugin, CAPBridgedPlugin {
 
         let port = call.getInt("port") ?? HelloPosPrinterPlugin.defaultPort
         let width = call.getInt("widthDots") ?? HelloPosPrinterPlugin.defaultWidthDots
+        let label = call.getString("label")?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
         guard port > 0, port <= 65535 else {
             call.reject("port invalide")
@@ -99,12 +104,14 @@ public class HelloPosPrinterPlugin: CAPPlugin, CAPBridgedPlugin {
         d.set(rawHost, forKey: HelloPosPrinterPlugin.hostKey)
         d.set(port, forKey: HelloPosPrinterPlugin.portKey)
         d.set(width, forKey: HelloPosPrinterPlugin.widthKey)
+        d.set(label, forKey: HelloPosPrinterPlugin.labelKey)
         d.set(true, forKey: HelloPosPrinterPlugin.configuredKey)
 
         call.resolve([
             "host": rawHost,
             "port": port,
             "widthDots": width,
+            "label": label,
             "configured": true
         ])
     }
