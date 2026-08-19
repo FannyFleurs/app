@@ -35,7 +35,9 @@ export async function GET(req: Request) {
     kind: 'X',
     printedAt: new Date().toISOString(),
   });
-  const buf = await renderReportPdf(report);
+  // ?ticket=1 : rendu 80 mm pour impression réseau native (app iOS/Android).
+  const thermal = url.searchParams.get('ticket') === '1';
+  const buf = await renderReportPdf(report, { thermal });
   return new NextResponse(buf, {
     status: 200,
     headers: {

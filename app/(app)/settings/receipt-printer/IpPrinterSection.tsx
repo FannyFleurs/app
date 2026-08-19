@@ -2,6 +2,11 @@
 
 import { useCallback, useEffect, useState } from 'react';
 
+interface PrinterPlugin {
+  testConnection(o: { host: string; port: number }): Promise<{ connected?: boolean; error?: string }>;
+  printTest(o: { host: string; port: number }): Promise<unknown>;
+}
+
 /** IPv4 stricte (octets 0-255) ou nom d'hôte (ex : imprimante.local). */
 function isValidHost(h: string): boolean {
   if (!h) return false;
@@ -29,6 +34,42 @@ export default function IpPrinterSection({ stores, canWrite }: {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [isNative, setIsNative] = useState(false);
+  const [testMsg, setTestMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    const cap = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor;
+    setIsNative(!!cap?.isNativePlatform?.());
+  }, []);
+
+  function printerPlugin(): PrinterPlugin | null {
+    const cap = (window as unknown as { Capacitor?: { Plugins?: Record<string, PrinterPlugin> } }).Capacitor;
+    return cap?.Plugins?.HelloPosPrinter ?? null;
+  }
+
+  async function testConnection() {
+    const p = printerPlugin();
+    if (!p) return;
+    if (!isValidHost(host.trim())) { setTestMsg('Adresse IP invalide (ex : 192.168.1.50).'); return; }
+    setTestMsg('Test en cours…');
+    try {
+      const r = await p.testConnection({ host: host.trim(), port });
+      setTestMsg(r?.connected
+        ? `Connexion OK (${host.trim()}:${port}).`
+        : `Injoignable : ${r?.error ?? 'aucune réponse'}.`);
+    } catch (e) { setTestMsg('Échec : ' + String(e)); }
+  }
+
+  async function testPrint() {
+    const p = printerPlugin();
+    if (!p) return;
+    if (!isValidHost(host.trim())) { setTestMsg('Adresse IP invalide (ex : 192.168.1.50).'); return; }
+    setTestMsg('Impression du ticket test…');
+    try {
+      await p.printTest({ host: host.trim(), port });
+      setTestMsg('Ticket test envoyé.');
+    } catch (e) { setTestMsg('Échec : ' + String(e)); }
+  }
 
   const load = useCallback(async () => {
     setLoading(true); setMsg(null); setErr(null);
@@ -132,12 +173,32 @@ export default function IpPrinterSection({ stores, canWrite }: {
       </label>
 
       {canWrite && (
-        <div>
+        <div className="flex flex-wrap items-center gap-2">
           <button className="btn-primary h-10 px-4" disabled={saving || loading} onClick={() => void save()}>
             {saving ? '…' : 'Enregistrer'}
           </button>
+          {isNative && (
+            <>
+              <button className="btn-soft h-10 px-4" disabled={loading} onClick={() => void testConnection()}>
+                Tester la connexion
+              </button>
+              <button className="btn-soft h-10 px-4" disabled={loading} onClick={() => void testPrint()}>
+                Imprimer un ticket test
+              </button>
+            </>
+          )}
         </div>
       )}
+
+      {isNative
+        ? (testMsg && <p className="text-sm text-ink-soft">{testMsg}</p>)
+        : (
+          <p className="text-xs text-ink-soft">
+            Le test de l’imprimante (connexion, ticket) se fait depuis
+            l’application HelloPos iOS/Android, seule capable de contacter
+            l’imprimante réseau.
+          </p>
+        )}
     </div>
   );
 }

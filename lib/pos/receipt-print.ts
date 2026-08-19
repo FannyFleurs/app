@@ -28,8 +28,14 @@ export async function printReceipt(opts: {
       try { window.open(`${opts.pdfUrl}${q}`, '_blank'); } catch { /* popup bloqué */ }
       return { ok: true, queued: false, message: 'Aucune imprimante ticket configurée — ouverture du PDF.' };
     }
-    return { ok: false, queued: false, message: 'Impression impossible.' };
+    // Échec imprimante (ex. app native : imprimante IP injoignable). On invite
+    // à vérifier l'imprimante puis à réimprimer (le bouton relance l'envoi).
+    const err = await r.json().catch(() => null);
+    if (err?.error === 'NATIVE_PRINT_FAILED') {
+      return { ok: false, queued: false, message: 'Imprimante injoignable — vérifiez qu’elle est allumée et connectée, puis réimprimez.' };
+    }
+    return { ok: false, queued: false, message: 'Impression échouée — réessayez.' };
   } catch {
-    return { ok: false, queued: false, message: 'Impression impossible (réseau).' };
+    return { ok: false, queued: false, message: 'Impression impossible (réseau) — réessayez.' };
   }
 }
