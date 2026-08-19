@@ -59,6 +59,7 @@ export default function Footer({ platform, brand }: { platform: PlatformSettings
             <ul>
               <li><Link href="/a-propos">À propos</Link></li>
               <li><Link href="/contact">Contact</Link></li>
+              <li><Link href="/support">Support</Link></li>
               <li><Link href="/connexion">Connexion</Link></li>
               <li><Link href="/mentions-legales">Mentions légales</Link></li>
               <li><Link href="/confidentialite">Confidentialité</Link></li>
