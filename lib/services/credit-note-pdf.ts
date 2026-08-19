@@ -22,119 +22,114 @@ export interface PartyInfo {
   address?: { line1?: string; zip?: string; city?: string } | null;
 }
 
+// Format ticket thermique 80 mm (et non A4) : l'avoir sort sur l'imprimante
+// ticket comme un reçu. 80 mm ≈ 226,77 pt ; petites marges latérales.
+const PAGE_W = 226.77;
+const MARGIN = 12;
+const CW = PAGE_W - MARGIN * 2;
+
+/**
+ * Dessine l'avoir en une colonne étroite (ticket). Retourne l'ordonnée finale,
+ * qui sert à fixer la hauteur exacte de la page (aucune avance de papier vide).
+ */
+function drawAvoir(doc: PDFKit.PDFDocument, data: CreditNotePdfData, emitter: PartyInfo, customer?: PartyInfo | null): number {
+  const x = MARGIN;
+  let y = MARGIN;
+  const center = (t: string, size = 8, bold = false) => {
+    doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(size).fillColor('#000');
+    doc.text(t, x, y, { width: CW, align: 'center' });
+    y = doc.y;
+  };
+  const left = (t: string, size = 9, bold = false) => {
+    doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(size).fillColor('#000');
+    doc.text(t, x, y, { width: CW });
+    y = doc.y;
+  };
+  const rule = () => {
+    doc.moveTo(x, y + 2).lineTo(x + CW, y + 2).strokeColor('#999').lineWidth(0.5).stroke().strokeColor('#000');
+    y += 7;
+  };
+  const row = (l: string, r: string, size = 9, bold = false) => {
+    doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(size).fillColor('#000');
+    const start = y;
+    doc.text(l, x, start, { width: CW * 0.6 });
+    const yl = doc.y;
+    doc.text(r, x + CW * 0.6, start, { width: CW * 0.4, align: 'right' });
+    y = Math.max(yl, doc.y);
+  };
+
+  // En-tête boutique
+  center(emitter.name, 11, true);
+  if (emitter.legal_name && emitter.legal_name !== emitter.name) center(emitter.legal_name, 8);
+  if (emitter.address?.line1) center(emitter.address.line1, 8);
+  const zc = [emitter.address?.zip, emitter.address?.city].filter(Boolean).join(' ');
+  if (zc) center(zc, 8);
+  if (emitter.siret) center(`SIRET ${emitter.siret}`, 8);
+  if (emitter.vat_number) center(`TVA ${emitter.vat_number}`, 8);
+
+  y += 4;
+  rule();
+  center('AVOIR', 14, true);
+  center(data.number, 9);
+  rule();
+
+  row('Date', new Date(data.issued_at).toLocaleDateString('fr-FR', { timeZone: 'Europe/Paris' }));
+  if (data.origin_receipt_number) row("Ticket d'origine", data.origin_receipt_number);
+  row('Retour', data.is_full_return ? 'Total' : 'Partiel');
+  if (customer?.name) row('Client', customer.name);
+  if (data.reason) { left('Motif :', 8, true); left(data.reason, 9); }
+
+  if (data.lines.length > 0) {
+    rule();
+    for (const l of data.lines) {
+      const label = l.quantity > 1 ? `${l.label} x${l.quantity}` : l.label;
+      row(label, `-${formatEUR(l.refunded_ttc)}`, 9);
+    }
+  }
+
+  rule();
+  row("MONTANT AVOIR", `-${formatEUR(data.amount)}`, 12, true);
+
+  y += 4;
+  if (data.refund_method === 'cash') {
+    center(`Remboursé en espèces : ${formatEUR(data.amount)}`, 8, true);
+  } else {
+    center('À valoir sur un prochain achat.', 9);
+    center('À conserver et présenter en caisse.', 8);
+  }
+
+  y += 6;
+  doc.fillColor('#666');
+  center(`Empreinte : ${data.fiscal_hash}`, 6);
+  center('Conforme art. 286, I, 3°bis du CGI.', 6);
+  doc.fillColor('#000');
+
+  return y;
+}
+
 export async function renderCreditNotePdf(
   data: CreditNotePdfData,
   emitter: PartyInfo,
   customer?: PartyInfo | null,
 ): Promise<Buffer> {
+  // Passe 1 — mesure de la hauteur du contenu (rendu jeté).
+  const measure = new PDFDocument({ size: [PAGE_W, 5000], margins: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN } });
+  measure.on('data', () => { /* ignoré */ });
+  measure.on('error', () => { /* ignoré */ });
+  const contentHeight = drawAvoir(measure, data, emitter, customer) + MARGIN;
+  measure.end();
+
+  // Passe 2 — page à la hauteur exacte, pour ne pas dérouler de papier vide.
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: 'A4', margin: 48 });
+    const doc = new PDFDocument({
+      size: [PAGE_W, Math.max(150, contentHeight)],
+      margins: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN },
+    });
     const chunks: Buffer[] = [];
     doc.on('data', (b: Buffer) => chunks.push(b));
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
-
-    // Bandeau rouge "AVOIR"
-    doc.rect(48, 48, 500, 36).fillColor('#B42318').fill();
-    doc.fillColor('white').font('Helvetica-Bold').fontSize(22).text('AVOIR', 60, 56);
-    doc.fontSize(11).text(data.number, 60, 70);
-    doc.fillColor('#000');
-
-    // Bloc émetteur
-    let y = 110;
-    doc.font('Helvetica-Bold').fontSize(11).text(emitter.name, 48, y);
-    doc.font('Helvetica').fontSize(9);
-    if (emitter.legal_name && emitter.legal_name !== emitter.name) doc.text(emitter.legal_name);
-    if (emitter.address?.line1) doc.text(emitter.address.line1);
-    if (emitter.address?.zip || emitter.address?.city) {
-      doc.text(`${emitter.address?.zip ?? ''} ${emitter.address?.city ?? ''}`.trim());
-    }
-    if (emitter.siret) doc.text(`SIRET ${emitter.siret}`);
-    if (emitter.vat_number) doc.text(`TVA intra. ${emitter.vat_number}`);
-
-    // Bloc client si fourni
-    if (customer) {
-      doc.font('Helvetica-Bold').fontSize(9).fillColor('#666').text('À L\'ATTENTION DE', 340, 110);
-      doc.fillColor('#000').font('Helvetica-Bold').fontSize(11).text(customer.name, 340, 124);
-      doc.font('Helvetica').fontSize(9);
-      if (customer.address?.line1) doc.text(customer.address.line1, 340, doc.y);
-      if (customer.address?.zip || customer.address?.city) {
-        doc.text(`${customer.address?.zip ?? ''} ${customer.address?.city ?? ''}`.trim(), 340, doc.y);
-      }
-      if (customer.siret) doc.text(`SIRET ${customer.siret}`, 340, doc.y);
-    }
-
-    // Méta
-    y = 220;
-    doc.font('Helvetica').fontSize(9).fillColor('#666');
-    doc.text('Date d\'émission', 48, y);
-    doc.text('Ticket d\'origine', 200, y);
-    doc.text('Statut', 360, y);
-    doc.fillColor('#000').font('Helvetica-Bold');
-    doc.text(new Date(data.issued_at).toLocaleDateString('fr-FR'), 48, y + 12);
-    doc.text(data.origin_receipt_number ?? '—', 200, y + 12);
-    doc.text(data.is_full_return ? 'Retour total' : 'Retour partiel', 360, y + 12);
-
-    // Motif
-    y = 260;
-    doc.font('Helvetica-Bold').fontSize(9).fillColor('#666').text('MOTIF DU RETOUR', 48, y);
-    doc.fillColor('#000').font('Helvetica').fontSize(10).text(data.reason, 48, y + 12, { width: 500 });
-
-    // Table des lignes
-    y = doc.y + 20;
-    doc.font('Helvetica-Bold').fontSize(9).fillColor('#666');
-    doc.text('DÉSIGNATION', 48, y);
-    doc.text('QTÉ', 360, y, { width: 40, align: 'right' });
-    doc.text('TVA', 410, y, { width: 30, align: 'right' });
-    doc.text('MONTANT TTC', 460, y, { width: 80, align: 'right' });
-    drawHr(doc, y + 14);
-
-    doc.fillColor('#000').font('Helvetica').fontSize(9);
-    y = y + 22;
-    for (const l of data.lines) {
-      doc.text(l.label, 48, y, { width: 300 });
-      doc.text(String(l.quantity), 360, y, { width: 40, align: 'right' });
-      doc.text(`${l.tax_rate}%`, 410, y, { width: 30, align: 'right' });
-      doc.text(`-${formatEUR(l.refunded_ttc)}`, 460, y, { width: 80, align: 'right' });
-      y += 18;
-    }
-
-    drawHr(doc, y);
-    y += 12;
-
-    // Total
-    doc.font('Helvetica-Bold').fontSize(14);
-    doc.text('TOTAL DE L\'AVOIR', 340, y, { width: 120 });
-    doc.fillColor('#B42318').text(`-${formatEUR(data.amount)}`, 460, y, { width: 80, align: 'right' });
-    doc.fillColor('#000');
-    y += 28;
-
-    // Note
-    if (data.refund_method === 'cash') {
-      doc.font('Helvetica-Bold').fontSize(10).fillColor('#2F6B3F')
-         .text(`REMBOURSÉ EN ESPÈCES — ${formatEUR(data.amount)} sorti de la caisse`, 48, y);
-      doc.fillColor('#000');
-    } else {
-      doc.font('Helvetica-Bold').fontSize(10).fillColor('#1F3A5F')
-         .text(`AVOIR UTILISABLE POUR UN ACHAT ULTÉRIEUR`, 48, y);
-      doc.fillColor('#000');
-      doc.font('Helvetica').fontSize(9).text(
-        `Présentez ce document lors d'un prochain passage en caisse : la référence ${data.number} permettra de l'utiliser comme moyen de paiement à concurrence de ${formatEUR(data.amount)}.`,
-        48, y + 14, { width: 500 },
-      );
-    }
-
-    // Pied
-    doc.font('Helvetica-Oblique').fontSize(7).fillColor('#888').text(
-      `Empreinte fiscale : ${data.fiscal_hash} · Système conforme aux exigences d'inaltérabilité (art. 286, I, 3°bis du CGI).`,
-      48, 780, { width: 500, align: 'center' },
-    );
-    doc.fillColor('#000');
-
+    drawAvoir(doc, data, emitter, customer);
     doc.end();
   });
-}
-
-function drawHr(doc: PDFKit.PDFDocument, y: number) {
-  doc.moveTo(48, y).lineTo(548, y).strokeColor('#DDD').lineWidth(0.5).stroke().strokeColor('#000');
 }
