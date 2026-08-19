@@ -25,14 +25,61 @@ const rate = (r: number) =>
 const dt = (iso: string | null) =>
   iso ? new Date(iso).toLocaleString('fr-FR') : '—';
 
-export async function renderReportPdf(r: DayReport): Promise<Buffer> {
+export interface RenderReportOptions {
+  /** Rendu ticket 80 mm (pour impression réseau native) au lieu d'A4. */
+  thermal?: boolean;
+}
+
+export async function renderReportPdf(
+  r: DayReport,
+  opts: RenderReportOptions = {},
+): Promise<Buffer> {
+  if (opts.thermal) return renderThermalReport(r);
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: 'A4', margin: 48 });
-    const chunks: Buffer[] = [];
-    doc.on('data', (b: Buffer) => chunks.push(b));
-    doc.on('end', () => resolve(Buffer.concat(chunks)));
-    doc.on('error', reject);
+    collectPdf(doc, resolve, reject);
+    drawReport(doc, r);
+    doc.end();
+  });
+}
 
+/**
+ * Rendu ticket 80 mm : deux passes (mesure de la hauteur du contenu sur une
+ * page très haute, puis rendu à la hauteur exacte). Le contenu s'appuie sur
+ * des helpers relatifs à la largeur de page (kv/hr/align center), il s'adapte
+ * donc directement à la largeur ticket.
+ */
+async function renderThermalReport(r: DayReport): Promise<Buffer> {
+  const WIDTH = 226; // ~80 mm
+  const MARGIN = 10;
+
+  const measure = new PDFDocument({ size: [WIDTH, 20000], margin: MARGIN });
+  measure.on('data', () => { /* on jette la sortie de mesure */ });
+  drawReport(measure, r);
+  const height = Math.max(200, Math.ceil(measure.y + MARGIN));
+  measure.end();
+
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ size: [WIDTH, height], margin: MARGIN });
+    collectPdf(doc, resolve, reject);
+    drawReport(doc, r);
+    doc.end();
+  });
+}
+
+function collectPdf(
+  doc: PDFKit.PDFDocument,
+  resolve: (b: Buffer) => void,
+  reject: (e: unknown) => void,
+) {
+  const chunks: Buffer[] = [];
+  doc.on('data', (b: Buffer) => chunks.push(b));
+  doc.on('end', () => resolve(Buffer.concat(chunks)));
+  doc.on('error', reject);
+}
+
+function drawReport(doc: PDFKit.PDFDocument, r: DayReport): void {
+  {
     const id = r.identity;
 
     // --- En-tête identité (centré) ---
@@ -158,9 +205,7 @@ export async function renderReportPdf(r: DayReport): Promise<Buffer> {
       );
       doc.fillColor('#000');
     }
-
-    doc.end();
-  });
+  }
 }
 
 function section(doc: PDFKit.PDFDocument, title: string) {
