@@ -641,6 +641,58 @@ export async function buildCreditNoteStarPrnt(
   return Buffer.from(enc.encode());
 }
 
+export interface GiftCardReceiptData {
+  code: string;
+  initial_amount: number;
+  balance: number;
+  issued_at: string;
+  expires_at: string | null;
+  buyer_name: string | null;
+  org_name: string;
+  store_name: string;
+}
+
+/**
+ * Carte cadeau en StarPRNT — la version ticket du PDF, pour l'imprimante de la
+ * boutique : en-tête boutique, code (en clair + code-barres), montant, solde
+ * restant si entamé, date de validité.
+ */
+export async function buildGiftCardStarPrnt(
+  gc: GiftCardReceiptData,
+  settings: ReceiptSettings | null,
+  paperWidthMm?: number,
+): Promise<Buffer> {
+  const W = columns(paperWidthMm);
+  const enc = await newEncoder(W);
+  const { center, rule, row } = layout(enc, W);
+
+  await printShopName(enc, settings?.shop_name?.trim() || gc.org_name, paperWidthMm);
+  if (settings?.address_line1) center(settings.address_line1);
+  if (settings?.address_zip_city) center(settings.address_zip_city);
+  if (settings?.siret) center(`SIRET ${settings.siret}`);
+
+  rule();
+  center('CARTE CADEAU', true);
+  rule();
+  enc.newline();
+  center(ascii(gc.code), true);
+  try { enc.align('center'); enc.barcode(gc.code, 'code128', 60); } catch { /* code non imprimable en barres */ }
+  enc.newline();
+  rule();
+  row('Montant', eur2(gc.initial_amount), true);
+  if (Math.abs(gc.balance - gc.initial_amount) > 0.005) row('Solde restant', eur2(gc.balance));
+  const issued = new Date(gc.issued_at);
+  row('Emise le', issued.toLocaleDateString('fr-FR', { timeZone: 'Europe/Paris' }));
+  if (gc.expires_at) {
+    row('Valable jusqu au', new Date(gc.expires_at).toLocaleDateString('fr-FR', { timeZone: 'Europe/Paris' }));
+  }
+  if (gc.buyer_name) row('Offerte par', gc.buyer_name);
+  enc.newline();
+  center('A presenter en caisse pour reglement.');
+  feedAndCut(enc);
+  return Buffer.from(enc.encode());
+}
+
 export interface BankDepositData {
   id?: string;
   movement_type: 'in' | 'out';
