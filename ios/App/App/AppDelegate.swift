@@ -1,5 +1,6 @@
 import UIKit
 import Capacitor
+import WebKit
 
 
 final class HelloPosBridgeViewController: CAPBridgeViewController {
@@ -7,6 +8,174 @@ final class HelloPosBridgeViewController: CAPBridgeViewController {
         print("### HELLOPOS capacitorDidLoad APPELE ###")
         bridge?.registerPluginInstance(HelloPosPrinterPlugin())
         print("### HELLOPOS PLUGIN ENREGISTRE ###")
+    }
+
+    override public func viewDidLoad() {
+        super.viewDidLoad()
+
+        let printInterceptScript = #"""
+        (() => {
+          if (window.__helloPosNativePrintInterceptorInstalled) return;
+          window.__helloPosNativePrintInterceptorInstalled = true;
+
+          const originalFetch = window.fetch.bind(window);
+
+          window.fetch = async function(input, init) {
+            try {
+              const rawUrl = typeof input === 'string'
+                ? input
+                : (input && typeof input.url === 'string' ? input.url : String(input));
+
+              const url = new URL(rawUrl, window.location.href);
+
+              const method = String(
+                (init && init.method) ||
+                (input && input.method) ||
+                'GET'
+              ).toUpperCase();
+
+              const isReceiptPrint =
+                method === 'POST' &&
+                /^\/api\/receipts\/(?:by-sale\/[^/]+|[^/]+)\/print$/.test(url.pathname);
+
+              if (isReceiptPrint) {
+                console.log(
+                  '### HELLOPOS NATIVE PRINT INTERCEPT ###',
+                  url.pathname
+                );
+
+                const pdfUrl = new URL(
+                  url.pathname.replace(/\/print$/, '/pdf'),
+                  window.location.origin
+                );
+
+                console.log(
+                  '### HELLOPOS NATIVE PDF FETCH ###',
+                  pdfUrl.pathname
+                );
+
+                const pdfResponse = await originalFetch(
+                  pdfUrl.toString(),
+                  {
+                    method: 'GET',
+                    credentials: 'include',
+                    cache: 'no-store'
+                  }
+                );
+
+                if (!pdfResponse.ok) {
+                  console.log(
+                    '### HELLOPOS NATIVE PDF ERROR ###',
+                    pdfResponse.status
+                  );
+
+                  return new Response(
+                    JSON.stringify({
+                      ok: false,
+                      error: 'PDF_FETCH_FAILED'
+                    }),
+                    {
+                      status: 500,
+                      headers: {
+                        'Content-Type': 'application/json'
+                      }
+                    }
+                  );
+                }
+
+                const buffer = await pdfResponse.arrayBuffer();
+                const bytes = new Uint8Array(buffer);
+
+                console.log(
+                  '### HELLOPOS NATIVE PDF OK ###',
+                  bytes.length,
+                  'bytes'
+                );
+
+                let binary = '';
+                const chunkSize = 0x8000;
+
+                for (let i = 0; i < bytes.length; i += chunkSize) {
+                  binary += String.fromCharCode(
+                    ...bytes.subarray(i, i + chunkSize)
+                  );
+                }
+
+                const pdfBase64 = btoa(binary);
+
+                try {
+                  const nativeResult =
+                    await window.Capacitor.Plugins.HelloPosPrinter.printPdf({
+                      host: '192.168.10.119',
+                      port: 9100,
+                      widthDots: 576,
+                      pdfBase64
+                    });
+
+                  console.log(
+                    '### HELLOPOS NATIVE PRINT SUCCESS ###',
+                    JSON.stringify(nativeResult)
+                  );
+
+                  return new Response(
+                    JSON.stringify({
+                      ok: true,
+                      printer_label: 'HelloPos iPad'
+                    }),
+                    {
+                      status: 200,
+                      headers: {
+                        'Content-Type': 'application/json'
+                      }
+                    }
+                  );
+
+                } catch (error) {
+                  console.log(
+                    '### HELLOPOS NATIVE PRINT ERROR ###',
+                    String(error)
+                  );
+
+                  return new Response(
+                    JSON.stringify({
+                      ok: false,
+                      error: 'NATIVE_PRINT_FAILED'
+                    }),
+                    {
+                      status: 500,
+                      headers: {
+                        'Content-Type': 'application/json'
+                      }
+                    }
+                  );
+                }
+              }
+            } catch (error) {
+              console.log(
+                '### HELLOPOS NATIVE PRINT INTERCEPT ERROR ###',
+                String(error)
+              );
+            }
+
+            return originalFetch(input, init);
+          };
+
+          console.log(
+            '### HELLOPOS NATIVE PRINT INTERCEPTOR INSTALLED ###'
+          );
+        })();
+        """#
+
+        let userScript = WKUserScript(
+            source: printInterceptScript,
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: true
+        )
+
+        webView?.configuration.userContentController.addUserScript(userScript)
+
+        guard let url = URL(string: "https://app.hellopos.fr") else { return }
+        webView?.load(URLRequest(url: url))
     }
 }
 
