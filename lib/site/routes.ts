@@ -42,6 +42,7 @@ export const STATIC_MARKETING_PATHS = [
   '/ressources',
   '/a-propos',
   '/contact',
+  '/support',
   '/connexion',
   '/mentions-legales',
   '/confidentialite',
