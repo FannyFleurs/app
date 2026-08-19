@@ -10,28 +10,115 @@ public class HelloPosPrinterPlugin: CAPPlugin, CAPBridgedPlugin {
     public let jsName = "HelloPosPrinter"
 
     public let pluginMethods: [CAPPluginMethod] = [
+        CAPPluginMethod(name: "getSettings", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "saveSettings", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "testConnection", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "printTest", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "printPdf", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "openDrawer", returnType: CAPPluginReturnPromise)
     ]
 
-    @objc func testConnection(_ call: CAPPluginCall) {
-        guard let host = call.getString("host"), !host.isEmpty else {
+    // MARK: - Réglages persistants (UserDefaults)
+
+    private static let hostKey = "hellopos.printer.host"
+    private static let portKey = "hellopos.printer.port"
+    private static let widthKey = "hellopos.printer.widthDots"
+    private static let configuredKey = "hellopos.printer.configured"
+
+    static let defaultPort = 9100
+    static let defaultWidthDots = 576
+
+    struct PrinterSettings {
+        var host: String
+        var port: Int
+        var widthDots: Int
+        var configured: Bool
+    }
+
+    static func loadSettings() -> PrinterSettings {
+        let d = UserDefaults.standard
+        let host = d.string(forKey: hostKey) ?? ""
+        let port = d.object(forKey: portKey) as? Int ?? defaultPort
+        let width = d.object(forKey: widthKey) as? Int ?? defaultWidthDots
+        let configured = d.bool(forKey: configuredKey)
+        return PrinterSettings(host: host, port: port, widthDots: width, configured: configured)
+    }
+
+    private func loadSettings() -> PrinterSettings {
+        return HelloPosPrinterPlugin.loadSettings()
+    }
+
+    /// Résout l'hôte/port à utiliser : valeurs fournies par l'appel JS sinon
+    /// réglages enregistrés. Rejette proprement si rien n'est configuré.
+    private func resolveTarget(_ call: CAPPluginCall) -> (host: String, portValue: Int, port: NWEndpoint.Port)? {
+        let settings = loadSettings()
+
+        let callHost = call.getString("host")?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let host = (callHost?.isEmpty == false ? callHost! : settings.host)
+        guard !host.isEmpty else {
+            call.reject("Imprimante non configurée")
+            return nil
+        }
+
+        let portValue = call.getInt("port") ?? settings.port
+        guard portValue > 0, portValue <= 65535,
+              let port = NWEndpoint.Port(rawValue: UInt16(portValue)) else {
+            call.reject("port invalide")
+            return nil
+        }
+
+        return (host, portValue, port)
+    }
+
+    @objc func getSettings(_ call: CAPPluginCall) {
+        let s = loadSettings()
+        call.resolve([
+            "host": s.host,
+            "port": s.port,
+            "widthDots": s.widthDots,
+            "configured": s.configured
+        ])
+    }
+
+    @objc func saveSettings(_ call: CAPPluginCall) {
+        guard let rawHost = call.getString("host")?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !rawHost.isEmpty else {
             call.reject("host manquant")
             return
         }
 
-        let portValue = call.getInt("port") ?? 9100
+        let port = call.getInt("port") ?? HelloPosPrinterPlugin.defaultPort
+        let width = call.getInt("widthDots") ?? HelloPosPrinterPlugin.defaultWidthDots
 
-        guard let port = NWEndpoint.Port(rawValue: UInt16(portValue)) else {
+        guard port > 0, port <= 65535 else {
             call.reject("port invalide")
             return
         }
 
+        let d = UserDefaults.standard
+        d.set(rawHost, forKey: HelloPosPrinterPlugin.hostKey)
+        d.set(port, forKey: HelloPosPrinterPlugin.portKey)
+        d.set(width, forKey: HelloPosPrinterPlugin.widthKey)
+        d.set(true, forKey: HelloPosPrinterPlugin.configuredKey)
+
+        call.resolve([
+            "host": rawHost,
+            "port": port,
+            "widthDots": width,
+            "configured": true
+        ])
+    }
+
+    // MARK: - Connexion / impression
+
+    @objc func testConnection(_ call: CAPPluginCall) {
+        guard let target = resolveTarget(call) else { return }
+        let host = target.host
+        let portValue = target.portValue
+
         let connection = NWConnection(
             host: NWEndpoint.Host(host),
-            port: port,
+            port: target.port,
             using: .tcp
         )
 
@@ -92,21 +179,13 @@ public class HelloPosPrinterPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc func printTest(_ call: CAPPluginCall) {
-        guard let host = call.getString("host"), !host.isEmpty else {
-            call.reject("host manquant")
-            return
-        }
-
-        let portValue = call.getInt("port") ?? 9100
-
-        guard let port = NWEndpoint.Port(rawValue: UInt16(portValue)) else {
-            call.reject("port invalide")
-            return
-        }
+        guard let target = resolveTarget(call) else { return }
+        let host = target.host
+        let portValue = target.portValue
 
         let connection = NWConnection(
             host: NWEndpoint.Host(host),
-            port: port,
+            port: target.port,
             using: .tcp
         )
 
@@ -145,7 +224,7 @@ public class HelloPosPrinterPlugin: CAPPlugin, CAPBridgedPlugin {
                 let text = """
                 HELLOPOS
                 Test impression native
-                19/08/2026
+                \(host):\(portValue)
 
 
                 """
@@ -155,7 +234,6 @@ public class HelloPosPrinterPlugin: CAPPlugin, CAPBridgedPlugin {
                 }
 
                 // Avance papier avant coupe : ESC d n
-                // 5 lignes pour dégager correctement le ticket.
                 data.append(contentsOf: [0x1B, 0x64, 0x05])
 
                 // Coupe complète ESC/POS
@@ -192,13 +270,8 @@ public class HelloPosPrinterPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc func printPdf(_ call: CAPPluginCall) {
-        guard let host = call.getString("host"), !host.isEmpty else {
-            call.reject("host manquant")
-            return
-        }
-
-        let portValue = call.getInt("port") ?? 9100
-        let widthDots = call.getInt("widthDots") ?? 576
+        let settings = loadSettings()
+        let widthDots = call.getInt("widthDots") ?? settings.widthDots
 
         guard let base64 = call.getString("pdfBase64"),
               let pdfData = Data(base64Encoded: base64),
@@ -208,10 +281,9 @@ public class HelloPosPrinterPlugin: CAPPlugin, CAPBridgedPlugin {
             return
         }
 
-        guard let port = NWEndpoint.Port(rawValue: UInt16(portValue)) else {
-            call.reject("port invalide")
-            return
-        }
+        guard let target = resolveTarget(call) else { return }
+        let host = target.host
+        let portValue = target.portValue
 
         let pageBounds = page.bounds(for: .mediaBox)
 
@@ -375,13 +447,14 @@ public class HelloPosPrinterPlugin: CAPPlugin, CAPBridgedPlugin {
 
         payload.append(raster)
 
-        // Avance + coupe
-        payload.append(contentsOf: [0x1B, 0x64, 0x0A])
+        // Avance minimale pour dégager la lame, puis coupe complète.
+        // On reste modéré (5 lignes) pour ne pas gaspiller de papier.
+        payload.append(contentsOf: [0x1B, 0x64, 0x05])
         payload.append(contentsOf: [0x1D, 0x56, 0x00])
 
         let connection = NWConnection(
             host: NWEndpoint.Host(host),
-            port: port,
+            port: target.port,
             using: .tcp
         )
 
@@ -443,21 +516,13 @@ public class HelloPosPrinterPlugin: CAPPlugin, CAPBridgedPlugin {
 
 
     @objc func openDrawer(_ call: CAPPluginCall) {
-        guard let host = call.getString("host"), !host.isEmpty else {
-            call.reject("host manquant")
-            return
-        }
-
-        let portValue = call.getInt("port") ?? 9100
-
-        guard let port = NWEndpoint.Port(rawValue: UInt16(portValue)) else {
-            call.reject("port invalide")
-            return
-        }
+        guard let target = resolveTarget(call) else { return }
+        let host = target.host
+        let portValue = target.portValue
 
         let connection = NWConnection(
             host: NWEndpoint.Host(host),
-            port: port,
+            port: target.port,
             using: .tcp
         )
 
@@ -487,7 +552,8 @@ public class HelloPosPrinterPlugin: CAPPlugin, CAPBridgedPlugin {
         connection.stateUpdateHandler = { state in
             switch state {
             case .ready:
-                // ESC p : impulsion tiroir standard ESC/POS.
+                // ESC p : impulsion tiroir standard ESC/POS (aucune avance
+                // papier, pour ne pas amorcer le rouleau à chaque ouverture).
                 let payload = Data([
                     0x1B, 0x70, 0x00, 0x19, 0xFA
                 ])

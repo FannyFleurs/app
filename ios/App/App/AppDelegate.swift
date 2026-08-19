@@ -4,6 +4,9 @@ import WebKit
 
 
 final class HelloPosBridgeViewController: CAPBridgeViewController {
+    private let appURL = URL(string: "https://app.hellopos.fr")!
+    private let settingsURL = URL(string: "capacitor://localhost/")!
+
     override public func capacitorDidLoad() {
         print("### HELLOPOS capacitorDidLoad APPELE ###")
         bridge?.registerPluginInstance(HelloPosPrinterPlugin())
@@ -13,12 +16,55 @@ final class HelloPosBridgeViewController: CAPBridgeViewController {
     override public func viewDidLoad() {
         super.viewDidLoad()
 
+        installPrintInterceptor()
+        installSettingsButton()
+
+        // Première ouverture non configurée : on laisse Capacitor afficher
+        // l'écran de réglages local (webDir). Sinon on charge directement
+        // l'application hébergée.
+        if HelloPosPrinterPlugin.loadSettings().configured {
+            webView?.load(URLRequest(url: appURL))
+        }
+    }
+
+    private func installPrintInterceptor() {
         let printInterceptScript = #"""
         (() => {
           if (window.__helloPosNativePrintInterceptorInstalled) return;
           window.__helloPosNativePrintInterceptorInstalled = true;
 
           const originalFetch = window.fetch.bind(window);
+
+          async function helloposPrinterConfig() {
+            try {
+              const plugin = window.Capacitor
+                && window.Capacitor.Plugins
+                && window.Capacitor.Plugins.HelloPosPrinter;
+
+              if (!plugin) return null;
+
+              const s = await plugin.getSettings();
+
+              if (s && s.configured && s.host) {
+                return {
+                  host: s.host,
+                  port: s.port || 9100,
+                  widthDots: s.widthDots || 576
+                };
+              }
+            } catch (error) {
+              console.log('### HELLOPOS CONFIG ERROR ###', String(error));
+            }
+
+            return null;
+          }
+
+          function jsonResponse(body, status) {
+            return new Response(JSON.stringify(body), {
+              status,
+              headers: { 'Content-Type': 'application/json' }
+            });
+          }
 
           window.fetch = async function(input, init) {
             try {
@@ -42,15 +88,18 @@ final class HelloPosBridgeViewController: CAPBridgeViewController {
                 method === 'POST' &&
                 url.pathname === '/api/cash-sessions/open-drawer';
 
-              const isSaleValidation =
-                method === 'POST' &&
-                /^\/api\/sales\/[^/]+\/validate$/.test(url.pathname);
-
               if (isReceiptPrint) {
                 console.log(
                   '### HELLOPOS NATIVE PRINT INTERCEPT ###',
                   url.pathname
                 );
+
+                const cfg = await helloposPrinterConfig();
+
+                if (!cfg) {
+                  console.log('### HELLOPOS PRINTER NOT CONFIGURED ###');
+                  return jsonResponse({ ok: false, error: 'PRINTER_NOT_CONFIGURED' }, 409);
+                }
 
                 let printBody = {};
 
@@ -96,18 +145,7 @@ final class HelloPosBridgeViewController: CAPBridgeViewController {
                     pdfResponse.status
                   );
 
-                  return new Response(
-                    JSON.stringify({
-                      ok: false,
-                      error: 'PDF_FETCH_FAILED'
-                    }),
-                    {
-                      status: 500,
-                      headers: {
-                        'Content-Type': 'application/json'
-                      }
-                    }
-                  );
+                  return jsonResponse({ ok: false, error: 'PDF_FETCH_FAILED' }, 500);
                 }
 
                 const buffer = await pdfResponse.arrayBuffer();
@@ -133,9 +171,9 @@ final class HelloPosBridgeViewController: CAPBridgeViewController {
                 try {
                   const nativeResult =
                     await window.Capacitor.Plugins.HelloPosPrinter.printPdf({
-                      host: '192.168.10.119',
-                      port: 9100,
-                      widthDots: 576,
+                      host: cfg.host,
+                      port: cfg.port,
+                      widthDots: cfg.widthDots,
                       pdfBase64
                     });
 
@@ -144,18 +182,7 @@ final class HelloPosBridgeViewController: CAPBridgeViewController {
                     JSON.stringify(nativeResult)
                   );
 
-                  return new Response(
-                    JSON.stringify({
-                      ok: true,
-                      printer_label: 'HelloPos iPad'
-                    }),
-                    {
-                      status: 200,
-                      headers: {
-                        'Content-Type': 'application/json'
-                      }
-                    }
-                  );
+                  return jsonResponse({ ok: true, printer_label: 'Imprimante réseau HelloPos' }, 200);
 
                 } catch (error) {
                   console.log(
@@ -163,52 +190,8 @@ final class HelloPosBridgeViewController: CAPBridgeViewController {
                     String(error)
                   );
 
-                  return new Response(
-                    JSON.stringify({
-                      ok: false,
-                      error: 'NATIVE_PRINT_FAILED'
-                    }),
-                    {
-                      status: 500,
-                      headers: {
-                        'Content-Type': 'application/json'
-                      }
-                    }
-                  );
+                  return jsonResponse({ ok: false, error: 'NATIVE_PRINT_FAILED' }, 500);
                 }
-              }
-              if (isSaleValidation) {
-                console.log(
-                  '### HELLOPOS NATIVE SALE VALIDATION INTERCEPT ###',
-                  url.pathname
-                );
-
-                let saleBody = {};
-
-                try {
-                  saleBody =
-                    init && typeof init.body === 'string'
-                      ? JSON.parse(init.body)
-                      : {};
-                } catch {
-                  saleBody = {};
-                }
-
-                const hasCashPayment =
-                  Array.isArray(saleBody.payments) &&
-                  saleBody.payments.some(
-                    (payment) => payment && payment.method === 'cash'
-                  );
-
-                console.log(
-                  '### HELLOPOS NATIVE SALE CASH ###',
-                  hasCashPayment
-                );
-
-                const validationResponse =
-                  await originalFetch(input, init);
-
-                return validationResponse;
               }
 
               if (isDrawerOpen) {
@@ -235,23 +218,29 @@ final class HelloPosBridgeViewController: CAPBridgeViewController {
                 // Si CloudPRNT a déjà envoyé l'impulsion,
                 // ne pas ouvrir une seconde fois.
                 if (responseData.drawer_kick_queued !== true) {
-                  try {
-                    const nativeResult =
-                      await window.Capacitor.Plugins.HelloPosPrinter.openDrawer({
-                        host: '192.168.10.119',
-                        port: 9100
-                      });
+                  const cfg = await helloposPrinterConfig();
 
-                    console.log(
-                      '### HELLOPOS NATIVE DRAWER SUCCESS ###',
-                      JSON.stringify(nativeResult)
-                    );
+                  if (cfg) {
+                    try {
+                      const nativeResult =
+                        await window.Capacitor.Plugins.HelloPosPrinter.openDrawer({
+                          host: cfg.host,
+                          port: cfg.port
+                        });
 
-                  } catch (error) {
-                    console.log(
-                      '### HELLOPOS NATIVE DRAWER ERROR ###',
-                      String(error)
-                    );
+                      console.log(
+                        '### HELLOPOS NATIVE DRAWER SUCCESS ###',
+                        JSON.stringify(nativeResult)
+                      );
+
+                    } catch (error) {
+                      console.log(
+                        '### HELLOPOS NATIVE DRAWER ERROR ###',
+                        String(error)
+                      );
+                    }
+                  } else {
+                    console.log('### HELLOPOS DRAWER PRINTER NOT CONFIGURED ###');
                   }
                 } else {
                   console.log(
@@ -285,9 +274,32 @@ final class HelloPosBridgeViewController: CAPBridgeViewController {
         )
 
         webView?.configuration.userContentController.addUserScript(userScript)
+    }
 
-        guard let url = URL(string: "https://app.hellopos.fr") else { return }
-        webView?.load(URLRequest(url: url))
+    /// Bouton flottant permettant de revenir à tout moment sur l'écran de
+    /// réglages imprimante (changement d'IP, test, etc.).
+    private func installSettingsButton() {
+        let button = UIButton(type: .system)
+        button.setTitle("⚙", for: .normal)
+        button.titleLabel?.font = .systemFont(ofSize: 22)
+        button.setTitleColor(.white, for: .normal)
+        button.backgroundColor = UIColor.black.withAlphaComponent(0.55)
+        button.layer.cornerRadius = 22
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.addTarget(self, action: #selector(openPrinterSettings), for: .touchUpInside)
+
+        view.addSubview(button)
+
+        NSLayoutConstraint.activate([
+            button.widthAnchor.constraint(equalToConstant: 44),
+            button.heightAnchor.constraint(equalToConstant: 44),
+            button.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -12),
+            button.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -12)
+        ])
+    }
+
+    @objc private func openPrinterSettings() {
+        webView?.load(URLRequest(url: settingsURL))
     }
 }
 

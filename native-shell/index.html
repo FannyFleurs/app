@@ -6,82 +6,205 @@
     name="viewport"
     content="width=device-width, initial-scale=1, viewport-fit=cover"
   >
-  <title>HelloPos Native</title>
+  <title>HelloPos - Réglages imprimante</title>
 
   <style>
+    :root {
+      --accent: #b3123f;
+      --ink: #1a1a1a;
+      --soft: #6b6b6b;
+      --line: #e2e2e2;
+    }
+
+    * { box-sizing: border-box; }
+
     body {
-      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-      padding: 60px 24px 24px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink);
+      margin: 0;
+      padding: calc(env(safe-area-inset-top) + 40px) 24px 40px;
+      max-width: 560px;
+      margin: 0 auto;
     }
 
-    h1 {
-      font-size: 34px;
+    h1 { font-size: 30px; margin: 0 0 4px; }
+    p.lead { color: var(--soft); margin: 0 0 28px; font-size: 15px; }
+
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--soft);
+      margin: 18px 0 6px;
     }
 
-    input, button {
-      box-sizing: border-box;
+    input, select, button {
       width: 100%;
       font-size: 18px;
       padding: 14px;
-      margin-top: 12px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: #fff;
     }
+
+    button {
+      border: none;
+      font-weight: 600;
+      margin-top: 14px;
+      cursor: pointer;
+    }
+
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-soft { background: #f3f3f3; color: var(--ink); }
+
+    .row { display: flex; gap: 12px; }
+    .row > div { flex: 1; }
 
     pre {
       white-space: pre-wrap;
-      margin-top: 24px;
-      padding: 16px;
-      background: #f2f2f2;
+      word-break: break-word;
+      margin-top: 20px;
+      padding: 14px;
+      background: #f6f6f6;
       border-radius: 12px;
+      font-size: 14px;
+      min-height: 20px;
     }
+
+    .status {
+      margin-top: 24px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      font-size: 14px;
+    }
+    .status.ok { background: #e8f5ec; color: #1f6b3a; }
+    .status.warn { background: #fdf0e3; color: #92531a; }
   </style>
 </head>
 
 <body>
-  <h1>Test imprimante réseau</h1>
+  <h1>Réglages imprimante</h1>
+  <p class="lead">
+    Configurez l'imprimante ticket réseau (ESC/POS, port RAW 9100) utilisée
+    par cette caisse. Ces réglages sont mémorisés sur l'appareil.
+  </p>
 
-  <input id="host" type="text" value="192.168.10.119">
-  <input id="port" type="number" value="9100">
+  <div id="config-status" class="status warn">Chargement des réglages…</div>
 
-  <button id="test">Tester la connexion</button>
-  <button id="print">Imprimer un ticket test</button>
+  <label for="host">Adresse IP de l'imprimante</label>
+  <input id="host" type="text" inputmode="decimal" placeholder="ex : 192.168.1.50" autocapitalize="off" autocorrect="off">
+
+  <div class="row">
+    <div>
+      <label for="port">Port</label>
+      <input id="port" type="number" value="9100">
+    </div>
+    <div>
+      <label for="width">Largeur papier</label>
+      <select id="width">
+        <option value="576">80 mm (576 points)</option>
+        <option value="384">58 mm (384 points)</option>
+      </select>
+    </div>
+  </div>
+
+  <button id="test" class="btn-soft">Tester la connexion</button>
+  <button id="print" class="btn-soft">Imprimer un ticket test</button>
+  <button id="save" class="btn-primary">Enregistrer et ouvrir HelloPos</button>
 
   <pre id="result"></pre>
 
   <script>
     const result = document.getElementById('result');
+    const statusBox = document.getElementById('config-status');
+    const APP_URL = 'https://app.hellopos.fr';
+
+    function plugin() {
+      return window.Capacitor
+        && window.Capacitor.Plugins
+        && window.Capacitor.Plugins.HelloPosPrinter;
+    }
 
     function values() {
       return {
         host: document.getElementById('host').value.trim(),
-        port: Number(document.getElementById('port').value) || 9100
+        port: Number(document.getElementById('port').value) || 9100,
+        widthDots: Number(document.getElementById('width').value) || 576
       };
     }
 
-    document.getElementById('test').addEventListener('click', async () => {
-      result.textContent = 'Test en cours…';
+    function show(msg) {
+      result.textContent = typeof msg === 'string' ? msg : JSON.stringify(msg, null, 2);
+    }
 
+    async function loadSettings() {
+      const p = plugin();
+      if (!p) {
+        statusBox.className = 'status warn';
+        statusBox.textContent = 'Environnement natif indisponible.';
+        return;
+      }
       try {
-        const res =
-          await window.Capacitor.Plugins.HelloPosPrinter.testConnection(values());
-
-        result.textContent = JSON.stringify(res, null, 2);
+        const s = await p.getSettings();
+        if (s.host) document.getElementById('host').value = s.host;
+        if (s.port) document.getElementById('port').value = s.port;
+        if (s.widthDots) document.getElementById('width').value = String(s.widthDots);
+        if (s.configured && s.host) {
+          statusBox.className = 'status ok';
+          statusBox.textContent = 'Imprimante configurée : ' + s.host + ':' + s.port;
+        } else {
+          statusBox.className = 'status warn';
+          statusBox.textContent = 'Aucune imprimante configurée pour le moment.';
+        }
       } catch (e) {
-        result.textContent = String(e);
+        statusBox.className = 'status warn';
+        statusBox.textContent = 'Impossible de lire les réglages : ' + String(e);
+      }
+    }
+
+    document.getElementById('test').addEventListener('click', async () => {
+      const p = plugin();
+      if (!p) return show('Environnement natif indisponible.');
+      show('Test en cours…');
+      try {
+        show(await p.testConnection(values()));
+      } catch (e) {
+        show(String(e));
       }
     });
 
     document.getElementById('print').addEventListener('click', async () => {
-      result.textContent = 'Impression en cours…';
-
+      const p = plugin();
+      if (!p) return show('Environnement natif indisponible.');
+      show('Impression en cours…');
       try {
-        const res =
-          await window.Capacitor.Plugins.HelloPosPrinter.printTest(values());
-
-        result.textContent = JSON.stringify(res, null, 2);
+        show(await p.printTest(values()));
       } catch (e) {
-        result.textContent = String(e);
+        show(String(e));
       }
     });
+
+    document.getElementById('save').addEventListener('click', async () => {
+      const p = plugin();
+      if (!p) return show('Environnement natif indisponible.');
+      const v = values();
+      if (!v.host) return show('Renseigne l’adresse IP de l’imprimante.');
+      show('Enregistrement…');
+      try {
+        await p.saveSettings(v);
+        window.location.href = APP_URL;
+      } catch (e) {
+        show(String(e));
+      }
+    });
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', loadSettings);
+    } else {
+      loadSettings();
+    }
   </script>
 </body>
 </html>
