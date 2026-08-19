@@ -3,6 +3,7 @@ import Capacitor
 import Network
 import PDFKit
 import UIKit
+import WebKit
 
 @objc(HelloPosPrinterPlugin)
 public class HelloPosPrinterPlugin: CAPPlugin, CAPBridgedPlugin {

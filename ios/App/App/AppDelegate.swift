@@ -17,7 +17,6 @@ final class HelloPosBridgeViewController: CAPBridgeViewController {
         super.viewDidLoad()
 
         installPrintInterceptor()
-        installSettingsButton()
 
         // Première ouverture non configurée : on laisse Capacitor afficher
         // l'écran de réglages local (webDir). Sinon on charge directement
@@ -25,6 +24,13 @@ final class HelloPosBridgeViewController: CAPBridgeViewController {
         if HelloPosPrinterPlugin.loadSettings().configured {
             webView?.load(URLRequest(url: appURL))
         }
+    }
+
+    override public func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        // Après viewDidAppear le webview est présent : le bouton se place ainsi
+        // à coup sûr au-dessus du contenu web (z-order fiable).
+        installSettingsButton()
     }
 
     private func installPrintInterceptor() {
@@ -355,7 +361,11 @@ final class HelloPosBridgeViewController: CAPBridgeViewController {
     /// Bouton flottant permettant de revenir à tout moment sur l'écran de
     /// réglages imprimante (changement d'IP, test, etc.).
     private func installSettingsButton() {
+        // Évite les doublons quand viewDidAppear est rappelé.
+        if view.viewWithTag(9911) != nil { return }
+
         let button = UIButton(type: .system)
+        button.tag = 9911
         button.setTitle("⚙", for: .normal)
         button.titleLabel?.font = .systemFont(ofSize: 22)
         button.setTitleColor(.white, for: .normal)
