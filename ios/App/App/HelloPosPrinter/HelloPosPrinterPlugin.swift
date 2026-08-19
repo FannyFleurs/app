@@ -12,7 +12,8 @@ public class HelloPosPrinterPlugin: CAPPlugin, CAPBridgedPlugin {
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "testConnection", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "printTest", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "printPdf", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "printPdf", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "openDrawer", returnType: CAPPluginReturnPromise)
     ]
 
     @objc func testConnection(_ call: CAPPluginCall) {
@@ -432,6 +433,87 @@ public class HelloPosPrinterPlugin: CAPPlugin, CAPBridgedPlugin {
         connection.start(queue: queue)
 
         queue.asyncAfter(deadline: .now() + 10) {
+            if !finished {
+                finished = true
+                connection.cancel()
+                call.reject("timeout")
+            }
+        }
+    }
+
+
+    @objc func openDrawer(_ call: CAPPluginCall) {
+        guard let host = call.getString("host"), !host.isEmpty else {
+            call.reject("host manquant")
+            return
+        }
+
+        let portValue = call.getInt("port") ?? 9100
+
+        guard let port = NWEndpoint.Port(rawValue: UInt16(portValue)) else {
+            call.reject("port invalide")
+            return
+        }
+
+        let connection = NWConnection(
+            host: NWEndpoint.Host(host),
+            port: port,
+            using: .tcp
+        )
+
+        let queue = DispatchQueue(label: "fr.hellopos.printer.drawer")
+        var finished = false
+
+        func finish(_ result: Result<Void, Error>) {
+            guard !finished else { return }
+            finished = true
+            connection.cancel()
+
+            switch result {
+            case .success:
+                call.resolve([
+                    "opened": true,
+                    "host": host,
+                    "port": portValue
+                ])
+
+            case .failure(let error):
+                call.reject(
+                    "Ouverture tiroir impossible : \(error.localizedDescription)"
+                )
+            }
+        }
+
+        connection.stateUpdateHandler = { state in
+            switch state {
+            case .ready:
+                // ESC p : impulsion tiroir standard ESC/POS.
+                let payload = Data([
+                    0x1B, 0x70, 0x00, 0x19, 0xFA
+                ])
+
+                connection.send(
+                    content: payload,
+                    completion: .contentProcessed { error in
+                        if let error = error {
+                            finish(.failure(error))
+                        } else {
+                            finish(.success(()))
+                        }
+                    }
+                )
+
+            case .failed(let error):
+                finish(.failure(error))
+
+            default:
+                break
+            }
+        }
+
+        connection.start(queue: queue)
+
+        queue.asyncAfter(deadline: .now() + 5) {
             if !finished {
                 finished = true
                 connection.cancel()

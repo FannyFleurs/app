@@ -38,6 +38,10 @@ final class HelloPosBridgeViewController: CAPBridgeViewController {
                 method === 'POST' &&
                 /^\/api\/receipts\/(?:by-sale\/[^/]+|[^/]+)\/print$/.test(url.pathname);
 
+              const isDrawerOpen =
+                method === 'POST' &&
+                url.pathname === '/api/cash-sessions/open-drawer';
+
               if (isReceiptPrint) {
                 console.log(
                   '### HELLOPOS NATIVE PRINT INTERCEPT ###',
@@ -150,6 +154,57 @@ final class HelloPosBridgeViewController: CAPBridgeViewController {
                   );
                 }
               }
+              if (isDrawerOpen) {
+                console.log(
+                  '### HELLOPOS NATIVE DRAWER INTERCEPT ###'
+                );
+
+                // On exécute d'abord la route Web pour conserver
+                // l'audit réglementaire de l'ouverture.
+                const webResponse = await originalFetch(input, init);
+
+                if (!webResponse.ok) {
+                  return webResponse;
+                }
+
+                let responseData = {};
+
+                try {
+                  responseData = await webResponse.clone().json();
+                } catch {
+                  responseData = {};
+                }
+
+                // Si CloudPRNT a déjà envoyé l'impulsion,
+                // ne pas ouvrir une seconde fois.
+                if (responseData.drawer_kick_queued !== true) {
+                  try {
+                    const nativeResult =
+                      await window.Capacitor.Plugins.HelloPosPrinter.openDrawer({
+                        host: '192.168.10.119',
+                        port: 9100
+                      });
+
+                    console.log(
+                      '### HELLOPOS NATIVE DRAWER SUCCESS ###',
+                      JSON.stringify(nativeResult)
+                    );
+
+                  } catch (error) {
+                    console.log(
+                      '### HELLOPOS NATIVE DRAWER ERROR ###',
+                      String(error)
+                    );
+                  }
+                } else {
+                  console.log(
+                    '### HELLOPOS DRAWER CLOUDPRNT ALREADY QUEUED ###'
+                  );
+                }
+
+                return webResponse;
+              }
+
             } catch (error) {
               console.log(
                 '### HELLOPOS NATIVE PRINT INTERCEPT ERROR ###',
