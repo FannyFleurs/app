@@ -42,20 +42,43 @@ final class HelloPosBridgeViewController: CAPBridgeViewController {
                 method === 'POST' &&
                 url.pathname === '/api/cash-sessions/open-drawer';
 
+              const isSaleValidation =
+                method === 'POST' &&
+                /^\/api\/sales\/[^/]+\/validate$/.test(url.pathname);
+
               if (isReceiptPrint) {
                 console.log(
                   '### HELLOPOS NATIVE PRINT INTERCEPT ###',
                   url.pathname
                 );
 
+                let printBody = {};
+
+                try {
+                  printBody =
+                    init && typeof init.body === 'string'
+                      ? JSON.parse(init.body)
+                      : {};
+                } catch {
+                  printBody = {};
+                }
+
                 const pdfUrl = new URL(
                   url.pathname.replace(/\/print$/, '/pdf'),
                   window.location.origin
                 );
 
+                if (printBody.gift === true) {
+                  pdfUrl.searchParams.set('gift', '1');
+
+                  if (Array.isArray(printBody.lines) && printBody.lines.length > 0) {
+                    pdfUrl.searchParams.set('lines', printBody.lines.join(','));
+                  }
+                }
+
                 console.log(
                   '### HELLOPOS NATIVE PDF FETCH ###',
-                  pdfUrl.pathname
+                  pdfUrl.pathname + pdfUrl.search
                 );
 
                 const pdfResponse = await originalFetch(
@@ -154,6 +177,40 @@ final class HelloPosBridgeViewController: CAPBridgeViewController {
                   );
                 }
               }
+              if (isSaleValidation) {
+                console.log(
+                  '### HELLOPOS NATIVE SALE VALIDATION INTERCEPT ###',
+                  url.pathname
+                );
+
+                let saleBody = {};
+
+                try {
+                  saleBody =
+                    init && typeof init.body === 'string'
+                      ? JSON.parse(init.body)
+                      : {};
+                } catch {
+                  saleBody = {};
+                }
+
+                const hasCashPayment =
+                  Array.isArray(saleBody.payments) &&
+                  saleBody.payments.some(
+                    (payment) => payment && payment.method === 'cash'
+                  );
+
+                console.log(
+                  '### HELLOPOS NATIVE SALE CASH ###',
+                  hasCashPayment
+                );
+
+                const validationResponse =
+                  await originalFetch(input, init);
+
+                return validationResponse;
+              }
+
               if (isDrawerOpen) {
                 console.log(
                   '### HELLOPOS NATIVE DRAWER INTERCEPT ###'
