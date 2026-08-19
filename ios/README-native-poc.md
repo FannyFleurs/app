@@ -7,13 +7,24 @@ et ajoute l'impression directe sur imprimante ticket réseau (ESC/POS, port RAW
 ## Principe
 
 - Le webview charge l'app hébergée. Un script injecté (`AppDelegate.swift`)
-  intercepte les appels `fetch` de la caisse :
-  - `POST /api/receipts/.../print` -> récupère le PDF ticket
-    (`/api/receipts/.../pdf`), le rastérise et l'envoie en ESC/POS.
+  intercepte les appels `fetch` de la caisse et, pour chaque famille de
+  document thermique, récupère le PDF frère (`/pdf`), le rastérise et l'envoie
+  en ESC/POS :
+  - `POST /api/receipts/.../print` (tickets de vente, + ticket cadeau sans prix)
+  - `POST /api/credit-notes/.../print` (avoirs, N exemplaires via `copies`)
+  - `POST /api/gift-cards/.../print` (cartes cadeaux, code-barres EAN-13 inclus)
   - `POST /api/cash-sessions/open-drawer` -> impulsion tiroir ESC/POS
     (uniquement si CloudPRNT n'a pas déjà envoyé l'impulsion).
 - Le plugin natif `HelloPosPrinter` (`HelloPosPrinterPlugin.swift`) ouvre une
   socket TCP (`Network.framework`) vers l'imprimante et pousse les octets bruts.
+
+### Non couvert (volontairement)
+
+- **Rapport X/Z** (`/api/reports/day`) et **factures** (`/api/invoices`) : leur
+  endpoint `/pdf` de production est au format **A4**, illisible une fois
+  rastérisé en 80 mm. Comme la version PWA en production ne doit pas être
+  modifiée, ces documents restent sur le circuit CloudPRNT/Star. Sur l'app
+  native sans imprimante Star, l'impression du X/Z renverra `NO_PRINTER`.
 
 ## Réglages imprimante
 

@@ -80,15 +80,25 @@ final class HelloPosBridgeViewController: CAPBridgeViewController {
                 'GET'
               ).toUpperCase();
 
-              const isReceiptPrint =
-                method === 'POST' &&
-                /^\/api\/receipts\/(?:by-sale\/[^/]+|[^/]+)\/print$/.test(url.pathname);
+              // Familles de documents thermiques (80 mm) imprimables en natif.
+              // Chacune expose un endpoint /print (POST) et un /pdf (GET) frère.
+              // Le X/Z (/api/reports/day) et les factures sont en A4 : non
+              // rastérisables proprement en thermique, donc non interceptés.
+              const printFamilies = [
+                { re: /^\/api\/receipts\/(?:by-sale\/[^/]+|[^/]+)\/print$/, gift: true },
+                { re: /^\/api\/credit-notes\/[^/]+\/print$/, copies: true },
+                { re: /^\/api\/gift-cards\/[^/]+\/print$/, copies: true }
+              ];
+
+              const printFamily = method === 'POST'
+                ? printFamilies.find((f) => f.re.test(url.pathname))
+                : null;
 
               const isDrawerOpen =
                 method === 'POST' &&
                 url.pathname === '/api/cash-sessions/open-drawer';
 
-              if (isReceiptPrint) {
+              if (printFamily) {
                 console.log(
                   '### HELLOPOS NATIVE PRINT INTERCEPT ###',
                   url.pathname
@@ -117,7 +127,8 @@ final class HelloPosBridgeViewController: CAPBridgeViewController {
                   window.location.origin
                 );
 
-                if (printBody.gift === true) {
+                // Ticket cadeau (sans prix) : uniquement pour les tickets de vente.
+                if (printFamily.gift && printBody.gift === true) {
                   pdfUrl.searchParams.set('gift', '1');
 
                   if (Array.isArray(printBody.lines) && printBody.lines.length > 0) {
@@ -125,9 +136,19 @@ final class HelloPosBridgeViewController: CAPBridgeViewController {
                   }
                 }
 
+                // Nombre d'exemplaires (avoirs / cartes cadeaux). 1 par défaut.
+                let copies = 1;
+                if (printFamily.copies) {
+                  const requested = Number(printBody.copies);
+                  if (Number.isInteger(requested) && requested >= 1 && requested <= 5) {
+                    copies = requested;
+                  }
+                }
+
                 console.log(
                   '### HELLOPOS NATIVE PDF FETCH ###',
-                  pdfUrl.pathname + pdfUrl.search
+                  pdfUrl.pathname + pdfUrl.search,
+                  'x' + copies
                 );
 
                 const pdfResponse = await originalFetch(
@@ -169,20 +190,23 @@ final class HelloPosBridgeViewController: CAPBridgeViewController {
                 const pdfBase64 = btoa(binary);
 
                 try {
-                  const nativeResult =
-                    await window.Capacitor.Plugins.HelloPosPrinter.printPdf({
-                      host: cfg.host,
-                      port: cfg.port,
-                      widthDots: cfg.widthDots,
-                      pdfBase64
-                    });
+                  for (let copy = 0; copy < copies; copy++) {
+                    const nativeResult =
+                      await window.Capacitor.Plugins.HelloPosPrinter.printPdf({
+                        host: cfg.host,
+                        port: cfg.port,
+                        widthDots: cfg.widthDots,
+                        pdfBase64
+                      });
 
-                  console.log(
-                    '### HELLOPOS NATIVE PRINT SUCCESS ###',
-                    JSON.stringify(nativeResult)
-                  );
+                    console.log(
+                      '### HELLOPOS NATIVE PRINT SUCCESS ###',
+                      (copy + 1) + '/' + copies,
+                      JSON.stringify(nativeResult)
+                    );
+                  }
 
-                  return jsonResponse({ ok: true, printer_label: 'Imprimante réseau HelloPos' }, 200);
+                  return jsonResponse({ ok: true, printer_label: 'Imprimante réseau HelloPos', copies }, 200);
 
                 } catch (error) {
                   console.log(
