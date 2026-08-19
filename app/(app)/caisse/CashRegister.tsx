@@ -1878,7 +1878,7 @@ export default function CashRegister({
               className="btn-soft w-full h-12 text-base font-semibold"
               onClick={() => setShowOrderModal(true)}
             >
-              📅 Commande différée (retrait à date)
+              Commande / Livraison
             </button>
           )}
 
