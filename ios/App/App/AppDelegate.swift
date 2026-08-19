@@ -294,20 +294,33 @@ final class HelloPosBridgeViewController: CAPBridgeViewController {
           // Entrée « Imprimante réseau » ajoutée au menu Paramètres. Ce script
           // n'étant injecté que par la coque iOS, l'entrée est invisible pour
           // les utilisateurs du site web (aucune modification côté serveur).
+          function findSettingsNav() {
+            // 1) barre latérale des réglages (classe Tailwind connue).
+            const byClass = document.querySelector('nav[class~="space-y-0.5"]');
+            if (byClass) return byClass;
+            // 2) repli robuste : on remonte au conteneur d'un lien /settings/.
+            const link = document.querySelector('aside a[href^="/settings/"]')
+              || document.querySelector('a[href^="/settings/"]');
+            if (link) return link.closest('nav') || link.parentElement;
+            return null;
+          }
+
           function injectPrinterSettingsEntry() {
             try {
-              const nav = document.querySelector('nav[class~="space-y-0.5"]');
-              if (!nav) return;
               if (document.getElementById('hellopos-native-printer-entry')) return;
+
+              const nav = findSettingsNav();
+              if (!nav) return;
 
               const entry = document.createElement('a');
               entry.id = 'hellopos-native-printer-entry';
               entry.href = '#';
-              entry.textContent = 'Imprimante réseau';
+              entry.textContent = '🖨 Imprimante réseau (IP)';
               entry.style.cssText =
-                'display:flex;align-items:center;gap:12px;margin-top:2px;' +
+                'display:flex;align-items:center;gap:12px;margin:2px 0;' +
                 'padding:10px 12px;border-radius:12px;font-size:14px;' +
-                'font-weight:500;color:#8a1538;text-decoration:none;cursor:pointer;';
+                'font-weight:600;color:#fff;background:#8a1538;' +
+                'text-decoration:none;cursor:pointer;';
 
               entry.addEventListener('click', function (e) {
                 e.preventDefault();
@@ -318,7 +331,8 @@ final class HelloPosBridgeViewController: CAPBridgeViewController {
                 }
               });
 
-              nav.appendChild(entry);
+              // En tête du menu pour être vu sans faire défiler.
+              nav.insertBefore(entry, nav.firstChild);
               console.log('### HELLOPOS PRINTER MENU ENTRY INJECTED ###');
             } catch (err) {
               console.log('### HELLOPOS MENU INJECT ERROR ###', String(err));
