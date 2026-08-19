@@ -26,7 +26,18 @@ et ajoute l'impression directe sur imprimante ticket réseau (ESC/POS, port RAW
   modifiée, ces documents restent sur le circuit CloudPRNT/Star. Sur l'app
   native sans imprimante Star, l'impression du X/Z renverra `NO_PRINTER`.
 
-## Réglages imprimante
+## Source de la configuration imprimante IP
+
+L'intercepteur résout l'imprimante dans cet ordre :
+
+1. **Serveur / back-office** (prioritaire) : `GET /api/pos/ip-printer` renvoie
+   la config IP de la boutique du poste, saisie dans le BO (page Imprimante
+   ticket, section « Imprimante ticket réseau (IP) »). Configurée une fois,
+   partagée par tous les postes de la boutique.
+2. **Réglage local** (repli) : l'écran de réglages natif (`UserDefaults`),
+   utile hors-ligne ou avant configuration du BO.
+
+## Réglages imprimante (repli local)
 
 - Nom (optionnel), adresse IP, port et largeur papier (80 mm / 576 pts ou
   58 mm / 384 pts) sont saisis sur l'écran de réglages

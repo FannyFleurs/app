@@ -42,24 +42,49 @@ final class HelloPosBridgeViewController: CAPBridgeViewController {
           const originalFetch = window.fetch.bind(window);
 
           async function helloposPrinterConfig() {
+            // 1) Config serveur (back-office), résolue pour la boutique du poste.
+            //    C'est la source prioritaire : configurée une fois dans le BO,
+            //    partagée par tous les postes de la boutique.
+            try {
+              const r = await originalFetch('/api/pos/ip-printer', {
+                method: 'GET',
+                credentials: 'include',
+                cache: 'no-store'
+              });
+
+              if (r.ok) {
+                const s = await r.json();
+                if (s && s.configured && s.host) {
+                  return {
+                    host: s.host,
+                    port: s.port || 9100,
+                    widthDots: s.widthDots || 576
+                  };
+                }
+              }
+            } catch (error) {
+              console.log('### HELLOPOS SERVER CONFIG ERROR ###', String(error));
+            }
+
+            // 2) Repli : réglage local de l'appareil (écran de réglages natif),
+            //    utile hors-ligne ou avant configuration du BO.
             try {
               const plugin = window.Capacitor
                 && window.Capacitor.Plugins
                 && window.Capacitor.Plugins.HelloPosPrinter;
 
-              if (!plugin) return null;
-
-              const s = await plugin.getSettings();
-
-              if (s && s.configured && s.host) {
-                return {
-                  host: s.host,
-                  port: s.port || 9100,
-                  widthDots: s.widthDots || 576
-                };
+              if (plugin) {
+                const s = await plugin.getSettings();
+                if (s && s.configured && s.host) {
+                  return {
+                    host: s.host,
+                    port: s.port || 9100,
+                    widthDots: s.widthDots || 576
+                  };
+                }
               }
             } catch (error) {
-              console.log('### HELLOPOS CONFIG ERROR ###', String(error));
+              console.log('### HELLOPOS LOCAL CONFIG ERROR ###', String(error));
             }
 
             return null;
@@ -358,7 +383,7 @@ final class HelloPosBridgeViewController: CAPBridgeViewController {
           }
 
           console.log(
-            '### HELLOPOS NATIVE PRINT INTERCEPTOR INSTALLED (build 6) ###'
+            '### HELLOPOS NATIVE PRINT INTERCEPTOR INSTALLED (build 7) ###'
           );
         })();
         """#
