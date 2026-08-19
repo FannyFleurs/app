@@ -17,3 +17,6 @@ dist/
 next-env.d.ts
 /data/
 /archives/
+
+# Xcode SwiftPM user workspace state
+ios/App/App.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/

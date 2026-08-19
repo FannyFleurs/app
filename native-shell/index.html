@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, viewport-fit=cover"
+  >
+  <title>HelloPos Native</title>
+
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      padding: 60px 24px 24px;
+    }
+
+    h1 {
+      font-size: 34px;
+    }
+
+    input, button {
+      box-sizing: border-box;
+      width: 100%;
+      font-size: 18px;
+      padding: 14px;
+      margin-top: 12px;
+    }
+
+    pre {
+      white-space: pre-wrap;
+      margin-top: 24px;
+      padding: 16px;
+      background: #f2f2f2;
+      border-radius: 12px;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Test imprimante réseau</h1>
+
+  <input id="host" type="text" value="192.168.10.119">
+  <input id="port" type="number" value="9100">
+
+  <button id="test">Tester la connexion</button>
+  <button id="print">Imprimer un ticket test</button>
+
+  <pre id="result"></pre>
+
+  <script>
+    const result = document.getElementById('result');
+
+    function values() {
+      return {
+        host: document.getElementById('host').value.trim(),
+        port: Number(document.getElementById('port').value) || 9100
+      };
+    }
+
+    document.getElementById('test').addEventListener('click', async () => {
+      result.textContent = 'Test en cours…';
+
+      try {
+        const res =
+          await window.Capacitor.Plugins.HelloPosPrinter.testConnection(values());
+
+        result.textContent = JSON.stringify(res, null, 2);
+      } catch (e) {
+        result.textContent = String(e);
+      }
+    });
+
+    document.getElementById('print').addEventListener('click', async () => {
+      result.textContent = 'Impression en cours…';
+
+      try {
+        const res =
+          await window.Capacitor.Plugins.HelloPosPrinter.printTest(values());
+
+        result.textContent = JSON.stringify(res, null, 2);
+      } catch (e) {
+        result.textContent = String(e);
+      }
+    });
+  </script>
+</body>
+</html>

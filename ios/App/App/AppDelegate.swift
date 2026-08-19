@@ -1,6 +1,15 @@
 import UIKit
 import Capacitor
 
+
+final class HelloPosBridgeViewController: CAPBridgeViewController {
+    override public func capacitorDidLoad() {
+        print("### HELLOPOS capacitorDidLoad APPELE ###")
+        bridge?.registerPluginInstance(HelloPosPrinterPlugin())
+        print("### HELLOPOS PLUGIN ENREGISTRE ###")
+    }
+}
+
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
 
