@@ -18,12 +18,11 @@ final class HelloPosBridgeViewController: CAPBridgeViewController {
 
         installPrintInterceptor()
 
-        // Première ouverture non configurée : on laisse Capacitor afficher
-        // l'écran de réglages local (webDir). Sinon on charge directement
-        // l'application hébergée.
-        if HelloPosPrinterPlugin.loadSettings().configured {
-            webView?.load(URLRequest(url: appURL))
-        }
+        // La configuration imprimante vit désormais surtout dans le back-office
+        // (lue via /api/pos/ip-printer). On charge donc toujours l'application ;
+        // l'écran de réglages local reste accessible en repli (menu « Imprimante
+        // réseau » ou bouton roue crantée).
+        webView?.load(URLRequest(url: appURL))
     }
 
     override public func viewDidAppear(_ animated: Bool) {
@@ -383,7 +382,7 @@ final class HelloPosBridgeViewController: CAPBridgeViewController {
           }
 
           console.log(
-            '### HELLOPOS NATIVE PRINT INTERCEPTOR INSTALLED (build 7) ###'
+            '### HELLOPOS NATIVE PRINT INTERCEPTOR INSTALLED (build 8) ###'
           );
         })();
         """#
