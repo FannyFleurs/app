@@ -1,7 +1,7 @@
 'use client';
 import { confirmThemed, alertThemed, promptThemed } from '@/lib/ui/dialog';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { posteRef } from '@/lib/poste-ref';
 
@@ -137,6 +137,8 @@ export default function OrganizationDetail({ id, planNames }: { id: string; plan
 
       <AdminActions id={o.id} maxDevicesFromServer={o.max_devices ?? 1} planNames={planNames} onChange={() => void reload()} />
 
+      <SupportAccessPanel id={o.id} />
+
       <ActiveSessions id={o.id} version={version} onChange={() => void reload()} />
 
       <BoundRegisters id={o.id} version={version} />
@@ -177,6 +179,102 @@ export default function OrganizationDetail({ id, planNames }: { id: string; plan
         )}
       </section>
     </div>
+  );
+}
+
+function supportStatusLabel(s: string): string {
+  switch (s) {
+    case 'declined': return 'refusée';
+    case 'expired':  return 'expirée (sans réponse)';
+    case 'ended':    return 'terminée';
+    case 'revoked':  return 'révoquée par la boutique';
+    default:         return s;
+  }
+}
+
+/** Dépannage à distance : demande d'accès (avec consentement boutique) + entrée. */
+function SupportAccessPanel({ id }: { id: string }) {
+  const [req, setReq] = useState<{ id: string; status: string; access_expires_at: string | null } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const r = await fetch(`/api/admin/organizations/${id}/support-request`);
+      if (r.ok) setReq((await r.json()).request);
+    } catch { /* ignore */ }
+  }, [id]);
+
+  useEffect(() => {
+    void load();
+    const t = setInterval(load, 8000);
+    return () => clearInterval(t);
+  }, [load]);
+
+  async function requestAccess() {
+    setBusy(true); setMsg(null);
+    try {
+      const r = await fetch(`/api/admin/organizations/${id}/support-request`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+      });
+      if (r.ok) setReq((await r.json()).request);
+      else setMsg('Échec de la demande.');
+    } finally { setBusy(false); }
+  }
+
+  async function enter() {
+    setBusy(true); setMsg(null);
+    try {
+      const r = await fetch(`/api/admin/organizations/${id}/impersonate`, { method: 'POST' });
+      if (r.ok) { window.location.assign((await r.json()).redirect); return; }
+      const j = await r.json().catch(() => ({}));
+      setMsg(j.error === 'NO_CONSENT' ? "L'accès n'est pas (ou plus) autorisé par la boutique."
+           : j.error === 'NO_TARGET' ? 'Aucun compte owner/manager à incarner dans cette organisation.'
+           : 'Échec.');
+      void load();
+    } finally { setBusy(false); }
+  }
+
+  const status = req?.status;
+  const closed = !status || ['declined', 'expired', 'ended', 'revoked'].includes(status);
+
+  return (
+    <section className="card p-5 space-y-3">
+      <div className="font-semibold">Dépannage à distance</div>
+      <p className="text-sm text-ink-soft">
+        Demande d&apos;accès temporaire à l&apos;espace de cette organisation (réglages,
+        imprimantes, comptes). La boutique doit <strong>autoriser</strong> via un popup.
+        Accès limité à 2&nbsp;h, tracé, révocable par la boutique à tout moment.
+      </p>
+
+      {closed && (
+        <div className="space-y-2">
+          {status && <p className="text-sm text-ink-soft">Dernière demande : {supportStatusLabel(status)}.</p>}
+          <button className="btn-primary h-10 px-4" disabled={busy} onClick={() => void requestAccess()}>
+            {busy ? '…' : 'Demander un accès de dépannage'}
+          </button>
+        </div>
+      )}
+
+      {status === 'pending' && (
+        <div className="rounded-xl bg-warning/10 px-4 py-3 text-sm text-warning">
+          En attente de l&apos;autorisation de la boutique… Le popup s&apos;affiche sur sa caisse / son back-office.
+        </div>
+      )}
+
+      {status === 'approved' && (
+        <div className="space-y-2">
+          <div className="rounded-xl bg-success/10 px-4 py-3 text-sm text-success">
+            Accès autorisé par la boutique.
+          </div>
+          <button className="btn-primary h-10 px-4" disabled={busy} onClick={() => void enter()}>
+            {busy ? '…' : 'Entrer dans l’espace (dépannage)'}
+          </button>
+        </div>
+      )}
+
+      {msg && <div className="rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{msg}</div>}
+    </section>
   );
 }
 

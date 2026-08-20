@@ -10,6 +10,8 @@ import {
 import AppShell, { type SubscriptionInfo } from '@/components/AppShell';
 import BillingBlock from '@/components/BillingBlock';
 import { resolveEffectivePermissions } from '@/lib/auth/permissions';
+import SupportBanner from '@/components/support/SupportBanner';
+import SupportConsentGate from '@/components/support/SupportConsentGate';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   // Mode back-office : injecte par le middleware sur le sous-domaine bo.
@@ -87,18 +89,22 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   );
 
   return (
-    <AppShell
-      user={{ id: user.id, fullName: user.fullName, role: user.role, email: user.email }}
-      hiddenPaths={ui.hidden_sidebar_paths ?? []}
-      autoLogoutMode={ui.auto_logout_mode}
-      autoLogoutMinutes={ui.auto_logout_minutes}
-      headerTabs={ui.header_tabs ?? []}
-      subscription={subscription}
-      permissions={Array.from(effectivePerms)}
-      backOffice={backOffice}
-    >
-      {children}
-    </AppShell>
+    <>
+      <SupportBanner />
+      <SupportConsentGate role={user.role} />
+      <AppShell
+        user={{ id: user.id, fullName: user.fullName, role: user.role, email: user.email }}
+        hiddenPaths={ui.hidden_sidebar_paths ?? []}
+        autoLogoutMode={ui.auto_logout_mode}
+        autoLogoutMinutes={ui.auto_logout_minutes}
+        headerTabs={ui.header_tabs ?? []}
+        subscription={subscription}
+        permissions={Array.from(effectivePerms)}
+        backOffice={backOffice}
+      >
+        {children}
+      </AppShell>
+    </>
   );
 }
 
