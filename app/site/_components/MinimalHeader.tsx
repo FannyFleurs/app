@@ -41,7 +41,17 @@ export default async function MinimalHeader({ onDark = false }: { onDark?: boole
         )}
       </span>
 
-      <LoginMenu caisse={urls.caisse} bo={urls.bo} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+        <a
+          href="/setup"
+          className="hp-btn hp-btn--gold hp-btn--sm"
+          data-track="essai_hellopos"
+          data-track-props='{"emplacement":"attente"}'
+        >
+          Créer ma caisse
+        </a>
+        <LoginMenu caisse={urls.caisse} bo={urls.bo} />
+      </div>
     </div>
   );
 }
