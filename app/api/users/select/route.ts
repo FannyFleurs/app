@@ -35,26 +35,19 @@ export async function GET(req: Request) {
   // Sur un déploiement multi-tenant (plusieurs organisations), on garde
   // l'exigence du tenant pour préserver l'isolation.
   if (!tenantId) {
+    // Repli UNIQUEMENT si le déploiement ne contient qu'UNE SEULE organisation
+    // (client dédié) : on peut alors proposer ses utilisateurs sans exiger
+    // d'abord une connexion email.
+    //
+    // En multi-organisations (SaaS mutualisé), on NE DEVINE JAMAIS
+    // l'organisation : un nouvel appareil sans session ni cookie tenant doit
+    // d'abord s'authentifier par email (ce qui fixe le tenant). Sinon on
+    // divulguerait les comptes (noms, rôles) d'une autre organisation et on
+    // exposerait leur écran de PIN. On renvoie donc `tenant_required`.
     try {
       const orgs = await query<{ id: string }>(`SELECT id FROM organizations LIMIT 2`);
       if (orgs.rowCount === 1) {
         tenantId = orgs.rows[0]!.id;
-      } else if (orgs.rowCount > 1) {
-        // Déploiement dédié avec une organisation résiduelle (ex. org de
-        // démo) : on retient l'organisation PRINCIPALE (le plus de boutiques,
-        // puis d'utilisateurs). L'authentification reste par utilisateur + PIN,
-        // donc c'est sans risque ; ça permet de se connecter directement sur
-        // pda./ca. sans passer d'abord par la caisse.
-        const main = await query<{ id: string }>(
-          `SELECT o.id
-             FROM organizations o
-             LEFT JOIN stores s ON s.organization_id = o.id AND s.is_active = TRUE
-             LEFT JOIN users  u ON u.organization_id = o.id AND u.is_active = TRUE
-            GROUP BY o.id
-            ORDER BY COUNT(DISTINCT s.id) DESC, COUNT(DISTINCT u.id) DESC
-            LIMIT 1`,
-        );
-        tenantId = main.rows[0]?.id ?? null;
       }
     } catch { /* ignore */ }
   }
