@@ -27,23 +27,43 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(req: Request) {
   const session = await readSessionFromCookie();
+  const url = new URL(req.url);
+  const deviceId = url.searchParams.get('device_id');
+
   let tenantId = session?.organizationId ?? readTenantCookie();
-  // Repli mono-organisation : sur un déploiement à une seule organisation
-  // (cas courant d'un client), on n'exige pas de cookie tenant préalable.
-  // Indispensable pour se connecter directement sur des sous-domaines
-  // secondaires (pda., ca.…) sans passer d'abord par la caisse.
-  // Sur un déploiement multi-tenant (plusieurs organisations), on garde
-  // l'exigence du tenant pour préserver l'isolation.
+
+  // Poste APPAIRÉ : l'organisation est celle de la caisse (ou station
+  // d'étiquettes) liée à ce device. C'est une résolution LÉGITIME — l'appareil
+  // EST physiquement la caisse de cette boutique — et non une devinette : on
+  // peut donc proposer les utilisateurs de cette organisation même sans session
+  // ni cookie tenant (cas d'un poste déjà installé dont la session a expiré).
+  if (!tenantId && deviceId) {
+    try {
+      const reg = await query<{ organization_id: string }>(
+        `SELECT organization_id FROM registers
+          WHERE device_id = $1 AND is_active = TRUE LIMIT 1`,
+        [deviceId],
+      );
+      tenantId = reg.rows[0]?.organization_id ?? null;
+    } catch { /* migration device_id absente */ }
+    if (!tenantId) {
+      try {
+        const ls = await query<{ organization_id: string }>(
+          `SELECT organization_id FROM label_stations WHERE device_id = $1 LIMIT 1`,
+          [deviceId],
+        );
+        tenantId = ls.rows[0]?.organization_id ?? null;
+      } catch { /* table 0051 absente */ }
+    }
+  }
+
+  // Repli mono-organisation : sur un déploiement à UNE SEULE organisation
+  // (client dédié), on n'exige pas de connexion email préalable. En
+  // multi-organisations (SaaS mutualisé), un appareil NON appairé, sans session
+  // ni cookie tenant, doit d'abord s'authentifier par email (ce qui fixe le
+  // tenant) : on renvoie `tenant_required`. Sinon on exposerait les comptes
+  // (noms, rôles) et l'écran de PIN d'une AUTRE organisation.
   if (!tenantId) {
-    // Repli UNIQUEMENT si le déploiement ne contient qu'UNE SEULE organisation
-    // (client dédié) : on peut alors proposer ses utilisateurs sans exiger
-    // d'abord une connexion email.
-    //
-    // En multi-organisations (SaaS mutualisé), on NE DEVINE JAMAIS
-    // l'organisation : un nouvel appareil sans session ni cookie tenant doit
-    // d'abord s'authentifier par email (ce qui fixe le tenant). Sinon on
-    // divulguerait les comptes (noms, rôles) d'une autre organisation et on
-    // exposerait leur écran de PIN. On renvoie donc `tenant_required`.
     try {
       const orgs = await query<{ id: string }>(`SELECT id FROM organizations LIMIT 2`);
       if (orgs.rowCount === 1) {
@@ -56,8 +76,6 @@ export async function GET(req: Request) {
   }
 
   // Résout la boutique du poste à partir du device_id (caisse liée).
-  const url = new URL(req.url);
-  const deviceId = url.searchParams.get('device_id');
   let storeId: string | null = null;
   // Sur la station d'étiquettes (PDA), l'appareil n'est pas une caisse mais une
   // label_station : on résout aussi la boutique via ce rattachement pour
