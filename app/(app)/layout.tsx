@@ -91,7 +91,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <>
       <SupportBanner />
-      <SupportConsentGate role={user.role} />
+      {/* Le consentement de dépannage se décide au back-office (owner/manager),
+          jamais sur une caisse de vente — important en multi-boutique. */}
+      {backOffice && <SupportConsentGate role={user.role} />}
       <AppShell
         user={{ id: user.id, fullName: user.fullName, role: user.role, email: user.email }}
         hiddenPaths={ui.hidden_sidebar_paths ?? []}

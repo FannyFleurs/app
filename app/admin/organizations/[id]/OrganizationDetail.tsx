@@ -258,7 +258,7 @@ function SupportAccessPanel({ id }: { id: string }) {
 
       {status === 'pending' && (
         <div className="rounded-xl bg-warning/10 px-4 py-3 text-sm text-warning">
-          En attente de l&apos;autorisation de la boutique… Le popup s&apos;affiche sur sa caisse / son back-office.
+          En attente de l&apos;autorisation de la boutique… Le popup s&apos;affiche dans son back-office (owner/manager).
         </div>
       )}
 
