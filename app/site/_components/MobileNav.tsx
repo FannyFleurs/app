@@ -111,7 +111,7 @@ export default function MobileNav({ nav, brand }: { nav: NavItem[]; brand: strin
 
           <div style={{ marginTop: '2rem', display: 'grid', gap: '0.75rem' }}>
             <a className="hp-btn hp-btn--primary hp-btn--block" href="/setup" data-track="essai_hellopos">
-              Essayer HelloPos
+              Créer ma caisse
             </a>
             <Link className="hp-btn hp-btn--ghost hp-btn--block" href="/contact" data-track="reserver_demo">
               Voir la démo

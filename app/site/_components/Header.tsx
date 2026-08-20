@@ -38,7 +38,7 @@ export default function Header({ brand, logoUrl }: { brand: string; logoUrl?: st
             Connexion
           </Link>
           <a href="/setup" className="hp-btn hp-btn--primary hp-btn--sm" data-track="essai_hellopos" data-track-props='{"emplacement":"en-tete"}'>
-            Essayer HelloPos
+            Créer ma caisse
           </a>
           <MobileNav nav={NAV} brand={brand} />
         </div>

@@ -41,6 +41,7 @@ const PLANS = [
 ];
 
 const STEPS = [
+  { key: 'email',    label: 'Email' },
   { key: 'company',  label: 'Société' },
   { key: 'store',    label: 'Boutique' },
   { key: 'register', label: 'Caisse' },
@@ -49,6 +50,8 @@ const STEPS = [
   { key: 'recap',    label: 'Récapitulatif' },
   { key: 'payment',  label: 'Paiement' },
 ] as const;
+
+const EMAIL_RE = /^[^@]+@[^@]+\.[^@]+$/;
 
 const DEFAULT_TAXES: TaxRow[] = [
   { code: 'TVA20', label: 'TVA 20% (taux normal)',     rate: 20,  is_default: false },
@@ -59,7 +62,7 @@ const DEFAULT_TAXES: TaxRow[] = [
 export default function SetupWizard() {
   const router = useRouter();
   const brand = useBrand();
-  const [step, setStep] = useState<typeof STEPS[number]['key']>('company');
+  const [step, setStep] = useState<typeof STEPS[number]['key']>('email');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<{ email: string } | null>(null);
@@ -112,6 +115,7 @@ export default function SetupWizard() {
 
   function canAdvance(): boolean {
     switch (step) {
+      case 'email':    return EMAIL_RE.test(f.admin_email.trim());
       case 'company':  return f.company_name.trim().length > 0 && f.company_legal.trim().length > 0;
       case 'store':    return f.store_code.trim().length > 0 && f.store_name.trim().length > 0;
       case 'register': return f.register_code.trim().length > 0 && f.register_name.trim().length > 0;
@@ -244,6 +248,27 @@ export default function SetupWizard() {
         </ol>
 
         <div className="card p-6">
+          {step === 'email' && (
+            <div className="space-y-4">
+              <SectionHeader
+                title="Votre adresse email"
+                subtitle="Elle servira d'identifiant pour administrer votre caisse."
+              />
+              <Field label="Adresse email *">
+                <input
+                  type="email"
+                  className="input"
+                  value={f.admin_email}
+                  onChange={(e) => patch('admin_email', e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && canAdvance()) next(); }}
+                  placeholder="vous@votreboutique.fr"
+                  autoComplete="email"
+                  autoFocus
+                />
+              </Field>
+            </div>
+          )}
+
           {step === 'company' && (
             <div className="space-y-4">
               <SectionHeader title="Société" subtitle="Renseignez les informations légales et de contact." />
@@ -372,9 +397,10 @@ export default function SetupWizard() {
                   <input className="input" value={f.admin_name}
                          onChange={(e) => patch('admin_name', e.target.value)} />
                 </Field>
-                <Field label="Email *">
-                  <input type="email" className="input" value={f.admin_email}
-                         onChange={(e) => patch('admin_email', e.target.value)} />
+                <Field label="Email">
+                  <input type="email" className="input bg-gray-50 text-ink-soft" value={f.admin_email}
+                         readOnly />
+                  <p className="mt-1 text-xs text-ink-soft">Saisi à la première étape.</p>
                 </Field>
                 <Field label="Mot de passe (8 caractères min.) *">
                   <input
