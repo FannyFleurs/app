@@ -1,6 +1,5 @@
 import './globals.css';
 import type { Metadata, Viewport } from 'next';
-import InstallPrompt from '@/components/InstallPrompt';
 import FaviconSetter from '@/components/FaviconSetter';
 import ServiceWorkerRegister from '@/components/ServiceWorkerRegister';
 import DialogHost from '@/lib/ui/dialog';
@@ -68,7 +67,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <FaviconSetter />
         <ServiceWorkerRegister />
         {children}
-        <InstallPrompt />
         <DialogHost />
       </body>
     </html>
