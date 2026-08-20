@@ -8,6 +8,7 @@ import { enqueueSale } from '@/lib/offline/queue';
 import { offlinePosEnabled } from '@/lib/offline/sync';
 import RegisterPicker from './RegisterPicker';
 import { type PickedCustomer } from './CustomerPickerModal';
+import { type OnboardingStatus } from './WelcomeOnboarding';
 import dynamic from 'next/dynamic';
 import Icon from '@/components/Icon';
 import CategoryIcon, { categoryIconDef } from '@/lib/category-icons';
@@ -22,6 +23,7 @@ const PaymentModal = dynamic(() => import('./PaymentModal'), { ssr: false });
 const ReceiptPreviewModal = dynamic(() => import('./ReceiptPreviewModal'), { ssr: false });
 const HoldListModal = dynamic(() => import('./HoldListModal'), { ssr: false });
 const OpenSessionModal = dynamic(() => import('./OpenSessionModal'), { ssr: false });
+const WelcomeOnboarding = dynamic(() => import('./WelcomeOnboarding'), { ssr: false });
 const FreePriceModal = dynamic(() => import('./FreePriceModal'), { ssr: false });
 const CustomerPickerModal = dynamic(() => import('./CustomerPickerModal'), { ssr: false });
 const LineDiscountModal = dynamic(() => import('./LineDiscountModal'), { ssr: false });
@@ -191,6 +193,8 @@ export default function CashRegister({
   const [sessionLoading, setSessionLoading] = useState(!initial);
   const sessionKnownRef = useRef<boolean>(!!initial);
   const [showOpenSession, setShowOpenSession] = useState(false);
+  // Accueil première connexion : statut des premières étapes (null = pas encore su).
+  const [onboarding, setOnboarding] = useState<OnboardingStatus | null>(null);
 
   const [products, setProducts] = useState<PosProduct[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -392,17 +396,41 @@ export default function CashRegister({
     return () => document.removeEventListener('visibilitychange', onVisible);
   }, [refreshSession]);
 
+  // Statut d'accueil : chargé uniquement quand il n'y a pas de session (nouvelle
+  // caisse ou journée fermée). En cas d'échec ou hors première fois, on retombe
+  // sur le comportement normal (ouverture directe de la modale fond de caisse).
+  useEffect(() => {
+    if (schoolMode) { setOnboarding({ has_category: true, has_product: true, has_customer: true, has_sale: true, first_time: false }); return; }
+    if (sessionLoading || sessionId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const r = await fetch('/api/onboarding/status');
+        const s: OnboardingStatus = r.ok
+          ? await r.json()
+          : { has_category: false, has_product: false, has_customer: false, has_sale: false, first_time: false };
+        if (!cancelled) setOnboarding(s);
+      } catch {
+        if (!cancelled) setOnboarding({ has_category: false, has_product: false, has_customer: false, has_sale: false, first_time: false });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [sessionLoading, sessionId, schoolMode]);
+
   // Arrivée sans session ouverte : on déclenche automatiquement la modale
   // "Ouvrir la caisse". Réarmé dès qu'une session redevient active, pour
-  // se redéclencher après une clôture de journée.
+  // se redéclencher après une clôture de journée. Exception : à la toute
+  // première connexion (aucune vente), on affiche d'abord l'écran d'accueil.
   const autoPromptOnceRef = useRef(false);
   useEffect(() => {
     if (sessionLoading) return;
     if (sessionId) { autoPromptOnceRef.current = false; return; }
+    if (onboarding === null) return;      // on attend le statut d'accueil
+    if (onboarding.first_time) return;    // accueil affiché à la place
     if (autoPromptOnceRef.current) return;
     autoPromptOnceRef.current = true;
     setShowOpenSession(true);
-  }, [sessionLoading, sessionId]);
+  }, [sessionLoading, sessionId, onboarding]);
 
   const refreshHeldCount = useCallback(async () => {
     if (!storeId) return;
@@ -1378,25 +1406,33 @@ export default function CashRegister({
     const currentRegister = registers.find((r) => r.id === registerId);
     return (
       <>
-        <div className="h-full grid place-items-center px-4">
-          <div className="card p-8 max-w-md w-full text-center">
-            <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl accent-bar text-white text-2xl">
-              ◆
+        {onboarding?.first_time ? (
+          <WelcomeOnboarding
+            status={onboarding}
+            storeName={currentStore?.name}
+            onOpenCaisse={() => setShowOpenSession(true)}
+          />
+        ) : (
+          <div className="h-full grid place-items-center px-4">
+            <div className="card p-8 max-w-md w-full text-center">
+              <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl accent-bar text-white text-2xl">
+                ◆
+              </div>
+              <h1 className="text-2xl font-semibold tracking-tight">Caisse fermée</h1>
+              <p className="mt-2 text-sm text-ink-soft">
+                {currentStore?.name ? `${currentStore.name}` : ''}
+                {currentRegister?.name ? ` · ${currentRegister.name}` : ''}
+                <br />Ouvrez la caisse pour commencer la journée.
+              </p>
+              <button
+                className="btn-primary mt-6 w-full h-12 text-base"
+                onClick={() => setShowOpenSession(true)}
+              >
+                Ouvrir la caisse
+              </button>
             </div>
-            <h1 className="text-2xl font-semibold tracking-tight">Caisse fermée</h1>
-            <p className="mt-2 text-sm text-ink-soft">
-              {currentStore?.name ? `${currentStore.name}` : ''}
-              {currentRegister?.name ? ` · ${currentRegister.name}` : ''}
-              <br />Ouvrez la caisse pour commencer la journée.
-            </p>
-            <button
-              className="btn-primary mt-6 w-full h-12 text-base"
-              onClick={() => setShowOpenSession(true)}
-            >
-              Ouvrir la caisse
-            </button>
           </div>
-        </div>
+        )}
         {showOpenSession && (
           <OpenSessionModal
             storeId={storeId}
