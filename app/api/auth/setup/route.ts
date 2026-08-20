@@ -6,7 +6,6 @@ import { hashPassword } from '@/lib/auth/password';
 import { createSession, sessionCookieOptions } from '@/lib/auth/session';
 import { setTenantCookie } from '@/lib/auth/tenant';
 import { jsonError } from '@/lib/validation/api';
-import { isSitePublic } from '@/lib/site/publication';
 import { parseJson } from '@/lib/validation/api';
 import {
   getPlatformConfig, billingConfigured, priceForPlan, subscriptionPlan,
@@ -71,14 +70,9 @@ function slugify(s: string): string {
 }
 
 export async function POST(req: Request) {
-  // La création d'espace en libre-service suit la publication du site public :
-  // fermée dans l'interface, elle doit l'être aussi côté serveur.
-  if (!(await isSitePublic())) {
-    return jsonError('SITE_UNAVAILABLE', 403, {
-      message: 'La création de compte en ligne est momentanément fermée.',
-    });
-  }
-
+  // Création d'espace en libre-service : ouverte indépendamment de la
+  // publication du site vitrine (le bouton « Créer ma caisse » de l'écran
+  // d'attente y renvoie).
   const parsed = await parseJson(req, schema);
   if ('response' in parsed) return parsed.response;
   const d = parsed.data;

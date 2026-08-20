@@ -1,5 +1,3 @@
-import { redirect } from 'next/navigation';
-import { isSitePublic } from '@/lib/site/publication';
 import SetupWizard from './SetupWizard';
 
 export const dynamic = 'force-dynamic';
@@ -7,11 +5,10 @@ export const dynamic = 'force-dynamic';
 /**
  * Création d'un espace en libre-service.
  *
- * Elle suit la publication du site public : tant que le site n'est pas
- * activé (Configuration → Site public), l'assistant est fermé et le visiteur
- * est renvoyé sur l'écran d'attente.
+ * Ouvert indépendamment de la publication du site vitrine : la création de
+ * caisse doit rester possible même quand le site public est encore en écran
+ * d'attente (le bouton « Créer ma caisse » y renvoie).
  */
-export default async function SetupPage() {
-  if (!(await isSitePublic())) redirect('/');
+export default function SetupPage() {
   return <SetupWizard />;
 }
