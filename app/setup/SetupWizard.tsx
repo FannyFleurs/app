@@ -226,26 +226,49 @@ export default function SetupWizard() {
         </header>
 
         {/* Stepper */}
-        <ol className="mb-6 flex flex-wrap gap-x-4 gap-y-2">
-          {STEPS.map((s, i) => {
-            const idx = STEPS.findIndex((x) => x.key === step);
-            const active = s.key === step;
-            const done = i < idx;
-            return (
-              <li key={s.key} className="flex items-center gap-2 text-xs">
-                <span className={`h-7 w-7 shrink-0 rounded-full grid place-items-center text-[11px] font-semibold ${
-                  active ? 'text-white' : done ? 'bg-success/15 text-success' : 'bg-gray-100 text-ink-soft'
-                }`}
-                  style={active ? { backgroundColor: 'var(--primary)' } : undefined}>
-                  {done ? '✓' : i + 1}
-                </span>
-                <span className={`whitespace-nowrap ${active ? 'text-ink font-medium' : 'text-ink-soft'}`}>
-                  {s.label}
-                </span>
-              </li>
-            );
-          })}
-        </ol>
+        {(() => {
+          const idx = STEPS.findIndex((x) => x.key === step);
+          const current = STEPS[idx];
+          const pct = Math.round(((idx + 1) / STEPS.length) * 100);
+          return (
+            <div className="mb-6">
+              {/* Mobile : compact, une seule ligne + barre de progression. */}
+              <div className="sm:hidden">
+                <div className="text-sm font-medium text-ink">
+                  Étape {idx + 1} sur {STEPS.length}
+                  <span className="text-ink-soft"> — {current?.label}</span>
+                </div>
+                <div className="mt-2 h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all"
+                    style={{ width: `${pct}%`, backgroundColor: 'var(--primary)' }}
+                  />
+                </div>
+              </div>
+
+              {/* Desktop : stepper complet (les 8 étapes tiennent en largeur). */}
+              <ol className="hidden sm:flex flex-wrap gap-x-4 gap-y-2">
+                {STEPS.map((s, i) => {
+                  const active = s.key === step;
+                  const done = i < idx;
+                  return (
+                    <li key={s.key} className="flex items-center gap-2 text-xs">
+                      <span className={`h-7 w-7 shrink-0 rounded-full grid place-items-center text-[11px] font-semibold ${
+                        active ? 'text-white' : done ? 'bg-success/15 text-success' : 'bg-gray-100 text-ink-soft'
+                      }`}
+                        style={active ? { backgroundColor: 'var(--primary)' } : undefined}>
+                        {done ? '✓' : i + 1}
+                      </span>
+                      <span className={`whitespace-nowrap ${active ? 'text-ink font-medium' : 'text-ink-soft'}`}>
+                        {s.label}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ol>
+            </div>
+          );
+        })()}
 
         <div className="card p-6">
           {step === 'email' && (
