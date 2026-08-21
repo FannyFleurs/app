@@ -30,10 +30,10 @@ export async function POST(req: Request) {
   const hasStoreIds = await productColumnExists('store_ids');
 
   const id = await withTransaction(async (client) => {
-    const cols = ['organization_id', 'name', 'category_id', 'tax_rate_id', 'sale_price_ttc',
+    const cols = ['organization_id', 'name', 'tax_rate_id', 'sale_price_ttc',
       'track_stock', 'is_pack', 'pack_discount_ttc', 'visible_in_pos', 'is_active'];
     const vals: unknown[] = [
-      g.user.organizationId, p.name, p.category_id ?? null, taxRateId, price,
+      g.user.organizationId, p.name, taxRateId, price,
       false, true, p.discount_ttc, p.visible_in_pos, p.is_active,
     ];
     if (hasStoreIds) {

@@ -5,7 +5,6 @@ import { MAX_PACK_ITEMS } from './pack';
 
 export const packSchema = z.object({
   name: z.string().min(1).max(200),
-  category_id: z.string().uuid().nullable().optional(),
   visible_in_pos: z.boolean().default(true),
   is_active: z.boolean().default(true),
   discount_ttc: z.number().min(0).default(0),
