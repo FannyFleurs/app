@@ -23,7 +23,7 @@ export default async function SupportPage() {
   const backOffice = headers().get('x-webpos-bo') === '1';
 
   return (
-    <div className="p-6 md:p-8 space-y-5 max-w-3xl">
+    <div className="p-6 md:p-8 space-y-5">
       <PageHeader
         title="Assistance"
         subtitle="Un problème, une idée d'amélioration : écrivez-nous d'ici. Nous répondons dans cette page, et sur l'écran d'où part la demande."
