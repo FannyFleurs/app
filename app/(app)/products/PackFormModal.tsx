@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { formatEUR, round2 } from '@/lib/services/money';
 import { MAX_PACK_ITEMS } from '@/lib/products/pack';
 
-interface Category { id: string; name: string }
 interface PackItem { product_id: string; name: string; price: number; quantity: number }
 
 interface SearchResult { id: string; name: string; sale_price_ttc: number; is_pack: boolean }
@@ -16,16 +15,14 @@ interface SearchResult { id: string; name: string; sale_price_ttc: number; is_pa
  * composants (décomptés chacun de leur stock).
  */
 export default function PackFormModal({
-  packId, categories, onClose, onSaved, inline = false,
+  packId, onClose, onSaved, inline = false,
 }: {
   packId?: string | null;
-  categories: Category[];
   onClose: () => void;
   onSaved: (id: string) => void;
   inline?: boolean;
 }) {
   const [name, setName] = useState('');
-  const [categoryId, setCategoryId] = useState('');
   const [visibleInPos, setVisibleInPos] = useState(true);
   const [isActive, setIsActive] = useState(true);
   const [items, setItems] = useState<PackItem[]>([]);
@@ -49,7 +46,6 @@ export default function PackFormModal({
         if (r.ok) {
           const { pack } = await r.json();
           setName(pack.name ?? '');
-          setCategoryId(pack.category_id ?? '');
           setVisibleInPos(!!pack.visible_in_pos);
           setIsActive(!!pack.is_active);
           setDiscount(pack.pack_discount_ttc ? String(pack.pack_discount_ttc) : '');
@@ -106,7 +102,6 @@ export default function PackFormModal({
     setSaving(true);
     const body = {
       name: name.trim(),
-      category_id: categoryId || null,
       visible_in_pos: visibleInPos,
       is_active: isActive,
       discount_ttc: discountNum,
@@ -144,23 +139,10 @@ export default function PackFormModal({
           <div className="p-8 text-sm text-ink-soft">Chargement…</div>
         ) : (
           <div className={inline ? 'p-5 space-y-4' : 'flex-1 overflow-y-auto p-5 space-y-4'}>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <label className="block text-sm sm:col-span-2">
-                <span className="text-ink-soft">Nom du pack *</span>
-                <input className="input mt-1" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex : Coffret cadeau naissance" />
-              </label>
-              <label className="block text-sm sm:col-span-2">
-                <span className="text-ink-soft">Catégorie</span>
-                <select className="input mt-1" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-                  <option value="">— Aucune —</option>
-                  {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-              </label>
-            </div>
-            <p className="text-xs text-ink-soft">
-              La TVA n'est pas définie sur le pack : à la vente, chaque produit du pack
-              conserve sa propre TVA.
-            </p>
+            <label className="block text-sm">
+              <span className="text-ink-soft">Nom du pack *</span>
+              <input className="input mt-1" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex : Coffret cadeau naissance" />
+            </label>
 
             {/* Composition */}
             <div className="rounded-xl border border-border p-3">

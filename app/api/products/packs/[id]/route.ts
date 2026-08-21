@@ -76,11 +76,11 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
   await withTransaction(async (client) => {
     const sets = [
-      'name = $2', 'category_id = $3', 'sale_price_ttc = $4',
-      'pack_discount_ttc = $5', 'visible_in_pos = $6', 'is_active = $7', 'updated_at = now()',
+      'name = $2', 'sale_price_ttc = $3',
+      'pack_discount_ttc = $4', 'visible_in_pos = $5', 'is_active = $6', 'updated_at = now()',
     ];
     const vals: unknown[] = [
-      params.id, p.name, p.category_id ?? null, price,
+      params.id, p.name, price,
       p.discount_ttc, p.visible_in_pos, p.is_active,
     ];
     if (hasStoreIds && p.store_ids !== undefined) {
