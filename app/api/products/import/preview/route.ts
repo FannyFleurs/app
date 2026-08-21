@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db/client';
 import { requirePermission } from '@/lib/auth/guards';
+import { parseProductImport } from '@/lib/products/import-parse';
 
 export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
 
 interface ParsedRow {
   line: number;
@@ -30,15 +32,17 @@ export async function POST(req: Request) {
   const g = await requirePermission('products.write');
   if ('response' in g) return g.response;
 
+  // Fichier reçu en binaire : Excel (.xlsx) OU CSV. Le format est détecté par
+  // parseProductImport (les .xlsx commencent par « PK »). Compat JSON legacy.
   const ct = req.headers.get('content-type') || '';
-  let csv: string;
+  let buf: Buffer;
   if (ct.includes('application/json')) {
     const body = await req.json();
-    csv = String(body.csv ?? '');
+    buf = Buffer.from(String(body.csv ?? ''), 'utf8');
   } else {
-    csv = await req.text();
+    buf = Buffer.from(await req.arrayBuffer());
   }
-  if (!csv.trim()) {
+  if (buf.length === 0) {
     return NextResponse.json({ rows: [], errors: 0, total: 0 });
   }
 
@@ -68,7 +72,7 @@ export async function POST(req: Request) {
   const barcodesInDb = new Set(existingBarcodes.rows.map((r) => r.barcode));
   const skusInDb = new Set(existingSkus.rows.map((r) => r.sku));
 
-  const rows = parseCsv(csv);
+  const rows = await parseProductImport(buf);
   // Garde-fou mémoire : plafond large par import (catalogues volumineux).
   const MAX_IMPORT = 20000;
   const truncated = rows.length > MAX_IMPORT;
@@ -153,89 +157,4 @@ export async function POST(req: Request) {
     total: validated.length,
     truncated,
   });
-}
-
-/**
- * Parse un CSV simple (séparateur , ou ;). Gère les guillemets pour
- * les valeurs contenant des virgules. Retourne un tableau d'objets
- * partiels à valider ensuite.
- */
-function parseCsv(csv: string): Array<{
-  name: string;
-  sku: string | null;
-  barcode: string | null;
-  category: string | null;
-  sale_price_ttc: number | null;
-  purchase_price_ht: number | null;
-  tax_rate_code: string;
-  color: string | null;
-  is_top_product: boolean;
-  visible_in_pos: boolean;
-  is_active: boolean;
-}> {
-  const raw = csv.replace(/^﻿/, '').trim();
-  const lines = raw.split(/\r?\n/);
-  if (lines.length < 2) return [];
-
-  // Détecte séparateur (, ou ;)
-  const headerLine = lines[0]!;
-  const sep = headerLine.includes(';') && !headerLine.includes(',') ? ';' : ',';
-
-  function splitRow(line: string): string[] {
-    const out: string[] = [];
-    let cur = '';
-    let inQuotes = false;
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i]!;
-      if (ch === '"') {
-        if (inQuotes && line[i + 1] === '"') {
-          cur += '"'; i++;
-        } else {
-          inQuotes = !inQuotes;
-        }
-      } else if (ch === sep && !inQuotes) {
-        out.push(cur.trim());
-        cur = '';
-      } else {
-        cur += ch;
-      }
-    }
-    out.push(cur.trim());
-    return out;
-  }
-
-  const headers = splitRow(headerLine).map((h) => h.toLowerCase().trim());
-  const idx = (name: string) => headers.indexOf(name);
-
-  const out = [];
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i]!;
-    if (!line.trim()) continue;
-    const cols = splitRow(line);
-    const get = (col: string) => {
-      const j = idx(col);
-      return j === -1 ? '' : (cols[j] ?? '').trim();
-    };
-    const toBool = (s: string) => /^(true|1|oui|yes|y|x)$/i.test(s);
-    const toNum = (s: string): number | null => {
-      if (!s) return null;
-      const v = Number(s.replace(',', '.'));
-      return Number.isFinite(v) ? v : NaN;
-    };
-
-    out.push({
-      name: get('name') || get('nom'),
-      sku: get('sku') || null,
-      barcode: get('barcode') || get('code_barres') || null,
-      category: get('category') || get('categorie') || null,
-      sale_price_ttc: toNum(get('sale_price_ttc') || get('prix_vente_ttc')),
-      purchase_price_ht: toNum(get('purchase_price_ht') || get('prix_achat_ht')),
-      tax_rate_code: get('tax_rate_code') || get('tva') || 'TVA20',
-      color: get('color') || null,
-      is_top_product: get('is_top_product') ? toBool(get('is_top_product')) : false,
-      visible_in_pos: get('visible_in_pos') ? toBool(get('visible_in_pos')) : true,
-      is_active: get('is_active') ? toBool(get('is_active')) : true,
-    });
-  }
-  return out;
 }
