@@ -261,6 +261,7 @@ export async function GET(req: Request) {
             p.sale_price_ttc, p.purchase_price_ht, p.price_is_free,
             p.track_stock,
             p.category_id, p.visible_in_pos, p.is_active,
+            COALESCE(p.is_pack, FALSE) AS is_pack,
             ${topCol},
             ${ndCol},
             ${colorCol},

@@ -49,6 +49,8 @@ export interface PosProduct {
   short_description: string | null;
   is_customizable: boolean;
   is_top_product: boolean;
+  /** Pack d'articles : à la vente, éclate en ses composants (chacun décompté du stock). */
+  is_pack?: boolean;
   /** Si true, AUCUNE remise (client ou globale) n'est appliquée. Cartes cadeaux. */
   no_discount?: boolean;
   /** Remise propre à l'article (fiche produit) — appliquée au scan/à l'ajout. */
@@ -673,7 +675,44 @@ export default function CashRegister({
     return { ttc, ht, tva, discount, breakdown: Array.from(byRate.entries()).sort((a,b)=>b[0]-a[0]) };
   }, [lines]);
 
+  // Vente d'un PACK : on l'éclate en lignes composant (chacune avec son prix et
+  // sa TVA). La remise du pack est répartie au prorata sur les composants — la
+  // somme des lignes vaut donc le prix du pack. Chaque composant portant son
+  // product_id, la décrémentation de stock à la validation le prend en charge.
+  const addPack = useCallback(async (pack: PosProduct) => {
+    void ensureSale();
+    try {
+      const r = await fetch(`/api/products/packs/${pack.id}`);
+      if (!r.ok) { setError('Pack indisponible.'); return; }
+      const { pack: data } = await r.json();
+      const comps: Array<{ product_id: string; quantity: number; name: string; sale_price_ttc: number }> = data.items ?? [];
+      if (comps.length === 0) { setError('Pack vide.'); return; }
+      const weights = comps.map((c) => round2(c.sale_price_ttc * c.quantity));
+      const discount = Math.max(0, Number(data.pack_discount_ttc) || 0);
+      const parts = distributeProrata(round2(discount), weights);
+      const catalog = productsRef.current;
+      const newLines: CartLine[] = comps.map((c, i) => {
+        const cp = catalog.find((x) => x.id === c.product_id);
+        return {
+          key: cryptoKey(),
+          product_id: c.product_id, variant_id: null,
+          label: c.name,
+          unit_price_ttc: c.sale_price_ttc,
+          quantity: c.quantity,
+          discount_amount: parts[i] ?? 0,
+          tax_rate: cp?.tax_rate ?? pack.tax_rate,
+          tax_rate_code: cp?.tax_rate_code ?? pack.tax_rate_code,
+          metadata: { pack_id: pack.id, pack_label: pack.name },
+        };
+      });
+      setLines((cur) => [...cur, ...newLines]);
+    } catch {
+      setError('Pack indisponible (réseau).');
+    }
+  }, [ensureSale]);
+
   const addProduct = useCallback((p: PosProduct) => {
+    if (p.is_pack) { void addPack(p); return; }
     void ensureSale();
     if (p.price_is_free) { setShowFreePrice({ label: p.name }); return; }
     // Remise systématique du client : appliquée automatiquement à chaque ajout
@@ -716,7 +755,7 @@ export default function CashRegister({
         },
       }];
     });
-  }, [ensureSale, customer]);
+  }, [ensureSale, customer, addPack]);
 
   // Référence stable vers addProduct : passée aux tuiles (mémoïsées) comme
   // onPick. Sans ça, l'identité de addProduct change à chaque vente (saleId /
