@@ -6,7 +6,6 @@ import { MAX_PACK_ITEMS } from './pack';
 export const packSchema = z.object({
   name: z.string().min(1).max(200),
   category_id: z.string().uuid().nullable().optional(),
-  tax_rate_id: z.string().uuid(),
   visible_in_pos: z.boolean().default(true),
   is_active: z.boolean().default(true),
   discount_ttc: z.number().min(0).default(0),
@@ -18,6 +17,23 @@ export const packSchema = z.object({
 });
 
 export type PackInput = z.infer<typeof packSchema>;
+
+/**
+ * TVA d'un pack : un pack n'a pas de TVA propre, il éclate à la vente en ses
+ * composants (chacun avec SA TVA). La colonne products.tax_rate_id étant
+ * obligatoire, on y met le taux par défaut de l'organisation (à défaut, le
+ * premier taux actif). Renvoie null si l'organisation n'a aucun taux.
+ */
+export async function defaultTaxRateId(organizationId: string): Promise<string | null> {
+  const r = await query<{ id: string }>(
+    `SELECT id FROM tax_rates
+      WHERE organization_id = $1 AND is_active = TRUE
+      ORDER BY is_default DESC, rate DESC
+      LIMIT 1`,
+    [organizationId],
+  );
+  return r.rows[0]?.id ?? null;
+}
 
 export async function productColumnExists(col: string): Promise<boolean> {
   const r = await query<{ e: boolean }>(

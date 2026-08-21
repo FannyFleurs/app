@@ -66,9 +66,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   if ('response' in parsed) return parsed.response;
   const p = parsed.data;
 
-  const tax = await query(`SELECT 1 FROM tax_rates WHERE id = $1 AND organization_id = $2`, [p.tax_rate_id, g.user.organizationId]);
-  if (tax.rowCount === 0) return jsonError('TAX_RATE_NOT_FOUND', 404);
-
+  // Pas de TVA propre au pack : on ne touche pas products.tax_rate_id ici.
   const comps = await loadPackComponents(g.user.organizationId, p.items);
   if (comps.some((c) => !c.found)) return jsonError('COMPONENT_NOT_FOUND', 404);
   if (comps.some((c) => c.is_pack || c.product_id === params.id)) return jsonError('PACK_IN_PACK', 400);
@@ -78,11 +76,11 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
   await withTransaction(async (client) => {
     const sets = [
-      'name = $2', 'category_id = $3', 'tax_rate_id = $4', 'sale_price_ttc = $5',
-      'pack_discount_ttc = $6', 'visible_in_pos = $7', 'is_active = $8', 'updated_at = now()',
+      'name = $2', 'category_id = $3', 'sale_price_ttc = $4',
+      'pack_discount_ttc = $5', 'visible_in_pos = $6', 'is_active = $7', 'updated_at = now()',
     ];
     const vals: unknown[] = [
-      params.id, p.name, p.category_id ?? null, p.tax_rate_id, price,
+      params.id, p.name, p.category_id ?? null, price,
       p.discount_ttc, p.visible_in_pos, p.is_active,
     ];
     if (hasStoreIds && p.store_ids !== undefined) {

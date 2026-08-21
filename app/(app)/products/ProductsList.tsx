@@ -462,7 +462,6 @@ export default function ProductsList({
               <PackFormModal
                 key={packEditing ?? 'new-pack'}
                 packId={packEditing}
-                taxRates={taxRates}
                 categories={categories}
                 inline
                 onClose={() => setPackEditing(undefined)}

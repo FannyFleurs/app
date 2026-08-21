@@ -4,7 +4,7 @@ import { requirePermission } from '@/lib/auth/guards';
 import { parseJson, jsonError } from '@/lib/validation/api';
 import { audit } from '@/lib/audit/log';
 import { computePackPrice } from '@/lib/products/pack';
-import { packSchema, productColumnExists, loadPackComponents } from '@/lib/products/pack-server';
+import { packSchema, productColumnExists, loadPackComponents, defaultTaxRateId } from '@/lib/products/pack-server';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -16,11 +16,11 @@ export async function POST(req: Request) {
   if ('response' in parsed) return parsed.response;
   const p = parsed.data;
 
-  const tax = await query(
-    `SELECT 1 FROM tax_rates WHERE id = $1 AND organization_id = $2`,
-    [p.tax_rate_id, g.user.organizationId],
-  );
-  if (tax.rowCount === 0) return jsonError('TAX_RATE_NOT_FOUND', 404);
+  // Un pack n'a pas de TVA propre (il éclate en composants à la vente). On
+  // renseigne quand même products.tax_rate_id (colonne obligatoire) avec le
+  // taux par défaut de l'organisation.
+  const taxRateId = await defaultTaxRateId(g.user.organizationId);
+  if (!taxRateId) return jsonError('TAX_RATE_NOT_FOUND', 404);
 
   const comps = await loadPackComponents(g.user.organizationId, p.items);
   if (comps.some((c) => !c.found)) return jsonError('COMPONENT_NOT_FOUND', 404);
@@ -33,7 +33,7 @@ export async function POST(req: Request) {
     const cols = ['organization_id', 'name', 'category_id', 'tax_rate_id', 'sale_price_ttc',
       'track_stock', 'is_pack', 'pack_discount_ttc', 'visible_in_pos', 'is_active'];
     const vals: unknown[] = [
-      g.user.organizationId, p.name, p.category_id ?? null, p.tax_rate_id, price,
+      g.user.organizationId, p.name, p.category_id ?? null, taxRateId, price,
       false, true, p.discount_ttc, p.visible_in_pos, p.is_active,
     ];
     if (hasStoreIds) {
