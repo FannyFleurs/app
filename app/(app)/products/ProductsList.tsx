@@ -6,6 +6,7 @@ import { getOrCreateDeviceId } from '@/lib/device';
 import { formatEUR } from '@/lib/services/money';
 import ProductFormModal from './ProductFormModal';
 import ProductImportModal from './ProductImportModal';
+import PackFormModal from './PackFormModal';
 import PageHeader from '@/components/PageHeader';
 import Badge from '@/components/Badge';
 import EmptyState from '@/components/EmptyState';
@@ -21,6 +22,7 @@ interface Product {
   visible_in_pos: boolean; is_active: boolean;
   is_seasonal: boolean; is_customizable: boolean;
   is_top_product?: boolean;
+  is_pack?: boolean;
   store_ids: string[];
   tags: string[];
 }
@@ -61,6 +63,8 @@ export default function ProductsList({
   const [loading, setLoading] = useState(true);
   // editing: undefined = rien affiché, null = nouveau produit, Product = édition.
   const [editing, setEditing] = useState<Product | null | undefined>(undefined);
+  // packEditing : undefined = fermé, null = nouveau pack, string = édition d'un pack.
+  const [packEditing, setPackEditing] = useState<string | null | undefined>(undefined);
   const [filterCat, setFilterCat] = useState<string>('all');
   const [filterStore, setFilterStore] = useState<string>('');
   const [showInactive, setShowInactive] = useState(false);
@@ -242,6 +246,7 @@ export default function ProductsList({
                   <a href="/products/liste" className="btn-soft">≣ Vue liste</a>
                 </>
               )}
+              <button className="btn-soft" onClick={() => setPackEditing(null)}>+ Nouveau Pack</button>
               <button className="btn-primary" onClick={() => setEditing(null)}>+ Nouveau produit</button>
             </div>
           ) : null}
@@ -385,7 +390,11 @@ export default function ProductsList({
                   return (
                     <li key={p.id}>
                       <button
-                        onClick={() => (selectMode ? toggleSelect(p.id) : canEdit && setEditing(p))}
+                        onClick={() => {
+                          if (selectMode) { toggleSelect(p.id); return; }
+                          if (!canEdit) return;
+                          if (p.is_pack) setPackEditing(p.id); else setEditing(p);
+                        }}
                         className={`w-full text-left px-4 md:px-3 py-2.5 transition-colors ${
                           selectMode && selectedIds.has(p.id) ? 'bg-accent-soft'
                           : activeId === p.id ? 'bg-accent-soft' : 'hover:bg-gray-50'
@@ -398,6 +407,9 @@ export default function ProductsList({
                             }`}>{selectedIds.has(p.id) ? '✓' : ''}</span>
                           )}
                           {p.is_top_product && <span className="text-warning" title="Top produit">★</span>}
+                          {p.is_pack && (
+                            <span className="shrink-0 rounded bg-accent-soft px-1.5 py-0.5 text-[10px] font-semibold text-accent-deep">PACK</span>
+                          )}
                           <span className="font-medium text-sm truncate flex-1">{p.name}</span>
                           <span className="text-sm font-medium tabular-nums whitespace-nowrap">
                             {p.price_is_free ? 'libre' : formatEUR(p.sale_price_ttc)}
@@ -488,6 +500,16 @@ export default function ProductsList({
           backOffice={backOffice}
           onClose={() => setShowImport(false)}
           onCompleted={() => { setShowImport(false); void reload(); }}
+        />
+      )}
+
+      {packEditing !== undefined && (
+        <PackFormModal
+          packId={packEditing}
+          taxRates={taxRates}
+          categories={categories}
+          onClose={() => setPackEditing(undefined)}
+          onSaved={() => { setPackEditing(undefined); void reload(); }}
         />
       )}
     </div>
