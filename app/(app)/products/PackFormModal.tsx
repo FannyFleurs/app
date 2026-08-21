@@ -17,13 +17,14 @@ interface SearchResult { id: string; name: string; sale_price_ttc: number; is_pa
  * composants (décomptés chacun de leur stock).
  */
 export default function PackFormModal({
-  packId, taxRates, categories, onClose, onSaved,
+  packId, taxRates, categories, onClose, onSaved, inline = false,
 }: {
   packId?: string | null;
   taxRates: TaxRate[];
   categories: Category[];
   onClose: () => void;
   onSaved: (id: string) => void;
+  inline?: boolean;
 }) {
   const defaultTax = taxRates.find((t) => t.is_default) ?? taxRates[0];
   const [name, setName] = useState('');
@@ -134,18 +135,22 @@ export default function PackFormModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-ink/30 backdrop-blur-sm p-2 md:p-4">
-      <div className="card w-full max-w-2xl max-h-[95vh] flex flex-col overflow-hidden">
+    <div className={inline
+      ? 'p-4 sm:p-6'
+      : 'fixed inset-0 z-50 grid place-items-center bg-ink/30 backdrop-blur-sm p-2 md:p-4'}>
+      <div className={inline
+        ? 'card w-full overflow-hidden'
+        : 'card w-full max-w-2xl max-h-[95vh] flex flex-col overflow-hidden'}>
         <div className="flex items-center justify-between px-5 py-3 border-b border-border shrink-0">
           <h2 className="text-lg font-semibold">{packId ? 'Modifier le pack' : 'Nouveau pack'}</h2>
-          <button onClick={onClose} aria-label="Fermer"
+          <button onClick={onClose} aria-label={inline ? 'Fermer la fiche' : 'Fermer'}
                   className="grid h-9 w-9 place-items-center rounded-full border border-border text-ink-soft hover:bg-gray-50">✕</button>
         </div>
 
         {loading ? (
           <div className="p-8 text-sm text-ink-soft">Chargement…</div>
         ) : (
-          <div className="flex-1 overflow-y-auto p-5 space-y-4">
+          <div className={inline ? 'p-5 space-y-4' : 'flex-1 overflow-y-auto p-5 space-y-4'}>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <label className="block text-sm sm:col-span-2">
                 <span className="text-ink-soft">Nom du pack *</span>
