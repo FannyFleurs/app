@@ -4,7 +4,7 @@ import { requirePermission } from '@/lib/auth/guards';
 import { parseJson, jsonError } from '@/lib/validation/api';
 import { audit } from '@/lib/audit/log';
 import { computePackPrice } from '@/lib/products/pack';
-import { packSchema, productColumnExists, loadPackComponents } from '../route';
+import { packSchema, productColumnExists, loadPackComponents } from '@/lib/products/pack-server';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
