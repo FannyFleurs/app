@@ -312,6 +312,9 @@ export default function CashRegister({
   }>({ gift_card_balance: 0, account_balance: 0, credit_notes_balance: 0 });
 
   const searchRef = useRef<HTMLInputElement>(null);
+  // Conteneur scrollable du catalogue : cible de la recomposition forcée iOS
+  // (voir nudgeRepaint plus bas).
+  const catalogScrollRef = useRef<HTMLDivElement>(null);
 
   // Écran & livraison : la valeur reçue du serveur est au niveau organisation
   // (le poste n'est pas encore lié côté serveur). On la réaffine par boutique
@@ -359,6 +362,23 @@ export default function CashRegister({
       }
     })();
   }, [storeId]);
+
+  // iOS en PWA « standalone » throttle la peinture après une navigation : les
+  // mises à jour issues d'un fetch (le catalogue) ne sont composées qu'au
+  // premier geste, si bien que les articles n'apparaissent qu'après un clic sur
+  // l'écran. On force une recomposition imperceptible dès que le catalogue (ou
+  // une étape de chargement) change, pour que l'affichage soit immédiat.
+  const nudgeRepaint = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    const el = catalogScrollRef.current ?? document.documentElement;
+    el.style.opacity = '0.999';
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => { el.style.opacity = ''; });
+    });
+  }, []);
+  useEffect(() => {
+    nudgeRepaint();
+  }, [deviceId, storeId, sessionLoading, sessionId, products.length, categories.length, nudgeRepaint]);
 
   // Vérifie session caisse
   const refreshSession = useCallback(async () => {
@@ -1582,7 +1602,7 @@ export default function CashRegister({
           </button>
         </div>
 
-        <div className="relative flex-1 overflow-auto p-3 md:p-5 pb-24 md:pb-5">
+        <div ref={catalogScrollRef} className="relative flex-1 overflow-auto p-3 md:p-5 pb-24 md:pb-5">
           {showingProducts ? (
             <>
               {/* Bouton retour en haut à gauche + libellé contextuel */}
