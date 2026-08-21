@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import Icon from '@/components/Icon';
 import { readDeviceId } from '@/lib/device';
 import { posteRef } from '@/lib/poste-ref';
@@ -165,94 +165,90 @@ export default function SupportForm({
   }
 
   return (
-    <form onSubmit={submit} className="card p-5 space-y-4">
-      <fieldset>
-        <legend className="text-sm font-medium mb-2">De quoi s’agit-il ?</legend>
-        <div className="flex flex-wrap gap-2">
+    <form onSubmit={submit} className="card p-5 sm:p-6">
+      {/* 1. Nature du signalement + gravité */}
+      <Section tone="green" icon={<Icon name="comment" size={20} />}>
+        <h3 className="text-base font-semibold">De quoi s’agit-il ?</h3>
+        <div className="mt-2 flex flex-wrap gap-2">
           {(Object.keys(KIND_LABELS) as TicketKind[]).map((k) => (
             <button
               key={k}
               type="button"
               onClick={() => setKind(k)}
               aria-pressed={kind === k}
-              className={kind === k ? 'btn-primary' : 'btn-ghost border border-border'}
+              className={`rounded-full px-3 py-1.5 text-sm font-medium border transition-colors ${
+                kind === k
+                  ? 'accent-bar text-white border-transparent'
+                  : 'bg-white text-ink border-border hover:border-gray-300'
+              }`}
             >
               {KIND_LABELS[k]}
             </button>
           ))}
         </div>
-      </fieldset>
+        {kind === 'incident' && (
+          <fieldset className="mt-3">
+            <legend className="text-sm font-medium text-ink">Est-ce que cela vous empêche de travailler ?</legend>
+            <div className="mt-1.5 space-y-1.5">
+              {TICKET_SEVERITIES.map((s) => (
+                <label key={s} className="flex items-center gap-2 text-sm">
+                  <input type="radio" name="severity" checked={severity === s} onChange={() => setSeverity(s)} />
+                  {SEVERITY_LABELS[s]}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        )}
+      </Section>
 
-      {kind === 'incident' ? (
-        <fieldset>
-          <legend className="text-sm font-medium mb-2">Est-ce que cela vous empêche de travailler ?</legend>
-          <div className="space-y-1.5">
-            {TICKET_SEVERITIES.map((s) => (
-              <label key={s} className="flex items-center gap-2 text-sm">
-                <input
-                  type="radio"
-                  name="severity"
-                  checked={severity === s}
-                  onChange={() => setSeverity(s)}
-                />
-                {SEVERITY_LABELS[s]}
-              </label>
-            ))}
-          </div>
-        </fieldset>
-      ) : null}
-
-      <div>
-        <label htmlFor="sujet" className="block text-sm font-medium mb-1">
-          En une ligne
-        </label>
+      {/* 2. Titre */}
+      <Section icon={<TicketIcon />}>
+        <label htmlFor="sujet" className="block text-base font-semibold">En une ligne</label>
         <input
           id="sujet"
-          className="input"
+          className="input mt-2"
           maxLength={160}
           value={subject}
           onChange={(e) => setSubject(e.target.value)}
           placeholder={kind === 'incident' ? 'Le ticket ne s’imprime plus' : 'Pouvoir dupliquer une commande'}
           required
         />
-      </div>
+      </Section>
 
-      <div>
-        <label htmlFor="recit" className="block text-sm font-medium mb-1">
-          Ce que vous faisiez, ce qui s’est passé
-        </label>
+      {/* 3. Récit */}
+      <Section icon={<PencilIcon />}>
+        <label htmlFor="recit" className="block text-base font-semibold">Ce que vous faisiez, ce qui s’est passé</label>
         <textarea
           id="recit"
-          className="input min-h-[7rem]"
+          className="input mt-2 min-h-[7rem]"
           maxLength={4000}
           value={body}
           onChange={(e) => setBody(e.target.value)}
           placeholder="Encaissement d’une vente en espèces, l’écran est resté bloqué sur « Paiement »."
         />
-      </div>
+      </Section>
 
-      <div>
-        <span className="block text-sm font-medium mb-1">
+      {/* 4. Capture d'écran */}
+      <Section icon={<Icon name="camera" size={20} />}>
+        <div className="text-base font-semibold">
           Capture d’écran <span className="font-normal text-ink-soft">— recommandée</span>
-        </span>
-        <p className="text-[13px] text-ink-soft mb-2">
+        </div>
+        <p className="mt-1 text-[13px] text-ink-soft">
           Une image de l’écran vaut mieux qu’une description : on voit tout de suite
           l’état de la caisse au moment du problème.
         </p>
         {shot ? (
-          <div className="flex items-start gap-3">
+          <div className="mt-3 flex items-start gap-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={shot}
               alt="Capture jointe à la demande"
               className="h-24 w-auto rounded-lg border border-border object-cover"
             />
-            <button type="button" className="btn-ghost" onClick={() => setShot(null)}>
-              Retirer
-            </button>
+            <button type="button" className="btn-ghost" onClick={() => setShot(null)}>Retirer</button>
           </div>
         ) : (
-          <div className="flex flex-wrap gap-2">
+          <div className="mt-3 flex flex-wrap gap-2">
             {canCapture ? (
               <button type="button" className="btn-soft" onClick={onCapture} disabled={capturing}>
                 <Icon name="camera" size={18} />
@@ -276,11 +272,11 @@ export default function SupportForm({
           </div>
         )}
         {shotError ? <p className="mt-2 text-sm text-danger">{shotError}</p> : null}
-      </div>
+      </Section>
 
-      {error ? <p className="text-sm text-danger">{error}</p> : null}
+      {error ? <p className="mt-4 text-sm text-danger">{error}</p> : null}
 
-      <div className="flex items-center gap-3">
+      <div className="mt-5 flex flex-wrap items-center gap-3">
         <button type="submit" className="btn-primary" disabled={sending}>
           {sending ? 'Envoi…' : 'Envoyer la demande'}
         </button>
@@ -291,5 +287,46 @@ export default function SupportForm({
         </span>
       </div>
     </form>
+  );
+}
+
+/** Ligne de section : pastille ronde à icône + contenu, séparateur pointillé. */
+function Section({ icon, tone = 'gold', children }: {
+  icon: ReactNode;
+  tone?: 'green' | 'gold';
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex gap-4 border-t border-dotted border-border pt-5 mt-5 first:border-t-0 first:pt-0 first:mt-0">
+      <div
+        className="mt-0.5 grid h-11 w-11 shrink-0 place-items-center rounded-full"
+        style={tone === 'green'
+          ? { backgroundColor: '#123D2E', color: '#ffffff' }
+          : { backgroundColor: '#FBEBB0', color: '#123D2E' }}
+      >
+        {icon}
+      </div>
+      <div className="min-w-0 flex-1">{children}</div>
+    </div>
+  );
+}
+
+function TicketIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2 2 2 0 0 0 0 4 2 2 0 0 1-2 2H6a2 2 0 0 1-2-2 2 2 0 0 0 0-4Z" />
+      <path d="M9 6v12" strokeDasharray="1.5 2.5" />
+    </svg>
+  );
+}
+
+function PencilIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </svg>
   );
 }
