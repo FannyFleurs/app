@@ -229,6 +229,8 @@ export default function ProductsList({
   }, [products, filterCat, onlyTop, filterStore, deferredQ]);
 
   const activeId = editing && 'id' in editing ? editing.id : null;
+  // Panneau de droite ouvert pour une fiche produit OU une fiche pack.
+  const panelOpen = editing !== undefined || packEditing !== undefined;
 
   return (
     <div className="flex flex-col md:h-full md:overflow-hidden">
@@ -246,8 +248,8 @@ export default function ProductsList({
                   <a href="/products/liste" className="btn-soft">≣ Vue liste</a>
                 </>
               )}
-              <button className="btn-soft" onClick={() => setPackEditing(null)}>+ Nouveau Pack</button>
-              <button className="btn-primary" onClick={() => setEditing(null)}>+ Nouveau produit</button>
+              <button className="btn-soft" onClick={() => { setEditing(undefined); setPackEditing(null); }}>+ Nouveau Pack</button>
+              <button className="btn-primary" onClick={() => { setPackEditing(undefined); setEditing(null); }}>+ Nouveau produit</button>
             </div>
           ) : null}
         />
@@ -260,7 +262,7 @@ export default function ProductsList({
             cohabitent. Les contraintes de hauteur/scroll ne s'appliquent qu'à
             partir de md (sur mobile la liste s'écoule naturellement). */}
         <aside className={`border-r border-border bg-white flex-col min-h-0 md:flex md:overflow-hidden ${
-          editing !== undefined ? 'hidden md:flex' : 'flex'
+          panelOpen ? 'hidden md:flex' : 'flex'
         }`}>
           <div className="px-4 md:px-3 py-3 border-b border-border space-y-2 shrink-0">
             <div className="flex gap-2">
@@ -393,11 +395,12 @@ export default function ProductsList({
                         onClick={() => {
                           if (selectMode) { toggleSelect(p.id); return; }
                           if (!canEdit) return;
-                          if (p.is_pack) setPackEditing(p.id); else setEditing(p);
+                          if (p.is_pack) { setEditing(undefined); setPackEditing(p.id); }
+                          else { setPackEditing(undefined); setEditing(p); }
                         }}
                         className={`w-full text-left px-4 md:px-3 py-2.5 transition-colors ${
                           selectMode && selectedIds.has(p.id) ? 'bg-accent-soft'
-                          : activeId === p.id ? 'bg-accent-soft' : 'hover:bg-gray-50'
+                          : activeId === p.id || packEditing === p.id ? 'bg-accent-soft' : 'hover:bg-gray-50'
                         } ${canEdit ? '' : 'cursor-default'}`}
                       >
                         <div className="flex items-center gap-2">
@@ -445,9 +448,28 @@ export default function ProductsList({
         {/* COLONNE FICHE (2/3). Mobile : plein écran quand une fiche est
             ouverte, masquée sinon (c'est la liste qui s'affiche). */}
         <main className={`bg-bg min-h-0 md:block md:overflow-y-auto ${
-          editing === undefined ? 'hidden md:block' : 'block'
+          !panelOpen ? 'hidden md:block' : 'block'
         }`}>
-          {editing !== undefined ? (
+          {packEditing !== undefined ? (
+            <>
+              {/* Barre retour (mobile uniquement) */}
+              <button
+                className="md:hidden w-full flex items-center gap-2 px-4 py-3 border-b border-border bg-white text-sm font-medium"
+                onClick={() => setPackEditing(undefined)}
+              >
+                <span aria-hidden>←</span> Retour à la liste
+              </button>
+              <PackFormModal
+                key={packEditing ?? 'new-pack'}
+                packId={packEditing}
+                taxRates={taxRates}
+                categories={categories}
+                inline
+                onClose={() => setPackEditing(undefined)}
+                onSaved={() => { setPackEditing(undefined); void reload(); }}
+              />
+            </>
+          ) : editing !== undefined ? (
             <>
               {/* Barre retour (mobile uniquement) */}
               <button
@@ -503,15 +525,6 @@ export default function ProductsList({
         />
       )}
 
-      {packEditing !== undefined && (
-        <PackFormModal
-          packId={packEditing}
-          taxRates={taxRates}
-          categories={categories}
-          onClose={() => setPackEditing(undefined)}
-          onSaved={() => { setPackEditing(undefined); void reload(); }}
-        />
-      )}
     </div>
   );
 }
