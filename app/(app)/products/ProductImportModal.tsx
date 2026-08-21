@@ -50,10 +50,11 @@ export default function ProductImportModal({
   async function onFile(f: File) {
     setLoading(true); setError(null);
     try {
-      const text = await f.text();
+      // Envoi en binaire : Excel (.xlsx) ou CSV, détecté côté serveur.
+      const bytes = await f.arrayBuffer();
       const r = await fetch('/api/products/import/preview', {
-        method: 'POST', headers: { 'Content-Type': 'text/csv' },
-        body: text,
+        method: 'POST', headers: { 'Content-Type': 'application/octet-stream' },
+        body: bytes,
       });
       if (!r.ok) {
         const j = await r.json().catch(() => ({}));
@@ -113,7 +114,7 @@ export default function ProductImportModal({
           <div>
             <h2 className="text-base md:text-lg font-semibold">Importer des produits</h2>
             <p className="text-xs md:text-sm text-ink-soft">
-              Importe un fichier CSV ou Excel exporté en CSV. Aperçu avant insertion.
+              Importe un fichier Excel (.xlsx) ou CSV. Aperçu avant insertion.
             </p>
           </div>
           <button
@@ -206,14 +207,14 @@ function PickStep({
   return (
     <div className="space-y-4">
       <div className="rounded-2xl border-2 border-dashed border-border p-8 text-center">
-        <div className="text-base font-medium mb-1">Sélectionnez votre fichier CSV</div>
+        <div className="text-base font-medium mb-1">Sélectionnez votre fichier Excel ou CSV</div>
         <div className="text-sm text-ink-soft mb-4">
           Une ligne par produit. La 1ʳᵉ ligne contient les en-têtes.
         </div>
         <input
           ref={inputRef}
           type="file"
-          accept=".csv,text/csv"
+          accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
           className="hidden"
           onChange={(e) => {
             const f = e.target.files?.[0];
@@ -226,14 +227,14 @@ function PickStep({
             disabled={loading}
             className="btn-primary"
           >
-            {loading ? 'Analyse…' : '📁 Choisir un fichier CSV'}
+            {loading ? 'Analyse…' : '📁 Choisir un fichier Excel ou CSV'}
           </button>
           <a
             href="/api/products/import/template"
             className="btn-soft inline-flex items-center"
             download
           >
-            ⬇ Télécharger le modèle
+            ⬇ Télécharger le modèle Excel
           </a>
         </div>
       </div>
@@ -241,20 +242,20 @@ function PickStep({
       <div className="rounded-xl border border-border p-4 text-sm">
         <div className="font-medium mb-2">Colonnes attendues</div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1 text-xs text-ink-soft">
-          <div><strong>name</strong> (obligatoire) — Nom du produit</div>
-          <div><strong>sale_price_ttc</strong> (obligatoire) — Prix TTC</div>
-          <div><strong>tax_rate_code</strong> (obligatoire) — TVA20, TVA10, TVA55, TVA0…</div>
-          <div><strong>sku</strong> — Référence interne</div>
-          <div><strong>barcode</strong> — Code-barres EAN/UPC</div>
-          <div><strong>category</strong> — Nom catégorie (créée si absente)</div>
-          <div><strong>purchase_price_ht</strong> — Prix d&apos;achat HT</div>
-          <div><strong>color</strong> — Couleur tuile #RRGGBB</div>
-          <div><strong>is_top_product</strong> — true / false</div>
-          <div><strong>visible_in_pos</strong> — true / false (défaut true)</div>
-          <div><strong>is_active</strong> — true / false (défaut true)</div>
+          <div><strong>Nom</strong> (obligatoire) — Nom du produit</div>
+          <div><strong>Prix de vente TTC (€)</strong> (obligatoire) — ex. 18,90</div>
+          <div><strong>Code TVA</strong> (obligatoire) — TVA20, TVA10, TVA55, TVA0…</div>
+          <div><strong>Référence (SKU)</strong> — Référence interne</div>
+          <div><strong>Code-barres</strong> — EAN / UPC</div>
+          <div><strong>Catégorie</strong> — Nom de la catégorie (créée si absente)</div>
+          <div><strong>Prix d&apos;achat HT (€)</strong> — ex. 7,50</div>
+          <div><strong>Couleur (#RRGGBB)</strong> — Couleur de la tuile</div>
+          <div><strong>Produit favori</strong> — oui / non</div>
+          <div><strong>Visible en caisse</strong> — oui / non (défaut oui)</div>
+          <div><strong>Actif</strong> — oui / non (défaut oui)</div>
         </div>
         <p className="mt-2 text-xs text-ink-soft">
-          Séparateur : virgule ou point-virgule. Décimal : point ou virgule.
+          Format Excel (.xlsx) ou CSV. Les décimales acceptent le point ou la virgule.
         </p>
       </div>
 
@@ -295,7 +296,7 @@ function PreviewStep({ preview, error }: { preview: PreviewResp; error: string |
       {preview.errors > 0 && (
         <div className="rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">
           Les lignes en rouge contiennent des erreurs et ne seront PAS importées.
-          Corrige ton CSV puis recharge-le.
+          Corrige ton fichier puis recharge-le.
         </div>
       )}
 
