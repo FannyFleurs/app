@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { formatEUR, round2 } from '@/lib/services/money';
 import { MAX_PACK_ITEMS } from '@/lib/products/pack';
 
-interface TaxRate { id: string; code: string; rate: number; label: string; is_default: boolean }
 interface Category { id: string; name: string }
 interface PackItem { product_id: string; name: string; price: number; quantity: number }
 
@@ -17,19 +16,16 @@ interface SearchResult { id: string; name: string; sale_price_ttc: number; is_pa
  * composants (décomptés chacun de leur stock).
  */
 export default function PackFormModal({
-  packId, taxRates, categories, onClose, onSaved, inline = false,
+  packId, categories, onClose, onSaved, inline = false,
 }: {
   packId?: string | null;
-  taxRates: TaxRate[];
   categories: Category[];
   onClose: () => void;
   onSaved: (id: string) => void;
   inline?: boolean;
 }) {
-  const defaultTax = taxRates.find((t) => t.is_default) ?? taxRates[0];
   const [name, setName] = useState('');
   const [categoryId, setCategoryId] = useState('');
-  const [taxRateId, setTaxRateId] = useState(defaultTax?.id ?? '');
   const [visibleInPos, setVisibleInPos] = useState(true);
   const [isActive, setIsActive] = useState(true);
   const [items, setItems] = useState<PackItem[]>([]);
@@ -54,7 +50,6 @@ export default function PackFormModal({
           const { pack } = await r.json();
           setName(pack.name ?? '');
           setCategoryId(pack.category_id ?? '');
-          setTaxRateId(pack.tax_rate_id ?? defaultTax?.id ?? '');
           setVisibleInPos(!!pack.visible_in_pos);
           setIsActive(!!pack.is_active);
           setDiscount(pack.pack_discount_ttc ? String(pack.pack_discount_ttc) : '');
@@ -108,12 +103,10 @@ export default function PackFormModal({
     setError(null);
     if (!name.trim()) { setError('Donnez un nom au pack.'); return; }
     if (items.length === 0) { setError('Ajoutez au moins un produit au pack.'); return; }
-    if (!taxRateId) { setError('Choisissez un taux de TVA.'); return; }
     setSaving(true);
     const body = {
       name: name.trim(),
       category_id: categoryId || null,
-      tax_rate_id: taxRateId,
       visible_in_pos: visibleInPos,
       is_active: isActive,
       discount_ttc: discountNum,
@@ -156,20 +149,18 @@ export default function PackFormModal({
                 <span className="text-ink-soft">Nom du pack *</span>
                 <input className="input mt-1" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex : Coffret cadeau naissance" />
               </label>
-              <label className="block text-sm">
+              <label className="block text-sm sm:col-span-2">
                 <span className="text-ink-soft">Catégorie</span>
                 <select className="input mt-1" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
                   <option value="">— Aucune —</option>
                   {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </label>
-              <label className="block text-sm">
-                <span className="text-ink-soft">TVA *</span>
-                <select className="input mt-1" value={taxRateId} onChange={(e) => setTaxRateId(e.target.value)}>
-                  {taxRates.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
-                </select>
-              </label>
             </div>
+            <p className="text-xs text-ink-soft">
+              La TVA n'est pas définie sur le pack : à la vente, chaque produit du pack
+              conserve sa propre TVA.
+            </p>
 
             {/* Composition */}
             <div className="rounded-xl border border-border p-3">
