@@ -440,7 +440,7 @@ function renderHtml(setup: string, caisse: string, bo: string, p: Prices): strin
           <li>${check} Gestion multi-boutiques centralisée</li>
           <li>${check} CA consolidé</li>
         </ul>
-        <a class="btn btn-ghost" href="/contact">Nous contacter</a>
+        <a class="btn btn-ghost" href="${setup}">Choisir Réseau</a>
       </div>
       <div class="plan reveal">
         <div class="pname">Sur mesure</div>
