@@ -104,7 +104,13 @@ html:has(.hp){scroll-behavior:smooth}
    ratio imposé) et on laisse l'image à sa taille naturelle. */
 .hp .shot.filled{border:none;border-radius:0;background:transparent;box-shadow:none;padding:0;overflow:visible;aspect-ratio:auto;display:block}
 .hp .shot.filled img{position:static;width:100%;height:auto;object-fit:contain}
-.hp .shot.phone-ar.filled{max-width:320px;margin:0 auto}
+/* Captures agrandies (~x2). overflow-x:clip évite tout scroll horizontal si
+   une image déborde légèrement de sa colonne. */
+.hp{overflow-x:clip}
+.hp #mobile .shot.phone-ar.filled{max-width:600px;margin:0 auto}
+@media(min-width:961px){
+  .hp .hero .shot.filled{width:min(56vw,960px);max-width:none}
+}
 .hp .shot.tablet-ar{aspect-ratio:4/3}
 .hp .shot.phone-ar{aspect-ratio:9/16;max-width:280px;margin:0 auto;border-radius:26px}
 .hp .shot.wide-ar{aspect-ratio:16/10}
@@ -332,7 +338,7 @@ function renderHtml(setup: string, caisse: string, bo: string): string {
         <div class="tick">${tick}<span><b>Fidélité au comptoir</b> — reconnaissance client, points et cartes cadeaux intégrés à la vente.</span></div>
       </div>
     </div>
-    <div class="visual reveal">${shot('tablet-ar', 'Capture app Caisse', 'caisse')}</div>
+    <div class="visual reveal">${shot('tablet-ar', "Aperçu de l'app Caisse HelloPos", 'caisse', '/projet/caisse.png')}</div>
   </div>
 </section>
 
@@ -365,7 +371,7 @@ function renderHtml(setup: string, caisse: string, bo: string): string {
         <div class="tick">${tick}<span><b>Exports & conformité</b> — exports comptables et chaîne fiscale vérifiable à tout moment.</span></div>
       </div>
     </div>
-    <div class="visual reveal">${shot('wide-ar', 'Capture back-office', 'backoffice')}</div>
+    <div class="visual reveal">${shot('wide-ar', 'Aperçu du back-office HelloPos', 'backoffice', '/projet/backoffice.png')}</div>
   </div>
 </section>
 
