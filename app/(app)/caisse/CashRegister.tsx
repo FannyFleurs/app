@@ -1584,7 +1584,7 @@ export default function CashRegister({
           )}
           {/* Scanner caméra : uniquement sur mobile/tablette. */}
           <button
-            className="btn-ghost min-h-[52px] px-3.5 md:hidden"
+            className="btn-ghost min-h-[52px] px-3.5 hidden [@media(pointer:coarse)]:inline-flex"
             onClick={() => setShowScanner(true)}
             title="Scanner code-barres / QR"
             aria-label="Scanner"
