@@ -45,8 +45,8 @@ export async function POST() {
         );
 
         const taxes: Array<[string, string, number, boolean]> = [
-          ['TVA20', 'TVA 20%', 20, false],
-          ['TVA10', 'TVA 10% (fleurs)', 10, true],
+          ['TVA20', 'TVA 20% (taux normal)', 20, true],
+          ['TVA10', 'TVA 10% (taux intermédiaire)', 10, false],
           ['TVA55', 'TVA 5,5%', 5.5, false],
         ];
         for (const [code, label, rate, def] of taxes) {

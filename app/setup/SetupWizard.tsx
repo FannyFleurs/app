@@ -54,8 +54,8 @@ const STEPS = [
 const EMAIL_RE = /^[^@]+@[^@]+\.[^@]+$/;
 
 const DEFAULT_TAXES: TaxRow[] = [
-  { code: 'TVA20', label: 'TVA 20% (taux normal)',     rate: 20,  is_default: false },
-  { code: 'TVA10', label: 'TVA 10% (fleurs coupées)',  rate: 10,  is_default: true },
+  { code: 'TVA20', label: 'TVA 20% (taux normal)',     rate: 20,  is_default: true },
+  { code: 'TVA10', label: 'TVA 10% (taux intermédiaire)',  rate: 10,  is_default: false },
   { code: 'TVA55', label: 'TVA 5,5% (produits réduits)', rate: 5.5, is_default: false },
 ];
 
