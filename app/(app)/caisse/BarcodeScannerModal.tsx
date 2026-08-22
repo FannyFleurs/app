@@ -13,6 +13,38 @@ interface BarcodeDetectorCtor {
 }
 
 /**
+ * Pont Capacitor natif (app iOS/Android empaquetée). L'app web distante tourne
+ * dans une WKWebView : le natif injecte `window.Capacitor`, on y accède comme
+ * pour l'imprimante (HelloPosPrinter) — sans importer @capacitor/core dans le
+ * bundle web, donc AUCUN impact sur la PWA / le navigateur.
+ *
+ * Plugin natif : @capacitor-mlkit/barcode-scanning (jsName « BarcodeScanner »),
+ * installé côté projet Capacitor iOS. Sa méthode scan() ouvre l'UI caméra
+ * native clé en main et renvoie les codes détectés.
+ */
+interface NativeBarcode { rawValue?: string; displayValue?: string; format?: string }
+interface NativeBarcodeScannerPlugin {
+  isSupported: () => Promise<{ supported: boolean }>;
+  checkPermissions: () => Promise<{ camera: string }>;
+  requestPermissions: () => Promise<{ camera: string }>;
+  scan: (options?: { formats?: string[] }) => Promise<{ barcodes: NativeBarcode[] }>;
+}
+interface CapacitorGlobal {
+  isNativePlatform?: () => boolean;
+  Plugins?: { BarcodeScanner?: NativeBarcodeScannerPlugin };
+}
+function getCapacitor(): CapacitorGlobal | null {
+  if (typeof window === 'undefined') return null;
+  return (window as unknown as { Capacitor?: CapacitorGlobal }).Capacitor ?? null;
+}
+/** Renvoie le plugin natif SEULEMENT dans une app Capacitor native, sinon null. */
+function nativeBarcodePlugin(): NativeBarcodeScannerPlugin | null {
+  const cap = getCapacitor();
+  if (!cap?.isNativePlatform?.()) return null;
+  return cap.Plugins?.BarcodeScanner ?? null;
+}
+
+/**
  * Scanner code-barres / QR mobile.
  *
  * Compatibilité :
@@ -27,7 +59,14 @@ export default function BarcodeScannerModal({ onClose, onScan }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [lastCode, setLastCode] = useState<string | null>(null);
   const [manualCode, setManualCode] = useState('');
-  const [engine, setEngine] = useState<'loading' | 'native' | 'zxing' | 'manual'>('loading');
+  const [engine, setEngine] = useState<'loading' | 'native' | 'zxing' | 'manual' | 'native-cap'>(
+    // App Capacitor native : on part directement sur le panneau natif (évite de
+    // monter le <video> web une fraction de seconde). Navigateur/PWA : 'loading'.
+    () => (nativeBarcodePlugin() ? 'native-cap' : 'loading'),
+  );
+  // Scan natif Capacitor en cours (UI caméra native affichée par-dessus).
+  const [nativeScanning, setNativeScanning] = useState(false);
+  const nativePluginRef = useRef<NativeBarcodeScannerPlugin | null>(null);
 
   // Anti-doublon
   const lastReportedRef = useRef<{ code: string; at: number }>({ code: '', at: 0 });
@@ -43,6 +82,39 @@ export default function BarcodeScannerModal({ onClose, onScan }: Props) {
     onScan(code);
   }
 
+  /**
+   * Ouvre le scanner caméra NATIF (app Capacitor). Un seul scan par appel :
+   * on renvoie le code au même traitement (report → onScan) puis on laisse la
+   * modale décider (le parcours caisse la ferme via onScan, comme pour le web).
+   * Toute erreur / annulation retombe proprement sur la saisie manuelle.
+   */
+  async function runNativeScan() {
+    const plugin = nativePluginRef.current;
+    if (!plugin || nativeScanning) return;
+    setError(null);
+    setNativeScanning(true);
+    try {
+      let perm = await plugin.checkPermissions();
+      if (perm.camera !== 'granted' && perm.camera !== 'limited') {
+        perm = await plugin.requestPermissions();
+      }
+      if (perm.camera !== 'granted' && perm.camera !== 'limited') {
+        setError('Accès caméra refusé. Autorisez la caméra dans Réglages, ou saisissez le code.');
+        return;
+      }
+      const res = await plugin.scan();
+      const b = res?.barcodes?.[0];
+      const code = (b?.rawValue ?? b?.displayValue ?? '').trim();
+      if (code) report(code);
+      // Code vide = scan annulé par l'utilisateur : on ne fait rien (retour modale).
+    } catch {
+      // Plugin indisponible / caméra HS / scan interrompu : jamais de crash.
+      setError('Scanner natif indisponible. Saisissez le code à la main.');
+    } finally {
+      setNativeScanning(false);
+    }
+  }
+
   useEffect(() => {
     let stopped = false;
     let stream: MediaStream | null = null;
@@ -50,6 +122,32 @@ export default function BarcodeScannerModal({ onClose, onScan }: Props) {
     let zxingControls: { stop: () => void } | null = null;
 
     async function start() {
+      // Chemin NATIF (app Capacitor iOS/Android) : caméra native via plugin.
+      // Sur navigateur / PWA, nativeBarcodePlugin() renvoie null → on garde
+      // strictement le chemin web existant ci-dessous, inchangé.
+      const nativePlugin = nativeBarcodePlugin();
+      if (nativePlugin) {
+        nativePluginRef.current = nativePlugin;
+        try {
+          const sup = await nativePlugin.isSupported();
+          if (!sup?.supported) {
+            setError('Scanner indisponible sur cet appareil. Saisissez le code à la main.');
+            setEngine('manual');
+            return;
+          }
+        } catch {
+          setError('Scanner natif indisponible. Saisissez le code à la main.');
+          setEngine('manual');
+          return;
+        }
+        if (stopped) return;
+        setEngine('native-cap');
+        // Ouverture immédiate du scanner natif (le parcours reste : clic sur le
+        // bouton caméra → scanner s'ouvre). Un bouton permet de rescanner.
+        void runNativeScan();
+        return;
+      }
+
       // Vérif HTTPS
       if (typeof window !== 'undefined'
           && window.location.protocol !== 'https:'
@@ -145,6 +243,7 @@ export default function BarcodeScannerModal({ onClose, onScan }: Props) {
   const engineLabel =
     engine === 'loading' ? 'Démarrage…'
     : engine === 'native' ? 'Scan natif'
+    : engine === 'native-cap' ? 'Caméra native'
     : engine === 'zxing' ? 'Scan ZXing'
     : 'Saisie manuelle';
 
@@ -152,15 +251,40 @@ export default function BarcodeScannerModal({ onClose, onScan }: Props) {
     <div className="fixed inset-0 z-[100] bg-black/90 grid place-items-center p-4" onClick={onClose}>
       <div className="relative w-full max-w-md" onClick={(e) => e.stopPropagation()}>
         <div className="rounded-2xl overflow-hidden bg-black aspect-[3/4] relative">
-          <video
-            ref={videoRef}
-            playsInline
-            muted
-            autoPlay
-            className="w-full h-full object-cover"
-          />
-          {/* Cadre de mire */}
-          {!error && engine !== 'manual' && (
+          {/* App native (Capacitor) : la caméra est ouverte par le scanner
+              natif par-dessus la WebView. On affiche donc un panneau avec un
+              bouton pour (re)lancer le scan, au lieu du flux <video> web. */}
+          {engine === 'native-cap' ? (
+            <div className="absolute inset-0 grid place-items-center p-6 text-center text-white">
+              <div className="flex flex-col items-center gap-3">
+                {error ? (
+                  <div className="text-sm font-medium">{error}</div>
+                ) : (
+                  <div className="text-sm opacity-80">
+                    {nativeScanning ? 'Scanner ouvert…' : 'Prêt à scanner'}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => void runNativeScan()}
+                  disabled={nativeScanning}
+                  className="rounded-xl accent-bar text-white px-5 py-3 text-sm font-semibold disabled:opacity-50"
+                >
+                  {nativeScanning ? 'Scan en cours…' : (lastCode ? 'Scanner à nouveau' : 'Scanner un code-barres')}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <video
+              ref={videoRef}
+              playsInline
+              muted
+              autoPlay
+              className="w-full h-full object-cover"
+            />
+          )}
+          {/* Cadre de mire (chemin caméra web uniquement) */}
+          {!error && engine !== 'manual' && engine !== 'native-cap' && (
             <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
               <div className="w-3/4 aspect-[4/3] border-2 border-white/80 rounded-2xl shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]" />
             </div>
@@ -169,7 +293,7 @@ export default function BarcodeScannerModal({ onClose, onScan }: Props) {
           <div className="absolute top-2 right-2 rounded-full bg-black/60 text-white text-[10px] px-2 py-0.5">
             {engineLabel}
           </div>
-          {error && (
+          {error && engine !== 'native-cap' && (
             <div className="absolute inset-0 grid place-items-center bg-black/80 text-white text-center p-6 text-sm">
               <div>
                 <div className="font-medium mb-2">{error}</div>
