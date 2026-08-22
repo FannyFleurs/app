@@ -15,7 +15,7 @@ import { spaceUrls } from '@/lib/site/spaces';
 export const metadata: Metadata = {
   title: 'HelloPos — Présentation',
   description:
-    'HelloPos : la caisse pour iPad, smartphone et back-office, pour tous les commerces de détail.',
+    'HelloPos : la caisse pour tablette, smartphone et back-office, pour tous les commerces de détail.',
   robots: { index: false, follow: false },
 };
 
@@ -244,7 +244,7 @@ function renderHtml(setup: string, caisse: string, bo: string): string {
 <section class="hero">
   <div class="wrap hero-grid">
     <div>
-      <h1 class="hero-h">La caisse qui vit sur <span class="mark">iPad, mobile</span> et dans votre back-office.</h1>
+      <h1 class="hero-h">La caisse qui vit sur <span class="mark">tablette, mobile</span> et dans votre back-office.</h1>
       <p class="hero-sub">HelloPos encaisse, gère le stock, fidélise et sort des tickets conformes — sur la tablette du comptoir, dans la poche, et depuis un back-office multi-boutiques.</p>
       <div class="hero-cta">
         <a class="btn btn-primary btn-lg" href="${setup}">Créer ma caisse</a>
@@ -267,11 +267,11 @@ function renderHtml(setup: string, caisse: string, bo: string): string {
     <div class="sec-head reveal">
       <div class="kicker">Prise en main</div>
       <h2 class="sec-h">Opérationnel en quelques minutes</h2>
-      <p>Pas de matériel imposé pour démarrer : votre iPad ou votre smartphone suffit. Le reste se configure à votre rythme.</p>
+      <p>Pas de matériel imposé pour démarrer : votre tablette ou votre smartphone suffit. Le reste se configure à votre rythme.</p>
     </div>
     <div class="steps">
       <div class="step reveal"><div class="n">1</div><h3>Créez votre catalogue</h3><p>Saisie rapide, catégories, codes-barres, packs d'articles — ou import de votre fichier Excel en un clic.</p></div>
-      <div class="step reveal"><div class="n">2</div><h3>Ouvrez la caisse</h3><p>Fond de caisse, modes de règlement, TVA par boutique. La caisse tactile est prête sur l'iPad du comptoir.</p></div>
+      <div class="step reveal"><div class="n">2</div><h3>Ouvrez la caisse</h3><p>Fond de caisse, modes de règlement, TVA par boutique. La caisse tactile est prête sur la tablette du comptoir.</p></div>
       <div class="step reveal"><div class="n">3</div><h3>Encaissez</h3><p>Ticket conforme à chaque vente, stock décompté automatiquement, chiffre d'affaires suivi en temps réel.</p></div>
     </div>
   </div>
@@ -329,7 +329,7 @@ function renderHtml(setup: string, caisse: string, bo: string): string {
   <div class="wrap split">
     <div class="reveal">
       <div class="kicker">L'application Caisse</div>
-      <h2>Le comptoir, en plein écran sur iPad</h2>
+      <h2>Le comptoir, en plein écran sur tablette</h2>
       <p class="lead">L'app de caisse tactile pensée pour la vente rapide : la grille produits d'un côté, le ticket de l'autre, l'encaissement en deux gestes.</p>
       <div class="ticks">
         <div class="tick">${tick}<span><b>Multi-règlements</b> — espèces, carte, chèque, lien de paiement, différé, avec rendu monnaie.</span></div>
@@ -444,7 +444,7 @@ function renderHtml(setup: string, caisse: string, bo: string): string {
       <h2 class="sec-h">Bon à savoir</h2>
     </div>
     <div class="faq">
-      <details class="reveal"><summary>Faut-il du matériel spécifique ?<span class="pm">+</span></summary><p>Non. HelloPos fonctionne sur un iPad ou un smartphone récent, et dans le navigateur. Vous pouvez ensuite ajouter une imprimante ticket réseau (IP / ESC-POS) et un tiroir-caisse si besoin.</p></details>
+      <details class="reveal"><summary>Faut-il du matériel spécifique ?<span class="pm">+</span></summary><p>Non. HelloPos fonctionne sur une tablette ou un smartphone récent, et dans le navigateur. Vous pouvez ensuite ajouter une imprimante ticket réseau (IP / ESC-POS) et un tiroir-caisse si besoin.</p></details>
       <details class="reveal"><summary>HelloPos est-il conforme à la réglementation française ?<span class="pm">+</span></summary><p>HelloPos est conçu pour répondre aux exigences applicables aux logiciels de caisse (art. 286-I-3°bis du CGI) : inaltérabilité, sécurisation, conservation et archivage. La chaîne fiscale est scellée et vérifiable, avec clôtures X/Z et exports pour le contrôle.</p></details>
       <details class="reveal"><summary>Puis-je l'utiliser sur smartphone ?<span class="pm">+</span></summary><p>Oui. La caisse tourne sur smartphone, avec le scan de codes-barres par la caméra et la gestion du stock en mobilité. L'application s'installe aussi sur l'écran d'accueil pour un usage plein écran.</p></details>
       <details class="reveal"><summary>Ça marche pour quel type de commerce ?<span class="pm">+</span></summary><p>Pour tout commerce de détail : catalogue, packs, stock, fidélité et tickets s'adaptent à votre activité. La configuration (TVA, catégories, modes de règlement) se fait en quelques minutes.</p></details>
@@ -469,7 +469,7 @@ function renderHtml(setup: string, caisse: string, bo: string): string {
     <div class="foot-top">
       <div class="foot-brand">
         <a class="brand" href="#top" style="font-size:1.1rem">${logoBrand}</a>
-        <p>Le logiciel de caisse pour tous les commerces de détail — sur iPad, sur mobile et dans votre back-office. Fait en France.</p>
+        <p>Le logiciel de caisse pour tous les commerces de détail — sur tablette, sur mobile et dans votre back-office. Fait en France.</p>
         <div class="foot-actions"><a class="btn btn-gold btn-sm" href="${setup}">Créer ma caisse</a></div>
       </div>
       <div class="foot-cols">
