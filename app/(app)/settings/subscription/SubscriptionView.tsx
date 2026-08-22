@@ -74,7 +74,21 @@ const PLANS: Plan[] = [
 // gérée dynamiquement plus bas selon la config Stripe).
 const ADDONS: Array<{ key: string; label: string; price: string; description: string }> = [];
 
+/**
+ * App native (iOS/Android empaquetée via Capacitor) : les règles de l'App Store
+ * interdisent l'achat/la gestion d'un abonnement numérique via un paiement tiers
+ * (Stripe) dans l'app. On masque donc toute la partie souscription/paiement dans
+ * l'app native et on n'affiche que l'état du plan en lecture seule ; la gestion
+ * se fait depuis le web. Aucun changement sur navigateur.
+ */
+function isNativeApp(): boolean {
+  if (typeof window === 'undefined') return false;
+  const cap = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor;
+  return !!cap?.isNativePlatform?.();
+}
+
 export default function SubscriptionView() {
+  const [native] = useState(isNativeApp);
   const [data, setData] = useState<Data | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -210,6 +224,18 @@ export default function SubscriptionView() {
         )}
       </div>
 
+      {native ? (
+        <div className="card p-6">
+          <div className="font-semibold">Gestion de l&apos;abonnement</div>
+          <p className="mt-1 text-sm text-ink-soft">
+            La souscription et la gestion de votre abonnement HelloPos (changement
+            d&apos;offre, moyen de paiement, factures, résiliation) se font depuis
+            votre espace de gestion sur ordinateur. Cette page affiche l&apos;état
+            de votre plan.
+          </p>
+        </div>
+      ) : (
+      <>
       <div>
         <h2 className="text-sm font-semibold uppercase tracking-widest text-ink-soft mb-3">
           Choisir un plan
@@ -331,6 +357,8 @@ export default function SubscriptionView() {
           {busy ? 'Ouverture…' : 'Gérer mon abonnement'}
         </button>
       </div>
+      </>
+      )}
     </div>
   );
 }
