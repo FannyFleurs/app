@@ -192,9 +192,10 @@ export function middleware(req: NextRequest) {
     // c'est donc le rendu qui décide d'afficher le site ou la page d'attente.
     // Le chemin d'origine est transmis dans `x-hp-path` pour que le gabarit
     // du site sache s'il sert l'accueil ou une page intérieure.
+    // Page d'accueil = la page de présentation /projet (devenue page principale).
     if (pathname === '/') {
-      url.pathname = '/site';
-      return NextResponse.rewrite(url, { request: { headers: withPath(req, pathname) } });
+      url.pathname = '/projet';
+      return NextResponse.rewrite(url);
     }
     // URLs propres du site vitrine (hellopos.fr/tarifs…) → /site/tarifs.
     if (isMarketingPath(pathname)) {
@@ -271,6 +272,12 @@ export function middleware(req: NextRequest) {
 
   // Route vitrine explicite
   if (pathname === '/site') return NextResponse.next();
+
+  // Page d'accueil = /projet (aussi en préversion/local, pour tester).
+  if (pathname === '/') {
+    url.pathname = '/projet';
+    return NextResponse.rewrite(url);
+  }
 
   return NextResponse.next();
 }

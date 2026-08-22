@@ -66,8 +66,13 @@ html:has(.hp){scroll-behavior:smooth}
 .hp .logo-word{font-family:'Bricolage Grotesque','Hanken Grotesk',sans-serif;font-weight:800;letter-spacing:-.03em}
 
 .hp .login{position:relative}
-.hp .login>summary{list-style:none;cursor:pointer}
+.hp .login>summary{list-style:none;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:.35rem;font-weight:600;font-size:.9rem;line-height:1;padding:.66rem .95rem;border-radius:12px;border:1px solid var(--border);background:var(--surface);color:var(--ink);white-space:nowrap;-webkit-appearance:none;appearance:none;user-select:none;transition:background .15s ease}
 .hp .login>summary::-webkit-details-marker{display:none}
+.hp .login>summary::marker{content:""}
+.hp .login>summary:hover{background:var(--surface-2)}
+.hp .login[open]>summary{background:var(--surface-2)}
+.hp .login .chev{transition:transform .2s ease}
+.hp .login[open] .chev{transform:rotate(180deg)}
 .hp .login-menu{position:absolute;right:0;top:calc(100% + 8px);background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);padding:6px;min-width:190px;display:flex;flex-direction:column;z-index:60}
 .hp .login-menu a{padding:.6rem .7rem;border-radius:8px;font-size:.92rem;font-weight:500;color:var(--ink);display:flex;align-items:center;gap:.55rem}
 .hp .login-menu a small{display:block;color:var(--ink-soft);font-weight:400;font-size:.78rem}
@@ -84,12 +89,12 @@ html:has(.hp){scroll-behavior:smooth}
 @media(max-width:640px){
   .hp .nav-in{gap:.5rem;height:60px}
   .hp .nav-cta{gap:.4rem}
-  .hp .nav-cta .btn{padding:.5rem .72rem;font-size:.82rem;border-radius:10px}
+  .hp .nav-cta .btn,.hp .nav-cta .login>summary{padding:.5rem .72rem;font-size:.82rem;border-radius:10px}
 }
 @media(max-width:430px){.hp .brand .logo-word{display:none}}
 
 .hp .hero{padding:64px 0 40px;position:relative}
-.hp .hero-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:48px;align-items:center}
+.hp .hero-grid{display:grid;grid-template-columns:1fr 1.08fr;gap:48px;align-items:center}
 @media(max-width:960px){.hp .hero-grid{grid-template-columns:1fr;gap:36px}}
 .hp .eyebrow{display:inline-flex;align-items:center;gap:.5rem;font-size:.82rem;font-weight:600;letter-spacing:.02em;color:var(--brand-ink);background:var(--surface);border:1px solid var(--border);padding:.35rem .7rem;border-radius:999px}
 .hp .eyebrow .dot{width:7px;height:7px;border-radius:50%;background:var(--cta)}
@@ -112,8 +117,9 @@ html:has(.hp){scroll-behavior:smooth}
 /* Capture « pleine » : les mockups intègrent déjà le cadre de l'appareil.
    On garde le format de la tuile (ratio défini par .tablet-ar/.phone-ar/.wide-ar)
    et on y contient l'image, sans habillage ni double cadre. */
-.hp .shot.filled{border:none;background:transparent;box-shadow:none;padding:0;overflow:visible}
-.hp .shot.filled img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+.hp .shot.filled{border:none;background:transparent;box-shadow:none;padding:0;overflow:visible;aspect-ratio:auto;display:block}
+.hp .shot.filled img{position:static;display:block;width:100%;height:auto;object-fit:contain}
+.hp .shot.phone-ar.filled{max-width:400px;margin:0 auto}
 .hp{overflow-x:clip}
 .hp .shot.tablet-ar{aspect-ratio:4/3}
 .hp .shot.phone-ar{aspect-ratio:9/16;max-width:280px;margin:0 auto;border-radius:26px}
@@ -148,7 +154,7 @@ html:has(.hp){scroll-behavior:smooth}
 .hp .f h4{font-family:'Hanken Grotesk';font-weight:700;font-size:1rem;margin:0 0 4px}
 .hp .f p{font-size:.9rem;color:var(--ink-soft)}
 
-.hp .split{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center}
+.hp .split{display:grid;grid-template-columns:1fr 1.12fr;gap:48px;align-items:center}
 .hp .split.rev .visual{order:2}
 @media(max-width:900px){.hp .split{grid-template-columns:1fr;gap:28px}.hp .split.rev .visual{order:0}}
 .hp .split h2{font-size:clamp(1.6rem,3.2vw,2.2rem);font-weight:700}
@@ -242,10 +248,10 @@ function renderHtml(setup: string, caisse: string, bo: string): string {
     <div class="nav-cta">
       <a class="btn btn-gold btn-sm" href="${setup}">Créer ma caisse</a>
       <details class="login">
-        <summary class="btn btn-ghost btn-sm">Connexion</summary>
+        <summary class="login-btn">Connexion <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></summary>
         <div class="login-menu">
-          <a href="${caisse}"><span>Espace caisse</span></a>
-          <a href="${bo}"><span>Back-office</span></a>
+          <a href="${caisse}">Espace caisse</a>
+          <a href="${bo}">Back-office</a>
         </div>
       </details>
     </div>
