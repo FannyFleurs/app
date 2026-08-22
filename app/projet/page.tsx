@@ -152,9 +152,10 @@ html:has(.hp){scroll-behavior:smooth}
 .hp .tick b{font-weight:600}
 .hp .tick span{color:var(--ink-soft);font-size:.96rem}
 
-.hp .plans{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
-@media(max-width:820px){.hp .plans{grid-template-columns:1fr}}
-.hp .plan{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:26px;display:flex;flex-direction:column;box-shadow:var(--shadow-soft)}
+.hp .plans{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+@media(max-width:1040px){.hp .plans{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:560px){.hp .plans{grid-template-columns:1fr}}
+.hp .plan{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:22px;display:flex;flex-direction:column;box-shadow:var(--shadow-soft)}
 .hp .plan.hot{border-color:var(--cta);box-shadow:var(--shadow)}
 .hp .plan .pname{font-family:'Bricolage Grotesque';font-weight:800;font-size:1.25rem}
 .hp .plan .price{font-size:2rem;font-weight:800;font-family:'Bricolage Grotesque';margin:10px 0 2px}
@@ -402,9 +403,11 @@ function renderHtml(setup: string, caisse: string, bo: string): string {
         <div class="pname">Essentiel</div>
         <div class="price tnum">29 €<small> /mois</small></div>
         <ul>
-          <li>${check} 1 boutique · 1 caisse (+ caisses en option)</li>
+          <li>${check} 1 boutique · 1 caisse (caisse en option 9 €)</li>
           <li>${check} Catalogue illimité</li>
           <li>${check} Tickets fiscaux conformes</li>
+          <li>${check} Programme de fidélité</li>
+          <li>${check} Factures B2B, avoirs, exports</li>
           <li>${check} Support email</li>
         </ul>
         <a class="btn btn-ghost" href="${setup}">Choisir Essentiel</a>
@@ -414,24 +417,35 @@ function renderHtml(setup: string, caisse: string, bo: string): string {
         <div class="pname">Croissance</div>
         <div class="price tnum">59 €<small> /mois</small></div>
         <ul>
+          <li>${check} Tout l'Essentiel, plus :</li>
           <li>${check} 1 boutique · jusqu'à 5 caisses</li>
           <li>${check} Écran & Livraison (commande différée)</li>
-          <li>${check} Programme de fidélité</li>
-          <li>${check} Factures B2B, avoirs, exports</li>
           <li>${check} Support prioritaire</li>
         </ul>
         <a class="btn btn-primary" href="${setup}">Choisir Croissance</a>
       </div>
       <div class="plan reveal">
         <div class="pname">Réseau</div>
-        <div class="price">Sur mesure</div>
+        <div class="price tnum">69 €<small> /mois</small></div>
+        <ul>
+          <li>${check} Tout Croissance, plus :</li>
+          <li>${check} Jusqu'à 3 boutiques · 2 caisses / boutique</li>
+          <li>${check} Boutique supplémentaire 9 €</li>
+          <li>${check} Gestion multi-boutiques centralisée</li>
+          <li>${check} CA consolidé</li>
+        </ul>
+        <a class="btn btn-ghost" href="${setup}">Choisir Réseau</a>
+      </div>
+      <div class="plan reveal">
+        <div class="pname">Sur mesure</div>
+        <div class="price">Sur devis</div>
         <ul>
           <li>${check} Boutiques & caisses illimitées</li>
           <li>${check} Gestion multi-boutiques centralisée</li>
           <li>${check} CA consolidé</li>
           <li>${check} Accompagnement dédié</li>
         </ul>
-        <a class="btn btn-ghost" href="#contact">Nous contacter</a>
+        <a class="btn btn-ghost" href="/contact">Nous contacter</a>
       </div>
     </div>
   </div>
