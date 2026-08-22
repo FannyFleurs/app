@@ -1,4 +1,6 @@
 import type { Metadata } from 'next';
+import { headers } from 'next/headers';
+import { spaceUrls } from '@/lib/site/spaces';
 
 /**
  * Page de présentation autonome (hellopos.fr/projet).
@@ -16,6 +18,9 @@ export const metadata: Metadata = {
     'HelloPos : la caisse pour iPad, smartphone et back-office, pour tous les commerces de détail.',
   robots: { index: false, follow: false },
 };
+
+// Lit l'hôte pour pointer « Connexion » vers les bons espaces (app./bo.).
+export const dynamic = 'force-dynamic';
 
 const CSS = `
 .hp{
@@ -53,6 +58,20 @@ html:has(.hp){scroll-behavior:smooth}
 .hp .btn-ghost{background:transparent;color:var(--ink);border-color:var(--border)}
 .hp .btn-ghost:hover{background:var(--surface-2)}
 .hp .btn-lg{padding:.85rem 1.4rem;font-size:1.05rem}
+.hp .btn-gold{background:var(--accent);color:#3a2f05;box-shadow:var(--shadow-soft)}
+.hp .btn-gold:hover{transform:translateY(-1px)}
+.hp .btn-sm{padding:.55rem .9rem;font-size:.9rem}
+
+.hp .logo-img{height:30px;width:auto;display:block;flex:none}
+.hp .logo-word{font-family:'Bricolage Grotesque','Hanken Grotesk',sans-serif;font-weight:800;letter-spacing:-.03em}
+
+.hp .login{position:relative}
+.hp .login>summary{list-style:none;cursor:pointer}
+.hp .login>summary::-webkit-details-marker{display:none}
+.hp .login-menu{position:absolute;right:0;top:calc(100% + 8px);background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);padding:6px;min-width:190px;display:flex;flex-direction:column;z-index:60}
+.hp .login-menu a{padding:.6rem .7rem;border-radius:8px;font-size:.92rem;font-weight:500;color:var(--ink);display:flex;align-items:center;gap:.55rem}
+.hp .login-menu a small{display:block;color:var(--ink-soft);font-weight:400;font-size:.78rem}
+.hp .login-menu a:hover{background:var(--surface-2)}
 
 .hp header.nav{position:sticky;top:0;z-index:50;background:color-mix(in srgb,var(--bg) 82%, transparent);backdrop-filter:saturate(1.4) blur(10px);border-bottom:1px solid var(--border)}
 .hp .nav-in{display:flex;align-items:center;gap:1.5rem;height:66px}
@@ -169,14 +188,19 @@ function shot(kind: 'tablet-ar' | 'phone-ar' | 'wide-ar', legende: string, id: s
   </div>`;
 }
 
-const brandSvg = `<svg viewBox="0 0 40 40" width="30" height="30" aria-hidden="true"><rect x="2" y="2" width="36" height="36" rx="11" fill="var(--accent)"/><path d="M11 21a9 9 0 0 0 18 0" fill="none" stroke="var(--brand-ink)" stroke-width="3.6" stroke-linecap="round"/></svg>`;
+// Logo : image swappable dans public/projet/logo.svg (la marque HelloPos).
+// Remplacez ce fichier pour changer le logo. Le mot « HelloPos » reste en texte
+// (il s'adapte au thème clair/sombre) ; masquez-le via .logo-word{display:none}
+// si votre logo contient déjà le nom.
+const logoBrand = `<img class="logo-img" src="/projet/logo.svg" alt="" aria-hidden="true"><span class="logo-word">HelloPos</span>`;
 const check = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M20 6L9 17l-5-5"/></svg>`;
 const tick = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>`;
 
-const HTML = `
+function renderHtml(setup: string, caisse: string, bo: string): string {
+  return `
 <header class="nav">
   <div class="wrap nav-in">
-    <a class="brand" href="#top" aria-label="HelloPos">${brandSvg} HelloPos</a>
+    <a class="brand" href="#top" aria-label="HelloPos">${logoBrand}</a>
     <nav class="nav-links">
       <a href="#fonctions">Fonctions</a>
       <a href="#caisse">Caisse</a>
@@ -184,7 +208,16 @@ const HTML = `
       <a href="#backoffice">Back-office</a>
       <a href="#tarifs">Tarifs</a>
     </nav>
-    <div class="nav-cta"><a class="btn btn-primary" href="#tarifs">Découvrir les offres</a></div>
+    <div class="nav-cta">
+      <a class="btn btn-gold btn-sm" href="${setup}">Créer ma caisse</a>
+      <details class="login">
+        <summary class="btn btn-ghost btn-sm">Connexion</summary>
+        <div class="login-menu">
+          <a href="${caisse}"><span>Espace caisse</span></a>
+          <a href="${bo}"><span>Back-office</span></a>
+        </div>
+      </details>
+    </div>
   </div>
 </header>
 
@@ -197,7 +230,7 @@ const HTML = `
       <h1 class="hero-h">La caisse qui vit sur <span class="mark">iPad, mobile</span> et dans votre back-office.</h1>
       <p class="hero-sub">HelloPos encaisse, gère le stock, fidélise et sort des tickets conformes — sur la tablette du comptoir, dans la poche, et depuis un back-office multi-boutiques.</p>
       <div class="hero-cta">
-        <a class="btn btn-primary btn-lg" href="#tarifs">Découvrir les offres</a>
+        <a class="btn btn-primary btn-lg" href="${setup}">Créer ma caisse</a>
         <a class="btn btn-ghost btn-lg" href="#fonctions">Voir les fonctions</a>
       </div>
       <div class="trust">
@@ -357,7 +390,7 @@ const HTML = `
           <li>${check} Tickets fiscaux conformes</li>
           <li>${check} Support email</li>
         </ul>
-        <a class="btn btn-ghost" href="#contact">Choisir Essentiel</a>
+        <a class="btn btn-ghost" href="${setup}">Choisir Essentiel</a>
       </div>
       <div class="plan hot reveal">
         <span class="badge-hot">Recommandé</span>
@@ -370,7 +403,7 @@ const HTML = `
           <li>${check} Factures B2B, avoirs, exports</li>
           <li>${check} Support prioritaire</li>
         </ul>
-        <a class="btn btn-primary" href="#contact">Choisir Croissance</a>
+        <a class="btn btn-primary" href="${setup}">Choisir Croissance</a>
       </div>
       <div class="plan reveal">
         <div class="pname">Réseau</div>
@@ -409,18 +442,19 @@ const HTML = `
       <svg class="smile" width="180" height="90" viewBox="0 0 180 90" aria-hidden="true"><path d="M20 20a70 70 0 0 0 140 0" fill="none" stroke="var(--accent)" stroke-width="12" stroke-linecap="round"/></svg>
       <h2>Prêt à passer à HelloPos ?</h2>
       <p>Une caisse tactile, une caisse mobile et un back-office, réunis dans une seule application française — sans engagement.</p>
-      <a class="btn btn-primary btn-lg" href="#tarifs">Découvrir les offres</a>
+      <a class="btn btn-primary btn-lg" href="${setup}">Créer ma caisse</a>
     </div>
   </div>
 </section>
 
 <footer>
   <div class="wrap foot-in">
-    <a class="brand" href="#top" style="font-size:1.05rem">${brandSvg} HelloPos</a>
+    <a class="brand" href="#top" style="font-size:1.05rem">${logoBrand}</a>
     <span>Caisse SaaS pour les commerces de détail · France</span>
   </div>
 </footer>
 `;
+}
 
 const JS = `(function(){
   var root=document.currentScript&&document.currentScript.previousElementSibling;
@@ -434,6 +468,8 @@ const JS = `(function(){
 })();`;
 
 export default function ProjetPage() {
+  const urls = spaceUrls(headers().get('host'));
+  const html = renderHtml('/setup', urls.caisse, urls.bo);
   return (
     <>
       <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -443,7 +479,7 @@ export default function ProjetPage() {
         href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Hanken+Grotesk:wght@400;500;600;700&display=swap"
       />
       <style dangerouslySetInnerHTML={{ __html: CSS }} />
-      <div className="hp" dangerouslySetInnerHTML={{ __html: HTML }} />
+      <div className="hp" dangerouslySetInnerHTML={{ __html: html }} />
       <script dangerouslySetInnerHTML={{ __html: JS }} />
     </>
   );
