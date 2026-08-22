@@ -170,7 +170,7 @@ html:has(.hp){scroll-behavior:smooth}
 .hp .plan .btn{margin-top:auto;justify-content:center}
 /* Ruban d'angle « Recommandé » : hors flux (position absolue), en diagonale
    dans le coin haut-droit — ne décale plus le titre de la tuile. */
-.hp .badge-hot{position:absolute;top:16px;right:-42px;transform:rotate(45deg);width:170px;text-align:center;font-size:.66rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--cta-ink);background:var(--cta);padding:5px 0;box-shadow:0 4px 10px -4px rgba(0,0,0,.35)}
+.hp .badge-hot{position:absolute;top:26px;right:-54px;width:200px;transform:rotate(45deg);text-align:center;font-size:.64rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--cta-ink);background:var(--cta);padding:6px 0;box-shadow:0 6px 14px -6px rgba(0,0,0,.35)}
 
 .hp .faq{max-width:820px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
 .hp details{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:2px 20px}
