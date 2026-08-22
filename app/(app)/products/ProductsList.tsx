@@ -237,7 +237,7 @@ export default function ProductsList({
       <div className="px-6 md:px-8 pt-6 md:pt-8 pb-4 shrink-0 border-b border-border">
         <PageHeader
           title="Produits"
-          subtitle="Bouquets, plantes, cache-pots, bougies, services, cartes cadeaux."
+          subtitle="Articles, packs, services, cartes cadeaux."
           actions={canEdit ? (
             <div className="flex gap-2">
               {/* Import + vue liste éditable : réservés au back-office (gestion

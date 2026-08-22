@@ -171,7 +171,7 @@ export default function OrderModal({
           <Field label="Notes internes">
             <textarea className="input h-20 text-base py-2" value={notes}
                       onChange={(e) => setNotes(e.target.value)}
-                      placeholder="Couleur de bouquet, message carte, etc." />
+                      placeholder="Détails, message carte, etc." />
           </Field>
 
           <div className="rounded-xl bg-gray-50 p-3 flex items-baseline justify-between">

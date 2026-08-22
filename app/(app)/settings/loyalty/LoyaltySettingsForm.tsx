@@ -352,7 +352,7 @@ export default function LoyaltySettingsForm({ initial, canEdit, stores = [], sco
               </label>
               <textarea
                 className="input mt-1 h-20 text-sm py-2"
-                placeholder="Merci pour votre fidélité. Rendez-vous en boutique dès votre prochain bouquet !"
+                placeholder="Merci pour votre fidélité. Rendez-vous en boutique très bientôt !"
                 maxLength={500}
                 value={wallet.back_message}
                 disabled={!canEdit}

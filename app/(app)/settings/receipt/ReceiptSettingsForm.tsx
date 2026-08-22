@@ -200,7 +200,7 @@ export default function ReceiptSettingsForm({ stores, canEdit, lockedStoreId }: 
 
             <Field label="Site web (propre à cette boutique)">
               <input className="input" value={form.website} disabled={!canEdit}
-                     placeholder="ex : plante-verte.fr"
+                     placeholder="ex : mon-commerce.fr"
                      onChange={(e) => setForm({ ...form, website: e.target.value })} />
             </Field>
           </div>

@@ -146,7 +146,7 @@ export default function EmailSettingsForm(
           <label className="block text-sm">
             <span className="text-ink-soft">Email expéditeur</span>
             <input className="input h-10 w-full mt-1" type="email" disabled={!canWrite}
-                   placeholder="contact@fannyfleurs.com"
+                   placeholder="contact@mon-commerce.fr"
                    value={s.sender_email} onChange={(e) => patch('sender_email', e.target.value)} />
           </label>
           <label className="block text-sm">

@@ -161,7 +161,7 @@ export default function OrdersClient({ orgId: _orgId }: { orgId: string }) {
     <div className="p-6 md:p-8 space-y-5">
       <PageHeader
         title="Commandes"
-        subtitle="Bouquets, compositions, plantes commandées avec retrait ou livraison."
+        subtitle="Commandes clients avec retrait ou livraison."
       />
 
       <section className="grid grid-cols-2 md:grid-cols-4 gap-3">

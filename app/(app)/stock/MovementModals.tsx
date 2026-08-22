@@ -203,8 +203,8 @@ export function TypeAndReasonModal({ product, delta, storeId, onClose, onSaved }
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           placeholder={reasonRequired
-            ? 'ex : casse, fleurs fanées, écart inventaire'
-            : 'ex : Livraison Aoki Fleurs'}
+            ? 'ex : casse, produit périmé, écart inventaire'
+            : 'ex : Livraison fournisseur'}
         />
 
         {error && <div className="mt-3 rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}

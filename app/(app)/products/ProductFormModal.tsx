@@ -613,7 +613,7 @@ export default function ProductFormModal({
             <div className="grid grid-cols-2 gap-y-1.5 gap-x-4 mt-2">
               <Check label="Gérer le stock" checked={form.track_stock}
                      onChange={(v) => setForm({ ...form, track_stock: v })} />
-              <Check label="Prix libre (bouquet)" checked={form.price_is_free}
+              <Check label="Prix libre" checked={form.price_is_free}
                      onChange={(v) => setForm({ ...form, price_is_free: v, sale_price_ttc: v ? '' : form.sale_price_ttc })} />
               <Check label="Top produit (épinglé en grille)" checked={form.is_top_product}
                      onChange={(v) => setForm({ ...form, is_top_product: v })} />
@@ -626,7 +626,7 @@ export default function ProductFormModal({
             <p className="mt-2 text-xs text-ink-soft">
               {form.track_stock
                 ? 'Chaque vente en caisse décompte cet article, et chaque retour le recrédite. Les inventaires et les alertes de réassort le prennent en compte.'
-                : 'Cet article se vend sans être décompté : aucun mouvement de stock, donc aucune quantité négative à corriger. À réserver à ce qui n\'a pas de stock à tenir — bouquet composé au comptoir, prestation, carte cadeau.'}
+                : 'Cet article se vend sans être décompté : aucun mouvement de stock, donc aucune quantité négative à corriger. À réserver à ce qui n\'a pas de stock à tenir — article assemblé au comptoir, prestation, carte cadeau.'}
             </p>
             {form.is_top_product && (
               <p className="mt-2 text-xs text-ink-soft">
