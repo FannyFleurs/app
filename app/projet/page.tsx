@@ -99,6 +99,8 @@ html:has(.hp){scroll-behavior:smooth}
 .hp .shot .lbl{background:var(--surface);border:1px solid var(--border);border-radius:999px;padding:.5rem .95rem;font-size:.8rem;font-weight:600;display:inline-flex;gap:.5rem;align-items:center;box-shadow:var(--shadow-soft)}
 .hp .shot .lbl svg{flex:none;color:var(--cta)}
 .hp .shot img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.hp .shot.filled{border:1px solid var(--border);border-radius:22px;background:var(--surface);padding:0}
+.hp .shot.phone-ar.filled img{object-fit:cover}
 .hp .shot.tablet-ar{aspect-ratio:4/3}
 .hp .shot.phone-ar{aspect-ratio:9/16;max-width:280px;margin:0 auto;border-radius:26px}
 .hp .shot.wide-ar{aspect-ratio:16/10}
@@ -181,9 +183,14 @@ html:has(.hp){scroll-behavior:smooth}
 
 // Emplacement de capture réutilisable. Pour insérer un mockup : remplacez le
 // contenu (le <span class="lbl">…</span>) par <img src="/projet/xxx.png" alt="…">.
-function shot(kind: 'tablet-ar' | 'phone-ar' | 'wide-ar', legende: string, id: string): string {
+function shot(kind: 'tablet-ar' | 'phone-ar' | 'wide-ar', legende: string, id: string, img?: string): string {
+  // Avec une image (déposée dans public/projet/), on l'affiche pleine trame.
+  // Sans image, un emplacement vide invite à en ajouter une.
+  if (img) {
+    return `<div class="shot ${kind} filled" id="${id}"><img src="${img}" alt="${legende}"></div>`;
+  }
   return `<div class="shot ${kind}" id="${id}">
-    <!-- Remplacez la ligne ci-dessous par : <img src="/projet/${id}.png" alt="${legende}"> -->
+    <!-- Remplacez ce bloc par : <img src="/projet/${id}.png" alt="${legende}"> (ou passez le 4e argument de shot()) -->
     <span class="lbl"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M3 15l5-5 4 4 3-3 6 6"/><circle cx="8.5" cy="9" r="1.4" fill="currentColor" stroke="none"/></svg> ${legende}</span>
   </div>`;
 }
@@ -239,7 +246,7 @@ function renderHtml(setup: string, caisse: string, bo: string): string {
         <span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg> 100% en français</span>
       </div>
     </div>
-    <div class="visual">${shot('tablet-ar', 'Capture caisse (iPad)', 'hero')}</div>
+    <div class="visual">${shot('tablet-ar', 'Aperçu de la caisse HelloPos', 'hero', '/projet/hero.png')}</div>
   </div>
 </section>
 
@@ -327,7 +334,7 @@ function renderHtml(setup: string, caisse: string, bo: string): string {
 
 <section id="mobile" style="background:var(--surface-2)">
   <div class="wrap split rev">
-    <div class="visual reveal">${shot('phone-ar', 'Capture mobile (scan)', 'mobile')}</div>
+    <div class="visual reveal">${shot('phone-ar', 'HelloPos sur smartphone', 'mobile', '/projet/mobile.png')}</div>
     <div class="reveal">
       <div class="kicker">Sur smartphone</div>
       <h2>Toute la caisse, dans la poche</h2>
