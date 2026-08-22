@@ -69,6 +69,21 @@ html:has(.hp){scroll-behavior:smooth}
 .hp .logo-img{height:30px;width:auto;display:block;flex:none}
 .hp .logo-word{font-family:'Bricolage Grotesque','Hanken Grotesk',sans-serif;font-weight:800;letter-spacing:-.03em}
 
+/* Bouton « Connexion » = menu déroulant (Espace caisse / Back-office). Le
+   <summary> est stylé comme un bouton simple : marqueur retiré, apparence
+   native supprimée — pas de double cadre. */
+.hp .login{position:relative}
+.hp .login>summary{list-style:none;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:.35rem;font-weight:600;font-size:.9rem;line-height:1;padding:.66rem .95rem;border-radius:12px;border:1px solid var(--border);background:var(--surface);color:var(--ink);white-space:nowrap;-webkit-appearance:none;appearance:none;user-select:none;transition:background .15s ease}
+.hp .login>summary::-webkit-details-marker{display:none}
+.hp .login>summary::marker{content:""}
+.hp .login>summary:hover{background:var(--surface-2)}
+.hp .login[open]>summary{background:var(--surface-2)}
+.hp .login .chev{transition:transform .2s ease}
+.hp .login[open] .chev{transform:rotate(180deg)}
+.hp .login-menu{position:absolute;right:0;top:calc(100% + 8px);background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);padding:6px;min-width:190px;display:flex;flex-direction:column;z-index:60}
+.hp .login-menu a{padding:.6rem .7rem;border-radius:8px;font-size:.92rem;font-weight:500;color:var(--ink)}
+.hp .login-menu a:hover{background:var(--surface-2)}
+
 .hp header.nav{position:sticky;top:0;z-index:50;background:color-mix(in srgb,var(--bg) 82%, transparent);backdrop-filter:saturate(1.4) blur(10px);border-bottom:1px solid var(--border)}
 .hp .nav-in{display:flex;align-items:center;gap:1.5rem;height:66px}
 .hp .brand{display:flex;align-items:center;gap:.6rem;font-family:'Bricolage Grotesque';font-weight:800;font-size:1.2rem;letter-spacing:-.03em}
@@ -80,7 +95,7 @@ html:has(.hp){scroll-behavior:smooth}
 @media(max-width:640px){
   .hp .nav-in{gap:.5rem;height:60px}
   .hp .nav-cta{gap:.4rem}
-  .hp .nav-cta .btn{padding:.5rem .72rem;font-size:.82rem;border-radius:10px}
+  .hp .nav-cta .btn,.hp .nav-cta .login>summary{padding:.5rem .72rem;font-size:.82rem;border-radius:10px}
 }
 @media(max-width:430px){.hp .brand .logo-word{display:none}}
 
@@ -241,7 +256,13 @@ function renderHtml(setup: string, caisse: string, bo: string, p: Prices): strin
     </nav>
     <div class="nav-cta">
       <a class="btn btn-gold btn-sm" href="${setup}">Créer ma caisse</a>
-      <a class="btn btn-ghost btn-sm" href="${caisse}">Connexion</a>
+      <details class="login">
+        <summary>Connexion <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></summary>
+        <div class="login-menu">
+          <a href="${caisse}">Espace caisse</a>
+          <a href="${bo}">Back-office</a>
+        </div>
+      </details>
     </div>
   </div>
 </header>
