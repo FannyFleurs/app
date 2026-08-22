@@ -492,7 +492,7 @@ function renderHtml(setup: string, caisse: string, bo: string, p: Prices): strin
       <details class="reveal"><summary>Et pour plusieurs boutiques ?<span class="pm">+</span></summary><p>Le back-office gère le multi-boutiques : catalogue partagé, TVA par boutique, rôles utilisateurs et suivi du chiffre d'affaires consolidé, avec l'offre adaptée.</p></details>
       <details class="reveal"><summary>Y a-t-il un engagement ou un essai gratuit ?<span class="pm">+</span></summary><p>Aucun engagement : un essai gratuit vous permet de tout tester avant le premier prélèvement, et l'abonnement est résiliable à tout moment. Vous pouvez changer d'offre quand votre activité grandit.</p></details>
       <details class="reveal"><summary>Quels moyens de paiement puis-je encaisser ?<span class="pm">+</span></summary><p>Espèces (avec rendu monnaie), carte bancaire, chèque, lien de paiement et règlement différé « en compte » pour vos clients professionnels. Chaque boutique active les modes de règlement qu'elle utilise.</p></details>
-      <details class="reveal"><summary>Où sont hébergées mes données ?<span class="pm">+</span></summary><p>Vos données sont hébergées en Europe (base PostgreSQL managée, région Francfort). Les ventes validées alimentent une chaîne fiscale scellée et inaltérable, conservée et archivée conformément à la réglementation française.</p></details>
+      <details class="reveal"><summary>Où sont hébergées mes données ?<span class="pm">+</span></summary><p>En Europe, sur des serveurs sécurisés. Vos ventes sont sauvegardées et protégées, conformément à la réglementation.</p></details>
     </div>
   </div>
 </section>
