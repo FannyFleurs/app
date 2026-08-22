@@ -202,7 +202,10 @@ export function middleware(req: NextRequest) {
       return NextResponse.rewrite(url, { request: { headers: withPath(req, pathname) } });
     }
     // /site/* (accès direct + captures) et /setup servis tels quels.
-    if (isSitePath(pathname) || pathname === HOLDING_PATH || pathname === '/setup' || pathname.startsWith('/setup/')) {
+    // /projet : page de présentation autonome, publique, hors vitrine (pas
+    // soumise au réglage « site public »). Servie telle quelle sur l'apex.
+    if (isSitePath(pathname) || pathname === HOLDING_PATH || pathname === '/setup' || pathname.startsWith('/setup/')
+        || pathname === '/projet' || pathname.startsWith('/projet/')) {
       return NextResponse.next({ request: { headers: withPath(req, pathname) } });
     }
     const to = url.clone();
