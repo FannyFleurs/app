@@ -32,12 +32,13 @@ interface FormState {
   admin_password: string;
   admin_password_confirm: string;
   // Offre choisie
-  plan: 'essentiel' | 'croissance';
+  plan: 'essentiel' | 'croissance' | 'reseau';
 }
 
 const PLANS = [
   { key: 'essentiel' as const, name: 'Essentiel', desc: '1 boutique · 1 caisse' },
-  { key: 'croissance' as const, name: 'Croissance', desc: 'Caisses illimitées · multi-postes' },
+  { key: 'croissance' as const, name: 'Croissance', desc: '1 boutique · jusqu\'à 5 caisses' },
+  { key: 'reseau' as const, name: 'Réseau', desc: 'Jusqu\'à 3 boutiques · multi-caisses' },
 ];
 
 const STEPS = [
@@ -95,6 +96,16 @@ export default function SetupWizard() {
   function patch<K extends keyof FormState>(k: K, v: FormState[K]) {
     setF((s) => ({ ...s, [k]: v }));
   }
+
+  // Offre pré-sélectionnée depuis le lien (ex. /setup?offre=reseau) — utilisé
+  // par les boutons « Choisir … » de la page de présentation.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const o = new URLSearchParams(window.location.search).get('offre');
+    if (o === 'essentiel' || o === 'croissance' || o === 'reseau') {
+      setF((s) => ({ ...s, plan: o }));
+    }
+  }, []);
 
   function patchTax(idx: number, k: keyof TaxRow, v: string | number | boolean) {
     setF((s) => ({
@@ -491,11 +502,13 @@ export default function SetupWizard() {
           {step === 'payment' && (
             <div className="space-y-4">
               <SectionHeader title="Paiement" subtitle="Choisissez votre offre. 14 jours d'essai, débit à l'échéance." />
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {PLANS.map((p) => {
-                  const price = p.key === 'croissance'
-                    ? (brand.plan_croissance_price || '59')
-                    : (brand.plan_essentiel_price || '29');
+                  const price = p.key === 'reseau'
+                    ? (brand.plan_reseau_price || '69')
+                    : p.key === 'croissance'
+                      ? (brand.plan_croissance_price || '59')
+                      : (brand.plan_essentiel_price || '29');
                   return (
                     <button
                       key={p.key}

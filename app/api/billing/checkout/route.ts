@@ -40,8 +40,9 @@ export async function POST() {
     return NextResponse.json({ error: 'ALREADY_ACTIVE' }, { status: 400 });
   }
 
-  // Offre : depuis le plan de la subscription (starter/pro), sinon défaut.
-  const plan: 'essentiel' | 'croissance' = org.plan === 'pro' ? 'croissance' : 'essentiel';
+  // Offre : depuis le plan de la subscription (starter/pro/enterprise), sinon défaut.
+  const plan: 'essentiel' | 'croissance' | 'reseau' =
+    org.plan === 'enterprise' ? 'reseau' : org.plan === 'pro' ? 'croissance' : 'essentiel';
   const priceId = priceForPlan(platform, plan);
   if (!priceId) {
     return NextResponse.json({ error: 'PRICE_NOT_CONFIGURED' }, { status: 400 });

@@ -416,7 +416,7 @@ function renderHtml(setup: string, caisse: string, bo: string, p: Prices): strin
           <li>${check} Factures B2B, avoirs, exports</li>
           <li>${check} Support email</li>
         </ul>
-        <a class="btn btn-ghost" href="${setup}">Choisir Essentiel</a>
+        <a class="btn btn-ghost" href="${setup}?offre=essentiel">Choisir Essentiel</a>
       </div>
       <div class="plan hot reveal">
         <span class="badge-hot">Recommandé</span>
@@ -428,7 +428,7 @@ function renderHtml(setup: string, caisse: string, bo: string, p: Prices): strin
           <li>${check} Écran & Livraison (commande différée)</li>
           <li>${check} Support prioritaire</li>
         </ul>
-        <a class="btn btn-primary" href="${setup}">Choisir Croissance</a>
+        <a class="btn btn-primary" href="${setup}?offre=croissance">Choisir Croissance</a>
       </div>
       <div class="plan reveal">
         <div class="pname">Réseau</div>
@@ -440,7 +440,7 @@ function renderHtml(setup: string, caisse: string, bo: string, p: Prices): strin
           <li>${check} Gestion multi-boutiques centralisée</li>
           <li>${check} CA consolidé</li>
         </ul>
-        <a class="btn btn-ghost" href="${setup}">Choisir Réseau</a>
+        <a class="btn btn-ghost" href="${setup}?offre=reseau">Choisir Réseau</a>
       </div>
       <div class="plan reveal">
         <div class="pname">Sur mesure</div>

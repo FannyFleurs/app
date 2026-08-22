@@ -58,7 +58,7 @@ const schema = z.object({
     is_default: z.boolean().optional(),
   })).min(1).max(10),
   /** Offre choisie (déclenche le paiement Stripe si configuré). */
-  plan: z.enum(['essentiel', 'croissance']).optional(),
+  plan: z.enum(['essentiel', 'croissance', 'reseau']).optional(),
 });
 
 const TRIAL_DAYS = 14;
