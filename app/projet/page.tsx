@@ -1,6 +1,10 @@
 import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 import { spaceUrls } from '@/lib/site/spaces';
+import { loadPlatform } from '@/lib/site/platform';
+
+/** Tarifs affichés, calqués sur la config admin (Facturation). */
+interface Prices { essentiel: string; croissance: string; reseau: string; addon: string }
 
 /**
  * Page de présentation autonome (hellopos.fr/projet).
@@ -221,7 +225,7 @@ const logoBrand = `<img class="logo-img" src="/projet/logo.svg" alt="" aria-hidd
 const check = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M20 6L9 17l-5-5"/></svg>`;
 const tick = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>`;
 
-function renderHtml(setup: string, caisse: string, bo: string): string {
+function renderHtml(setup: string, caisse: string, bo: string, p: Prices): string {
   return `
 <header class="nav">
   <div class="wrap nav-in">
@@ -401,9 +405,9 @@ function renderHtml(setup: string, caisse: string, bo: string): string {
     <div class="plans">
       <div class="plan reveal">
         <div class="pname">Essentiel</div>
-        <div class="price tnum">29 €<small> /mois</small></div>
+        <div class="price tnum">${p.essentiel} €<small> /mois</small></div>
         <ul>
-          <li>${check} 1 boutique · 1 caisse (caisse en option 9 €)</li>
+          <li>${check} 1 boutique · 1 caisse (caisse en option ${p.addon} €)</li>
           <li>${check} Catalogue illimité</li>
           <li>${check} Tickets fiscaux conformes</li>
           <li>${check} Programme de fidélité</li>
@@ -415,7 +419,7 @@ function renderHtml(setup: string, caisse: string, bo: string): string {
       <div class="plan hot reveal">
         <span class="badge-hot">Recommandé</span>
         <div class="pname">Croissance</div>
-        <div class="price tnum">59 €<small> /mois</small></div>
+        <div class="price tnum">${p.croissance} €<small> /mois</small></div>
         <ul>
           <li>${check} Tout l'Essentiel, plus :</li>
           <li>${check} 1 boutique · jusqu'à 5 caisses</li>
@@ -426,11 +430,11 @@ function renderHtml(setup: string, caisse: string, bo: string): string {
       </div>
       <div class="plan reveal">
         <div class="pname">Réseau</div>
-        <div class="price tnum">69 €<small> /mois</small></div>
+        <div class="price tnum">${p.reseau} €<small> /mois</small></div>
         <ul>
           <li>${check} Tout Croissance, plus :</li>
           <li>${check} Jusqu'à 3 boutiques · 2 caisses / boutique</li>
-          <li>${check} Boutique supplémentaire 9 €</li>
+          <li>${check} Boutique supplémentaire ${p.addon} €</li>
           <li>${check} Gestion multi-boutiques centralisée</li>
           <li>${check} CA consolidé</li>
         </ul>
@@ -536,9 +540,17 @@ const JS = `(function(){
   els.forEach(function(e){io.observe(e)});
 })();`;
 
-export default function ProjetPage() {
+export default async function ProjetPage() {
   const urls = spaceUrls(headers().get('host'));
-  const html = renderHtml('/setup', urls.caisse, urls.bo);
+  // Tarifs calqués sur la config admin (Facturation) — table platform_settings.
+  const platform = await loadPlatform();
+  const prices: Prices = {
+    essentiel: platform.plan_essentiel_price || '29',
+    croissance: platform.plan_croissance_price || '59',
+    reseau: platform.plan_reseau_price || '69',
+    addon: platform.addon_register_price || '9',
+  };
+  const html = renderHtml('/setup', urls.caisse, urls.bo, prices);
   return (
     <>
       <link rel="preconnect" href="https://fonts.googleapis.com" />
