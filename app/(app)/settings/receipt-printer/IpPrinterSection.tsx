@@ -47,9 +47,16 @@ export default function IpPrinterSection({ stores, canWrite }: {
     return cap?.Plugins?.HelloPosPrinter ?? null;
   }
 
+  // Message explicite quand le plugin natif est introuvable : sans lui, on ne
+  // distinguait pas « plugin non chargé » de « imprimante injoignable ». Un
+  // plugin absent alors que l'app est native = plugin non ré-enregistré (ex.
+  // après une migration Capacitor) : la coque iOS/Android doit être reconstruite.
+  const PLUGIN_MISSING = 'Plugin d’impression natif introuvable dans cette version de l’app. '
+    + 'La coque iOS/Android doit être reconstruite (plugin HelloPosPrinter à ré-enregistrer).';
+
   async function testConnection() {
     const p = printerPlugin();
-    if (!p) return;
+    if (!p) { setTestMsg(PLUGIN_MISSING); return; }
     if (!isValidHost(host.trim())) { setTestMsg('Adresse IP invalide (ex : 192.168.1.50).'); return; }
     setTestMsg('Test en cours…');
     try {
@@ -62,7 +69,7 @@ export default function IpPrinterSection({ stores, canWrite }: {
 
   async function testPrint() {
     const p = printerPlugin();
-    if (!p) return;
+    if (!p) { setTestMsg(PLUGIN_MISSING); return; }
     if (!isValidHost(host.trim())) { setTestMsg('Adresse IP invalide (ex : 192.168.1.50).'); return; }
     setTestMsg('Impression du ticket test…');
     try {
