@@ -106,7 +106,7 @@ html:has(.hp){scroll-behavior:smooth}
    et on y contient l'image, sans habillage ni double cadre. */
 .hp .shot.filled{border:none;background:transparent;box-shadow:none;padding:0;overflow:visible;aspect-ratio:auto;display:block}
 .hp .shot.filled img{position:static;display:block;width:100%;height:auto;object-fit:contain}
-.hp .shot.phone-ar.filled{max-width:340px;margin:0 auto}
+.hp .shot.phone-ar.filled{max-width:272px;margin:0 auto}
 .hp{overflow-x:clip}
 .hp .shot.tablet-ar{aspect-ratio:4/3}
 .hp .shot.phone-ar{aspect-ratio:9/16;max-width:280px;margin:0 auto;border-radius:26px}
@@ -434,7 +434,7 @@ function renderHtml(setup: string, caisse: string, bo: string): string {
           <li>${check} Gestion multi-boutiques centralisée</li>
           <li>${check} CA consolidé</li>
         </ul>
-        <a class="btn btn-ghost" href="${setup}">Choisir Réseau</a>
+        <a class="btn btn-ghost" href="/contact">Nous contacter</a>
       </div>
       <div class="plan reveal">
         <div class="pname">Sur mesure</div>
