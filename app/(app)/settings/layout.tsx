@@ -60,7 +60,7 @@ export default async function SettingsLayout({ children }: { children: React.Rea
     { href: '/settings/permissions',      label: 'Permissions par rôle',  icon: 'users' as const,        perm: 'settings.write' as const,   boOnly: false, proOnly: false },
     { href: '/settings/users',            label: 'Gestion utilisateurs',  icon: 'users' as const,        perm: 'users.read' as const,       boOnly: false, proOnly: false },
     { href: '/settings/company',          label: 'Société & boutiques',   icon: 'settings' as const,     perm: 'settings.read' as const,    boOnly: true,  proOnly: false },
-    { href: '/settings/subscription',     label: 'Abonnement',            icon: 'invoices' as const,     perm: 'settings.read' as const,    boOnly: false, proOnly: false },
+    { href: '/settings/subscription',     label: 'Abonnement',            icon: 'invoices' as const,     perm: 'settings.read' as const,    boOnly: true,  proOnly: false },
     // Deux entrées voisines et distinctes : on VA aux exports, on RÈGLE les
     // formats. Le raccourci vers l'écran d'export est là parce qu'on l'y a
     // longtemps trouvé — le renommer sans le remplacer revenait à le cacher.
