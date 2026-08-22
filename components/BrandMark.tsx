@@ -17,6 +17,7 @@ export interface Brand {
   login_image_url?: string;
   plan_essentiel_price?: string;
   plan_croissance_price?: string;
+  plan_reseau_price?: string;
 }
 
 const CACHE_KEY = 'webpos_brand_cache';

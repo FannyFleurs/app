@@ -237,12 +237,17 @@ export async function setPromotionCodeActive(c: PlatformSettings, id: string, ac
   await stripePost(c.stripe_secret_key, `/promotion_codes/${id}`, { active: active ? 'true' : 'false' });
 }
 
+/** Offre commerciale : les trois plans self-service. */
+export type PlanOffer = 'essentiel' | 'croissance' | 'reseau';
+
 /** Mappe le plan interne (offre) vers son Price ID configuré. */
-export function priceForPlan(c: PlatformSettings, plan: 'essentiel' | 'croissance'): string {
+export function priceForPlan(c: PlatformSettings, plan: PlanOffer): string {
+  if (plan === 'reseau') return c.stripe_price_reseau;
   return plan === 'croissance' ? c.stripe_price_croissance : c.stripe_price_essentiel;
 }
 
 /** Mappe l'offre vers le plan de la table subscriptions. */
-export function subscriptionPlan(plan: 'essentiel' | 'croissance'): 'starter' | 'pro' {
+export function subscriptionPlan(plan: PlanOffer): 'starter' | 'pro' | 'enterprise' {
+  if (plan === 'reseau') return 'enterprise';
   return plan === 'croissance' ? 'pro' : 'starter';
 }
