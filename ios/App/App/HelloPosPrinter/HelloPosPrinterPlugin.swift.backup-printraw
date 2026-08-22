@@ -13,7 +13,6 @@ public class HelloPosPrinterPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "testConnection", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "printTest", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "printPdf", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "printRaw", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "printDayReport", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "openDrawer", returnType: CAPPluginReturnPromise)
     ]
@@ -190,99 +189,6 @@ public class HelloPosPrinterPlugin: CAPPlugin, CAPBridgedPlugin {
                 connection.cancel()
                 call.reject("timeout")
             }
-        }
-    }
-
-
-    @objc func printRaw(_ call: CAPPluginCall) {
-        guard let host = call.getString("host"),
-              !host.isEmpty else {
-            call.reject("host manquant")
-            return
-        }
-
-        let portValue = call.getInt("port") ?? 9100
-
-        guard let rawBase64 = call.getString("dataBase64"),
-              let payload = Data(base64Encoded: rawBase64),
-              !payload.isEmpty else {
-            call.reject("donnees d'impression invalides")
-            return
-        }
-
-        guard let port = NWEndpoint.Port(
-            rawValue: UInt16(portValue)
-        ) else {
-            call.reject("port invalide")
-            return
-        }
-
-        let connection = NWConnection(
-            host: NWEndpoint.Host(host),
-            port: port,
-            using: .tcp
-        )
-
-        let queue = DispatchQueue(
-            label: "fr.hellopos.printer.raw"
-        )
-
-        var finished = false
-
-        func finish(
-            _ result: Result<Void, Error>
-        ) {
-            guard !finished else { return }
-
-            finished = true
-            connection.cancel()
-
-            switch result {
-            case .success:
-                call.resolve([
-                    "printed": true,
-                    "host": host,
-                    "port": portValue,
-                    "bytes": payload.count
-                ])
-
-            case .failure(let error):
-                call.reject(
-                    "Impression brute impossible : \(error.localizedDescription)"
-                )
-            }
-        }
-
-        connection.stateUpdateHandler = { state in
-            switch state {
-            case .ready:
-                connection.send(
-                    content: payload,
-                    completion: .contentProcessed { error in
-                        if let error = error {
-                            finish(.failure(error))
-                        } else {
-                            finish(.success(()))
-                        }
-                    }
-                )
-
-            case .failed(let error):
-                finish(.failure(error))
-
-            default:
-                break
-            }
-        }
-
-        connection.start(queue: queue)
-
-        queue.asyncAfter(deadline: .now() + 10) {
-            guard !finished else { return }
-
-            finished = true
-            connection.cancel()
-            call.reject("timeout")
         }
     }
 

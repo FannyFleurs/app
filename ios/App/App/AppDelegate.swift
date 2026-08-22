@@ -21,6 +21,166 @@ final class HelloPosBridgeViewController: CAPBridgeViewController {
           const originalFetch = window.fetch.bind(window);
           const originalOpen = window.open.bind(window);
 
+          /*
+           * Configuration imprimante ticket native.
+           *
+           * LECTURE SEULE :
+           * - aucune modification des réglages PWA ;
+           * - aucun PATCH ;
+           * - la boutique est celle du poste appairé ;
+           * - aucune imprimante de secours arbitraire.
+           */
+          let helloPosNativePrinterCache = null;
+          let helloPosNativePrinterCacheAt = 0;
+
+          async function getHelloPosNativePrinter() {
+            const now = Date.now();
+
+            if (
+              helloPosNativePrinterCache &&
+              now - helloPosNativePrinterCacheAt < 60000
+            ) {
+              return helloPosNativePrinterCache;
+            }
+
+            console.log(
+              '### HELLOPOS NATIVE PRINTER RESOLVE ###'
+            );
+
+            /*
+             * Cette route résout déjà la boutique du poste grâce
+             * au cookie webpos_device_id.
+             */
+            const reportUrl = new URL(
+              '/api/reports/day',
+              window.location.origin
+            );
+
+            const reportResponse = await originalFetch(
+              reportUrl.toString(),
+              {
+                method: 'GET',
+                credentials: 'include',
+                cache: 'no-store'
+              }
+            );
+
+            if (!reportResponse.ok) {
+              throw new Error(
+                'NATIVE_PRINTER_STORE_RESOLVE_FAILED_' +
+                reportResponse.status
+              );
+            }
+
+            const reportData = await reportResponse.json();
+
+            const storeId =
+              reportData.store_id ||
+              reportData.storeId ||
+              reportData.report?.store_id ||
+              reportData.report?.storeId ||
+              null;
+
+            if (!storeId) {
+              throw new Error(
+                'NATIVE_PRINTER_STORE_NOT_FOUND'
+              );
+            }
+
+            console.log(
+              '### HELLOPOS NATIVE PRINTER STORE ###',
+              storeId
+            );
+
+            const settingsUrl = new URL(
+              '/api/settings/printer',
+              window.location.origin
+            );
+
+            settingsUrl.searchParams.set(
+              'store_id',
+              String(storeId)
+            );
+
+            const settingsResponse = await originalFetch(
+              settingsUrl.toString(),
+              {
+                method: 'GET',
+                credentials: 'include',
+                cache: 'no-store'
+              }
+            );
+
+            if (!settingsResponse.ok) {
+              throw new Error(
+                'NATIVE_PRINTER_SETTINGS_FAILED_' +
+                settingsResponse.status
+              );
+            }
+
+            const settingsData =
+              await settingsResponse.json();
+
+            const settings =
+              settingsData.settings || {};
+
+            if (settings.enabled !== true) {
+              throw new Error(
+                'NATIVE_PRINTER_DISABLED'
+              );
+            }
+
+            const host =
+              String(settings.ip || '').trim();
+
+            const port =
+              Number(settings.port || 9100);
+
+            const paperWidth =
+              Number(settings.paper_width || 80);
+
+            if (!host) {
+              throw new Error(
+                'NATIVE_PRINTER_IP_MISSING'
+              );
+            }
+
+            if (
+              !Number.isInteger(port) ||
+              port < 1 ||
+              port > 65535
+            ) {
+              throw new Error(
+                'NATIVE_PRINTER_PORT_INVALID'
+              );
+            }
+
+            const printer = {
+              storeId,
+              host,
+              port,
+              paperWidth,
+              widthDots:
+                paperWidth === 58 ? 384 : 576
+            };
+
+            helloPosNativePrinterCache = printer;
+            helloPosNativePrinterCacheAt = now;
+
+            console.log(
+              '### HELLOPOS NATIVE PRINTER READY ###',
+              JSON.stringify({
+                storeId: printer.storeId,
+                host: printer.host,
+                port: printer.port,
+                paperWidth: printer.paperWidth,
+                widthDots: printer.widthDots
+              })
+            );
+
+            return printer;
+          }
+
           document.addEventListener(
             'click',
             function(event) {
@@ -430,14 +590,17 @@ final class HelloPosBridgeViewController: CAPBridgeViewController {
 
                   const pdfBase64 = btoa(binary);
 
+                  const printer =
+                    await getHelloPosNativePrinter();
+
                   const nativeResult =
                     await window.Capacitor
                       .Plugins
                       .HelloPosPrinter
                       .printPdf({
-                        host: '192.168.10.119',
-                        port: 9100,
-                        widthDots: 576,
+                        host: printer.host,
+                        port: printer.port,
+                        widthDots: printer.widthDots,
                         pdfBase64
                       });
 
