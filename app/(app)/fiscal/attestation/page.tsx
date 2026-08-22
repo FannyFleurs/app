@@ -111,7 +111,7 @@ export default async function AttestationPage() {
 
         <Section title="Logiciel attesté">
           <Field label="Éditeur" value="HelloPos" />
-          <Field label="Logiciel" value="HelloPos — caisse SaaS" />
+          <Field label="Logiciel" value="HelloPos — logiciel de caisse" />
           <Field label="Version" value={`v${(pkg as { version?: string }).version ?? '—'}`} />
           <Field label="Révision fiscale (dernière migration)" value={lastMigration} />
           <Field
