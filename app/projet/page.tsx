@@ -52,7 +52,7 @@ html:has(.hp){scroll-behavior:smooth}
 .hp .wrap{max-width:1140px;margin:0 auto;padding:0 24px}
 .hp .tnum{font-variant-numeric:tabular-nums}
 
-.hp .btn{display:inline-flex;align-items:center;gap:.5rem;font-weight:600;font-size:.98rem;padding:.72rem 1.15rem;border-radius:12px;border:1px solid transparent;cursor:pointer;transition:transform .15s ease, box-shadow .15s ease, background .15s ease}
+.hp .btn{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;font-weight:600;font-size:.98rem;padding:.72rem 1.15rem;border-radius:12px;border:1px solid transparent;cursor:pointer;white-space:nowrap;transition:transform .15s ease, box-shadow .15s ease, background .15s ease}
 .hp .btn-primary{background:var(--cta);color:var(--cta-ink);box-shadow:var(--shadow-soft)}
 .hp .btn-primary:hover{transform:translateY(-1px)}
 .hp .btn-ghost{background:transparent;color:var(--ink);border-color:var(--border)}
@@ -80,6 +80,13 @@ html:has(.hp){scroll-behavior:smooth}
 .hp .nav-links a:hover{color:var(--ink)}
 .hp .nav-cta{margin-left:auto;display:flex;gap:.6rem;align-items:center}
 @media(max-width:860px){.hp .nav-links{display:none}}
+/* Boutons d'en-tête sur petit écran : compacts, sur une seule ligne. */
+@media(max-width:640px){
+  .hp .nav-in{gap:.5rem;height:60px}
+  .hp .nav-cta{gap:.4rem}
+  .hp .nav-cta .btn{padding:.5rem .72rem;font-size:.82rem;border-radius:10px}
+}
+@media(max-width:430px){.hp .brand .logo-word{display:none}}
 
 .hp .hero{padding:64px 0 40px;position:relative}
 .hp .hero-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:48px;align-items:center}
@@ -102,15 +109,12 @@ html:has(.hp){scroll-behavior:smooth}
 /* Image « pleine » : les mockups fournis intègrent déjà le cadre de l'appareil
    et son ombre. On retire donc TOUT habillage (bordure, fond, ombre, coins,
    ratio imposé) et on laisse l'image à sa taille naturelle. */
-.hp .shot.filled{border:none;border-radius:0;background:transparent;box-shadow:none;padding:0;overflow:visible;aspect-ratio:auto;display:block}
-.hp .shot.filled img{position:static;width:100%;height:auto;object-fit:contain}
-/* Captures agrandies (~x2). overflow-x:clip évite tout scroll horizontal si
-   une image déborde légèrement de sa colonne. */
+/* Capture « pleine » : les mockups intègrent déjà le cadre de l'appareil.
+   On garde le format de la tuile (ratio défini par .tablet-ar/.phone-ar/.wide-ar)
+   et on y contient l'image, sans habillage ni double cadre. */
+.hp .shot.filled{border:none;background:transparent;box-shadow:none;padding:0;overflow:visible}
+.hp .shot.filled img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
 .hp{overflow-x:clip}
-.hp #mobile .shot.phone-ar.filled{max-width:600px;margin:0 auto}
-@media(min-width:961px){
-  .hp .hero .shot.filled{width:min(56vw,960px);max-width:none}
-}
 .hp .shot.tablet-ar{aspect-ratio:4/3}
 .hp .shot.phone-ar{aspect-ratio:9/16;max-width:280px;margin:0 auto;border-radius:26px}
 .hp .shot.wide-ar{aspect-ratio:16/10}
@@ -183,8 +187,18 @@ html:has(.hp){scroll-behavior:smooth}
 .hp .cta-band .btn-primary{margin-top:26px}
 .hp .cta-band .smile{position:absolute;left:50%;top:-40px;transform:translateX(-50%);opacity:.14}
 
-.hp footer{padding:44px 0 60px;border-top:1px solid var(--border);color:var(--ink-soft);font-size:.9rem}
-.hp .foot-in{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;align-items:center}
+.hp footer{padding:56px 0 60px;border-top:1px solid var(--border);color:var(--ink-soft);font-size:.9rem;background:var(--surface-2)}
+.hp .foot-top{display:grid;grid-template-columns:1.25fr 2fr;gap:44px}
+@media(max-width:820px){.hp .foot-top{grid-template-columns:1fr;gap:30px}}
+.hp .foot-brand p{margin-top:12px;max-width:36ch;color:var(--ink-soft)}
+.hp .foot-actions{margin-top:16px}
+.hp .foot-cols{display:grid;grid-template-columns:repeat(4,1fr);gap:20px}
+@media(max-width:560px){.hp .foot-cols{grid-template-columns:repeat(2,1fr)}}
+.hp .foot-col h4{font-family:'Hanken Grotesk';font-size:.78rem;text-transform:uppercase;letter-spacing:.08em;color:var(--ink);margin:0 0 12px;font-weight:700}
+.hp .foot-col a{display:block;padding:4px 0;color:var(--ink-soft);font-size:.92rem}
+.hp .foot-col a:hover{color:var(--ink)}
+.hp .foot-rule{border:none;border-top:1px solid var(--border);margin:30px 0 18px}
+.hp .foot-bottom{display:flex;justify-content:space-between;gap:12px 20px;flex-wrap:wrap;font-size:.85rem}
 
 .hp .reveal{opacity:0;transform:translateY(16px);transition:opacity .6s ease, transform .6s ease}
 .hp .reveal.in{opacity:1;transform:none}
@@ -243,7 +257,6 @@ function renderHtml(setup: string, caisse: string, bo: string): string {
 <section class="hero">
   <div class="wrap hero-grid">
     <div>
-      <span class="eyebrow"><span class="dot"></span> Caisse SaaS · tous commerces · France</span>
       <h1 class="hero-h">La caisse qui vit sur <span class="mark">iPad, mobile</span> et dans votre back-office.</h1>
       <p class="hero-sub">HelloPos encaisse, gère le stock, fidélise et sort des tickets conformes — sur la tablette du comptoir, dans la poche, et depuis un back-office multi-boutiques.</p>
       <div class="hero-cta">
@@ -465,9 +478,47 @@ function renderHtml(setup: string, caisse: string, bo: string): string {
 </section>
 
 <footer>
-  <div class="wrap foot-in">
-    <a class="brand" href="#top" style="font-size:1.05rem">${logoBrand}</a>
-    <span>Caisse SaaS pour les commerces de détail · France</span>
+  <div class="wrap">
+    <div class="foot-top">
+      <div class="foot-brand">
+        <a class="brand" href="#top" style="font-size:1.1rem">${logoBrand}</a>
+        <p>Le logiciel de caisse pour tous les commerces de détail — sur iPad, sur mobile et dans votre back-office. Fait en France.</p>
+        <div class="foot-actions"><a class="btn btn-gold btn-sm" href="${setup}">Créer ma caisse</a></div>
+      </div>
+      <div class="foot-cols">
+        <div class="foot-col">
+          <h4>Produit</h4>
+          <a href="#fonctions">Fonctions</a>
+          <a href="#caisse">Caisse</a>
+          <a href="#mobile">Mobile</a>
+          <a href="#backoffice">Back-office</a>
+          <a href="#tarifs">Tarifs</a>
+        </div>
+        <div class="foot-col">
+          <h4>Accès</h4>
+          <a href="${caisse}">Espace caisse</a>
+          <a href="${bo}">Back-office</a>
+          <a href="${setup}">Créer ma caisse</a>
+        </div>
+        <div class="foot-col">
+          <h4>Aide</h4>
+          <a href="/contact">Contact</a>
+          <a href="/support">Support</a>
+          <a href="/a-propos">À propos</a>
+        </div>
+        <div class="foot-col">
+          <h4>Légal</h4>
+          <a href="/mentions-legales">Mentions légales</a>
+          <a href="/confidentialite">Politique de confidentialité</a>
+          <a href="/confidentialite#cookies">Gestion des cookies</a>
+        </div>
+      </div>
+    </div>
+    <hr class="foot-rule">
+    <div class="foot-bottom">
+      <span>© HelloPos · France</span>
+      <span>Conçu conforme à l'art. 286-I-3°bis du CGI</span>
+    </div>
   </div>
 </footer>
 `;

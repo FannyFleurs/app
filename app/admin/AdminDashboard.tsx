@@ -49,7 +49,7 @@ export default function AdminDashboard() {
   return (
     <div className="p-8 space-y-6 max-w-7xl">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Dashboard SaaS</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
         <p className="mt-1 text-sm text-ink-soft">
           Vue d&apos;ensemble des comptes clients HelloPos.
         </p>

@@ -7,7 +7,7 @@ import DialogHost from '@/lib/ui/dialog';
 export const metadata: Metadata = {
   title: 'HelloPos',
   description:
-    'Caisse SaaS pour commerces de détail — conforme by design aux exigences françaises de l\'article 286, I, 3°bis du CGI.',
+    'Logiciel de caisse pour commerces de détail — conforme by design aux exigences françaises de l\'article 286, I, 3°bis du CGI.',
   applicationName: 'HelloPos',
   manifest: '/manifest.json',
   appleWebApp: {

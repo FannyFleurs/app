@@ -164,7 +164,7 @@ export default function BrandingForm({ initial }: { initial: BrandingData }) {
         {/* Un bloc par espace : logo + favicon, titré par le nom de la page. */}
         <SpaceBlock title="Back-office" sub="Sous-domaine bo. Vides = branding principal."
                     logoKey="bo_logo_url" favKey="bo_favicon_url" />
-        <SpaceBlock title="Console admin (SaaS)" sub="Sous-domaine admin. Vides = branding principal."
+        <SpaceBlock title="Console admin" sub="Sous-domaine admin. Vides = branding principal."
                     logoKey="admin_logo_url" favKey="admin_favicon_url" />
         <SpaceBlock title="PDA (étiquettes)" sub="Sous-domaine pda. Vides = branding principal."
                     logoKey="pda_logo_url" favKey="pda_favicon_url" />

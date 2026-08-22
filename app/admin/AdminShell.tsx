@@ -53,7 +53,7 @@ export default function AdminShell({
         </button>
         <Link href="/admin" className="flex items-center gap-2">
           <BrandLogo logoUrl={logoUrl} brandName={brandName} className="h-8 w-auto max-w-[130px] object-contain" />
-          <span className="text-sm font-semibold tracking-tight text-ink-soft">Admin SaaS</span>
+          <span className="text-sm font-semibold tracking-tight text-ink-soft">Admin</span>
         </Link>
       </header>
 
@@ -75,7 +75,7 @@ export default function AdminShell({
         <div className="h-16 flex items-center justify-between px-4 border-b border-border">
           <Link href="/admin" className="flex items-center gap-2.5">
             <BrandLogo logoUrl={logoUrl} brandName={brandName} />
-            <span className="text-sm font-semibold tracking-tight text-ink-soft">Admin SaaS</span>
+            <span className="text-sm font-semibold tracking-tight text-ink-soft">Admin</span>
           </Link>
           {/* Fermeture du tiroir (mobile). */}
           <button
