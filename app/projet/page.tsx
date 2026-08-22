@@ -99,8 +99,12 @@ html:has(.hp){scroll-behavior:smooth}
 .hp .shot .lbl{background:var(--surface);border:1px solid var(--border);border-radius:999px;padding:.5rem .95rem;font-size:.8rem;font-weight:600;display:inline-flex;gap:.5rem;align-items:center;box-shadow:var(--shadow-soft)}
 .hp .shot .lbl svg{flex:none;color:var(--cta)}
 .hp .shot img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-.hp .shot.filled{border:1px solid var(--border);border-radius:22px;background:var(--surface);padding:0}
-.hp .shot.phone-ar.filled img{object-fit:cover}
+/* Image « pleine » : les mockups fournis intègrent déjà le cadre de l'appareil
+   et son ombre. On retire donc TOUT habillage (bordure, fond, ombre, coins,
+   ratio imposé) et on laisse l'image à sa taille naturelle. */
+.hp .shot.filled{border:none;border-radius:0;background:transparent;box-shadow:none;padding:0;overflow:visible;aspect-ratio:auto;display:block}
+.hp .shot.filled img{position:static;width:100%;height:auto;object-fit:contain}
+.hp .shot.phone-ar.filled{max-width:320px;margin:0 auto}
 .hp .shot.tablet-ar{aspect-ratio:4/3}
 .hp .shot.phone-ar{aspect-ratio:9/16;max-width:280px;margin:0 auto;border-radius:26px}
 .hp .shot.wide-ar{aspect-ratio:16/10}
