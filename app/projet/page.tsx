@@ -160,7 +160,7 @@ html:has(.hp){scroll-behavior:smooth}
 @media(max-width:1040px){.hp .plans{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:560px){.hp .plans{grid-template-columns:1fr}}
 .hp .plan{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:22px;display:flex;flex-direction:column;box-shadow:var(--shadow-soft)}
-.hp .plan.hot{border-color:var(--cta);box-shadow:var(--shadow)}
+.hp .plan.hot{border-color:var(--cta);box-shadow:var(--shadow);position:relative;overflow:hidden}
 .hp .plan .pname{font-family:'Bricolage Grotesque';font-weight:800;font-size:1.25rem}
 .hp .plan .price{font-size:2rem;font-weight:800;font-family:'Bricolage Grotesque';margin:10px 0 2px}
 .hp .plan .price small{font-size:.9rem;font-weight:600;color:var(--ink-soft)}
@@ -168,7 +168,9 @@ html:has(.hp){scroll-behavior:smooth}
 .hp .plan li{display:flex;gap:.55rem;font-size:.94rem;color:var(--ink-soft)}
 .hp .plan li svg{flex:none;color:var(--cta);margin-top:3px}
 .hp .plan .btn{margin-top:auto;justify-content:center}
-.hp .badge-hot{align-self:flex-start;font-size:.7rem;font-weight:700;color:var(--cta-ink);background:var(--cta);border-radius:999px;padding:3px 10px;margin-bottom:6px}
+/* Ruban d'angle « Recommandé » : hors flux (position absolue), en diagonale
+   dans le coin haut-droit — ne décale plus le titre de la tuile. */
+.hp .badge-hot{position:absolute;top:16px;right:-42px;transform:rotate(45deg);width:170px;text-align:center;font-size:.66rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--cta-ink);background:var(--cta);padding:5px 0;box-shadow:0 4px 10px -4px rgba(0,0,0,.35)}
 
 .hp .faq{max-width:820px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
 .hp details{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:2px 20px}
