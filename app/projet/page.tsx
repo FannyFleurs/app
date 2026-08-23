@@ -126,7 +126,7 @@ html:has(.hp){scroll-behavior:smooth}
    et on y contient l'image, sans habillage ni double cadre. */
 .hp .shot.filled{border:none;background:transparent;box-shadow:none;padding:0;overflow:visible;aspect-ratio:auto;display:block}
 .hp .shot.filled img{position:static;display:block;width:100%;height:auto;object-fit:contain}
-.hp .shot.phone-ar.filled{max-width:272px;margin:0 auto}
+.hp .shot.phone-ar.filled{max-width:218px;margin:0 auto}
 .hp{overflow-x:clip}
 .hp .shot.tablet-ar{aspect-ratio:4/3}
 .hp .shot.phone-ar{aspect-ratio:9/16;max-width:280px;margin:0 auto;border-radius:26px}
