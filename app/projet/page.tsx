@@ -372,7 +372,7 @@ function renderHtml(setup: string, caisse: string, bo: string, p: Prices): strin
 </section>
 
 <section id="mobile" style="background:var(--surface-2)">
-  <div class="wrap split rev">
+  <div class="wrap split">
     <div class="visual reveal">${shot('phone-ar', 'HelloPos sur smartphone', 'mobile', '/projet/mobile.png')}</div>
     <div class="reveal">
       <div class="kicker">Sur smartphone</div>
