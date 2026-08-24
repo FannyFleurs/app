@@ -97,16 +97,7 @@ export default function CaisseLogin({ logoUrl, brandName }: { logoUrl: string; b
   return (
     <main className="min-h-screen bg-bg flex flex-col items-center justify-center px-6 py-10">
       <div className="w-full max-w-sm flex flex-col items-center text-center">
-        {/* Logo de l'app (réglage de marque). Repli sur la marque HelloPos si absent. */}
-        {logoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={logoUrl} alt={brandName || 'HelloPos'} className="h-20 w-auto object-contain" />
-        ) : (
-          <div className="h-20 w-20 rounded-3xl grid place-items-center" style={{ background: YELLOW }} aria-hidden="true">
-            <svg width="46" height="46" viewBox="0 0 40 40"><path d="M11 21a9 9 0 0 0 18 0" fill="none" stroke={GREEN} strokeWidth="3.6" strokeLinecap="round" /></svg>
-          </div>
-        )}
-        <h1 className="mt-5 text-3xl font-bold" style={{ color: GREEN }}>Bienvenue sur {brandName || 'HelloPos'}</h1>
+        <h1 className="text-3xl font-bold" style={{ color: GREEN }}>Bienvenue sur {brandName || 'HelloPos'}</h1>
         <p className="mt-2 text-ink-soft">Votre caisse simple, rapide et adaptée à votre boutique.</p>
 
         {/* Carte « Créer ma caisse » */}
