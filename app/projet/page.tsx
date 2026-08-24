@@ -127,6 +127,21 @@ html:has(.hp){scroll-behavior:smooth}
 .hp .shot.filled{border:none;background:transparent;box-shadow:none;padding:0;overflow:visible;aspect-ratio:auto;display:block}
 .hp .shot.filled img{position:static;display:block;width:100%;height:auto;object-fit:contain}
 .hp .shot.phone-ar.filled{max-width:218px;margin:0 auto}
+
+/* Carrousel de captures mobiles : plusieurs écrans qui glissent, flèches +
+   points. Les slides dont l'image manque sont retirées automatiquement. */
+.hp .mcar{position:relative;max-width:306px;margin:0 auto;padding:0 44px}
+.hp .mcar-viewport{overflow:hidden;width:100%}
+.hp .mcar-track{display:flex;transition:transform .4s ease}
+.hp .mslide{flex:0 0 100%;display:flex;justify-content:center;align-items:flex-end}
+.hp .mslide img{width:218px;max-width:100%;height:auto;display:block}
+.hp .mcar-arrow{position:absolute;top:50%;transform:translateY(-50%);width:38px;height:38px;border-radius:50%;border:1px solid var(--border);background:var(--surface);color:var(--ink);display:grid;place-items:center;cursor:pointer;box-shadow:var(--shadow-soft);z-index:2;font-size:1.3rem;line-height:1;padding:0}
+.hp .mcar-arrow:hover{background:var(--surface-2)}
+.hp .mcar-arrow.prev{left:0}
+.hp .mcar-arrow.next{right:0}
+.hp .mcar-dots{display:flex;gap:7px;justify-content:center;margin-top:16px}
+.hp .mcar-dots button{width:8px;height:8px;border-radius:50%;border:none;background:var(--border);cursor:pointer;padding:0}
+.hp .mcar-dots button.on{background:var(--cta)}
 .hp{overflow-x:clip}
 .hp .shot.tablet-ar{aspect-ratio:4/3}
 .hp .shot.phone-ar{aspect-ratio:9/16;max-width:280px;margin:0 auto;border-radius:26px}
@@ -373,7 +388,21 @@ function renderHtml(setup: string, caisse: string, bo: string, p: Prices): strin
 
 <section id="mobile" style="background:var(--surface-2)">
   <div class="wrap split">
-    <div class="visual reveal">${shot('phone-ar', 'HelloPos sur smartphone', 'mobile', '/projet/mobile.png')}</div>
+    <div class="visual reveal">
+      <div class="mcar">
+        <button type="button" class="mcar-arrow prev" aria-label="Capture précédente">&#8249;</button>
+        <div class="mcar-viewport">
+          <div class="mcar-track">
+            <div class="mslide"><img src="/projet/mobile.png" alt="HelloPos sur smartphone" onerror="this.closest('.mslide').remove()"></div>
+            <div class="mslide"><img src="/projet/mobile-2.png" alt="HelloPos sur smartphone" onerror="this.closest('.mslide').remove()"></div>
+            <div class="mslide"><img src="/projet/mobile-3.png" alt="HelloPos sur smartphone" onerror="this.closest('.mslide').remove()"></div>
+            <div class="mslide"><img src="/projet/mobile-4.png" alt="HelloPos sur smartphone" onerror="this.closest('.mslide').remove()"></div>
+          </div>
+        </div>
+        <button type="button" class="mcar-arrow next" aria-label="Capture suivante">&#8250;</button>
+        <div class="mcar-dots"></div>
+      </div>
+    </div>
     <div class="reveal">
       <div class="kicker">Sur smartphone</div>
       <h2>Toute la caisse, dans la poche</h2>
@@ -565,6 +594,36 @@ const JS = `(function(){
     entries.forEach(function(en){if(en.isIntersecting){en.target.classList.add('in');io.unobserve(en.target);}});
   },{threshold:.12,rootMargin:'0px 0px -8% 0px'});
   els.forEach(function(e){io.observe(e)});
+
+  // Carrousel captures mobiles.
+  var mcar=scope.querySelector('.mcar');
+  if(mcar){
+    var track=mcar.querySelector('.mcar-track');
+    var dotsEl=mcar.querySelector('.mcar-dots');
+    var idx=0;
+    function slides(){return Array.prototype.slice.call(track.querySelectorAll('.mslide'));}
+    function render(){
+      var s=slides(),n=s.length;
+      if(idx>n-1)idx=n-1; if(idx<0)idx=0;
+      track.style.transform='translateX('+(-idx*100)+'%)';
+      var nav=n>1;
+      mcar.querySelectorAll('.mcar-arrow').forEach(function(a){a.style.display=nav?'':'none';});
+      dotsEl.innerHTML='';
+      if(nav){for(var k=0;k<n;k++){(function(k){var b=document.createElement('button');b.type='button';b.setAttribute('aria-label','Capture '+(k+1));if(k===idx)b.className='on';b.addEventListener('click',function(){idx=k;render();});dotsEl.appendChild(b);})(k);}}
+    }
+    mcar.querySelector('.prev').addEventListener('click',function(){var n=slides().length;if(n)idx=(idx-1+n)%n;render();});
+    mcar.querySelector('.next').addEventListener('click',function(){var n=slides().length;if(n)idx=(idx+1)%n;render();});
+    // Slides retirées quand l'image manque -> on recalcule.
+    track.addEventListener('error',function(){setTimeout(render,0);},true);
+    // Glissé tactile.
+    var x0=null;
+    track.addEventListener('touchstart',function(e){x0=e.touches[0].clientX;},{passive:true});
+    track.addEventListener('touchend',function(e){
+      if(x0===null)return;var dx=e.changedTouches[0].clientX-x0;x0=null;var n=slides().length;
+      if(Math.abs(dx)>40&&n){idx=dx<0?(idx+1)%n:(idx-1+n)%n;render();}
+    },{passive:true});
+    render();setTimeout(render,400);setTimeout(render,1500);
+  }
 
   // Menu « Connexion » : ouverture au clic, fermeture au clic extérieur / Echap.
   var login=scope.querySelector('.login');
