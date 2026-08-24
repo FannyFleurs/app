@@ -110,6 +110,11 @@ html:has(.hp){scroll-behavior:smooth}
 .hp .hero-h .mark::after{content:"";position:absolute;left:-2%;right:-2%;bottom:.06em;height:.34em;background:var(--accent);z-index:-1;border-radius:4px;transform:rotate(-.6deg)}
 .hp .hero-sub{margin-top:20px;font-size:1.16rem;color:var(--ink-soft);max-width:33ch}
 .hp .hero-cta{display:flex;gap:.8rem;flex-wrap:wrap;margin-top:28px}
+.hp .appstore-link{display:inline-block;line-height:0}
+.hp .appstore-badge{display:block;width:168px;height:auto}
+.hp .hero-appstore{margin-top:20px}
+.hp .foot-appstore{margin-top:14px}
+.hp .foot-appstore .appstore-badge{width:145px}
 .hp .trust{display:flex;gap:1.1rem;flex-wrap:wrap;margin-top:26px;font-size:.86rem;color:var(--ink-soft)}
 .hp .trust span{display:inline-flex;align-items:center;gap:.4rem}
 .hp .trust svg{flex:none}
@@ -234,6 +239,8 @@ html:has(.hp){scroll-behavior:smooth}
 .hp .reveal{opacity:0;transform:translateY(16px);transition:opacity .6s ease, transform .6s ease}
 .hp .reveal.in{opacity:1;transform:none}
 @media (prefers-reduced-motion:reduce){.hp .reveal{opacity:1;transform:none;transition:none}html:has(.hp){scroll-behavior:auto}}
+
+
 `;
 
 // Emplacement de capture réutilisable. Pour insérer un mockup : remplacez le
@@ -291,10 +298,23 @@ function renderHtml(setup: string, caisse: string, bo: string, p: Prices): strin
       <h1 class="hero-h">La caisse qui vit sur <span class="mark">tablette, mobile</span> et dans votre back-office.</h1>
       <p class="hero-sub">HelloPos encaisse, gère le stock, fidélise et sort des tickets conformes — sur la tablette du comptoir, dans la poche, et depuis un back-office multi-boutiques.</p>
       <div class="hero-cta">
-        <a class="btn btn-primary btn-lg" href="${setup}">Créer ma caisse</a>
-        <a class="btn btn-ghost btn-lg" href="#fonctions">Voir les fonctions</a>
-      </div>
-      <div class="trust">
+  <a class="btn btn-primary btn-lg" href="${setup}">Créer ma caisse</a>
+  <a class="btn btn-ghost btn-lg" href="#fonctions">Voir les fonctions</a>
+</div>
+<div class="hero-appstore">
+  <a
+    class="appstore-link"
+    href="#"
+    aria-label="Télécharger HelloPos sur l’App Store"
+  >
+    <img
+      class="appstore-badge"
+      src="/projet/app-store.svg"
+      alt="Download on the App Store"
+    >
+  </a>
+</div>
+<div class="trust">
         <span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2l7 3v6c0 4.5-3 8.3-7 9-4-.7-7-4.5-7-9V5z"/><path d="M9 12l2 2 4-4"/></svg> Conçu conforme art. 286 CGI</span>
         <span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M3 9h18"/></svg> Sans engagement</span>
         <span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg> 100% en français</span>
@@ -545,6 +565,7 @@ function renderHtml(setup: string, caisse: string, bo: string, p: Prices): strin
         <a class="brand" href="#top" style="font-size:1.1rem">${logoBrand}</a>
         <p>Le logiciel de caisse pour tous les commerces de détail — sur tablette, sur mobile et dans votre back-office. Développé en France. Données hébergées en Europe.</p>
         <div class="foot-actions"><a class="btn btn-gold btn-sm" href="${setup}">Créer ma caisse</a></div>
+        <div class="foot-appstore"><a class="appstore-link" href="#" aria-label="Télécharger HelloPos sur l’App Store"><img class="appstore-badge" src="/projet/app-store.svg" alt="Download on the App Store"></a></div>
       </div>
       <div class="foot-cols">
         <div class="foot-col">
