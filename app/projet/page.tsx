@@ -543,7 +543,7 @@ function renderHtml(setup: string, caisse: string, bo: string, p: Prices): strin
     <div class="foot-top">
       <div class="foot-brand">
         <a class="brand" href="#top" style="font-size:1.1rem">${logoBrand}</a>
-        <p>Le logiciel de caisse pour tous les commerces de détail — sur tablette, sur mobile et dans votre back-office. Fait en France.</p>
+        <p>Le logiciel de caisse pour tous les commerces de détail — sur tablette, sur mobile et dans votre back-office. Développé en France. Données hébergées en Europe.</p>
         <div class="foot-actions"><a class="btn btn-gold btn-sm" href="${setup}">Créer ma caisse</a></div>
       </div>
       <div class="foot-cols">
@@ -577,7 +577,7 @@ function renderHtml(setup: string, caisse: string, bo: string, p: Prices): strin
     </div>
     <hr class="foot-rule">
     <div class="foot-bottom">
-      <span>Conçu conforme à l'art. 286-I-3°bis du CGI<br>© HelloPos · Tous droits réservés · France</span>
+      <span>© HelloPos · Tous droits réservés · France</span>
       <span>Site édité par <a href="https://swebio.fr">Swebio.fr</a></span>
     </div>
   </div>
