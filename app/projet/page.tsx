@@ -302,11 +302,6 @@ function renderHtml(setup: string, caisse: string, bo: string, p: Prices): strin
   <a class="btn btn-ghost btn-lg" href="#fonctions">Voir les fonctions</a>
 </div>
 <div class="hero-appstore"><a class="appstore-link" href="https://apps.apple.com/fr/app/hellopos/id6803190444" target="_blank" rel="noopener noreferrer" aria-label="Télécharger HelloPos sur l’App Store"><img class="appstore-badge" src="/projet/app-store.svg" alt="Download on the App Store"></a></div>
-    <img
-      class="appstore-badge"
-      src="/projet/app-store.svg"
-      alt="Download on the App Store"
-    >
   </a>
 </div>
 <div class="trust">
