@@ -1,13 +1,17 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import BrandMark, { useBrand } from '@/components/BrandMark';
 
-interface TaxRow { code: string; label: string; rate: number; is_default: boolean }
+interface TaxRow {
+  code: string;
+  label: string;
+  rate: number;
+  is_default: boolean;
+}
 
 interface FormState {
-  // Step 1
   company_name: string;
   company_legal: string;
   company_siret: string;
@@ -17,53 +21,49 @@ interface FormState {
   company_city: string;
   company_phone: string;
   company_email: string;
-  // Step 2
   store_code: string;
   store_name: string;
-  // Step 3
   register_code: string;
   register_name: string;
-  // Step 4
   taxes: TaxRow[];
-  // Step 5
   admin_name: string;
   admin_email: string;
   admin_pin: string;
   admin_password: string;
   admin_password_confirm: string;
-  // Offre choisie
   plan: 'essentiel' | 'croissance' | 'reseau';
 }
 
 const PLANS = [
   { key: 'essentiel' as const, name: 'Essentiel', desc: '1 boutique · 1 caisse' },
-  { key: 'croissance' as const, name: 'Croissance', desc: '1 boutique · jusqu\'à 5 caisses' },
-  { key: 'reseau' as const, name: 'Réseau', desc: 'Jusqu\'à 3 boutiques · multi-caisses' },
+  { key: 'croissance' as const, name: 'Croissance', desc: '1 boutique · jusqu’à 5 caisses' },
+  { key: 'reseau' as const, name: 'Réseau', desc: 'Jusqu’à 3 boutiques · multi-caisses' },
 ];
 
 const STEPS = [
-  { key: 'email',    label: 'Email' },
-  { key: 'company',  label: 'Société' },
-  { key: 'store',    label: 'Boutique' },
+  { key: 'email', label: 'Email' },
+  { key: 'company', label: 'Société' },
+  { key: 'store', label: 'Boutique' },
   { key: 'register', label: 'Caisse' },
-  { key: 'tax',      label: 'TVA' },
-  { key: 'admin',    label: 'Administrateur' },
-  { key: 'recap',    label: 'Récapitulatif' },
-  { key: 'payment',  label: 'Paiement' },
+  { key: 'tax', label: 'TVA' },
+  { key: 'admin', label: 'Administrateur' },
+  { key: 'recap', label: 'Récapitulatif' },
+  { key: 'payment', label: 'Paiement' },
 ] as const;
 
 const EMAIL_RE = /^[^@]+@[^@]+\.[^@]+$/;
 
 const DEFAULT_TAXES: TaxRow[] = [
-  { code: 'TVA20', label: 'TVA 20% (taux normal)',     rate: 20,  is_default: true },
-  { code: 'TVA10', label: 'TVA 10% (taux intermédiaire)',  rate: 10,  is_default: false },
+  { code: 'TVA20', label: 'TVA 20% (taux normal)', rate: 20, is_default: true },
+  { code: 'TVA10', label: 'TVA 10% (taux intermédiaire)', rate: 10, is_default: false },
   { code: 'TVA55', label: 'TVA 5,5% (produits réduits)', rate: 5.5, is_default: false },
 ];
 
 export default function SetupWizard() {
   const router = useRouter();
   const brand = useBrand();
-  const [step, setStep] = useState<typeof STEPS[number]['key']>('email');
+
+  const [step, setStep] = useState<(typeof STEPS)[number]['key']>('email');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<{ email: string } | null>(null);
@@ -91,68 +91,90 @@ export default function SetupWizard() {
     plan: 'croissance',
   });
 
-  // Mode multi-tenant : pas de check global, on autorise toujours la création.
+  const stepIndex = useMemo(() => STEPS.findIndex((s) => s.key === step), [step]);
+  const currentStep = STEPS[stepIndex];
+  const progress = Math.round(((stepIndex + 1) / STEPS.length) * 100);
 
-  function patch<K extends keyof FormState>(k: K, v: FormState[K]) {
-    setF((s) => ({ ...s, [k]: v }));
+  function patch<K extends keyof FormState>(key: K, value: FormState[K]) {
+    setF((prev) => ({ ...prev, [key]: value }));
   }
 
-  // Offre pré-sélectionnée depuis le lien (ex. /setup?offre=reseau) — utilisé
-  // par les boutons « Choisir … » de la page de présentation.
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const o = new URLSearchParams(window.location.search).get('offre');
-    if (o === 'essentiel' || o === 'croissance' || o === 'reseau') {
-      setF((s) => ({ ...s, plan: o }));
+    const offer = new URLSearchParams(window.location.search).get('offre');
+
+    if (offer === 'essentiel' || offer === 'croissance' || offer === 'reseau') {
+      setF((prev) => ({ ...prev, plan: offer }));
     }
   }, []);
 
-  function patchTax(idx: number, k: keyof TaxRow, v: string | number | boolean) {
-    setF((s) => ({
-      ...s,
-      taxes: s.taxes.map((t, i) => i === idx ? { ...t, [k]: v } : (
-        k === 'is_default' && v ? { ...t, is_default: false } : t
-      )),
+  function patchTax(index: number, key: keyof TaxRow, value: string | number | boolean) {
+    setF((prev) => ({
+      ...prev,
+      taxes: prev.taxes.map((tax, i) =>
+        i === index
+          ? { ...tax, [key]: value }
+          : key === 'is_default' && value
+            ? { ...tax, is_default: false }
+            : tax
+      ),
     }));
   }
 
   function addTax() {
-    setF((s) => ({ ...s, taxes: [...s.taxes, { code: '', label: '', rate: 0, is_default: false }] }));
+    setF((prev) => ({
+      ...prev,
+      taxes: [...prev.taxes, { code: '', label: '', rate: 0, is_default: false }],
+    }));
   }
 
-  function removeTax(idx: number) {
-    setF((s) => ({ ...s, taxes: s.taxes.filter((_, i) => i !== idx) }));
+  function removeTax(index: number) {
+    setF((prev) => ({
+      ...prev,
+      taxes: prev.taxes.filter((_, i) => i !== index),
+    }));
   }
 
   function canAdvance(): boolean {
     switch (step) {
-      case 'email':    return EMAIL_RE.test(f.admin_email.trim());
-      case 'company':  return f.company_name.trim().length > 0 && f.company_legal.trim().length > 0;
-      case 'store':    return f.store_code.trim().length > 0 && f.store_name.trim().length > 0;
-      case 'register': return f.register_code.trim().length > 0 && f.register_name.trim().length > 0;
-      case 'tax':      return f.taxes.length > 0 && f.taxes.every((t) => t.code && t.label && t.rate >= 0);
-      case 'admin':    return f.admin_name.trim().length > 0
-                            && f.admin_password === f.admin_password_confirm
-                            && /^[^@]+@[^@]+\.[^@]+$/.test(f.admin_email)
-                            && /^\d{4}$/.test(f.admin_pin)
-                            && f.admin_password.length >= 8;
-      default:         return true;
+      case 'email':
+        return EMAIL_RE.test(f.admin_email.trim());
+      case 'company':
+        return f.company_name.trim().length > 0 && f.company_legal.trim().length > 0;
+      case 'store':
+        return f.store_code.trim().length > 0 && f.store_name.trim().length > 0;
+      case 'register':
+        return f.register_code.trim().length > 0 && f.register_name.trim().length > 0;
+      case 'tax':
+        return f.taxes.length > 0 && f.taxes.every((t) => t.code && t.label && t.rate >= 0);
+      case 'admin':
+        return (
+          f.admin_name.trim().length > 0 &&
+          f.admin_password === f.admin_password_confirm &&
+          EMAIL_RE.test(f.admin_email) &&
+          /^\d{4}$/.test(f.admin_pin) &&
+          f.admin_password.length >= 8
+        );
+      default:
+        return true;
     }
   }
 
   function next() {
-    const idx = STEPS.findIndex((s) => s.key === step);
-    if (idx < STEPS.length - 1) setStep(STEPS[idx + 1]!.key);
+    if (stepIndex < STEPS.length - 1) setStep(STEPS[stepIndex + 1]!.key);
   }
+
   function prev() {
-    const idx = STEPS.findIndex((s) => s.key === step);
-    if (idx > 0) setStep(STEPS[idx - 1]!.key);
+    if (stepIndex > 0) setStep(STEPS[stepIndex - 1]!.key);
   }
 
   async function submit() {
-    setBusy(true); setError(null);
-    const r = await fetch('/api/auth/setup', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+    setBusy(true);
+    setError(null);
+
+    const response = await fetch('/api/auth/setup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         company: {
           name: f.company_name.trim(),
@@ -165,8 +187,14 @@ export default function SetupWizard() {
           phone: f.company_phone.trim() || undefined,
           email: f.company_email.trim() || undefined,
         },
-        store: { code: f.store_code.trim().toUpperCase(), name: f.store_name.trim() },
-        register: { code: f.register_code.trim().toUpperCase(), name: f.register_name.trim() },
+        store: {
+          code: f.store_code.trim().toUpperCase(),
+          name: f.store_name.trim(),
+        },
+        register: {
+          code: f.register_code.trim().toUpperCase(),
+          name: f.register_name.trim(),
+        },
         admin: {
           email: f.admin_email.trim().toLowerCase(),
           full_name: f.admin_name.trim(),
@@ -182,413 +210,745 @@ export default function SetupWizard() {
         plan: f.plan,
       }),
     });
-    if (!r.ok) {
+
+    if (!response.ok) {
       setBusy(false);
-      const j = await r.json().catch(() => ({}));
-      setError(j.message ?? j.error ?? 'Erreur');
+      const data = await response.json().catch(() => ({}));
+      setError(data.message ?? data.error ?? 'Erreur');
       return;
     }
-    const j = await r.json();
-    // Paiement Stripe requis : on redirige vers le Checkout (on garde
-    // busy=true, la page va changer).
-    if (j.checkout_url) {
-      window.location.assign(j.checkout_url);
+
+    const data = await response.json();
+
+    if (data.checkout_url) {
+      window.location.assign(data.checkout_url);
       return;
     }
-    // Fallback (Stripe non configuré) : compte créé + connecté.
+
     setBusy(false);
-    setSuccess({ email: j.email });
+    setSuccess({ email: data.email });
   }
 
   if (success) {
     return (
-      <main className="h-screen grid place-items-center bg-white p-6">
-        <div className="card max-w-md w-full p-6 text-center">
-          <div className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-success/10 text-success text-2xl">✓</div>
-          <h1 className="text-2xl font-semibold">Bienvenue sur HelloPos !</h1>
-          <p className="mt-2 text-sm text-ink-soft">
-            Votre boutique est créée et vous êtes déjà connecté. 14 jours
-            d&apos;essai gratuit pour tester la solution.
-          </p>
-          <div className="mt-4 rounded-xl bg-gray-50 px-4 py-3 text-sm">
-            <div className="text-ink-soft text-xs">Email administrateur</div>
-            <div className="font-medium">{success.email}</div>
-          </div>
-          <button onClick={() => router.push('/caisse')} className="btn-primary mt-4 w-full">
-            Accéder à ma caisse
-          </button>
-          <button onClick={() => router.push('/settings/company')} className="btn-ghost mt-2 w-full text-sm">
-            Configurer mon profil
-          </button>
+      <main className="min-h-dvh bg-[#fbfaf6] px-4 py-8 sm:px-6 sm:py-12">
+        <div className="mx-auto flex min-h-[calc(100dvh-4rem)] max-w-lg items-center justify-center">
+          <section className="w-full rounded-[30px] border border-black/[0.05] bg-white p-6 text-center shadow-[0_24px_80px_rgba(1,62,55,0.08)] sm:p-8">
+            <div className="mx-auto mb-5 grid h-16 w-16 place-items-center rounded-2xl bg-[#fff2bd] text-2xl text-[#013e37]">
+              ✓
+            </div>
+            <h1 className="text-2xl font-semibold tracking-[-0.03em] text-[#013e37]">
+              Votre caisse est prête
+            </h1>
+            <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-[#66736f]">
+              Votre boutique HelloPos a bien été créée. Vous êtes déjà connecté et pouvez commencer la configuration.
+            </p>
+
+            <div className="mt-6 rounded-2xl bg-[#f7f7f3] px-4 py-3">
+              <div className="text-xs text-[#78827f]">Email administrateur</div>
+              <div className="mt-1 font-medium text-[#193f39]">{success.email}</div>
+            </div>
+
+            <button
+              onClick={() => router.push('/caisse')}
+              className="mt-6 h-14 w-full rounded-2xl bg-[#0b5a4f] px-5 font-semibold text-white transition hover:bg-[#084d44] active:scale-[0.99]"
+            >
+              Accéder à ma caisse
+            </button>
+
+            <button
+              onClick={() => router.push('/settings/company')}
+              className="mt-3 h-12 w-full rounded-2xl px-5 text-sm font-medium text-[#0b5a4f] transition hover:bg-[#f3f6f4]"
+            >
+              Configurer mon profil
+            </button>
+          </section>
         </div>
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen bg-bg">
-      <div className="max-w-3xl mx-auto p-6 sm:p-10">
-        <header className="flex items-center gap-3 mb-6">
-          <BrandMark size={44} showName={false} />
-          <div>
-            <div className="text-xl font-semibold tracking-tight">{brand.brand_name || 'HelloPos'} — Configuration</div>
-            <div className="text-xs text-ink-soft">Configurez votre installation en quelques minutes.</div>
+    <main className="min-h-dvh bg-[#fbfaf6] text-[#153d36]">
+      <div className="mx-auto w-full max-w-[920px] px-4 py-5 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
+        <header className="mx-auto mb-6 max-w-2xl text-center sm:mb-8">
+          <div className="mx-auto grid h-16 w-16 place-items-center rounded-[22px] bg-[#fff0b0] shadow-[0_12px_35px_rgba(1,62,55,0.06)] sm:h-[72px] sm:w-[72px]">
+            <BrandMark size={46} showName={false} />
           </div>
+
+          <h1 className="mt-5 text-[28px] font-semibold leading-tight tracking-[-0.04em] text-[#013e37] sm:text-4xl">
+            Créons votre caisse
+          </h1>
+          <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-[#6d7572] sm:text-base">
+            Quelques informations suffisent pour préparer votre boutique et votre première caisse.
+          </p>
         </header>
 
-        {/* Stepper */}
-        {(() => {
-          const idx = STEPS.findIndex((x) => x.key === step);
-          const current = STEPS[idx];
-          const pct = Math.round(((idx + 1) / STEPS.length) * 100);
-          return (
-            <div className="mb-6">
-              {/* Étape courante + barre de progression : une seule ligne, à
-                  toutes les tailles (les 8 libellés ne tiennent pas côte à côte). */}
-              <div className="text-sm font-medium text-ink">
-                Étape {idx + 1} sur {STEPS.length}
-                <span className="text-ink-soft"> — {current?.label}</span>
-              </div>
-              <div className="mt-2 h-1.5 rounded-full bg-gray-100 overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-all"
-                  style={{ width: `${pct}%`, backgroundColor: 'var(--primary)' }}
-                />
-              </div>
-
-              {/* Desktop : rangée de pastilles numérotées (sans libellés, tient
-                  toujours sur une ligne) ; le libellé s'affiche en infobulle. */}
-              <ol className="hidden sm:flex items-center gap-2 mt-3">
-                {STEPS.map((s, i) => {
-                  const active = s.key === step;
-                  const done = i < idx;
-                  return (
-                    <li
-                      key={s.key}
-                      title={s.label}
-                      aria-label={s.label}
-                      className={`h-7 w-7 shrink-0 rounded-full grid place-items-center text-[11px] font-semibold ${
-                        active ? 'text-white' : done ? 'bg-success/15 text-success' : 'bg-gray-100 text-ink-soft'
-                      }`}
-                      style={active ? { backgroundColor: 'var(--primary)' } : undefined}
-                    >
-                      {done ? '✓' : i + 1}
-                    </li>
-                  );
-                })}
-              </ol>
-            </div>
-          );
-        })()}
-
-        <div className="card p-6">
-          {step === 'email' && (
-            <div className="space-y-4">
-              <SectionHeader
-                title="Votre adresse email"
-                subtitle="Elle servira d'identifiant pour administrer votre caisse."
-              />
-              <Field label="Adresse email *">
-                <input
-                  type="email"
-                  className="input"
-                  value={f.admin_email}
-                  onChange={(e) => patch('admin_email', e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' && canAdvance()) next(); }}
-                  placeholder="vous@votreboutique.fr"
-                  autoComplete="email"
-                  autoFocus
-                />
-              </Field>
-            </div>
-          )}
-
-          {step === 'company' && (
-            <div className="space-y-4">
-              <SectionHeader title="Société" subtitle="Renseignez les informations légales et de contact." />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <Field label="Nom commercial *">
-                  <input className="input" value={f.company_name}
-                         onChange={(e) => patch('company_name', e.target.value)}
-                         placeholder="HelloPos Fleurs" />
-                </Field>
-                <Field label="Raison sociale *">
-                  <input className="input" value={f.company_legal}
-                         onChange={(e) => patch('company_legal', e.target.value)}
-                         placeholder="SARL HelloPos" />
-                </Field>
-                <Field label="SIRET">
-                  <input className="input" value={f.company_siret} maxLength={14}
-                         onChange={(e) => patch('company_siret', e.target.value)} />
-                </Field>
-                <Field label="N° TVA intra.">
-                  <input className="input" value={f.company_vat}
-                         onChange={(e) => patch('company_vat', e.target.value)}
-                         placeholder="FR12 345 678 901" />
-                </Field>
-                <Field label="Adresse" full>
-                  <input className="input" value={f.company_addr1}
-                         onChange={(e) => patch('company_addr1', e.target.value)}
-                         placeholder="N°, rue" />
-                </Field>
-                <Field label="Code postal">
-                  <input className="input" value={f.company_zip}
-                         onChange={(e) => patch('company_zip', e.target.value)} />
-                </Field>
-                <Field label="Ville">
-                  <input className="input" value={f.company_city}
-                         onChange={(e) => patch('company_city', e.target.value)} />
-                </Field>
-                <Field label="Téléphone">
-                  <input className="input" value={f.company_phone}
-                         onChange={(e) => patch('company_phone', e.target.value)} />
-                </Field>
-                <Field label="Email">
-                  <input type="email" className="input" value={f.company_email}
-                         onChange={(e) => patch('company_email', e.target.value)} />
-                </Field>
-              </div>
-            </div>
-          )}
-
-          {step === 'store' && (
-            <div className="space-y-4">
-              <SectionHeader title="Boutique" subtitle="Votre premier point de vente. Vous pourrez en ajouter d'autres après." />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <Field label="Code court *">
-                  <input className="input" value={f.store_code} maxLength={20}
-                         onChange={(e) => patch('store_code', e.target.value.toUpperCase())} />
-                </Field>
-                <Field label="Nom *">
-                  <input className="input" value={f.store_name}
-                         onChange={(e) => patch('store_name', e.target.value)} />
-                </Field>
-              </div>
-            </div>
-          )}
-
-          {step === 'register' && (
-            <div className="space-y-4">
-              <SectionHeader title="Caisse" subtitle="Votre première caisse physique sur cette boutique." />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <Field label="Code court *">
-                  <input className="input" value={f.register_code} maxLength={20}
-                         onChange={(e) => patch('register_code', e.target.value.toUpperCase())} />
-                </Field>
-                <Field label="Nom *">
-                  <input className="input" value={f.register_name}
-                         onChange={(e) => patch('register_name', e.target.value)} />
-                </Field>
-              </div>
-            </div>
-          )}
-
-          {step === 'tax' && (
-            <div className="space-y-3">
-              <SectionHeader title="Taux de TVA" subtitle="Au moins un taux est requis. Vous pourrez en ajouter ou en modifier après." />
-              {f.taxes.map((t, i) => (
-                <div key={i} className="rounded-xl border border-border p-3 grid grid-cols-1 md:grid-cols-12 gap-2 items-end">
-                  <div className="md:col-span-2">
-                    <label className="text-xs font-medium text-ink-soft">Code</label>
-                    <input className="input mt-1" value={t.code}
-                           onChange={(e) => patchTax(i, 'code', e.target.value.toUpperCase())}
-                           placeholder="TVA20" />
-                  </div>
-                  <div className="md:col-span-6">
-                    <label className="text-xs font-medium text-ink-soft">Libellé</label>
-                    <input className="input mt-1" value={t.label}
-                           onChange={(e) => patchTax(i, 'label', e.target.value)} />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="text-xs font-medium text-ink-soft">Taux (%)</label>
-                    <input type="number" step="0.1" min={0} max={100}
-                           className="input mt-1" value={t.rate}
-                           onChange={(e) => patchTax(i, 'rate', Number(e.target.value) || 0)} />
-                  </div>
-                  <div className="md:col-span-2 flex items-center gap-2">
-                    <label className="flex items-center gap-1.5 text-xs">
-                      <input type="radio" name="default-tax" checked={t.is_default}
-                             onChange={(e) => patchTax(i, 'is_default', e.target.checked)} />
-                      Défaut
-                    </label>
-                    {f.taxes.length > 1 && (
-                      <button onClick={() => removeTax(i)} className="ml-auto text-ink-soft hover:text-danger text-sm">✕</button>
-                    )}
-                  </div>
+        <section className="overflow-hidden rounded-[28px] border border-black/[0.055] bg-white shadow-[0_20px_70px_rgba(1,62,55,0.075)] sm:rounded-[32px]">
+          <div className="border-b border-black/[0.055] bg-[#fffdf8] px-5 py-5 sm:px-8 sm:py-6">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8a928f]">
+                  Configuration HelloPos
                 </div>
-              ))}
-              <button onClick={addTax} className="btn-soft text-sm" disabled={f.taxes.length >= 10}>
-                + Ajouter un taux
-              </button>
-            </div>
-          )}
+                <div className="mt-1 text-base font-semibold text-[#173f38] sm:text-lg">
+                  {currentStep?.label}
+                </div>
+              </div>
 
-          {step === 'admin' && (
-            <div className="space-y-4">
-              <SectionHeader title="Compte administrateur" subtitle="Ce compte aura tous les droits pour configurer l'application." />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <Field label="Nom complet *">
-                  <input className="input" value={f.admin_name}
-                         onChange={(e) => patch('admin_name', e.target.value)} />
-                </Field>
-                <Field label="Email">
-                  <input type="email" className="input bg-gray-50 text-ink-soft" value={f.admin_email}
-                         readOnly />
-                  <p className="mt-1 text-xs text-ink-soft">Saisi à la première étape.</p>
-                </Field>
-                <Field label="Mot de passe (8 caractères min.) *">
-                  <input
-                    type="password"
-                    className="input"
-                    value={f.admin_password}
-                    onChange={(e) => patch('admin_password', e.target.value)}
-                    autoComplete="new-password"
-                  />
-                  <p className="mt-1 text-xs text-ink-soft">
-                    Sert à la connexion email + mot de passe (back-office, CA).
-                  </p>
-                </Field>
-                <Field label="Confirmer le mot de passe *">
-                  <input
-                    type="password"
-                    className="input"
-                    value={f.admin_password_confirm}
-                    onChange={(e) => patch('admin_password_confirm', e.target.value)}
-                    autoComplete="new-password"
-                  />
-                  {f.admin_password_confirm.length > 0 && f.admin_password !== f.admin_password_confirm && (
-                    <p className="mt-1 text-xs text-danger">Les mots de passe ne correspondent pas.</p>
-                  )}
-                </Field>
-                <Field label="PIN (4 chiffres) *">
-                  <input
-                    inputMode="numeric"
-                    className="input max-w-[160px] text-2xl tracking-[0.5em] tabular-nums"
-                    value={f.admin_pin}
-                    maxLength={4}
-                    onChange={(e) => patch('admin_pin', e.target.value.replace(/\D/g, '').slice(0, 4))}
-                  />
-                  <p className="mt-1 text-xs text-ink-soft">
-                    Connexion rapide en caisse. Modifiable ensuite.
-                  </p>
-                </Field>
+              <div className="shrink-0 rounded-full bg-[#f1f4f1] px-3 py-1.5 text-xs font-semibold text-[#5f6d68]">
+                {stepIndex + 1}/{STEPS.length}
               </div>
             </div>
-          )}
 
-          {step === 'recap' && (
-            <div className="space-y-4">
-              <SectionHeader title="Vérification" subtitle="Vérifiez le résumé avant de finaliser." />
-              <RecapBlock title="Société" items={[
-                ['Nom', f.company_name], ['Raison sociale', f.company_legal],
-                ['SIRET', f.company_siret || '—'], ['TVA', f.company_vat || '—'],
-                ['Adresse', [f.company_addr1, f.company_zip, f.company_city].filter(Boolean).join(', ') || '—'],
-                ['Contact', [f.company_phone, f.company_email].filter(Boolean).join(' · ') || '—'],
-              ]} />
-              <RecapBlock title="Boutique" items={[['Code', f.store_code], ['Nom', f.store_name]]} />
-              <RecapBlock title="Caisse" items={[['Code', f.register_code], ['Nom', f.register_name]]} />
-              <RecapBlock title="TVA" items={f.taxes.map((t) => [
-                `${t.code} (${t.rate}%)`,
-                t.label + (t.is_default ? ' · défaut' : ''),
-              ])} />
-              <RecapBlock title="Administrateur" items={[
-                ['Nom', f.admin_name], ['Email', f.admin_email],
-                ['Mot de passe', '•'.repeat(Math.min(f.admin_password.length, 12))],
-                ['PIN', '••••'],
-              ]} />
+            <div className="mt-4 h-2 overflow-hidden rounded-full bg-[#edf0ed]">
+              <div
+                className="h-full rounded-full bg-[#0b5a4f] transition-[width] duration-300"
+                style={{ width: `${progress}%` }}
+              />
             </div>
-          )}
 
-          {step === 'payment' && (
-            <div className="space-y-4">
-              <SectionHeader title="Paiement" subtitle="Choisissez votre offre. 14 jours d'essai, débit à l'échéance." />
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {PLANS.map((p) => {
-                  const price = p.key === 'reseau'
-                    ? (brand.plan_reseau_price || '69')
-                    : p.key === 'croissance'
-                      ? (brand.plan_croissance_price || '59')
-                      : (brand.plan_essentiel_price || '29');
-                  return (
-                    <button
-                      key={p.key}
-                      type="button"
-                      onClick={() => patch('plan', p.key)}
-                      className={`rounded-xl border p-4 text-left transition ${
-                        f.plan === p.key ? 'border-accent bg-accent-soft/40 ring-1 ring-accent' : 'border-border hover:border-accent'
-                      }`}
+            <ol className="mt-4 hidden grid-cols-8 gap-2 sm:grid">
+              {STEPS.map((item, index) => {
+                const active = index === stepIndex;
+                const done = index < stepIndex;
+
+                return (
+                  <li key={item.key} className="text-center">
+                    <div
+                      className={[
+                        'mx-auto grid h-7 w-7 place-items-center rounded-full text-[11px] font-semibold transition',
+                        active
+                          ? 'bg-[#0b5a4f] text-white'
+                          : done
+                            ? 'bg-[#dfeee8] text-[#0b5a4f]'
+                            : 'bg-[#f1f2ef] text-[#909692]',
+                      ].join(' ')}
                     >
-                      <div className="font-semibold">{p.name}</div>
-                      <div className="mt-1 flex items-baseline gap-1">
-                        <span className="text-2xl font-semibold">{price}</span>
-                        <span className="text-xs text-ink-soft">€ HT / mois</span>
-                      </div>
-                      <div className="mt-1 text-xs text-ink-soft">{p.desc}</div>
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="rounded-xl bg-gray-50 border border-border px-4 py-3 text-xs text-ink-soft">
-                14 jours d&apos;essai gratuit. Votre carte est enregistrée à
-                l&apos;étape suivante (Stripe sécurisé) mais n&apos;est débitée
-                qu&apos;à la fin de l&apos;essai. Un code promo pourra être saisi
-                sur la page de paiement. Résiliable à tout moment.
-              </div>
-              {error && <div className="rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
-            </div>
-          )}
-        </div>
+                      {done ? '✓' : index + 1}
+                    </div>
+                    <div
+                      className={[
+                        'mt-1.5 truncate text-[10px]',
+                        active ? 'font-semibold text-[#0b5a4f]' : 'text-[#9a9f9c]',
+                      ].join(' ')}
+                    >
+                      {item.label}
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+          </div>
 
-        <div className="mt-5 flex items-center justify-between gap-3">
-          <button onClick={prev} disabled={step === STEPS[0]!.key} className="btn-ghost">
-            ‹ Précédent
-          </button>
-          {step !== 'payment' ? (
-            <button
-              onClick={next}
-              disabled={!canAdvance()}
-              className="btn-primary"
-            >
-              Suivant ›
-            </button>
-          ) : (
-            <button onClick={() => void submit()} disabled={busy} className="btn-primary h-12 px-6">
-              {busy ? 'Redirection…' : 'Continuer vers le paiement ›'}
-            </button>
-          )}
+          <div className="px-5 py-6 sm:px-8 sm:py-8">
+            {step === 'email' && (
+              <div className="space-y-5">
+                <SectionHeader
+                  title="Votre adresse email"
+                  subtitle="Elle servira d’identifiant principal pour administrer votre caisse."
+                />
+                <Field label="Adresse email *">
+                  <input
+                    type="email"
+                    className="setup-input"
+                    value={f.admin_email}
+                    onChange={(e) => patch('admin_email', e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && canAdvance()) next();
+                    }}
+                    placeholder="vous@votreboutique.fr"
+                    autoComplete="email"
+                    autoFocus
+                  />
+                </Field>
+
+                <InfoBox>
+                  Cette adresse sera utilisée pour la connexion administrateur et pour les informations importantes liées à votre compte.
+                </InfoBox>
+              </div>
+            )}
+
+            {step === 'company' && (
+              <div className="space-y-5">
+                <SectionHeader
+                  title="Votre société"
+                  subtitle="Renseignez les informations principales de votre entreprise."
+                />
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <Field label="Nom commercial *">
+                    <input
+                      className="setup-input"
+                      value={f.company_name}
+                      onChange={(e) => patch('company_name', e.target.value)}
+                      placeholder="Ma boutique"
+                    />
+                  </Field>
+
+                  <Field label="Raison sociale *">
+                    <input
+                      className="setup-input"
+                      value={f.company_legal}
+                      onChange={(e) => patch('company_legal', e.target.value)}
+                      placeholder="SARL Ma boutique"
+                    />
+                  </Field>
+
+                  <Field label="SIRET">
+                    <input
+                      className="setup-input"
+                      value={f.company_siret}
+                      maxLength={14}
+                      onChange={(e) => patch('company_siret', e.target.value)}
+                    />
+                  </Field>
+
+                  <Field label="N° TVA intracommunautaire">
+                    <input
+                      className="setup-input"
+                      value={f.company_vat}
+                      onChange={(e) => patch('company_vat', e.target.value)}
+                      placeholder="FR12 345 678 901"
+                    />
+                  </Field>
+
+                  <Field label="Adresse" full>
+                    <input
+                      className="setup-input"
+                      value={f.company_addr1}
+                      onChange={(e) => patch('company_addr1', e.target.value)}
+                      placeholder="N°, rue"
+                    />
+                  </Field>
+
+                  <Field label="Code postal">
+                    <input
+                      className="setup-input"
+                      value={f.company_zip}
+                      onChange={(e) => patch('company_zip', e.target.value)}
+                    />
+                  </Field>
+
+                  <Field label="Ville">
+                    <input
+                      className="setup-input"
+                      value={f.company_city}
+                      onChange={(e) => patch('company_city', e.target.value)}
+                    />
+                  </Field>
+
+                  <Field label="Téléphone">
+                    <input
+                      className="setup-input"
+                      value={f.company_phone}
+                      onChange={(e) => patch('company_phone', e.target.value)}
+                    />
+                  </Field>
+
+                  <Field label="Email société">
+                    <input
+                      type="email"
+                      className="setup-input"
+                      value={f.company_email}
+                      onChange={(e) => patch('company_email', e.target.value)}
+                    />
+                  </Field>
+                </div>
+              </div>
+            )}
+
+            {step === 'store' && (
+              <div className="space-y-5">
+                <SectionHeader
+                  title="Votre boutique"
+                  subtitle="Créez votre premier point de vente. Vous pourrez en ajouter d’autres ensuite."
+                />
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <Field label="Code boutique *">
+                    <input
+                      className="setup-input"
+                      value={f.store_code}
+                      maxLength={20}
+                      onChange={(e) => patch('store_code', e.target.value.toUpperCase())}
+                    />
+                  </Field>
+
+                  <Field label="Nom de la boutique *">
+                    <input
+                      className="setup-input"
+                      value={f.store_name}
+                      onChange={(e) => patch('store_name', e.target.value)}
+                    />
+                  </Field>
+                </div>
+              </div>
+            )}
+
+            {step === 'register' && (
+              <div className="space-y-5">
+                <SectionHeader
+                  title="Votre première caisse"
+                  subtitle="Identifiez la caisse installée sur ce point de vente."
+                />
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <Field label="Code caisse *">
+                    <input
+                      className="setup-input"
+                      value={f.register_code}
+                      maxLength={20}
+                      onChange={(e) => patch('register_code', e.target.value.toUpperCase())}
+                    />
+                  </Field>
+
+                  <Field label="Nom de la caisse *">
+                    <input
+                      className="setup-input"
+                      value={f.register_name}
+                      onChange={(e) => patch('register_name', e.target.value)}
+                    />
+                  </Field>
+                </div>
+              </div>
+            )}
+
+            {step === 'tax' && (
+              <div className="space-y-5">
+                <SectionHeader
+                  title="Taux de TVA"
+                  subtitle="Les taux courants sont déjà ajoutés. Ajustez-les uniquement si nécessaire."
+                />
+
+                <div className="space-y-3">
+                  {f.taxes.map((tax, index) => (
+                    <div
+                      key={index}
+                      className="rounded-[22px] border border-black/[0.07] bg-[#fcfcf9] p-4"
+                    >
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-12 md:items-end">
+                        <div className="md:col-span-2">
+                          <label className="setup-label">Code</label>
+                          <input
+                            className="setup-input mt-1.5"
+                            value={tax.code}
+                            onChange={(e) => patchTax(index, 'code', e.target.value.toUpperCase())}
+                            placeholder="TVA20"
+                          />
+                        </div>
+
+                        <div className="md:col-span-6">
+                          <label className="setup-label">Libellé</label>
+                          <input
+                            className="setup-input mt-1.5"
+                            value={tax.label}
+                            onChange={(e) => patchTax(index, 'label', e.target.value)}
+                          />
+                        </div>
+
+                        <div className="md:col-span-2">
+                          <label className="setup-label">Taux (%)</label>
+                          <input
+                            type="number"
+                            step="0.1"
+                            min={0}
+                            max={100}
+                            className="setup-input mt-1.5"
+                            value={tax.rate}
+                            onChange={(e) => patchTax(index, 'rate', Number(e.target.value) || 0)}
+                          />
+                        </div>
+
+                        <div className="flex items-center gap-3 md:col-span-2 md:pb-2">
+                          <label className="flex items-center gap-2 text-xs font-medium text-[#5f6b67]">
+                            <input
+                              type="radio"
+                              name="default-tax"
+                              checked={tax.is_default}
+                              onChange={(e) => patchTax(index, 'is_default', e.target.checked)}
+                              className="accent-[#0b5a4f]"
+                            />
+                            Défaut
+                          </label>
+
+                          {f.taxes.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeTax(index)}
+                              className="ml-auto rounded-lg px-2 py-1 text-sm text-[#9b6767] hover:bg-[#fff3f3]"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={addTax}
+                  disabled={f.taxes.length >= 10}
+                  className="inline-flex h-11 items-center justify-center rounded-xl bg-[#eef5f1] px-4 text-sm font-semibold text-[#0b5a4f] transition hover:bg-[#e5f0eb] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  + Ajouter un taux
+                </button>
+              </div>
+            )}
+
+            {step === 'admin' && (
+              <div className="space-y-5">
+                <SectionHeader
+                  title="Compte administrateur"
+                  subtitle="Ce compte aura tous les droits pour gérer HelloPos."
+                />
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <Field label="Nom complet *">
+                    <input
+                      className="setup-input"
+                      value={f.admin_name}
+                      onChange={(e) => patch('admin_name', e.target.value)}
+                    />
+                  </Field>
+
+                  <Field label="Email">
+                    <input
+                      type="email"
+                      className="setup-input bg-[#f7f8f5] text-[#76807c]"
+                      value={f.admin_email}
+                      readOnly
+                    />
+                    <p className="mt-1.5 text-xs text-[#8a918e]">Saisi à la première étape.</p>
+                  </Field>
+
+                  <Field label="Mot de passe *">
+                    <input
+                      type="password"
+                      className="setup-input"
+                      value={f.admin_password}
+                      onChange={(e) => patch('admin_password', e.target.value)}
+                      autoComplete="new-password"
+                    />
+                    <p className="mt-1.5 text-xs text-[#8a918e]">8 caractères minimum.</p>
+                  </Field>
+
+                  <Field label="Confirmer le mot de passe *">
+                    <input
+                      type="password"
+                      className="setup-input"
+                      value={f.admin_password_confirm}
+                      onChange={(e) => patch('admin_password_confirm', e.target.value)}
+                      autoComplete="new-password"
+                    />
+                    {f.admin_password_confirm.length > 0 &&
+                      f.admin_password !== f.admin_password_confirm && (
+                        <p className="mt-1.5 text-xs text-[#a34f4f]">
+                          Les mots de passe ne correspondent pas.
+                        </p>
+                      )}
+                  </Field>
+
+                  <Field label="Code PIN *">
+                    <input
+                      inputMode="numeric"
+                      className="setup-input max-w-[190px] text-center text-2xl tracking-[0.45em] tabular-nums"
+                      value={f.admin_pin}
+                      maxLength={4}
+                      onChange={(e) =>
+                        patch('admin_pin', e.target.value.replace(/\D/g, '').slice(0, 4))
+                      }
+                    />
+                    <p className="mt-1.5 text-xs text-[#8a918e]">
+                      Utilisé pour la connexion rapide en caisse.
+                    </p>
+                  </Field>
+                </div>
+              </div>
+            )}
+
+            {step === 'recap' && (
+              <div className="space-y-5">
+                <SectionHeader
+                  title="Vérification"
+                  subtitle="Vérifiez les informations avant de choisir votre offre."
+                />
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  <RecapBlock
+                    title="Société"
+                    items={[
+                      ['Nom', f.company_name],
+                      ['Raison sociale', f.company_legal],
+                      ['SIRET', f.company_siret || '—'],
+                      ['TVA', f.company_vat || '—'],
+                      [
+                        'Adresse',
+                        [f.company_addr1, f.company_zip, f.company_city]
+                          .filter(Boolean)
+                          .join(', ') || '—',
+                      ],
+                      [
+                        'Contact',
+                        [f.company_phone, f.company_email].filter(Boolean).join(' · ') || '—',
+                      ],
+                    ]}
+                  />
+
+                  <div className="space-y-3">
+                    <RecapBlock
+                      title="Boutique"
+                      items={[
+                        ['Code', f.store_code],
+                        ['Nom', f.store_name],
+                      ]}
+                    />
+                    <RecapBlock
+                      title="Caisse"
+                      items={[
+                        ['Code', f.register_code],
+                        ['Nom', f.register_name],
+                      ]}
+                    />
+                  </div>
+
+                  <RecapBlock
+                    title="TVA"
+                    items={f.taxes.map((t) => [
+                      `${t.code} (${t.rate}%)`,
+                      t.label + (t.is_default ? ' · défaut' : ''),
+                    ])}
+                  />
+
+                  <RecapBlock
+                    title="Administrateur"
+                    items={[
+                      ['Nom', f.admin_name],
+                      ['Email', f.admin_email],
+                      ['Mot de passe', '•'.repeat(Math.min(f.admin_password.length, 12))],
+                      ['PIN', '••••'],
+                    ]}
+                  />
+                </div>
+              </div>
+            )}
+
+            {step === 'payment' && (
+              <div className="space-y-5">
+                <SectionHeader
+                  title="Choisissez votre offre"
+                  subtitle="14 jours d’essai gratuit. Aucun débit avant la fin de la période d’essai."
+                />
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  {PLANS.map((plan) => {
+                    const price =
+                      plan.key === 'reseau'
+                        ? brand.plan_reseau_price || '69'
+                        : plan.key === 'croissance'
+                          ? brand.plan_croissance_price || '59'
+                          : brand.plan_essentiel_price || '29';
+
+                    const selected = f.plan === plan.key;
+
+                    return (
+                      <button
+                        key={plan.key}
+                        type="button"
+                        onClick={() => patch('plan', plan.key)}
+                        className={[
+                          'relative rounded-[22px] border p-4 text-left transition',
+                          selected
+                            ? 'border-[#0b5a4f] bg-[#f0f7f3] shadow-[0_10px_28px_rgba(11,90,79,0.08)]'
+                            : 'border-black/[0.075] bg-white hover:border-[#9dbbb1]',
+                        ].join(' ')}
+                      >
+                        {selected && (
+                          <span className="absolute right-3 top-3 grid h-6 w-6 place-items-center rounded-full bg-[#0b5a4f] text-[11px] text-white">
+                            ✓
+                          </span>
+                        )}
+
+                        <div className="font-semibold text-[#143e37]">{plan.name}</div>
+                        <div className="mt-3 flex items-end gap-1">
+                          <span className="text-3xl font-semibold tracking-[-0.04em] text-[#013e37]">
+                            {price}
+                          </span>
+                          <span className="pb-1 text-xs text-[#7a837f]">€ HT/mois</span>
+                        </div>
+                        <div className="mt-2 text-xs leading-5 text-[#737c78]">{plan.desc}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <InfoBox>
+                  Votre carte bancaire est enregistrée via Stripe. Elle ne sera débitée qu’à la fin des 14 jours d’essai. Vous pourrez résilier à tout moment.
+                </InfoBox>
+
+                {error && (
+                  <div className="rounded-2xl bg-[#fff1f1] px-4 py-3 text-sm text-[#9d4242]">
+                    {error}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="border-t border-black/[0.055] bg-[#fffdf8] px-5 py-4 sm:px-8 sm:py-5">
+            <div className="flex items-center gap-3">
+              {step !== STEPS[0]!.key && (
+                <button
+                  type="button"
+                  onClick={prev}
+                  className="h-12 shrink-0 rounded-2xl border border-black/[0.08] bg-white px-4 text-sm font-semibold text-[#53635e] transition hover:bg-[#f7f8f5] sm:px-5"
+                >
+                  ‹ Précédent
+                </button>
+              )}
+
+              {step !== 'payment' ? (
+                <button
+                  type="button"
+                  onClick={next}
+                  disabled={!canAdvance()}
+                  className="ml-auto h-12 min-w-[150px] flex-1 rounded-2xl bg-[#0b5a4f] px-5 text-sm font-semibold text-white transition hover:bg-[#084d44] active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-[#c9d3cf] sm:flex-none"
+                >
+                  Continuer
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void submit()}
+                  disabled={busy}
+                  className="ml-auto h-12 flex-1 rounded-2xl bg-[#0b5a4f] px-5 text-sm font-semibold text-white transition hover:bg-[#084d44] active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-[#c9d3cf] sm:flex-none sm:min-w-[250px]"
+                >
+                  {busy ? 'Redirection…' : 'Continuer vers le paiement'}
+                </button>
+              )}
+            </div>
+          </div>
+        </section>
+
+        <div className="mt-5 flex items-center justify-center gap-2 text-center text-xs text-[#89918e]">
+          <svg
+            viewBox="0 0 24 24"
+            className="h-4 w-4 text-[#3b8b78]"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+          >
+            <path d="M12 3 5.5 5.7v5.7c0 4.4 2.7 7.9 6.5 9.6 3.8-1.7 6.5-5.2 6.5-9.6V5.7L12 3Z" />
+            <path d="m9.3 12 1.8 1.8 3.7-4" />
+          </svg>
+          <span>Données sécurisées et hébergées en France</span>
         </div>
       </div>
+
+      <style jsx global>{`
+        .setup-label {
+          display: block;
+          font-size: 12px;
+          font-weight: 600;
+          color: #68736f;
+        }
+
+        .setup-input {
+          width: 100%;
+          min-height: 50px;
+          border-radius: 14px;
+          border: 1px solid rgba(22, 61, 54, 0.12);
+          background: #fff;
+          padding: 0 14px;
+          color: #173f38;
+          outline: none;
+          transition:
+            border-color 160ms ease,
+            box-shadow 160ms ease,
+            background-color 160ms ease;
+        }
+
+        .setup-input::placeholder {
+          color: #a3aaa7;
+        }
+
+        .setup-input:focus {
+          border-color: rgba(11, 90, 79, 0.72);
+          box-shadow: 0 0 0 4px rgba(11, 90, 79, 0.08);
+        }
+
+        @media (max-width: 640px) {
+          .setup-input {
+            min-height: 52px;
+            font-size: 16px;
+          }
+        }
+      `}</style>
     </main>
   );
 }
 
 function SectionHeader({ title, subtitle }: { title: string; subtitle: string }) {
   return (
-    <div>
-      <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
-      <p className="text-sm text-ink-soft">{subtitle}</p>
+    <div className="max-w-2xl">
+      <h2 className="text-xl font-semibold tracking-[-0.025em] text-[#143e37] sm:text-2xl">
+        {title}
+      </h2>
+      <p className="mt-1.5 text-sm leading-6 text-[#727c78]">{subtitle}</p>
     </div>
   );
 }
 
-function Field({ label, children, full }: { label: string; children: React.ReactNode; full?: boolean }) {
+function Field({
+  label,
+  children,
+  full,
+}: {
+  label: string;
+  children: React.ReactNode;
+  full?: boolean;
+}) {
   return (
     <div className={full ? 'md:col-span-2' : ''}>
-      <label className="text-xs font-medium text-ink-soft">{label}</label>
-      <div className="mt-1">{children}</div>
+      <label className="setup-label">{label}</label>
+      <div className="mt-1.5">{children}</div>
     </div>
   );
 }
 
-function RecapBlock({ title, items }: { title: string; items: Array<[string, string]> }) {
+function InfoBox({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-border p-3">
-      <div className="text-xs uppercase tracking-widest text-ink-soft font-semibold mb-2">{title}</div>
-      <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-sm">
-        {items.map(([k, v], i) => (
-          <div key={i} className="flex items-baseline justify-between gap-3 border-b border-border/50 py-1 last:border-0">
-            <dt className="text-ink-soft text-xs">{k}</dt>
-            <dd className="font-medium text-right truncate">{v}</dd>
+    <div className="rounded-2xl border border-[#e7ece8] bg-[#f7faf8] px-4 py-3 text-xs leading-5 text-[#687570]">
+      {children}
+    </div>
+  );
+}
+
+function RecapBlock({
+  title,
+  items,
+}: {
+  title: string;
+  items: Array<[string, string]>;
+}) {
+  return (
+    <div className="rounded-[22px] border border-black/[0.07] bg-[#fcfcf9] p-4">
+      <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#88918d]">
+        {title}
+      </div>
+
+      <dl className="space-y-2">
+        {items.map(([key, value], index) => (
+          <div
+            key={`${key}-${index}`}
+            className="flex items-start justify-between gap-4 border-b border-black/[0.05] pb-2 last:border-0 last:pb-0"
+          >
+            <dt className="text-xs text-[#7c8581]">{key}</dt>
+            <dd className="max-w-[65%] break-words text-right text-sm font-medium text-[#244740]">
+              {value}
+            </dd>
           </div>
         ))}
       </dl>
