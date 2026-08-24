@@ -301,12 +301,7 @@ function renderHtml(setup: string, caisse: string, bo: string, p: Prices): strin
   <a class="btn btn-primary btn-lg" href="${setup}">Créer ma caisse</a>
   <a class="btn btn-ghost btn-lg" href="#fonctions">Voir les fonctions</a>
 </div>
-<div class="hero-appstore">
-  <a
-    class="appstore-link"
-    href="#"
-    aria-label="Télécharger HelloPos sur l’App Store"
-  >
+<div class="hero-appstore"><a class="appstore-link" href="https://apps.apple.com/fr/app/hellopos/id6803190444" target="_blank" rel="noopener noreferrer" aria-label="Télécharger HelloPos sur l’App Store"><img class="appstore-badge" src="/projet/app-store.svg" alt="Download on the App Store"></a></div>
     <img
       class="appstore-badge"
       src="/projet/app-store.svg"
@@ -565,8 +560,7 @@ function renderHtml(setup: string, caisse: string, bo: string, p: Prices): strin
         <a class="brand" href="#top" style="font-size:1.1rem">${logoBrand}</a>
         <p>Le logiciel de caisse pour tous les commerces de détail — sur tablette, sur mobile et dans votre back-office. Développé en France. Données hébergées en Europe.</p>
         <div class="foot-actions"><a class="btn btn-gold btn-sm" href="${setup}">Créer ma caisse</a></div>
-        <div class="foot-appstore"><a class="appstore-link" href="#" aria-label="Télécharger HelloPos sur l’App Store"><img class="appstore-badge" src="/projet/app-store.svg" alt="Download on the App Store"></a></div>
-      </div>
+        <div class="foot-appstore"><a class="appstore-link" href="https://apps.apple.com/fr/app/hellopos/id6803190444" target="_blank" rel="noopener noreferrer" aria-label="Télécharger HelloPos sur l’App Store"><img class="appstore-badge" src="/projet/app-store.svg" alt="Download on the App Store"></a></div>      </div>
       <div class="foot-cols">
         <div class="foot-col">
           <h4>Produit</h4>
