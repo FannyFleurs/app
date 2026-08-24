@@ -142,6 +142,10 @@ export default function CaisseLogin({ logoUrl, brandName }: { logoUrl: string; b
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M12 2l7 3v6c0 4.5-3 8.3-7 9-4-.7-7-4.5-7-9V5z" /><path d="M9 12l2 2 4-4" /></svg>
           <span>Données sécurisées et hébergées en Europe. Conçu conforme art. 286 CGI.</span>
         </div>
+        <div className="mt-6 flex items-center gap-2 text-xs text-ink-soft">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M12 2l7 3v6c0 4.5-3 8.3-7 9-4-.7-7-4.5-7-9V5z" /><path d="M9 12l2 2 4-4" /></svg>
+          <span>Conçu conforme art. 286 CGI.</span>
+        </div>
       </div>
     </main>
   );
