@@ -410,7 +410,7 @@ function renderHtml(setup: string, caisse: string, bo: string, p: Prices): strin
       <div class="ticks">
         <div class="tick">${tick}<span><b>Scan code-barres par la caméra</b> — lecture native EAN, UPC, QR, Code 128 pour ajouter un produit ou l'identifier.</span></div>
         <div class="tick">${tick}<span><b>Gestion du stock mobile</b> — entrées, sorties et inventaires, tout, directement depuis le téléphone.</span></div>
-        <div class="tick">${tick}<span><b>Application Suivi CA</b> — consultez à distance l'activité de vos établissements sur votre mobile.</span></div>
+        <div class="tick">${tick}<span><b>Application Suivi CA</b> — consultez l'activité de vos établissements directement sur votre mobile, idéal en déplacement.</span></div>
       </div>
     </div>
   </div>
