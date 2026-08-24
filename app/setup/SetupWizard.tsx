@@ -231,7 +231,7 @@ export default function SetupWizard() {
 
   if (success) {
     return (
-      <main className="min-h-dvh bg-[#fbfaf6] px-4 py-8 sm:px-6 sm:py-12">
+      <main className="min-h-dvh bg-[#F4F7F1] px-4 py-8 sm:px-6 sm:py-12">
         <div className="mx-auto flex min-h-[calc(100dvh-4rem)] max-w-lg items-center justify-center">
           <section className="w-full rounded-[30px] border border-black/[0.05] bg-white p-6 text-center shadow-[0_24px_80px_rgba(1,62,55,0.08)] sm:p-8">
             <div className="mx-auto mb-5 grid h-16 w-16 place-items-center rounded-2xl bg-[#fff2bd] text-2xl text-[#013e37]">
