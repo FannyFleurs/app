@@ -21,31 +21,29 @@ function setupUrl(): string {
   return `https://${base}/setup`;
 }
 
+// Couleurs de marque (le logo : carré jaune pâle + sourire vert foncé).
+const GREEN = '#16412C';       // titres, icônes vertes
+const GREEN_CARD = '#2E6A59';  // fond de la carte « Créer ma caisse »
+const YELLOW = '#FFEFB3';      // accents (logo, bouton, pastilles)
+
 /**
- * Écran de connexion caisse. La connexion EMAIL n'est nécessaire qu'à la
- * PREMIÈRE connexion sur un poste (pour rattacher la boutique). Une fois la
- * boutique connue sur cet appareil, on affiche directement la connexion par
- * PIN. Un lien discret permet de basculer d'un mode à l'autre.
+ * Écran de connexion caisse.
  *
- * Le formulaire email réutilise le composant partagé AuthForm : rendu
- * strictement identique aux autres pages de connexion (CA, back-office).
+ * - PREMIÈRE utilisation d'un appareil (aucune boutique rattachée) : on affiche
+ *   un écran d'accueil « Bienvenue » avec deux choix — créer une caisse (ouvre
+ *   /setup en navigateur externe, hors de l'app) ou se connecter à un compte
+ *   existant.
+ * - Ensuite, la connexion se fait par PIN (boutique déjà connue) ou par email.
  */
 export default function CaisseLogin({ logoUrl, brandName }: { logoUrl: string; brandName: string }) {
-  const [mode, setMode] = useState<'email' | 'pin' | 'loading'>('loading');
-  // Première connexion sur cet appareil (aucune boutique rattachée) : on propose
-  // de créer une caisse. Pas affiché si l'utilisateur bascule manuellement vers
-  // l'email depuis l'écran PIN (dans ce cas la boutique existe déjà).
-  const [firstTime, setFirstTime] = useState(false);
+  const [mode, setMode] = useState<'loading' | 'welcome' | 'email' | 'pin'>('loading');
 
-  // Décide du mode initial : PIN si la boutique est déjà rattachée à ce
-  // poste (des utilisateurs remontent), sinon email (première connexion).
   useEffect(() => {
-    // Aide au test : /login?new=1 force l'écran « première connexion » (email +
-    // bouton « Créer ma caisse »), même sur une instance mono-organisation.
+    // Aide au test : /login?new=1 force l'écran d'accueil « première visite »,
+    // même sur une instance mono-organisation.
     if (typeof window !== 'undefined'
         && new URLSearchParams(window.location.search).get('new') === '1') {
-      setFirstTime(true);
-      setMode('email');
+      setMode('welcome');
       return;
     }
     void (async () => {
@@ -60,60 +58,95 @@ export default function CaisseLogin({ logoUrl, brandName }: { logoUrl: string; b
         if (!j.tenant_required && Array.isArray(j.users) && j.users.length > 0) {
           setMode('pin');
         } else {
-          setFirstTime(true);
-          setMode('email');
+          // Aucune boutique rattachée à cet appareil : accueil première visite.
+          setMode('welcome');
         }
       } catch {
-        setFirstTime(true);
-        setMode('email');
+        setMode('welcome');
       }
     })();
   }, []);
 
   if (mode === 'loading') {
-    return <main className="min-h-screen grid place-items-center bg-gray-50 text-sm text-ink-soft">Chargement…</main>;
+    return <main className="min-h-screen grid place-items-center bg-bg text-sm text-ink-soft">Chargement…</main>;
   }
 
   if (mode === 'pin') {
-    // Le bouton « Connexion par email » fait partie du design de l'écran PIN
-    // (cadre or sur le fond vert) : on le passe à PinLogin plutôt que de le
-    // superposer.
     return <PinLogin onEmailLogin={() => setMode('email')} />;
   }
 
+  if (mode === 'email') {
+    return (
+      <AuthForm
+        logoUrl={logoUrl}
+        brandName={brandName}
+        title="Connexion à la caisse"
+        subtitle="Connectez-vous avec votre email et votre mot de passe."
+        submitLabel="Se connecter"
+        redirectTo="/caisse"
+        footer={
+          <button onClick={() => setMode('welcome')} className="underline hover:text-ink">
+            ← Retour
+          </button>
+        }
+      />
+    );
+  }
+
+  // -------- Accueil première visite --------
   return (
-    <AuthForm
-      logoUrl={logoUrl}
-      brandName={brandName}
-      title="Connexion à la caisse"
-      subtitle="Connectez-vous avec votre email et votre mot de passe."
-      submitLabel="Se connecter"
-      redirectTo="/caisse"
-      footer={
-        <div className="w-full flex flex-col items-center gap-3">
-          {firstTime && (
-            <div className="w-full">
-              <a
-                href={setupUrl()}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full inline-flex items-center justify-center gap-2 rounded-xl accent-bar text-white px-4 py-2.5 text-sm font-semibold"
-              >
-                Créer ma caisse
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
-                  <path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
-                </svg>
-              </a>
-              <p className="mt-1.5 text-center text-xs text-ink-soft">
-                Première utilisation ? Créez votre boutique en quelques minutes.
-              </p>
-            </div>
-          )}
-          <button onClick={() => setMode('pin')} className="underline hover:text-ink">
-            Connexion par code PIN
+    <main className="min-h-screen bg-bg flex flex-col items-center justify-center px-6 py-10">
+      <div className="w-full max-w-sm flex flex-col items-center text-center">
+        {/* Logo (carré jaune + sourire vert) */}
+        <div className="h-20 w-20 rounded-3xl grid place-items-center" style={{ background: YELLOW }} aria-hidden="true">
+          <svg width="46" height="46" viewBox="0 0 40 40"><path d="M11 21a9 9 0 0 0 18 0" fill="none" stroke={GREEN} strokeWidth="3.6" strokeLinecap="round" /></svg>
+        </div>
+        <h1 className="mt-5 text-3xl font-bold" style={{ color: GREEN }}>Bienvenue sur {brandName || 'HelloPos'}</h1>
+        <p className="mt-2 text-ink-soft">Votre caisse simple, rapide et adaptée à votre boutique.</p>
+
+        {/* Carte « Créer ma caisse » */}
+        <div className="mt-8 w-full rounded-3xl p-6 text-white shadow-sm" style={{ background: GREEN_CARD }}>
+          <div className="mx-auto h-16 w-16 rounded-full grid place-items-center" style={{ background: YELLOW }}>
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke={GREEN} strokeWidth="1.8">
+              <path d="M4 9h16l-1-4H5L4 9z" /><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9" /><path d="M9 20v-5h6v5" />
+            </svg>
+          </div>
+          <div className="mt-4 text-2xl font-bold">Créer ma caisse</div>
+          <p className="mt-2 text-sm text-white/85">Première utilisation ? Créez votre boutique et commencez à encaisser en quelques minutes.</p>
+          <a
+            href={setupUrl()}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-5 w-full inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3.5 text-base font-semibold"
+            style={{ background: YELLOW, color: GREEN }}
+          >
+            Commencer maintenant
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+          </a>
+        </div>
+
+        {/* Carte « Me connecter » */}
+        <div className="mt-4 w-full rounded-3xl p-6 bg-surface border border-border shadow-sm">
+          <div className="mx-auto h-16 w-16 rounded-full grid place-items-center" style={{ background: '#E7EFE9' }}>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={GREEN} strokeWidth="1.8"><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></svg>
+          </div>
+          <div className="mt-4 text-2xl font-bold" style={{ color: GREEN }}>Me connecter</div>
+          <p className="mt-2 text-sm text-ink-soft">J&apos;ai déjà une caisse {brandName || 'HelloPos'}, je me connecte à mon compte.</p>
+          <button
+            onClick={() => setMode('email')}
+            className="mt-5 w-full inline-flex items-center justify-center gap-2 rounded-2xl border px-4 py-3.5 text-base font-semibold"
+            style={{ color: GREEN, borderColor: GREEN }}
+          >
+            Se connecter
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
           </button>
         </div>
-      }
-    />
+
+        <div className="mt-6 flex items-center gap-2 text-xs text-ink-soft">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M12 2l7 3v6c0 4.5-3 8.3-7 9-4-.7-7-4.5-7-9V5z" /><path d="M9 12l2 2 4-4" /></svg>
+          Données sécurisées et hébergées en France
+        </div>
+      </div>
+    </main>
   );
 }
