@@ -577,8 +577,8 @@ function renderHtml(setup: string, caisse: string, bo: string, p: Prices): strin
     </div>
     <hr class="foot-rule">
     <div class="foot-bottom">
-      <span>© HelloPos · Tous droits réservés · France</span>
-      <span>Site édité par <a href="https://swebio.fr">Swebio.fr</a><br>Conçu conforme à l'art. 286-I-3°bis du CGI</span>
+      <span>Conçu conforme à l'art. 286-I-3°bis du CGI<br>© HelloPos · Tous droits réservés · France</span>
+      <span>Site édité par <a href="https://swebio.fr">Swebio.fr</a></span>
     </div>
   </div>
 </footer>
