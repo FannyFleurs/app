@@ -40,6 +40,14 @@ export default function CaisseLogin({ logoUrl, brandName }: { logoUrl: string; b
   // Décide du mode initial : PIN si la boutique est déjà rattachée à ce
   // poste (des utilisateurs remontent), sinon email (première connexion).
   useEffect(() => {
+    // Aide au test : /login?new=1 force l'écran « première connexion » (email +
+    // bouton « Créer ma caisse »), même sur une instance mono-organisation.
+    if (typeof window !== 'undefined'
+        && new URLSearchParams(window.location.search).get('new') === '1') {
+      setFirstTime(true);
+      setMode('email');
+      return;
+    }
     void (async () => {
       try {
         let q = '';
