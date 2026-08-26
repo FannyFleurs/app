@@ -97,6 +97,10 @@ export default function OpenSessionModal({
     }
     if (!res.ok) {
       const j = await res.json().catch(() => ({}));
+      if (j.error === 'DAY_SEALED') {
+        setError('Journée déjà fermée : la réouverture est réservée à un responsable.');
+        return;
+      }
       setError(j.message ?? j.error ?? 'Erreur d\'ouverture');
       return;
     }
