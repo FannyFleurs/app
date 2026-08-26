@@ -198,6 +198,10 @@ export default function CashRegister({
   // Journée déjà fermée (Z scellé) pour cette boutique aujourd'hui : la caisse
   // reste fermée, seule une réouverture par un responsable est possible.
   const [sealedToday, setSealedToday] = useState(false);
+  // Statut « journée fermée » résolu (fetch termine) : on n'auto-ouvre la
+  // modale de fond de caisse qu'une fois connu, pour éviter qu'elle s'affiche
+  // une fraction de seconde avant que « journée fermée » ne soit su.
+  const [sealedResolved, setSealedResolved] = useState(false);
   // Réouverture d'une journée fermée : réservée aux responsables (closures.daily).
   const canReopen = ['super_admin', 'owner', 'manager'].includes(currentUser.role);
   // Accueil première connexion : statut des premières étapes (null = pas encore su).
@@ -414,6 +418,7 @@ export default function CashRegister({
       const cr = await fetch(`/api/closures/daily/today?date=${day}${storeId ? `&store_id=${encodeURIComponent(storeId)}` : ''}`);
       if (cr.ok) setSealedToday(Boolean((await cr.json()).sealed_at));
     } catch { /* statut inconnu : on ne bloque pas */ }
+    setSealedResolved(true);
     sessionKnownRef.current = true;
     setSessionLoading(false);
   }, [registerId, storeId, schoolMode]);
@@ -461,13 +466,14 @@ export default function CashRegister({
   useEffect(() => {
     if (sessionLoading) return;
     if (sessionId) { autoPromptOnceRef.current = false; return; }
+    if (!sealedResolved) return;          // on attend de savoir si la journée est fermée
     if (sealedToday) return;              // journée fermée : pas de réouverture auto
     if (onboarding === null) return;      // on attend le statut d'accueil
     if (onboarding.first_time) return;    // accueil affiché à la place
     if (autoPromptOnceRef.current) return;
     autoPromptOnceRef.current = true;
     setShowOpenSession(true);
-  }, [sessionLoading, sessionId, sealedToday, onboarding]);
+  }, [sessionLoading, sessionId, sealedResolved, sealedToday, onboarding]);
 
   const refreshHeldCount = useCallback(async () => {
     if (!storeId) return;
@@ -1521,7 +1527,7 @@ export default function CashRegister({
             </div>
           </div>
         )}
-        {showOpenSession && (
+        {showOpenSession && !(sealedToday && !canReopen) && (
           <OpenSessionModal
             storeId={storeId}
             registerId={registerId}
