@@ -16,10 +16,6 @@ export default function OpenSessionModal({
     amount: number | null;
     fallback?: number;
   } | null>(null);
-  // Fonds commun : le montant saisi vaut pour TOUTE la boutique, les autres
-  // postes n'auront rien à ouvrir. À dire avant la saisie, pas après.
-  const [sharedFloat, setSharedFloat] = useState(false);
-
   useEffect(() => {
     void (async () => {
       const r = await fetch(`/api/cash-sessions/suggest-float?register_id=${registerId}&store_id=${encodeURIComponent(storeId)}`);
@@ -32,14 +28,6 @@ export default function OpenSessionModal({
       // 'manual' → reste vide pour saisie libre
     })();
   }, [registerId]);
-
-  useEffect(() => {
-    void (async () => {
-      const r = await fetch(`/api/settings/cash?store_id=${encodeURIComponent(storeId)}`);
-      if (!r.ok) return;
-      setSharedFloat(Boolean((await r.json()).settings?.shared_float));
-    })();
-  }, [storeId]);
 
   function press(key: string) {
     setError(null);
@@ -126,7 +114,7 @@ export default function OpenSessionModal({
       <div className="card max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">
-            {sharedFloat ? 'Ouverture de la boutique' : 'Ouverture caisse'}
+            Ouverture caisse
           </h2>
           <button
             onClick={onClose}
@@ -149,14 +137,8 @@ export default function OpenSessionModal({
 
         <div className="mt-4 rounded-2xl border border-border p-4 bg-gray-50">
           <div className="text-xs uppercase tracking-wider text-ink-soft">
-            {sharedFloat ? 'Fond de caisse commun' : 'Fond de caisse'}
+            Fond de caisse
           </div>
-          {sharedFloat && (
-            <p className="mt-1 text-xs text-ink-soft">
-              Ce montant vaut pour toute la boutique : les autres caisses
-              n&apos;auront rien à ouvrir.
-            </p>
-          )}
           <div className="mt-1 flex items-baseline justify-between">
             <span className="text-4xl font-semibold tabular-nums">
               {openingFloatStr === '' ? '—' : formatEUR(value)}
@@ -191,14 +173,8 @@ export default function OpenSessionModal({
           onClick={() => void submit()}
           className="btn-primary w-full mt-4 h-16 text-lg font-semibold"
         >
-          {loading
-            ? 'Ouverture…'
-            : `${sharedFloat ? 'Ouvrir la boutique' : 'Ouvrir la caisse'} · ${formatEUR(value)}`}
+          {loading ? 'Ouverture…' : `Ouvrir la caisse · ${formatEUR(value)}`}
         </button>
-
-        <p className="mt-3 text-xs text-ink-soft">
-          Mode d&apos;ouverture (manuel / fixe / solde de la veille) configurable dans les paramètres.
-        </p>
       </div>
     </div>
   );
