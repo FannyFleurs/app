@@ -13,8 +13,19 @@ import { buildSalesXlsx } from '@/lib/services/accounting-xlsx';
  * F. Le total en bas somme les colonnes D et E par formule, valeur mise en
  * cache pour les logiciels qui n'évaluent pas les formules.
  */
+/** Valeur de stock d'une catégorie (onglet « Valeur de stock »). */
+export interface StockCategoryValue {
+  category: string;
+  qty: number;
+  /** Valorisation au prix de revient HT. */
+  value: number;
+}
+
+const r2 = (n: number) => Math.round(n * 100) / 100;
+const r3 = (n: number) => Math.round(n * 1000) / 1000;
+
 export async function renderSalesXlsx(
-  totals: AccountTotal[], periodEnd: string,
+  totals: AccountTotal[], periodEnd: string, stock: StockCategoryValue[] = [],
 ): Promise<Buffer> {
   const { rows, totalD, totalE } = buildSalesXlsx(totals, periodEnd);
 
@@ -46,6 +57,36 @@ export async function renderSalesXlsx(
   eCell.value = { formula: `SUM(E1:E${last})`, result: totalE };
   dCell.numFmt = '0.00';
   eCell.numFmt = '0.00';
+
+  // -------- Onglet « Valeur de stock » (par catégorie + total) --------
+  // Stock valorisé au prix de revient HT (products.purchase_price_ht), quantités
+  // courantes (stock_levels). Un produit sans prix de revient compte pour 0.
+  const ws2 = wb.addWorksheet('Valeur de stock');
+  ws2.getColumn(1).width = 42;
+  ws2.getColumn(2).width = 14;
+  ws2.getColumn(3).width = 18;
+  ws2.getColumn(2).numFmt = '0.000';
+  ws2.getColumn(3).numFmt = '0.00';
+
+  ws2.addRow(['Valeur du stock par catégorie']).font = { bold: true, size: 12 };
+  ws2.addRow(['Valorisation au prix de revient HT · stock au jour de l’export']).font = { italic: true, size: 9 };
+  ws2.addRow([]);
+  const head = ws2.addRow(['Catégorie', 'Quantité', 'Valeur HT (€)']);
+  head.font = { bold: true };
+
+  let totalQty = 0;
+  let totalVal = 0;
+  for (const s of stock) {
+    ws2.addRow([s.category, r3(s.qty), r2(s.value)]);
+    totalQty += s.qty;
+    totalVal += s.value;
+  }
+  if (stock.length === 0) {
+    ws2.addRow(['Aucun article en stock suivi.', null, null]);
+  }
+  ws2.addRow([]);
+  const stockTotalRow = ws2.addRow(['TOTAL', r3(totalQty), r2(totalVal)]);
+  stockTotalRow.font = { bold: true };
 
   const out = await wb.xlsx.writeBuffer();
   return Buffer.from(out);

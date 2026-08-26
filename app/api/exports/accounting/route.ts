@@ -202,9 +202,30 @@ export async function POST(req: Request) {
     );
 
     if (format === 'accounts_xlsx') {
+      // Valeur de stock par catégorie (onglet dédié). Quantités courantes
+      // (stock_levels) valorisées au prix de revient HT (purchase_price_ht).
+      const stockRows = await query<{ category_name: string | null; qty: string; value: string }>(
+        `SELECT c.name AS category_name,
+                SUM(sl.quantity)::text AS qty,
+                SUM(sl.quantity * COALESCE(p.purchase_price_ht, 0))::text AS value
+           FROM stock_levels sl
+           JOIN products p ON p.id = sl.product_id AND p.organization_id = sl.organization_id
+           LEFT JOIN product_categories c ON c.id = p.category_id
+          WHERE sl.organization_id = $1
+            ${storeIds.length ? 'AND sl.store_id = ANY($2::uuid[])' : ''}
+          GROUP BY c.name
+          ORDER BY c.name NULLS FIRST`,
+        storeIds.length ? [g.user.organizationId, storeIds] : [g.user.organizationId],
+      );
+      const stock = stockRows.rows.map((r) => ({
+        category: r.category_name ?? 'Sans catégorie',
+        qty: Number(r.qty),
+        value: Number(r.value),
+      }));
+
       // Excel à la mise en page attendue par le comptable (fichier modèle) :
-      // deux lignes par famille, ligne « VENTES », total équilibré.
-      payload = await renderSalesXlsx(totals, period_end);
+      // deux lignes par famille, ligne « VENTES », total équilibré, + onglet stock.
+      payload = await renderSalesXlsx(totals, period_end, stock);
       mime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
     } else {
     // Deux natures dans le même fichier : le HT au crédit du compte de ventes,
