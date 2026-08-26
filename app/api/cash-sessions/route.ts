@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requirePermission } from '@/lib/auth/guards';
+import { userCan } from '@/lib/auth/permissions';
 import { parseJson, jsonError } from '@/lib/validation/api';
 import { CashSessionService } from '@/lib/services/cash-session-service';
 import { query } from '@/lib/db/client';
@@ -60,6 +61,22 @@ export async function POST(req: Request) {
     [parsed.data.register_id, parsed.data.store_id, g.user.organizationId],
   );
   if (r.rowCount === 0) return jsonError('REGISTER_NOT_FOUND', 404);
+
+  // Journée déjà FERMÉE (Z scellé aujourd'hui pour cette boutique) : la
+  // réouverture est réservée aux responsables (closures.daily). Un vendeur ne
+  // peut pas rouvrir la caisse le jour même.
+  const sealed = await query(
+    `SELECT 1 FROM daily_closures
+      WHERE organization_id = $1 AND store_id = $2
+        AND business_date = (now() AT TIME ZONE 'Europe/Paris')::date
+        AND sealed_at IS NOT NULL
+      LIMIT 1`,
+    [g.user.organizationId, parsed.data.store_id],
+  );
+  if ((sealed.rowCount ?? 0) > 0 && !(await userCan(g.user, 'closures.daily'))) {
+    return jsonError('DAY_SEALED', 403);
+  }
+
   const shared = await isSharedFloat(g.user.organizationId, parsed.data.store_id);
   try {
     const out = await CashSessionService.open({

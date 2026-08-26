@@ -195,6 +195,11 @@ export default function CashRegister({
   const [sessionLoading, setSessionLoading] = useState(!initial);
   const sessionKnownRef = useRef<boolean>(!!initial);
   const [showOpenSession, setShowOpenSession] = useState(false);
+  // Journée déjà fermée (Z scellé) pour cette boutique aujourd'hui : la caisse
+  // reste fermée, seule une réouverture par un responsable est possible.
+  const [sealedToday, setSealedToday] = useState(false);
+  // Réouverture d'une journée fermée : réservée aux responsables (closures.daily).
+  const canReopen = ['super_admin', 'owner', 'manager'].includes(currentUser.role);
   // Accueil première connexion : statut des premières étapes (null = pas encore su).
   const [onboarding, setOnboarding] = useState<OnboardingStatus | null>(null);
 
@@ -400,9 +405,18 @@ export default function CashRegister({
       const j = await res.json();
       setSessionId(j.session?.id ?? null);
     }
+    // Journée fermée aujourd'hui pour cette boutique ? (bloque la réouverture
+    // hors responsable, et évite de redemander le fond de caisse après une
+    // fermeture définitive).
+    try {
+      const n = new Date();
+      const day = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
+      const cr = await fetch(`/api/closures/daily/today?date=${day}${storeId ? `&store_id=${encodeURIComponent(storeId)}` : ''}`);
+      if (cr.ok) setSealedToday(Boolean((await cr.json()).sealed_at));
+    } catch { /* statut inconnu : on ne bloque pas */ }
     sessionKnownRef.current = true;
     setSessionLoading(false);
-  }, [registerId, schoolMode]);
+  }, [registerId, storeId, schoolMode]);
 
   useEffect(() => { void refreshSession(); }, [refreshSession]);
 
@@ -447,12 +461,13 @@ export default function CashRegister({
   useEffect(() => {
     if (sessionLoading) return;
     if (sessionId) { autoPromptOnceRef.current = false; return; }
+    if (sealedToday) return;              // journée fermée : pas de réouverture auto
     if (onboarding === null) return;      // on attend le statut d'accueil
     if (onboarding.first_time) return;    // accueil affiché à la place
     if (autoPromptOnceRef.current) return;
     autoPromptOnceRef.current = true;
     setShowOpenSession(true);
-  }, [sessionLoading, sessionId, onboarding]);
+  }, [sessionLoading, sessionId, sealedToday, onboarding]);
 
   const refreshHeldCount = useCallback(async () => {
     if (!storeId) return;
@@ -1475,20 +1490,34 @@ export default function CashRegister({
           <div className="h-full grid place-items-center px-4">
             <div className="card p-8 max-w-md w-full text-center">
               <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl accent-bar text-white text-2xl">
-                ◆
+                {sealedToday ? '🔒' : '◆'}
               </div>
-              <h1 className="text-2xl font-semibold tracking-tight">Caisse fermée</h1>
+              <h1 className="text-2xl font-semibold tracking-tight">
+                {sealedToday ? 'Caisse fermée pour aujourd’hui' : 'Caisse fermée'}
+              </h1>
               <p className="mt-2 text-sm text-ink-soft">
                 {currentStore?.name ? `${currentStore.name}` : ''}
                 {currentRegister?.name ? ` · ${currentRegister.name}` : ''}
-                <br />Ouvrez la caisse pour commencer la journée.
+                <br />
+                {sealedToday
+                  ? (canReopen
+                      ? 'La journée a été fermée. Vous pouvez la rouvrir en tant que responsable.'
+                      : 'La journée a été fermée. Sa réouverture nécessite un responsable.')
+                  : 'Ouvrez la caisse pour commencer la journée.'}
               </p>
-              <button
-                className="btn-primary mt-6 w-full h-12 text-base"
-                onClick={() => setShowOpenSession(true)}
-              >
-                Ouvrir la caisse
-              </button>
+              {(!sealedToday || canReopen) && (
+                <button
+                  className="btn-primary mt-6 w-full h-12 text-base"
+                  onClick={() => setShowOpenSession(true)}
+                >
+                  {sealedToday ? 'Rouvrir la caisse' : 'Ouvrir la caisse'}
+                </button>
+              )}
+              {sealedToday && !canReopen && (
+                <a href="/ma-journee" className="btn-soft mt-4 w-full h-12 text-base flex items-center justify-center">
+                  Voir Ma journée
+                </a>
+              )}
             </div>
           </div>
         )}
