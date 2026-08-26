@@ -451,7 +451,7 @@ export default function MaJourneeClient() {
           ) : (
             <a href="/closures"
                className="btn-primary h-12 rounded-2xl flex items-center justify-center gap-2 text-sm font-semibold">
-              <Icon name="lock" size={16} /> Clôturer la journée
+              <Icon name="lock" size={16} /> Fermer ma caisse
             </a>
           )}
         </aside>

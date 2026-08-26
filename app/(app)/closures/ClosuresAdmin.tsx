@@ -291,7 +291,7 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
       }
       const ok = await confirmThemed({
         title: '⚠ Attention — erreur de caisse',
-        message: `Un écart a été détecté : ${parts.join(' · ')}.\n\nClôturer quand même ? La clôture est définitive.`,
+        message: `Un écart a été détecté : ${parts.join(' · ')}.\n\nFermer ma caisse quand même ? La fermeture est définitive.`,
       });
       if (!ok) return;
     }
@@ -385,7 +385,7 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
       {/* Header : titre + boutons à droite sur la même ligne */}
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Clôture de caisse</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Fermeture de caisse</h1>
           {alreadySealed && (
             <Badge tone="success">
               Scellée le {new Date(preview!.sealed!.sealed_at).toLocaleString('fr-FR')}
@@ -442,12 +442,12 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
                 ? 'Des paniers sont en attente : finissez-les avant de clôturer'
                 : !allPaymentsValidated
                   ? 'Validez tous les modes de paiement (et comptez les espèces) avant de clôturer'
-                  : 'Clôturer définitivement la journée'}
+                  : 'Fermer définitivement ma caisse'}
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <rect x="4" y="10" width="16" height="10" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" />
               </svg>
-              {sealing ? 'Clôture…' : hasAnyDiscrepancy ? 'Clôturer malgré l’écart' : 'Clôturer ma journée'}
+              {sealing ? 'Fermeture…' : hasAnyDiscrepancy ? 'Fermer malgré l’écart' : 'Fermer ma caisse'}
             </button>
           )}
         </div>

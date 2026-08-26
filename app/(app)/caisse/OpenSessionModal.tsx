@@ -104,6 +104,8 @@ export default function OpenSessionModal({
   }
 
   const value = openingFloatStr === '' ? 0 : Number(openingFloatStr);
+  // Fond « Montant fixe » : pas de saisie, juste confirmation puis ouverture.
+  const isFixed = suggestion?.mode === 'fixed';
 
   const suggestionLabel = (() => {
     if (!suggestion) return null;
@@ -130,7 +132,9 @@ export default function OpenSessionModal({
         </div>
 
         <p className="mt-1 text-sm text-ink-soft">
-          Confirmez le fond de caisse présent dans le tiroir avant de démarrer.
+          {isFixed
+            ? 'Fond de caisse fixe défini dans les réglages. Confirmez pour ouvrir la caisse.'
+            : 'Confirmez le fond de caisse présent dans le tiroir avant de démarrer.'}
         </p>
 
         {suggestionLabel && (
@@ -153,24 +157,28 @@ export default function OpenSessionModal({
             <span className="text-4xl font-semibold tabular-nums">
               {openingFloatStr === '' ? '—' : formatEUR(value)}
             </span>
-            <button onClick={() => setOpeningFloatStr('')} className="text-xs text-ink-soft hover:text-ink">
-              Effacer
-            </button>
+            {!isFixed && (
+              <button onClick={() => setOpeningFloatStr('')} className="text-xs text-ink-soft hover:text-ink">
+                Effacer
+              </button>
+            )}
           </div>
         </div>
 
-        {/* Pavé numérique */}
-        <div className="mt-3 grid grid-cols-3 gap-2 lg:gap-3">
-          {['7','8','9','4','5','6','1','2','3','.','0','⌫'].map((k) => (
-            <button
-              key={k}
-              onClick={() => press(k)}
-              className="h-16 lg:h-20 rounded-xl border border-border bg-white text-2xl lg:text-3xl font-medium hover:bg-gray-50 active:scale-95 transition"
-            >
-              {k}
-            </button>
-          ))}
-        </div>
+        {/* Pavé numérique — masqué en mode « fond fixe ». */}
+        {!isFixed && (
+          <div className="mt-3 grid grid-cols-3 gap-2 lg:gap-3">
+            {['7','8','9','4','5','6','1','2','3','.','0','⌫'].map((k) => (
+              <button
+                key={k}
+                onClick={() => press(k)}
+                className="h-16 lg:h-20 rounded-xl border border-border bg-white text-2xl lg:text-3xl font-medium hover:bg-gray-50 active:scale-95 transition"
+              >
+                {k}
+              </button>
+            ))}
+          </div>
+        )}
 
         {error && <div className="mt-3 rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
 
