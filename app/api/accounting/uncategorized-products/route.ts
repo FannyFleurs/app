@@ -16,7 +16,9 @@ export const dynamic = 'force-dynamic';
  */
 
 interface Article { id: string; name: string; sku: string | null; qty: number; ht: number }
-interface FreeLine { label: string; qty: number; ht: number }
+/** Article du catalogue portant exactement ce libellé, proposé au rattachement. */
+interface Suggestion { id: string; name: string; category_id: string | null; category_name: string | null }
+interface FreeLine { label: string; qty: number; ht: number; suggestion: Suggestion | null }
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -86,9 +88,37 @@ export async function GET(req: Request) {
   const articles: Article[] = prod.rows.map((r) => ({
     id: r.id, name: r.name, sku: r.sku, qty: r3(Number(r.qty)), ht: r2(Number(r.ht)),
   }));
-  const freeLines: FreeLine[] = free.rows.map((r) => ({
-    label: r.label, qty: r3(Number(r.qty)), ht: r2(Number(r.ht)),
-  }));
+
+  // Pour chaque ligne libre, on cherche l'article du catalogue portant EXACTEMENT
+  // ce libellé (à la casse près). C'est le rattachement évident, celui que l'on
+  // proposera en un clic. Un libellé porté par plusieurs articles est ambigu :
+  // on ne propose alors rien plutôt que de deviner.
+  const labels = [...new Set(free.rows.map((r) => r.label.trim().toLowerCase()).filter(Boolean))];
+  const byName = new Map<string, Suggestion[]>();
+  if (labels.length) {
+    const m = await query<{ id: string; name: string; category_id: string | null; category_name: string | null }>(
+      `SELECT p.id, p.name, p.category_id, c.name AS category_name
+         FROM products p
+         LEFT JOIN product_categories c ON c.id = p.category_id
+        WHERE p.organization_id = $1
+          AND lower(btrim(p.name)) = ANY($2::text[])`,
+      [g.user.organizationId, labels],
+    );
+    for (const r of m.rows) {
+      const k = r.name.trim().toLowerCase();
+      const list = byName.get(k) ?? [];
+      list.push({ id: r.id, name: r.name, category_id: r.category_id, category_name: r.category_name });
+      byName.set(k, list);
+    }
+  }
+
+  const freeLines: FreeLine[] = free.rows.map((r) => {
+    const cand = byName.get(r.label.trim().toLowerCase());
+    return {
+      label: r.label, qty: r3(Number(r.qty)), ht: r2(Number(r.ht)),
+      suggestion: cand && cand.length === 1 ? cand[0]! : null,
+    };
+  });
 
   return NextResponse.json({ articles, freeLines });
 }
