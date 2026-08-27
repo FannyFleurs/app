@@ -16,9 +16,12 @@ export default async function ExportsPage() {
 
   // Le plan de comptes vit sur cette page et non dans les réglages : c'est le
   // comptable qui le renseigne, et il n'a accès qu'ici.
-  const [canRead, canEdit] = await Promise.all([
+  const [canRead, canEdit, canAssignFamily] = await Promise.all([
     userCan(user, 'accounting.read'),
     userCan(user, 'accounting.write'),
+    // Attribuer une famille à un article, c'est modifier le catalogue : réservé
+    // au commerçant (products.write), pas au comptable externe.
+    userCan(user, 'products.write'),
   ]);
 
   return (
@@ -27,7 +30,7 @@ export default async function ExportsPage() {
     // l'écran, lui, était à moitié vide.
     <div className="p-6 md:p-8 space-y-8 w-full">
       <ExportsAdmin />
-      {canRead && <SalesAccountsSection canEdit={canEdit} />}
+      {canRead && <SalesAccountsSection canEdit={canEdit} canAssignFamily={canAssignFamily} />}
     </div>
   );
 }
