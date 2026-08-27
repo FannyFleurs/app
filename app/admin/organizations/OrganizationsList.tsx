@@ -18,7 +18,7 @@ export default function OrganizationsList() {
   const [orgs, setOrgs] = useState<OrgRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
-  const [filter, setFilter] = useState<'all' | 'trial' | 'active' | 'cancelled' | 'expiring'>('all');
+  const [filter, setFilter] = useState<'all' | 'trial' | 'active' | 'cancelled' | 'expiring'>('active');
 
   useEffect(() => {
     void (async () => {
