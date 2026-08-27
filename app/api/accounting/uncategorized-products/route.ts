@@ -5,25 +5,22 @@ import { requirePermission } from '@/lib/auth/guards';
 export const dynamic = 'force-dynamic';
 
 /**
- * Articles sans famille vendus dans un croisement « Sans famille » précis
- * (boutique + taux + période).
+ * Ce qui compose un croisement « Sans famille » (boutique + taux + période).
  *
- * Le croisement « Sans famille » de l'écran des comptes de ventes n'est pas un
- * cas comptable à paramétrer : c'est un oubli de saisie. Un produit devrait
- * toujours porter une famille. Cette route liste les articles concernés pour
- * qu'on leur en attribue une après coup (PATCH /api/products/[id]) ; le
- * croisement disparaît alors de lui-même, la vente rejoignant sa famille.
+ * Deux populations s'y mélangent, et il faut les distinguer pour comprendre :
+ *  - des ARTICLES du catalogue sans famille : un oubli de saisie. On leur en
+ *    attribue une (PATCH /api/products/[id]) et la vente rejoint sa famille.
+ *  - des lignes SANS produit (vente au montant libre) : elles n'ont qu'un
+ *    libellé, aucune famille possible. On les liste en lecture pour montrer
+ *    d'où vient le chiffre d'affaires resté sans famille.
  */
 
-interface Article {
-  id: string;
-  name: string;
-  sku: string | null;
-  qty: number;
-  ht: number;
-}
+interface Article { id: string; name: string; sku: string | null; qty: number; ht: number }
+interface FreeLine { label: string; qty: number; ht: number }
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const r2 = (n: number) => Math.round(n * 100) / 100;
+const r3 = (n: number) => Math.round(n * 1000) / 1000;
 
 export async function GET(req: Request) {
   const g = await requirePermission('accounting.read');
@@ -48,33 +45,50 @@ export async function GET(req: Request) {
   const params: unknown[] = [g.user.organizationId, from, to, vat];
   if (storeId) params.push(storeId);
 
-  // Même périmètre que le croisement « Sans famille » de /accounting/coverage :
-  // articles réellement vendus (produit rattaché, sans famille) sur la période,
-  // la boutique et le taux donnés. Les lignes sans produit (saisie libre) ne
-  // peuvent pas recevoir de famille : on ne les liste pas.
-  const { rows } = await query<{ id: string; name: string; sku: string | null; qty: string; ht: string }>(
-    `SELECT p.id, p.name, p.sku,
-            SUM(sl.quantity)::text AS qty,
-            SUM(sl.line_ht)::text  AS ht
-       FROM sale_lines sl
-       JOIN sales s ON s.id = sl.sale_id
-       JOIN products p ON p.id = sl.product_id
-      WHERE s.organization_id = $1
+  // Filtre commun aux deux requêtes : même périmètre que le croisement
+  // « Sans famille » de /accounting/coverage.
+  const where = `s.organization_id = $1
         AND s.status = 'validated'
         AND s.validated_at::date BETWEEN $2::date AND $3::date
-        AND p.category_id IS NULL
         AND ABS(sl.tax_rate - $4::numeric) < 0.005
-        AND ${storeFilter}
-      GROUP BY p.id, p.name, p.sku
-      ORDER BY SUM(sl.line_ht) DESC, p.name`,
-    params,
-  );
+        AND ${storeFilter}`;
 
-  const articles: Article[] = rows.map((r) => ({
-    id: r.id, name: r.name, sku: r.sku,
-    qty: Math.round(Number(r.qty) * 1000) / 1000,
-    ht: Math.round(Number(r.ht) * 100) / 100,
+  const [prod, free] = await Promise.all([
+    // Articles du catalogue vendus ici et restés sans famille : reclassables.
+    query<{ id: string; name: string; sku: string | null; qty: string; ht: string }>(
+      `SELECT p.id, p.name, p.sku,
+              SUM(sl.quantity)::text AS qty,
+              SUM(sl.line_ht)::text  AS ht
+         FROM sale_lines sl
+         JOIN sales s ON s.id = sl.sale_id
+         JOIN products p ON p.id = sl.product_id
+        WHERE ${where}
+          AND p.category_id IS NULL
+        GROUP BY p.id, p.name, p.sku
+        ORDER BY SUM(sl.line_ht) DESC, p.name`,
+      params,
+    ),
+    // Lignes sans produit (vente libre) : regroupées par libellé, en lecture.
+    query<{ label: string; qty: string; ht: string }>(
+      `SELECT sl.label,
+              SUM(sl.quantity)::text AS qty,
+              SUM(sl.line_ht)::text  AS ht
+         FROM sale_lines sl
+         JOIN sales s ON s.id = sl.sale_id
+        WHERE ${where}
+          AND sl.product_id IS NULL
+        GROUP BY sl.label
+        ORDER BY SUM(sl.line_ht) DESC, sl.label`,
+      params,
+    ),
+  ]);
+
+  const articles: Article[] = prod.rows.map((r) => ({
+    id: r.id, name: r.name, sku: r.sku, qty: r3(Number(r.qty)), ht: r2(Number(r.ht)),
+  }));
+  const freeLines: FreeLine[] = free.rows.map((r) => ({
+    label: r.label, qty: r3(Number(r.qty)), ht: r2(Number(r.ht)),
   }));
 
-  return NextResponse.json({ articles });
+  return NextResponse.json({ articles, freeLines });
 }
