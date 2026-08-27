@@ -63,6 +63,10 @@ export async function GET(req: Request) {
       WHERE s.organization_id = $1
         AND s.status = 'validated'
         AND s.validated_at::date BETWEEN $2::date AND $3::date
+        -- Émission d'un bon d'achat / carte cadeau : ce n'est pas une vente
+        -- taxable (0 € HT), c'est une dette « à honorer ». Elle a son propre
+        -- compte, hors ventilation des ventes.
+        AND sl.metadata->>'gift_card' IS DISTINCT FROM 'true'
         ${storeFilter}
       GROUP BY s.store_id, st.name, p.category_id, c.name, sl.tax_rate`,
     [g.user.organizationId, from, to, ...storeArgs],

@@ -57,6 +57,8 @@ export async function GET(req: Request) {
         AND s.status = 'validated'
         AND s.validated_at::date BETWEEN $2::date AND $3::date
         AND ABS(sl.tax_rate - $4::numeric) < 0.005
+        -- Bons d'achat / cartes cadeaux exclus, comme dans coverage/export.
+        AND sl.metadata->>'gift_card' IS DISTINCT FROM 'true'
         AND ${storeFilter}`;
 
   // Articles du croisement : ceux de la famille demandée, ou sans famille.
