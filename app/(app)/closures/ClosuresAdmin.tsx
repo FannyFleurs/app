@@ -222,6 +222,14 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
   }, [preview, declared]);
   const hasAnyDiscrepancy = hasCashDiscrepancy || paymentVariances.length > 0;
 
+  // Affichage de l'« erreur de caisse » : tant que le comptage des espèces n'est
+  // pas complet (compté < attendu), l'écart négatif n'est qu'un « reste à
+  // compter », pas une erreur — on ne l'affiche donc pas en haut de l'écran.
+  // Le contrôle au moment du scellement, lui, reste sur l'écart réel.
+  const cashCountComplete = countedCash >= expectedCash;
+  const showCashDiscrepancy = hasCashDiscrepancy && cashCountComplete;
+  const showDiscrepancyBanner = showCashDiscrepancy || paymentVariances.length > 0;
+
   /**
    * Tous les modes de paiement sont-ils validés ? La clôture n'est possible
    * qu'à cette condition : on ne scelle pas une journée dont un règlement n'a
@@ -447,7 +455,7 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <rect x="4" y="10" width="16" height="10" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" />
               </svg>
-              {sealing ? 'Fermeture…' : hasAnyDiscrepancy ? 'Fermer malgré l’écart' : 'Fermer ma caisse'}
+              {sealing ? 'Fermeture…' : showDiscrepancyBanner ? 'Fermer malgré l’écart' : 'Fermer ma caisse'}
             </button>
           )}
         </div>
@@ -485,10 +493,10 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
               ⚠ {preview.held_count} panier{preview.held_count > 1 ? 's' : ''} en attente — finissez-les ou videz-les avant de clôturer.
             </div>
           )}
-          {!alreadySealed && hasAnyDiscrepancy && (
+          {!alreadySealed && showDiscrepancyBanner && (
             <div className="rounded-xl bg-danger/10 border border-danger/30 px-3 py-2 text-sm text-danger font-medium flex flex-wrap items-center gap-x-2 gap-y-0.5 shrink-0">
               <span>⚠ Erreur de caisse :</span>
-              {hasCashDiscrepancy && (
+              {showCashDiscrepancy && (
                 <span>espèces {cashVariance >= 0 ? '+' : ''}{formatEUR(cashVariance)}</span>
               )}
               {paymentVariances.map((pv) => (
