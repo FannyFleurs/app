@@ -478,7 +478,8 @@ function AccountForm({ row, preset, stores, categories, onClose, onSaved }: {
 }
 
 interface Article { id: string; name: string; sku: string | null; qty: number; ht: number }
-interface FreeLine { label: string; qty: number; ht: number }
+interface Suggestion { id: string; name: string; category_id: string | null; category_name: string | null }
+interface FreeLine { label: string; qty: number; ht: number; suggestion: Suggestion | null }
 
 /**
  * Articles sans famille d'un croisement, avec un menu pour leur attribuer une
@@ -496,7 +497,9 @@ function ArticlesModal({ crossing, categories, from, to, onClose, onChanged }: {
   const [articles, setArticles] = useState<Article[] | null>(null);
   const [freeLines, setFreeLines] = useState<FreeLine[]>([]);
   const [done, setDone] = useState<Record<string, string>>({});
+  const [linked, setLinked] = useState<Record<string, string>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [linkingLabel, setLinkingLabel] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -525,6 +528,23 @@ function ArticlesModal({ crossing, categories, from, to, onClose, onChanged }: {
       return;
     }
     setDone((d) => ({ ...d, [a.id]: categories.find((c) => c.id === categoryId)?.name ?? 'Famille' }));
+    onChanged();
+  }
+
+  async function link(f: FreeLine) {
+    if (!f.suggestion) return;
+    setLinkingLabel(f.label); setError(null);
+    const res = await fetch('/api/accounting/link-free-lines', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label: f.label, product_id: f.suggestion.id }),
+    }).catch(() => null);
+    setLinkingLabel(null);
+    if (!res || !res.ok) {
+      setError('Rattachement impossible. Réessayez.');
+      return;
+    }
+    setLinked((d) => ({ ...d, [f.label]: f.suggestion!.category_name ?? f.suggestion!.name }));
     onChanged();
   }
 
@@ -592,19 +612,22 @@ function ArticlesModal({ crossing, categories, from, to, onClose, onChanged }: {
               </div>
             )}
 
-            {/* Ventes sans produit (montant libre) : aucune famille possible. */}
+            {/* Ventes saisies au prix (product_id nul). Si un article du même nom
+                existe, on relie la ligne à cet article : la famille suit. */}
             {freeLines.length > 0 && (
               <div className="space-y-1.5">
-                <h3 className="text-sm font-semibold">Ventes sans produit (montant libre)</h3>
+                <h3 className="text-sm font-semibold">Ventes saisies au prix</h3>
                 <p className="text-xs text-ink-soft">
-                  Saisies directement au prix, sans article du catalogue : elles ne
-                  peuvent pas recevoir de famille.
+                  Ces ventes n&apos;ont pas été passées par la fiche article, elles n&apos;en
+                  connaissent donc pas la famille. Rattachez-les à l&apos;article du même nom :
+                  la famille suivra, ici et dans les stats de l&apos;article. Le rattachement
+                  vaut pour toutes les ventes de ce libellé.
                 </p>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm border-collapse">
                     <thead>
                       <tr className="text-[11px] uppercase tracking-wider text-ink-soft border-b border-border">
-                        <Th>Libellé</Th><Th>Quantité</Th><Th>CA HT</Th>
+                        <Th>Libellé</Th><Th>Quantité</Th><Th>CA HT</Th><Th>Article</Th>
                       </tr>
                     </thead>
                     <tbody>
@@ -613,6 +636,22 @@ function ArticlesModal({ crossing, categories, from, to, onClose, onChanged }: {
                           <Td>{f.label || <span className="text-ink-soft italic">Sans libellé</span>}</Td>
                           <Td><span className="tabular-nums">{f.qty}</span></Td>
                           <Td><span className="tabular-nums">{f.ht.toFixed(2)} €</span></Td>
+                          <Td>
+                            {linked[f.label] ? (
+                              <span className="text-success text-xs">✓ Rattaché ({linked[f.label]})</span>
+                            ) : f.suggestion ? (
+                              <button
+                                className="btn-soft text-xs h-8 px-3 whitespace-nowrap"
+                                disabled={linkingLabel === f.label}
+                                onClick={() => void link(f)}>
+                                {linkingLabel === f.label
+                                  ? 'Rattachement…'
+                                  : `Rattacher${f.suggestion.category_name ? ` · ${f.suggestion.category_name}` : ' (article sans famille)'}`}
+                              </button>
+                            ) : (
+                              <span className="text-ink-soft text-xs italic">Aucun article de ce nom</span>
+                            )}
+                          </Td>
                         </tr>
                       ))}
                     </tbody>
