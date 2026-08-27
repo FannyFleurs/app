@@ -231,7 +231,7 @@ export default function SalesAccountsSection(
                             ? (canAssignFamily && (
                                 <button className="btn-soft text-xs h-8 px-3"
                                         onClick={() => setArticlesFor(c)}>
-                                  Voir articles
+                                  Voir le détail
                                 </button>
                               ))
                             : (canEdit && (
@@ -478,6 +478,7 @@ function AccountForm({ row, preset, stores, categories, onClose, onSaved }: {
 }
 
 interface Article { id: string; name: string; sku: string | null; qty: number; ht: number }
+interface FreeLine { label: string; qty: number; ht: number }
 
 /**
  * Articles sans famille d'un croisement, avec un menu pour leur attribuer une
@@ -493,6 +494,7 @@ function ArticlesModal({ crossing, categories, from, to, onClose, onChanged }: {
   onChanged: () => void;
 }) {
   const [articles, setArticles] = useState<Article[] | null>(null);
+  const [freeLines, setFreeLines] = useState<FreeLine[]>([]);
   const [done, setDone] = useState<Record<string, string>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -502,9 +504,10 @@ function ArticlesModal({ crossing, categories, from, to, onClose, onChanged }: {
       const qs = new URLSearchParams({ from, to, vat_rate: String(crossing.vat_rate) });
       if (crossing.store_id) qs.set('store_id', crossing.store_id);
       const r = await fetch(`/api/accounting/uncategorized-products?${qs.toString()}`)
-        .then((x) => (x.ok ? x.json() : { articles: [] }))
-        .catch(() => ({ articles: [] }));
+        .then((x) => (x.ok ? x.json() : { articles: [], freeLines: [] }))
+        .catch(() => ({ articles: [], freeLines: [] }));
       setArticles(r.articles ?? []);
+      setFreeLines(r.freeLines ?? []);
     })();
   }, [crossing, from, to]);
 
@@ -537,53 +540,91 @@ function ArticlesModal({ crossing, categories, from, to, onClose, onChanged }: {
         </div>
 
         <p className="text-sm text-ink-soft">
-          {crossing.store_name ?? 'Toutes boutiques'} · TVA {formatRate(crossing.vat_rate)} %.
-          Attribuez une famille à chaque article : il rejoindra alors sa famille dans
-          l&apos;export, et ce croisement disparaîtra.
+          {crossing.store_name ?? 'Toutes boutiques'} · TVA {formatRate(crossing.vat_rate)} % ·
+          {' '}{crossing.ht.toFixed(2)} € HT. Voici ce qui compose cette ligne.
         </p>
 
         {error && <div className="rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
 
         {articles === null ? (
           <div className="text-sm text-ink-soft">Chargement…</div>
-        ) : articles.length === 0 ? (
-          <div className="text-sm text-ink-soft">
-            Aucun article rattachable ici : ces ventes proviennent de lignes libres,
-            sans produit du catalogue.
-          </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm border-collapse">
-              <thead>
-                <tr className="text-[11px] uppercase tracking-wider text-ink-soft border-b border-border">
-                  <Th>Article</Th><Th>CA HT</Th><Th>Famille</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {articles.map((a) => (
-                  <tr key={a.id} className="border-b border-border last:border-0">
-                    <Td>
-                      <div className="font-medium">{a.name}</div>
-                      {a.sku && <div className="text-[11px] text-ink-soft font-mono">{a.sku}</div>}
-                    </Td>
-                    <Td><span className="tabular-nums">{a.ht.toFixed(2)} €</span></Td>
-                    <Td>
-                      {done[a.id] ? (
-                        <span className="text-success text-xs">✓ Rangé dans {done[a.id]}</span>
-                      ) : (
-                        <select className="input h-9 text-sm" defaultValue=""
-                                disabled={savingId === a.id}
-                                onChange={(e) => void assign(a, e.target.value)}>
-                          <option value="" disabled>Attribuer une famille…</option>
-                          {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                        </select>
-                      )}
-                    </Td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <>
+            {/* Articles du catalogue sans famille : reclassables. */}
+            {articles.length > 0 && (
+              <div className="space-y-1.5">
+                <h3 className="text-sm font-semibold">Articles du catalogue sans famille</h3>
+                <p className="text-xs text-ink-soft">
+                  Attribuez une famille : l&apos;article rejoint sa famille dans l&apos;export.
+                </p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm border-collapse">
+                    <thead>
+                      <tr className="text-[11px] uppercase tracking-wider text-ink-soft border-b border-border">
+                        <Th>Article</Th><Th>CA HT</Th><Th>Famille</Th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {articles.map((a) => (
+                        <tr key={a.id} className="border-b border-border last:border-0">
+                          <Td>
+                            <div className="font-medium">{a.name}</div>
+                            {a.sku && <div className="text-[11px] text-ink-soft font-mono">{a.sku}</div>}
+                          </Td>
+                          <Td><span className="tabular-nums">{a.ht.toFixed(2)} €</span></Td>
+                          <Td>
+                            {done[a.id] ? (
+                              <span className="text-success text-xs">✓ Rangé dans {done[a.id]}</span>
+                            ) : (
+                              <select className="input h-9 text-sm" defaultValue=""
+                                      disabled={savingId === a.id}
+                                      onChange={(e) => void assign(a, e.target.value)}>
+                                <option value="" disabled>Attribuer une famille…</option>
+                                {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                              </select>
+                            )}
+                          </Td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Ventes sans produit (montant libre) : aucune famille possible. */}
+            {freeLines.length > 0 && (
+              <div className="space-y-1.5">
+                <h3 className="text-sm font-semibold">Ventes sans produit (montant libre)</h3>
+                <p className="text-xs text-ink-soft">
+                  Saisies directement au prix, sans article du catalogue : elles ne
+                  peuvent pas recevoir de famille.
+                </p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm border-collapse">
+                    <thead>
+                      <tr className="text-[11px] uppercase tracking-wider text-ink-soft border-b border-border">
+                        <Th>Libellé</Th><Th>Quantité</Th><Th>CA HT</Th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {freeLines.map((f, i) => (
+                        <tr key={`${f.label}|${i}`} className="border-b border-border last:border-0">
+                          <Td>{f.label || <span className="text-ink-soft italic">Sans libellé</span>}</Td>
+                          <Td><span className="tabular-nums">{f.qty}</span></Td>
+                          <Td><span className="tabular-nums">{f.ht.toFixed(2)} €</span></Td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {articles.length === 0 && freeLines.length === 0 && (
+              <div className="text-sm text-ink-soft">Aucune vente sur ce croisement.</div>
+            )}
+          </>
         )}
 
         <div className="flex items-center justify-between pt-1">
