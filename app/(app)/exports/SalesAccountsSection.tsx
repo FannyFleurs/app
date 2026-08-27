@@ -224,21 +224,20 @@ export default function SalesAccountsSection(
                       <Td>{c.store_name ?? '—'}</Td>
                       <Td><span className="tabular-nums">{c.ht.toFixed(2)} €</span></Td>
                       <Td>
-                        <div className="flex justify-end">
-                          {c.category_id === null
-                            // « Sans famille » = oubli de saisie : on attribue une
-                            // famille aux articles plutôt qu'un compte au croisement.
-                            ? (canAssignFamily && (
-                                <button className="btn-soft text-xs h-8 px-3"
-                                        onClick={() => setArticlesFor(c)}>
-                                  Voir le détail
-                                </button>
-                              ))
-                            : (canEdit && (
-                                <button className="btn-soft text-xs h-8 px-3" onClick={() => creerPour(c)}>
-                                  Créer le compte
-                                </button>
-                              ))}
+                        <div className="flex justify-end gap-1">
+                          {/* Voir le détail : les articles (et lignes libres) qui
+                              composent le croisement, pour tous les cas. */}
+                          <button className="btn-soft text-xs h-8 px-3"
+                                  onClick={() => setArticlesFor(c)}>
+                            Voir le détail
+                          </button>
+                          {/* Créer le compte : seulement pour un croisement qui a
+                              une famille ; « Sans famille » se corrige par les articles. */}
+                          {c.category_id !== null && canEdit && (
+                            <button className="btn-soft text-xs h-8 px-3" onClick={() => creerPour(c)}>
+                              Créer le compte
+                            </button>
+                          )}
                         </div>
                       </Td>
                     </tr>
@@ -313,6 +312,7 @@ export default function SalesAccountsSection(
         <ArticlesModal
           crossing={articlesFor}
           categories={categories}
+          canAssignFamily={canAssignFamily}
           from={from}
           to={to}
           onClose={() => setArticlesFor(null)}
@@ -477,23 +477,27 @@ function AccountForm({ row, preset, stores, categories, onClose, onSaved }: {
   );
 }
 
-interface Article { id: string; name: string; sku: string | null; qty: number; ht: number }
+interface Article { id: string; name: string; sku: string | null; qty: number; ht: number; configured_vat: number | null }
 interface Suggestion { id: string; name: string; category_id: string | null; category_name: string | null }
 interface FreeLine { label: string; qty: number; ht: number; suggestion: Suggestion | null }
 
 /**
- * Articles sans famille d'un croisement, avec un menu pour leur attribuer une
- * famille. Corrige la donnée à la source : une fois rangé, l'article rejoint sa
- * famille dans l'export et le croisement « Sans famille » s'éteint tout seul.
+ * Détail d'un croisement : les articles (et, pour « Sans famille », les ventes
+ * saisies au prix) qui le composent. Sur un croisement « Sans famille » on
+ * corrige la donnée à la source (attribuer une famille, rattacher à un article) ;
+ * sur un croisement qui a déjà une famille, on montre le taux de TVA configuré
+ * sur chaque fiche pour repérer une vente passée au mauvais taux.
  */
-function ArticlesModal({ crossing, categories, from, to, onClose, onChanged }: {
+function ArticlesModal({ crossing, categories, canAssignFamily, from, to, onClose, onChanged }: {
   crossing: Crossing;
   categories: Ref[];
+  canAssignFamily: boolean;
   from: string;
   to: string;
   onClose: () => void;
   onChanged: () => void;
 }) {
+  const sansFamille = crossing.category_id === null;
   const [articles, setArticles] = useState<Article[] | null>(null);
   const [freeLines, setFreeLines] = useState<FreeLine[]>([]);
   const [done, setDone] = useState<Record<string, string>>({});
@@ -506,6 +510,7 @@ function ArticlesModal({ crossing, categories, from, to, onClose, onChanged }: {
     void (async () => {
       const qs = new URLSearchParams({ from, to, vat_rate: String(crossing.vat_rate) });
       if (crossing.store_id) qs.set('store_id', crossing.store_id);
+      if (crossing.category_id) qs.set('category_id', crossing.category_id);
       const r = await fetch(`/api/accounting/uncategorized-products?${qs.toString()}`)
         .then((x) => (x.ok ? x.json() : { articles: [], freeLines: [] }))
         .catch(() => ({ articles: [], freeLines: [] }));
@@ -555,7 +560,9 @@ function ArticlesModal({ crossing, categories, from, to, onClose, onChanged }: {
          onClick={onClose}>
       <div className="card w-full max-w-2xl p-6 my-8 space-y-3" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Articles sans famille</h2>
+          <h2 className="text-lg font-semibold">
+            {sansFamille ? 'Détail « Sans famille »' : `Détail · ${crossing.category_name}`}
+          </h2>
           <button onClick={onClose} className="text-ink-soft hover:text-ink" aria-label="Fermer">✕</button>
         </div>
 
@@ -570,42 +577,64 @@ function ArticlesModal({ crossing, categories, from, to, onClose, onChanged }: {
           <div className="text-sm text-ink-soft">Chargement…</div>
         ) : (
           <>
-            {/* Articles du catalogue sans famille : reclassables. */}
             {articles.length > 0 && (
               <div className="space-y-1.5">
-                <h3 className="text-sm font-semibold">Articles du catalogue sans famille</h3>
+                <h3 className="text-sm font-semibold">
+                  {sansFamille ? 'Articles du catalogue sans famille' : 'Articles vendus'}
+                </h3>
                 <p className="text-xs text-ink-soft">
-                  Attribuez une famille : l&apos;article rejoint sa famille dans l&apos;export.
+                  {sansFamille
+                    ? 'Attribuez une famille : l’article rejoint sa famille dans l’export.'
+                    : 'Taux vendu comparé au taux de la fiche article : un écart signale une vente passée au mauvais taux.'}
                 </p>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm border-collapse">
                     <thead>
                       <tr className="text-[11px] uppercase tracking-wider text-ink-soft border-b border-border">
-                        <Th>Article</Th><Th>CA HT</Th><Th>Famille</Th>
+                        <Th>Article</Th><Th>CA HT</Th>
+                        <Th>{sansFamille ? 'Famille' : 'TVA fiche'}</Th>
                       </tr>
                     </thead>
                     <tbody>
-                      {articles.map((a) => (
+                      {articles.map((a) => {
+                        const mismatch = a.configured_vat != null
+                          && Math.abs(a.configured_vat - crossing.vat_rate) > 0.005;
+                        return (
                         <tr key={a.id} className="border-b border-border last:border-0">
                           <Td>
                             <div className="font-medium">{a.name}</div>
                             {a.sku && <div className="text-[11px] text-ink-soft font-mono">{a.sku}</div>}
                           </Td>
                           <Td><span className="tabular-nums">{a.ht.toFixed(2)} €</span></Td>
-                          <Td>
-                            {done[a.id] ? (
-                              <span className="text-success text-xs">✓ Rangé dans {done[a.id]}</span>
-                            ) : (
-                              <select className="input h-9 text-sm" defaultValue=""
-                                      disabled={savingId === a.id}
-                                      onChange={(e) => void assign(a, e.target.value)}>
-                                <option value="" disabled>Attribuer une famille…</option>
-                                {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                              </select>
-                            )}
-                          </Td>
+                          {sansFamille ? (
+                            <Td>
+                              {done[a.id] ? (
+                                <span className="text-success text-xs">✓ Rangé dans {done[a.id]}</span>
+                              ) : canAssignFamily ? (
+                                <select className="input h-9 text-sm" defaultValue=""
+                                        disabled={savingId === a.id}
+                                        onChange={(e) => void assign(a, e.target.value)}>
+                                  <option value="" disabled>Attribuer une famille…</option>
+                                  {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                </select>
+                              ) : <span className="text-ink-soft text-xs italic">—</span>}
+                            </Td>
+                          ) : (
+                            <Td>
+                              {a.configured_vat == null ? (
+                                <span className="text-ink-soft text-xs italic">—</span>
+                              ) : mismatch ? (
+                                <span className="text-danger text-xs font-medium">
+                                  fiche {formatRate(a.configured_vat)} % ≠ vendu {formatRate(crossing.vat_rate)} %
+                                </span>
+                              ) : (
+                                <span className="tabular-nums text-xs">{formatRate(a.configured_vat)} %</span>
+                              )}
+                            </Td>
+                          )}
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -639,7 +668,9 @@ function ArticlesModal({ crossing, categories, from, to, onClose, onChanged }: {
                           <Td>
                             {linked[f.label] ? (
                               <span className="text-success text-xs">✓ Rattaché ({linked[f.label]})</span>
-                            ) : f.suggestion ? (
+                            ) : !f.suggestion ? (
+                              <span className="text-ink-soft text-xs italic">Aucun article de ce nom</span>
+                            ) : canAssignFamily ? (
                               <button
                                 className="btn-soft text-xs h-8 px-3 whitespace-nowrap"
                                 disabled={linkingLabel === f.label}
@@ -649,7 +680,7 @@ function ArticlesModal({ crossing, categories, from, to, onClose, onChanged }: {
                                   : `Rattacher${f.suggestion.category_name ? ` · ${f.suggestion.category_name}` : ' (article sans famille)'}`}
                               </button>
                             ) : (
-                              <span className="text-ink-soft text-xs italic">Aucun article de ce nom</span>
+                              <span className="text-ink-soft text-xs">{f.suggestion.name}</span>
                             )}
                           </Td>
                         </tr>
@@ -668,7 +699,7 @@ function ArticlesModal({ crossing, categories, from, to, onClose, onChanged }: {
 
         <div className="flex items-center justify-between pt-1">
           <span className="text-xs text-ink-soft">
-            {articles && articles.length > 0 && (
+            {sansFamille && articles && articles.length > 0 && (
               reste === 0 ? 'Tous les articles ont une famille.' : `${reste} article${reste > 1 ? 's' : ''} à ranger`
             )}
           </span>
