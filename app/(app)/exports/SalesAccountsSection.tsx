@@ -52,7 +52,9 @@ function debutDuMois(): string {
   return t.slice(0, 8) + '01';
 }
 
-export default function SalesAccountsSection({ canEdit }: { canEdit: boolean }) {
+export default function SalesAccountsSection(
+  { canEdit, canAssignFamily = false }: { canEdit: boolean; canAssignFamily?: boolean },
+) {
   const [rows, setRows] = useState<Row[]>([]);
   const [stores, setStores] = useState<Ref[]>([]);
   const [categories, setCategories] = useState<Ref[]>([]);
@@ -62,6 +64,9 @@ export default function SalesAccountsSection({ canEdit }: { canEdit: boolean }) 
   const [editing, setEditing] = useState<Row | null | undefined>(undefined);
   const [preset, setPreset] = useState<Preset | null>(null);
   const [crossings, setCrossings] = useState<Crossing[] | null>(null);
+  // Croisement « Sans famille » dont on liste les articles pour leur attribuer
+  // une famille (plutôt que de lui créer un compte comptable dédié).
+  const [articlesFor, setArticlesFor] = useState<Crossing | null>(null);
   const [from, setFrom] = useState(debutDuMois);
   const [to, setTo] = useState(() => new Date().toISOString().slice(0, 10));
 
@@ -170,7 +175,9 @@ export default function SalesAccountsSection({ canEdit }: { canEdit: boolean }) 
             <h3 className="font-semibold">Croisements vendus sans compte</h3>
             <p className="mt-0.5 text-sm text-ink-soft max-w-2xl">
               Chacun produira dans l&apos;export une ligne sans numéro de compte.
-              Créez-lui un compte pour qu&apos;il sorte sous le vôtre.
+              Créez-lui un compte pour qu&apos;il sorte sous le vôtre. Pour une ligne
+              « Sans famille », attribuez plutôt une famille aux articles concernés :
+              la vente rejoint alors sa famille et la ligne disparaît.
             </p>
           </div>
           <div className="flex items-end gap-2">
@@ -217,13 +224,22 @@ export default function SalesAccountsSection({ canEdit }: { canEdit: boolean }) 
                       <Td>{c.store_name ?? '—'}</Td>
                       <Td><span className="tabular-nums">{c.ht.toFixed(2)} €</span></Td>
                       <Td>
-                        {canEdit && (
-                          <div className="flex justify-end">
-                            <button className="btn-soft text-xs h-8 px-3" onClick={() => creerPour(c)}>
-                              Créer le compte
-                            </button>
-                          </div>
-                        )}
+                        <div className="flex justify-end">
+                          {c.category_id === null
+                            // « Sans famille » = oubli de saisie : on attribue une
+                            // famille aux articles plutôt qu'un compte au croisement.
+                            ? (canAssignFamily && (
+                                <button className="btn-soft text-xs h-8 px-3"
+                                        onClick={() => setArticlesFor(c)}>
+                                  Voir articles
+                                </button>
+                              ))
+                            : (canEdit && (
+                                <button className="btn-soft text-xs h-8 px-3" onClick={() => creerPour(c)}>
+                                  Créer le compte
+                                </button>
+                              ))}
+                        </div>
                       </Td>
                     </tr>
                   ))}
@@ -290,6 +306,17 @@ export default function SalesAccountsSection({ canEdit }: { canEdit: boolean }) 
             setEditing(undefined); setPreset(null);
             void reload(); void reloadCoverage();
           }}
+        />
+      )}
+
+      {articlesFor && (
+        <ArticlesModal
+          crossing={articlesFor}
+          categories={categories}
+          from={from}
+          to={to}
+          onClose={() => setArticlesFor(null)}
+          onChanged={() => void reloadCoverage()}
         />
       )}
     </section>
@@ -444,6 +471,128 @@ function AccountForm({ row, preset, stores, categories, onClose, onSaved }: {
                   onClick={() => void submit()}>
             {saving ? 'Enregistrement…' : (row ? 'Enregistrer' : 'Créer')}
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface Article { id: string; name: string; sku: string | null; qty: number; ht: number }
+
+/**
+ * Articles sans famille d'un croisement, avec un menu pour leur attribuer une
+ * famille. Corrige la donnée à la source : une fois rangé, l'article rejoint sa
+ * famille dans l'export et le croisement « Sans famille » s'éteint tout seul.
+ */
+function ArticlesModal({ crossing, categories, from, to, onClose, onChanged }: {
+  crossing: Crossing;
+  categories: Ref[];
+  from: string;
+  to: string;
+  onClose: () => void;
+  onChanged: () => void;
+}) {
+  const [articles, setArticles] = useState<Article[] | null>(null);
+  const [done, setDone] = useState<Record<string, string>>({});
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void (async () => {
+      const qs = new URLSearchParams({ from, to, vat_rate: String(crossing.vat_rate) });
+      if (crossing.store_id) qs.set('store_id', crossing.store_id);
+      const r = await fetch(`/api/accounting/uncategorized-products?${qs.toString()}`)
+        .then((x) => (x.ok ? x.json() : { articles: [] }))
+        .catch(() => ({ articles: [] }));
+      setArticles(r.articles ?? []);
+    })();
+  }, [crossing, from, to]);
+
+  async function assign(a: Article, categoryId: string) {
+    if (!categoryId) return;
+    setSavingId(a.id); setError(null);
+    const res = await fetch(`/api/products/${a.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ category_id: categoryId }),
+    }).catch(() => null);
+    setSavingId(null);
+    if (!res || !res.ok) {
+      setError('Attribution impossible. Réessayez.');
+      return;
+    }
+    setDone((d) => ({ ...d, [a.id]: categories.find((c) => c.id === categoryId)?.name ?? 'Famille' }));
+    onChanged();
+  }
+
+  const reste = (articles ?? []).filter((a) => !done[a.id]).length;
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-ink/30 backdrop-blur-sm p-4 overflow-auto"
+         onClick={onClose}>
+      <div className="card w-full max-w-2xl p-6 my-8 space-y-3" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Articles sans famille</h2>
+          <button onClick={onClose} className="text-ink-soft hover:text-ink" aria-label="Fermer">✕</button>
+        </div>
+
+        <p className="text-sm text-ink-soft">
+          {crossing.store_name ?? 'Toutes boutiques'} · TVA {formatRate(crossing.vat_rate)} %.
+          Attribuez une famille à chaque article : il rejoindra alors sa famille dans
+          l&apos;export, et ce croisement disparaîtra.
+        </p>
+
+        {error && <div className="rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
+
+        {articles === null ? (
+          <div className="text-sm text-ink-soft">Chargement…</div>
+        ) : articles.length === 0 ? (
+          <div className="text-sm text-ink-soft">
+            Aucun article rattachable ici : ces ventes proviennent de lignes libres,
+            sans produit du catalogue.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="text-[11px] uppercase tracking-wider text-ink-soft border-b border-border">
+                  <Th>Article</Th><Th>CA HT</Th><Th>Famille</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {articles.map((a) => (
+                  <tr key={a.id} className="border-b border-border last:border-0">
+                    <Td>
+                      <div className="font-medium">{a.name}</div>
+                      {a.sku && <div className="text-[11px] text-ink-soft font-mono">{a.sku}</div>}
+                    </Td>
+                    <Td><span className="tabular-nums">{a.ht.toFixed(2)} €</span></Td>
+                    <Td>
+                      {done[a.id] ? (
+                        <span className="text-success text-xs">✓ Rangé dans {done[a.id]}</span>
+                      ) : (
+                        <select className="input h-9 text-sm" defaultValue=""
+                                disabled={savingId === a.id}
+                                onChange={(e) => void assign(a, e.target.value)}>
+                          <option value="" disabled>Attribuer une famille…</option>
+                          {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
+                      )}
+                    </Td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <div className="flex items-center justify-between pt-1">
+          <span className="text-xs text-ink-soft">
+            {articles && articles.length > 0 && (
+              reste === 0 ? 'Tous les articles ont une famille.' : `${reste} article${reste > 1 ? 's' : ''} à ranger`
+            )}
+          </span>
+          <button onClick={onClose} className="btn-primary">Terminé</button>
         </div>
       </div>
     </div>
