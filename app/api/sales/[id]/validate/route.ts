@@ -9,6 +9,7 @@ import { pushWalletUpdateForCustomer } from '@/lib/wallet/notify';
 import { autoSendReceiptIfEnabled } from '@/lib/email/auto-send';
 import { resolveReceiptPrinter, enqueueJob } from '@/lib/services/cloudprnt/queue';
 import { buildDrawerKickStarPrnt, STARPRNT_CONTENT_TYPE } from '@/lib/services/cloudprnt/receipt-star';
+import { enqueueGiftCardPrint, NoReceiptPrinterError as GiftCardNoPrinter } from '@/lib/services/cloudprnt/print-gift-card';
 
 const paymentSchema = z.object({
   method: z.enum(['cash','card','check','transfer','gift_card','credit_note','deferred','other','payment_link']),
@@ -99,6 +100,22 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error('[drawer.after_sale]', err);
+    }
+
+    // Bon(s) d'achat / carte(s) cadeau émis : impression sur l'imprimante TICKET
+    // configurée, comme l'avoir sur un retour. Best-effort et par carte (une
+    // erreur n'empêche pas les suivantes) ; sans imprimante ticket, le client
+    // garde le PDF en repli. AWAIT sur serverless (une tâche post-réponse peut
+    // ne jamais s'exécuter), jamais fatal à la vente déjà validée.
+    for (const gc of out.gift_cards_issued ?? []) {
+      try {
+        await enqueueGiftCardPrint({
+          organizationId: g.user.organizationId, userId: g.user.id, giftCardId: gc.id,
+        });
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        if (!(err instanceof GiftCardNoPrinter)) console.error('[giftcard.print.after_sale]', err);
+      }
     }
 
     return NextResponse.json({
