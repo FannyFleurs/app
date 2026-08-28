@@ -86,6 +86,14 @@ export default function ReceiptPrinterForm({ stores, canWrite, lockStoreId = nul
     await load();
   }
 
+  async function setPrinterStore(p: Printer, storeId: string) {
+    await fetch(`/api/cloudprnt/printers/${p.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ store_id: storeId || null }),
+    });
+    await load();
+  }
+
   async function remove(p: Printer) {
     if (!(await confirmThemed({ message: `Supprimer l'imprimante « ${p.label} » ?` }))) return;
     await fetch(`/api/cloudprnt/printers/${p.id}`, { method: 'DELETE' });
@@ -164,6 +172,22 @@ export default function ReceiptPrinterForm({ stores, canWrite, lockStoreId = nul
                 </div>
                 {canWrite && (
                   <div className="flex flex-wrap justify-end items-center gap-2">
+                    {stores.length > 1 && (
+                      // Rattacher l'imprimante à SA boutique : « Toutes boutiques »
+                      // la fait servir tous les magasins (repli), ce qui envoie
+                      // les tickets d'une autre boutique dessus.
+                      <label className="text-xs text-ink-soft inline-flex items-center gap-1">
+                        Boutique
+                        <select
+                          className="input h-8 text-xs py-0"
+                          value={p.store_id ?? ''}
+                          onChange={(e) => void setPrinterStore(p, e.target.value)}
+                        >
+                          <option value="">Toutes boutiques</option>
+                          {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                        </select>
+                      </label>
+                    )}
                     <label className="text-xs text-ink-soft inline-flex items-center gap-1">
                       Papier
                       <select
