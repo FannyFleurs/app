@@ -45,7 +45,7 @@ interface Props {
     loyaltyUsed: number,
   ) => Promise<void>;
   onClose: () => void;
-  onValidated: (receiptId: string, receiptNumber: string, loyalty?: { earned: number; redeemed: number; new_balance: number } | null, giftCardsIssued?: Array<{ id: string; code: string; amount: number }>, change?: number) => void;
+  onValidated: (receiptId: string, receiptNumber: string, loyalty?: { earned: number; redeemed: number; new_balance: number } | null, giftCardsIssued?: Array<{ id: string; code: string; amount: number; printed?: boolean }>, change?: number) => void;
   /** Mode « règlement de solde en compte » : encaisse via l'écran classique
    *  mais valide un règlement de compte (pas une vente). */
   settlement?: { customerId: string };

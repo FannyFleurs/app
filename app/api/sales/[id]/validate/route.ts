@@ -107,11 +107,15 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     // erreur n'empêche pas les suivantes) ; sans imprimante ticket, le client
     // garde le PDF en repli. AWAIT sur serverless (une tâche post-réponse peut
     // ne jamais s'exécuter), jamais fatal à la vente déjà validée.
+    // On note les cartes réellement mises en file d'impression : le client
+    // n'ouvre le PDF (repli) que pour celles qui n'ont PAS d'imprimante ticket.
+    const printedIds = new Set<string>();
     for (const gc of out.gift_cards_issued ?? []) {
       try {
         await enqueueGiftCardPrint({
           organizationId: g.user.organizationId, userId: g.user.id, giftCardId: gc.id,
         });
+        printedIds.add(gc.id);
       } catch (err) {
         // eslint-disable-next-line no-console
         if (!(err instanceof GiftCardNoPrinter)) console.error('[giftcard.print.after_sale]', err);
@@ -126,6 +130,10 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       fiscal_event_id: out.fiscalEventId,
       loyalty: out.loyalty ?? null,
       stock_movements: out.stock_movements ?? 0,
+      // `printed` = sorti sur l'imprimante ticket ; sinon le client ouvre le PDF.
+      gift_cards_issued: (out.gift_cards_issued ?? []).map((gc) => ({
+        id: gc.id, code: gc.code, amount: gc.amount, printed: printedIds.has(gc.id),
+      })),
     });
   } catch (e) {
     const msg = (e as Error).message;
