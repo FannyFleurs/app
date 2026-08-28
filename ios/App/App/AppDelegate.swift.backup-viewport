@@ -13,11 +13,6 @@ final class HelloPosBridgeViewController: CAPBridgeViewController {
     override public func viewDidLoad() {
         super.viewDidLoad()
 
-        // Sur iPad, WKWebView peut utiliser un viewport de type desktop,
-        // ce qui réduit fortement toute l'interface HelloPos.
-        // On force le rendu mobile comme dans la PWA installée.
-        webView?.configuration.defaultWebpagePreferences.preferredContentMode = .mobile
-
         let printInterceptScript = #"""
         (() => {
           if (window.__helloPosNativePrintInterceptorInstalled) return;
