@@ -194,18 +194,6 @@ export default function CashRegister({
   // chargement au 1er rendu. La vérification client se fait ensuite en fond.
   const [sessionLoading, setSessionLoading] = useState(!initial);
   const sessionKnownRef = useRef<boolean>(!!initial);
-
-  // Boutique du poste, exposée en cookie same-origin : l'app native lit
-  // /api/pos/ip-printer pour router l'impression IP, et sans ce repère elle
-  // pouvait résoudre une AUTRE boutique (mauvaise imprimante / rien). Le cookie
-  // rend l'imprimante déterministe pour CETTE caisse.
-  useEffect(() => {
-    if (!storeId) return;
-    try {
-      document.cookie = `webpos_store_id=${storeId}; path=/; max-age=31536000; samesite=lax`;
-    } catch { /* pas de cookie dispo */ }
-  }, [storeId]);
-
   const [showOpenSession, setShowOpenSession] = useState(false);
   // Journée déjà fermée (Z scellé) pour cette boutique aujourd'hui : la caisse
   // reste fermée, seule une réouverture par un responsable est possible.
