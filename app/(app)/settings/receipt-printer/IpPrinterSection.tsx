@@ -40,6 +40,24 @@ export default function IpPrinterSection({ stores, canWrite, lockStoreId = null 
   const [err, setErr] = useState<string | null>(null);
   const [isNative, setIsNative] = useState(false);
   const [testMsg, setTestMsg] = useState<string | null>(null);
+  const [diag, setDiag] = useState<string | null>(null);
+
+  // Diagnostic : ce que l'app RÉSOUT réellement au moment d'imprimer
+  // (/api/pos/ip-printer). Révèle si on pointe sur la bonne boutique / la bonne
+  // imprimante, ou si l'impression IP est considérée comme inactive.
+  async function runDiag() {
+    setDiag('Vérification…');
+    try {
+      const r = await fetch('/api/pos/ip-printer');
+      if (!r.ok) { setDiag('Échec de la vérification.'); return; }
+      const j = await r.json();
+      setDiag(
+        `Boutique résolue : ${j.store_name ?? '—'} · `
+        + `Impression IP : ${j.configured ? 'ACTIVE' : 'INACTIVE'} · `
+        + `Imprimante : ${j.host || '—'}:${j.port}`,
+      );
+    } catch { setDiag('Vérification impossible (réseau).'); }
+  }
 
   useEffect(() => {
     const cap = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor;
@@ -208,6 +226,15 @@ export default function IpPrinterSection({ stores, canWrite, lockStoreId = null 
               </button>
             </>
           )}
+          <button className="btn-soft h-10 px-4" onClick={() => void runDiag()}>
+            Diagnostic impression
+          </button>
+        </div>
+      )}
+
+      {diag && (
+        <div className="rounded-xl border border-border bg-gray-50 px-3 py-2 text-xs text-ink-soft">
+          {diag}
         </div>
       )}
 
