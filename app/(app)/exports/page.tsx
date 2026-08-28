@@ -1,7 +1,6 @@
 import { readSessionFromCookie } from '@/lib/auth/session';
 import { userCan } from '@/lib/auth/permissions';
-import ExportsAdmin from './ExportsAdmin';
-import SalesAccountsSection from './SalesAccountsSection';
+import ExportsShell from './ExportsShell';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,9 +27,8 @@ export default async function ExportsPage() {
     // Pleine largeur : les tableaux de comptes ont sept colonnes, les brider à
     // une colonne de lecture les faisait défiler latéralement alors que
     // l'écran, lui, était à moitié vide.
-    <div className="p-6 md:p-8 space-y-8 w-full">
-      <ExportsAdmin />
-      {canRead && <SalesAccountsSection canEdit={canEdit} canAssignFamily={canAssignFamily} />}
+    <div className="p-6 md:p-8 w-full">
+      <ExportsShell canRead={canRead} canEdit={canEdit} canAssignFamily={canAssignFamily} />
     </div>
   );
 }
