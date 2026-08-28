@@ -21,17 +21,21 @@ interface Printer {
   queued: number;
 }
 
-export default function ReceiptPrinterForm({ stores, canWrite, lockStoreId = null, printerType = null }: {
+export default function ReceiptPrinterForm({ stores, canWrite, lockStoreId = null, printerType = null, ipConfigured = false }: {
   stores: { id: string; name: string }[]; canWrite: boolean;
   /** Boutique du poste de caisse : verrouille la config imprimante dessus. */
   lockStoreId?: string | null;
   /** Type d'imprimante de la boutique verrouillée. Sur un poste de caisse, on
    *  n'affiche que la section correspondante. Null (back-office) = les deux. */
   printerType?: 'cloudprnt' | 'ip' | null;
+  /** Une IP est-elle déjà configurée pour la boutique verrouillée ? On garde
+   *  alors la section IP visible même si le type est resté au défaut. */
+  ipConfigured?: boolean;
 }) {
-  // Poste verrouillé : on ne montre QUE le type choisi. Sinon (back-office), tout.
+  // Poste verrouillé : on montre le type choisi. Mais on n'occulte JAMAIS une
+  // section réellement configurée (IP déjà en place), pour ne rien casser.
   const showCloud = !lockStoreId || printerType === 'cloudprnt';
-  const showIp = !lockStoreId || printerType === 'ip';
+  const showIp = !lockStoreId || printerType === 'ip' || ipConfigured;
   const [printers, setPrinters] = useState<Printer[]>([]);
   const [loading, setLoading] = useState(true);
   const [origin, setOrigin] = useState('');

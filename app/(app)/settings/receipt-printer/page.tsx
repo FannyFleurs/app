@@ -3,6 +3,7 @@ import { userCan } from '@/lib/auth/permissions';
 import { accessibleStores } from '@/lib/auth/stores-server';
 import { resolveSettingsLockStoreId } from '@/lib/pos/current-store';
 import { loadReceiptSettings } from '@/lib/settings/receipt-server';
+import { loadIpPrinterSettings } from '@/lib/settings/ip-printer-server';
 import ReceiptPrinterForm from './ReceiptPrinterForm';
 
 export const dynamic = 'force-dynamic';
@@ -26,15 +27,22 @@ export default async function ReceiptPrinterPage() {
   // Sur un poste de caisse (verrouillé sur sa boutique), on n'affiche que la
   // config du type d'imprimante choisi pour CETTE boutique (Ticket → Paramètres).
   // En back-office (non verrouillé), on garde les deux pour tout gérer.
-  const printerType = lockStoreId
-    ? (await loadReceiptSettings(user.organizationId, lockStoreId)).printer_type
-    : null;
+  // On charge aussi si une IP est réellement configurée : on ne masque JAMAIS la
+  // section IP d'une boutique qui en a une (même si son type est resté au défaut
+  // « cloudprnt »), pour ne pas cacher une config qui marche.
+  const [printerType, ipConfigured] = lockStoreId
+    ? await Promise.all([
+        loadReceiptSettings(user.organizationId, lockStoreId).then((r) => r.printer_type),
+        loadIpPrinterSettings(user.organizationId, lockStoreId).then((ip) => ip.enabled && ip.host.trim() !== ''),
+      ])
+    : [null, false];
   return (
     <ReceiptPrinterForm
       stores={stores}
       canWrite={canWrite}
       lockStoreId={lockStoreId}
       printerType={printerType}
+      ipConfigured={ipConfigured}
     />
   );
 }

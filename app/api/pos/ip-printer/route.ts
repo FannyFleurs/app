@@ -4,7 +4,6 @@ import { requirePermission } from '@/lib/auth/guards';
 import { accessibleStores } from '@/lib/auth/stores-server';
 import { resolveDeviceStoreId } from '@/lib/pos/current-store';
 import { loadIpPrinterSettings } from '@/lib/settings/ip-printer-server';
-import { loadReceiptSettings } from '@/lib/settings/receipt-server';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -38,14 +37,11 @@ export async function GET(req: Request) {
     ?? stores[0]?.id
     ?? null;
 
-  const [s, receipt] = await Promise.all([
-    loadIpPrinterSettings(g.user.organizationId, storeId),
-    loadReceiptSettings(g.user.organizationId, storeId),
-  ]);
-  // L'app native ne route vers l'IP que si la boutique est déclarée en type
-  // « ip » : une boutique CloudPRNT ne bascule jamais en IP par accident, même
-  // si un ancien réglage IP traîne encore.
-  const configured = receipt.printer_type === 'ip' && s.enabled && s.host.trim() !== '';
+  const s = await loadIpPrinterSettings(g.user.organizationId, storeId);
+  // Une IP activée + renseignée SUFFIT : c'est le signal qu'on veut l'IP. On ne
+  // gate PAS sur le type d'imprimante — le défaut « cloudprnt » aurait cassé
+  // toutes les boutiques IP existantes (impression retombée en PDF).
+  const configured = s.enabled && s.host.trim() !== '';
 
   return NextResponse.json({
     configured,
