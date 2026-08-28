@@ -21,8 +21,10 @@ interface Printer {
   queued: number;
 }
 
-export default function ReceiptPrinterForm({ stores, canWrite }: {
+export default function ReceiptPrinterForm({ stores, canWrite, lockStoreId = null }: {
   stores: { id: string; name: string }[]; canWrite: boolean;
+  /** Boutique du poste de caisse : verrouille la config imprimante dessus. */
+  lockStoreId?: string | null;
 }) {
   const [printers, setPrinters] = useState<Printer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -229,7 +231,7 @@ export default function ReceiptPrinterForm({ stores, canWrite }: {
         </div>
       )}
 
-      <IpPrinterSection stores={stores} canWrite={canWrite} />
+      <IpPrinterSection stores={stores} canWrite={canWrite} lockStoreId={lockStoreId} />
     </div>
   );
 }
