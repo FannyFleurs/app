@@ -98,17 +98,28 @@ export default function ReceiptPreviewModal({ receipt, storeId, onClose }: Props
         if (!rR.ok || !rP.ok) return;
         const recv = (await rR.json()).settings;
         const printer = (await rP.json()).settings;
-        if (recv?.auto_print_receipt && printer?.enabled) {
-          // window.open en background tab puis print : sur mobile, l'utilisateur
-          // confirmera dans le menu Partager → Imprimer.
-          const w = window.open(pdfUrl, '_blank');
-          if (w) {
-            // Tentative d'impression auto au load. Échoue silencieusement
-            // si le PDF est dans un onglet bloqué — au moins l'onglet est
-            // ouvert et l'utilisateur peut imprimer en 1 geste.
-            w.addEventListener('load', () => {
-              try { w.print(); } catch { /* iOS bloque souvent print() */ }
-            });
+        if (recv?.auto_print_receipt) {
+          // Imprimante ticket RÉSEAU (IP native, ou CloudPRNT) : on imprime
+          // directement via /print (l'app native intercepte pour l'IP, sinon
+          // mise en file CloudPRNT). Sans elle, ancien comportement AirPrint :
+          // PDF + dialogue d'impression navigateur, si une imprimante navigateur
+          // est activée.
+          const ip = await fetch('/api/pos/ip-printer')
+            .then((r) => (r.ok ? r.json() : null)).catch(() => null);
+          if (ip?.configured) {
+            void printReceipt({ base: apiBase, pdfUrl });
+          } else if (printer?.enabled) {
+            // window.open en background tab puis print : sur mobile, l'utilisateur
+            // confirmera dans le menu Partager → Imprimer.
+            const w = window.open(pdfUrl, '_blank');
+            if (w) {
+              // Tentative d'impression auto au load. Échoue silencieusement
+              // si le PDF est dans un onglet bloqué — au moins l'onglet est
+              // ouvert et l'utilisateur peut imprimer en 1 geste.
+              w.addEventListener('load', () => {
+                try { w.print(); } catch { /* iOS bloque souvent print() */ }
+              });
+            }
           }
         }
       } catch { /* ignore */ }
