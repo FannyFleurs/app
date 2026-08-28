@@ -43,58 +43,12 @@ enum HelloPosNativePrintScript {
             );
 
             /*
-             * Cette route résout déjà la boutique du poste grâce
-             * au cookie webpos_device_id.
+             * La configuration IP du poste est résolue côté serveur.
+             * Cette route nécessite uniquement la permission pos.use.
              */
-            const reportUrl = new URL(
-              '/api/reports/day',
-              window.location.origin
-            );
-
-            const reportResponse = await originalFetch(
-              reportUrl.toString(),
-              {
-                method: 'GET',
-                credentials: 'include',
-                cache: 'no-store'
-              }
-            );
-
-            if (!reportResponse.ok) {
-              throw new Error(
-                'NATIVE_PRINTER_STORE_RESOLVE_FAILED_' +
-                reportResponse.status
-              );
-            }
-
-            const reportData = await reportResponse.json();
-
-            const storeId =
-              reportData.store_id ||
-              reportData.storeId ||
-              reportData.report?.store_id ||
-              reportData.report?.storeId ||
-              null;
-
-            if (!storeId) {
-              throw new Error(
-                'NATIVE_PRINTER_STORE_NOT_FOUND'
-              );
-            }
-
-            console.log(
-              '### HELLOPOS NATIVE PRINTER STORE ###',
-              storeId
-            );
-
             const settingsUrl = new URL(
-              '/api/settings/printer',
+              '/api/pos/ip-printer',
               window.location.origin
-            );
-
-            settingsUrl.searchParams.set(
-              'store_id',
-              String(storeId)
             );
 
             const settingsResponse = await originalFetch(
@@ -113,26 +67,28 @@ enum HelloPosNativePrintScript {
               );
             }
 
-            const settingsData =
+            const settings =
               await settingsResponse.json();
 
-            const settings =
-              settingsData.settings || {};
+            console.log(
+              '### HELLOPOS NATIVE PRINTER API ###',
+              JSON.stringify(settings)
+            );
 
-            if (settings.enabled !== true) {
+            if (settings.configured !== true) {
               throw new Error(
-                'NATIVE_PRINTER_DISABLED'
+                'NATIVE_PRINTER_NOT_CONFIGURED'
               );
             }
 
             const host =
-              String(settings.ip || '').trim();
+              String(settings.host || '').trim();
 
             const port =
               Number(settings.port || 9100);
 
-            const paperWidth =
-              Number(settings.paper_width || 80);
+            const widthDots =
+              Number(settings.widthDots || 576);
 
             if (!host) {
               throw new Error(
@@ -151,12 +107,11 @@ enum HelloPosNativePrintScript {
             }
 
             const printer = {
-              storeId,
+              storeId: settings.store_id || null,
+              storeName: settings.store_name || null,
               host,
               port,
-              paperWidth,
-              widthDots:
-                paperWidth === 58 ? 384 : 576
+              widthDots
             };
 
             helloPosNativePrinterCache = printer;
@@ -291,14 +246,17 @@ enum HelloPosNativePrintScript {
                       'bytes'
                     );
 
+                    const printer =
+                      await getHelloPosNativePrinter();
+
                     const nativeResult =
                       await window.Capacitor
                         .Plugins
                         .HelloPosPrinter
                         .printPdf({
-                          host: '192.168.10.119',
-                          port: 9100,
-                          widthDots: 576,
+                          host: printer.host,
+                          port: printer.port,
+                          widthDots: printer.widthDots,
                           pdfBase64
                         });
 
@@ -451,14 +409,17 @@ enum HelloPosNativePrintScript {
 
                   const pdfBase64 = btoa(binary);
 
+                  const printer =
+                    await getHelloPosNativePrinter();
+
                   const nativeResult =
                     await window.Capacitor
                       .Plugins
                       .HelloPosPrinter
                       .printPdf({
-                        host: '192.168.10.119',
-                        port: 9100,
-                        widthDots: 576,
+                        host: printer.host,
+                        port: printer.port,
+                        widthDots: printer.widthDots,
                         pdfBase64
                       });
 
@@ -728,11 +689,14 @@ enum HelloPosNativePrintScript {
                 const pdfBase64 = btoa(binary);
 
                 try {
+                  const printer =
+                    await getHelloPosNativePrinter();
+
                   const nativeResult =
                     await window.Capacitor.Plugins.HelloPosPrinter.printPdf({
-                      host: '192.168.10.119',
-                      port: 9100,
-                      widthDots: 576,
+                      host: printer.host,
+                      port: printer.port,
+                      widthDots: printer.widthDots,
                       pdfBase64
                     });
 
@@ -1418,13 +1382,16 @@ enum HelloPosNativePrintScript {
                 );
 
                 try {
+                  const printer =
+                    await getHelloPosNativePrinter();
+
                   const nativeResult =
                     await window.Capacitor
                       .Plugins
                       .HelloPosPrinter
                       .printDayReport({
-                        host: '192.168.10.119',
-                        port: 9100,
+                        host: printer.host,
+                        port: printer.port,
                         text: reportText
                       });
 
@@ -1530,10 +1497,13 @@ enum HelloPosNativePrintScript {
                 // ne pas ouvrir une seconde fois.
                 if (responseData.drawer_kick_queued !== true) {
                   try {
+                    const printer =
+                      await getHelloPosNativePrinter();
+
                     const nativeResult =
                       await window.Capacitor.Plugins.HelloPosPrinter.openDrawer({
-                        host: '192.168.10.119',
-                        port: 9100
+                        host: printer.host,
+                        port: printer.port
                       });
 
                     console.log(
