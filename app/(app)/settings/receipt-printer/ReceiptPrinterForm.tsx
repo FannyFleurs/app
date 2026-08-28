@@ -21,11 +21,17 @@ interface Printer {
   queued: number;
 }
 
-export default function ReceiptPrinterForm({ stores, canWrite, lockStoreId = null }: {
+export default function ReceiptPrinterForm({ stores, canWrite, lockStoreId = null, printerType = null }: {
   stores: { id: string; name: string }[]; canWrite: boolean;
   /** Boutique du poste de caisse : verrouille la config imprimante dessus. */
   lockStoreId?: string | null;
+  /** Type d'imprimante de la boutique verrouillée. Sur un poste de caisse, on
+   *  n'affiche que la section correspondante. Null (back-office) = les deux. */
+  printerType?: 'cloudprnt' | 'ip' | null;
 }) {
+  // Poste verrouillé : on ne montre QUE le type choisi. Sinon (back-office), tout.
+  const showCloud = !lockStoreId || printerType === 'cloudprnt';
+  const showIp = !lockStoreId || printerType === 'ip';
   const [printers, setPrinters] = useState<Printer[]>([]);
   const [loading, setLoading] = useState(true);
   const [origin, setOrigin] = useState('');
@@ -118,22 +124,24 @@ export default function ReceiptPrinterForm({ stores, canWrite, lockStoreId = nul
   return (
     <div className="p-6 md:p-8 space-y-5 max-w-3xl">
       <PageHeader
-        title="Imprimante ticket (CloudPRNT)"
-        subtitle="Impression des tickets sur une imprimante Star (TSP143 / mC-Print) en Ethernet, avec ouverture du tiroir-caisse branché dessus."
+        title="Imprimante ticket"
+        subtitle="Configuration de l’imprimante ticket de la boutique. Le type (Star CloudPRNT ou réseau IP) se choisit dans Ticket → Paramètres."
         actions={null}
       />
-
-      <div className="card p-4 text-sm text-ink-soft space-y-1">
-        <p className="font-medium text-ink">Comment ça marche</p>
-        <p>1. Enregistre ci-dessous l'imprimante (son adresse MAC, au dos de l'appareil).</p>
-        <p>2. Sur l'imprimante (page de config Star CloudPRNT), colle l'<strong>URL de sondage</strong> affichée, active CloudPRNT et règle l'intervalle (2–5 s conseillé).</p>
-        <p>3. Le tiroir-caisse se branche sur le port RJ11/DK de l'imprimante : il s'ouvre alors depuis le bouton discret de la caisse et à chaque ticket encaissé en espèces.</p>
-      </div>
 
       {msg && <div className="rounded-xl bg-success/10 px-4 py-3 text-sm text-success">{msg}</div>}
       {err && <div className="rounded-xl bg-danger/10 px-4 py-3 text-sm text-danger">{err}</div>}
 
-      {loading ? (
+      {showCloud && (
+      <div className="card p-4 text-sm text-ink-soft space-y-1">
+        <p className="font-medium text-ink">Imprimante Star CloudPRNT — comment ça marche</p>
+        <p>1. Enregistre ci-dessous l'imprimante (son adresse MAC, au dos de l'appareil).</p>
+        <p>2. Sur l'imprimante (page de config Star CloudPRNT), colle l'<strong>URL de sondage</strong> affichée, active CloudPRNT et règle l'intervalle (2–5 s conseillé).</p>
+        <p>3. Le tiroir-caisse se branche sur le port RJ11/DK de l'imprimante : il s'ouvre alors depuis le bouton discret de la caisse et à chaque ticket encaissé en espèces.</p>
+      </div>
+      )}
+
+      {showCloud && (loading ? (
         <p className="text-sm text-ink-soft">Chargement…</p>
       ) : printers.length === 0 ? (
         <p className="text-sm text-ink-soft">Aucune imprimante ticket enregistrée.</p>
@@ -215,9 +223,9 @@ export default function ReceiptPrinterForm({ stores, canWrite, lockStoreId = nul
             </div>
           ))}
         </div>
-      )}
+      ))}
 
-      {canWrite && (
+      {showCloud && canWrite && (
         <div className="card p-5 space-y-3">
           <h3 className="font-semibold">Ajouter une imprimante ticket</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -255,7 +263,7 @@ export default function ReceiptPrinterForm({ stores, canWrite, lockStoreId = nul
         </div>
       )}
 
-      <IpPrinterSection stores={stores} canWrite={canWrite} lockStoreId={lockStoreId} />
+      {showIp && <IpPrinterSection stores={stores} canWrite={canWrite} lockStoreId={lockStoreId} />}
     </div>
   );
 }

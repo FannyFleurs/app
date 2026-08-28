@@ -2,6 +2,7 @@ import { readSessionFromCookie } from '@/lib/auth/session';
 import { userCan } from '@/lib/auth/permissions';
 import { accessibleStores } from '@/lib/auth/stores-server';
 import { resolveSettingsLockStoreId } from '@/lib/pos/current-store';
+import { loadReceiptSettings } from '@/lib/settings/receipt-server';
 import ReceiptPrinterForm from './ReceiptPrinterForm';
 
 export const dynamic = 'force-dynamic';
@@ -22,5 +23,18 @@ export default async function ReceiptPrinterPage() {
   // boutique — celle que résout aussi l'impression (/api/pos/ip-printer). Sinon
   // (back-office), null : le sélecteur reste, pour gérer toutes les boutiques.
   const lockStoreId = await resolveSettingsLockStoreId(user.organizationId);
-  return <ReceiptPrinterForm stores={stores} canWrite={canWrite} lockStoreId={lockStoreId} />;
+  // Sur un poste de caisse (verrouillé sur sa boutique), on n'affiche que la
+  // config du type d'imprimante choisi pour CETTE boutique (Ticket → Paramètres).
+  // En back-office (non verrouillé), on garde les deux pour tout gérer.
+  const printerType = lockStoreId
+    ? (await loadReceiptSettings(user.organizationId, lockStoreId)).printer_type
+    : null;
+  return (
+    <ReceiptPrinterForm
+      stores={stores}
+      canWrite={canWrite}
+      lockStoreId={lockStoreId}
+      printerType={printerType}
+    />
+  );
 }
