@@ -218,6 +218,33 @@ export default function ReceiptSettingsForm({ stores, canEdit, lockedStoreId }: 
           </div>
 
           <div className="card p-5 space-y-3">
+            <h2 className="font-semibold">Type d&apos;imprimante ticket</h2>
+            <p className="text-xs text-ink-soft">
+              Cette boutique a une seule imprimante ticket. Choisissez son type ;
+              son paramétrage (adresse IP, ou imprimante Star) se fait dans
+              « Imprimante ticket ».
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {([
+                ['cloudprnt', 'Star CloudPRNT', 'Imprimante Star réseau, pilotée par le serveur. Fonctionne au navigateur/PWA comme dans l’app.'],
+                ['ip', 'Réseau IP (ESC/POS)', 'Imprimante réseau par son adresse IP. Application iOS/Android uniquement.'],
+              ] as const).map(([val, title, desc]) => (
+                <button key={val} type="button" disabled={!canEdit}
+                  aria-pressed={form.printer_type === val}
+                  onClick={() => setForm({ ...form, printer_type: val })}
+                  className={`text-left rounded-xl border p-3 transition-colors ${
+                    form.printer_type === val
+                      ? 'border-accent bg-accent-soft'
+                      : 'border-border hover:bg-gray-50'
+                  } ${!canEdit ? 'opacity-50' : ''}`}>
+                  <div className="font-medium text-sm">{title}</div>
+                  <div className="text-xs text-ink-soft mt-0.5">{desc}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="card p-5 space-y-3">
             <h2 className="font-semibold">Options d&apos;impression</h2>
             <Check label="Imprimer le code-barres du numéro de ticket (Code-128)"
                    checked={form.show_barcode} disabled={!canEdit}

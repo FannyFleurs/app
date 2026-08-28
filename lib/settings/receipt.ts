@@ -45,6 +45,16 @@ export interface ReceiptSettings {
   /** À la clôture journalière (Z), imprime automatiquement le Z. */
   auto_print_z: boolean;
   /**
+   * Type d'imprimante ticket de LA boutique. Détermine par quel chemin sort le
+   * ticket, sans ambiguïté :
+   *  - 'cloudprnt' : imprimante Star CloudPRNT (réseau, pilotée par le serveur).
+   *    Fonctionne au navigateur/PWA comme dans l'app.
+   *  - 'ip' : imprimante réseau ESC/POS (IP:port), pilotée par l'application
+   *    native iOS/Android uniquement.
+   * Défaut 'cloudprnt' : les boutiques déjà configurées ne changent pas.
+   */
+  printer_type: 'cloudprnt' | 'ip';
+  /**
    * Nombre d'exemplaires imprimés d'un avoir sur l'imprimante ticket, lors
    * d'une reprise de produit. 2 par défaut (un pour le client, un pour la
    * boutique). 0 = ne pas imprimer automatiquement.
@@ -67,6 +77,7 @@ export const RECEIPT_DEFAULTS: ReceiptSettings = {
   show_tax_breakdown: true,
   auto_print_receipt: false,
   auto_print_z: false,
+  printer_type: 'cloudprnt',
   credit_note_copies: 2,
 };
 
