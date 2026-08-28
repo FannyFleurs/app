@@ -134,14 +134,7 @@ export default function SalesAccountsSection(
   return (
     <section className="space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold tracking-tight">Comptes de ventes</h2>
-          <p className="mt-1 text-sm text-ink-soft max-w-2xl">
-            Le compte de chaque famille de produit, par taux de TVA et par boutique.
-            C&apos;est cette ventilation que reprend l&apos;export « Ventes par compte » ;
-            un croisement sans règle y sort sans numéro de compte, à renseigner.
-          </p>
-        </div>
+        <h2 className="text-lg font-semibold tracking-tight">Comptes de ventes</h2>
         {canEdit && (
           // Sur téléphone la ligne prend toute la largeur et c'est le filtre
           // qui cède la place ; le bouton, lui, garde sa taille. Sans cela il
@@ -167,48 +160,34 @@ export default function SalesAccountsSection(
 
       {error && <div className="rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
 
-      {/* Ce qui a été vendu sans compte : sans cette liste, on ne découvre les
-          croisements manquants qu'en relisant le CSV exporté ligne à ligne. */}
-      <div className="card p-4 space-y-3">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h3 className="font-semibold">Croisements vendus sans compte</h3>
-            <p className="mt-0.5 text-sm text-ink-soft max-w-2xl">
-              Chacun produira dans l&apos;export une ligne sans numéro de compte.
-              Créez-lui un compte pour qu&apos;il sorte sous le vôtre. Pour une ligne
-              « Sans famille », attribuez plutôt une famille aux articles concernés :
-              la vente rejoint alors sa famille et la ligne disparaît.
-            </p>
-          </div>
-          <div className="flex items-end gap-2">
+      {/* Croisements vendus sans compte : n'apparaît que s'il y en a réellement.
+          Sans cette liste, on ne les découvre qu'en relisant le CSV exporté. */}
+      {crossings !== null && manquants.length > 0 && (
+        <div className="card p-4 space-y-3">
+          <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
-              <label className="text-[11px] font-medium text-ink-soft">Du</label>
-              <input type="date" className="input h-10 text-sm mt-0.5" value={from} max={to}
-                     onChange={(e) => setFrom(e.target.value)} />
+              <h3 className="font-semibold">Croisements vendus sans compte</h3>
+              <p className="mt-0.5 text-sm text-ink-soft">
+                {manquants.length} croisement{manquants.length > 1 ? 's' : ''} sans compte
+                {couverts > 0 && <> · {couverts} déjà couvert{couverts > 1 ? 's' : ''}</>}.
+                Créez-lui un compte ; pour « Sans famille », attribuez une famille aux articles.
+              </p>
             </div>
-            <div>
-              <label className="text-[11px] font-medium text-ink-soft">Au</label>
-              <input type="date" className="input h-10 text-sm mt-0.5" value={to} min={from}
-                     onChange={(e) => setTo(e.target.value)} />
+            <div className="flex items-end gap-2">
+              <div>
+                <label className="text-[11px] font-medium text-ink-soft">Du</label>
+                <input type="date" className="input h-10 text-sm mt-0.5" value={from} max={to}
+                       onChange={(e) => setFrom(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-[11px] font-medium text-ink-soft">Au</label>
+                <input type="date" className="input h-10 text-sm mt-0.5" value={to} min={from}
+                       onChange={(e) => setTo(e.target.value)} />
+              </div>
             </div>
           </div>
-        </div>
 
-        {crossings === null ? (
-          <div className="text-sm text-ink-soft">Chargement…</div>
-        ) : crossings.length === 0 ? (
-          <div className="text-sm text-ink-soft">Aucune vente sur cette période.</div>
-        ) : manquants.length === 0 ? (
-          <div className="rounded-xl bg-success/10 px-3 py-2 text-sm text-success">
-            ✓ Les {couverts} croisements vendus sur la période ont tous un compte.
-          </div>
-        ) : (
-          <>
-            <div className="text-sm text-ink-soft">
-              {manquants.length} croisement{manquants.length > 1 ? 's' : ''} sans compte
-              {couverts > 0 && <> · {couverts} déjà couvert{couverts > 1 ? 's' : ''}</>}
-            </div>
-            <div className="overflow-x-auto">
+          <div className="overflow-x-auto">
               <table className="w-full text-sm border-collapse">
                 <thead>
                   <tr className="text-[11px] uppercase tracking-wider text-ink-soft border-b border-border">
@@ -245,9 +224,8 @@ export default function SalesAccountsSection(
                 </tbody>
               </table>
             </div>
-          </>
-        )}
-      </div>
+        </div>
+      )}
 
       {loading ? (
         <div className="text-ink-soft text-sm">Chargement…</div>

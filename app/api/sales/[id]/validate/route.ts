@@ -9,6 +9,7 @@ import { pushWalletUpdateForCustomer } from '@/lib/wallet/notify';
 import { autoSendReceiptIfEnabled } from '@/lib/email/auto-send';
 import { resolveReceiptPrinter, enqueueJob } from '@/lib/services/cloudprnt/queue';
 import { buildDrawerKickStarPrnt, STARPRNT_CONTENT_TYPE } from '@/lib/services/cloudprnt/receipt-star';
+import { enqueueGiftCardPrint, NoReceiptPrinterError as GiftCardNoPrinter } from '@/lib/services/cloudprnt/print-gift-card';
 
 const paymentSchema = z.object({
   method: z.enum(['cash','card','check','transfer','gift_card','credit_note','deferred','other','payment_link']),
@@ -101,6 +102,26 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       console.error('[drawer.after_sale]', err);
     }
 
+    // Bon(s) d'achat / carte(s) cadeau émis : impression sur l'imprimante TICKET
+    // configurée, comme l'avoir sur un retour. Best-effort et par carte (une
+    // erreur n'empêche pas les suivantes) ; sans imprimante ticket, le client
+    // garde le PDF en repli. AWAIT sur serverless (une tâche post-réponse peut
+    // ne jamais s'exécuter), jamais fatal à la vente déjà validée.
+    // On note les cartes réellement mises en file d'impression : le client
+    // n'ouvre le PDF (repli) que pour celles qui n'ont PAS d'imprimante ticket.
+    const printedIds = new Set<string>();
+    for (const gc of out.gift_cards_issued ?? []) {
+      try {
+        await enqueueGiftCardPrint({
+          organizationId: g.user.organizationId, userId: g.user.id, giftCardId: gc.id,
+        });
+        printedIds.add(gc.id);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        if (!(err instanceof GiftCardNoPrinter)) console.error('[giftcard.print.after_sale]', err);
+      }
+    }
+
     return NextResponse.json({
       sale_id: out.saleId,
       receipt_number: out.receiptNumber,
@@ -109,6 +130,10 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       fiscal_event_id: out.fiscalEventId,
       loyalty: out.loyalty ?? null,
       stock_movements: out.stock_movements ?? 0,
+      // `printed` = sorti sur l'imprimante ticket ; sinon le client ouvre le PDF.
+      gift_cards_issued: (out.gift_cards_issued ?? []).map((gc) => ({
+        id: gc.id, code: gc.code, amount: gc.amount, printed: printedIds.has(gc.id),
+      })),
     });
   } catch (e) {
     const msg = (e as Error).message;

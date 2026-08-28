@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { confirmThemed } from '@/lib/ui/dialog';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -12,6 +13,11 @@ import PageHeader from '@/components/PageHeader';
 import { formatEUR } from '@/lib/services/money';
 import WalletActions from './[id]/WalletActions';
 import LoyaltyPanel from './[id]/LoyaltyPanel';
+
+// Sur la caisse, on solde un compte via la page d'encaissement générale (mêmes
+// modes, dont le bon d'achat), pour que le règlement compte dans la journée
+// (CB, espèces…). Chargée à la demande : lourde et inutile au back-office.
+const PaymentModal = dynamic(() => import('../caisse/PaymentModal'), { ssr: false });
 
 interface Customer {
   id: string;
@@ -398,6 +404,13 @@ function CustomerDetailContent({ tab, onTabChange, detail, canWrite, onEdit, onR
   const accountDue = balances.account_balance < 0 ? -balances.account_balance : 0;
 
   const [settleOpen, setSettleOpen] = useState(false);
+  // Boutique de caisse active sur ce poste : sa présence signale qu'on est « sur
+  // caisse » (et fournit la boutique où rattacher l'encaissement). Absente au
+  // back-office, où l'on garde le règlement déclaratif.
+  const [caisseStoreId, setCaisseStoreId] = useState<string | null>(null);
+  useEffect(() => {
+    try { setCaisseStoreId(localStorage.getItem('webpos_current_store_id')); } catch { /* pas de storage */ }
+  }, []);
 
   return (
     <div className="pb-6">
@@ -493,12 +506,26 @@ function CustomerDetailContent({ tab, onTabChange, detail, canWrite, onEdit, onR
       )}
 
       {settleOpen && (
-        <SettleAccountModal
-          customerId={c.id}
-          due={accountDue}
-          onClose={() => setSettleOpen(false)}
-          onDone={() => { setSettleOpen(false); loadBalances(); }}
-        />
+        caisseStoreId ? (
+          // Sur caisse : la page d'encaissement générale. Le règlement passe par
+          // les vrais modes (dont le bon d'achat) et entre dans la journée.
+          <PaymentModal
+            saleId=""
+            totalTtc={accountDue}
+            storeId={caisseStoreId}
+            settlement={{ customerId: c.id }}
+            onClose={() => setSettleOpen(false)}
+            onValidated={() => {}}
+            onSettled={() => { setSettleOpen(false); loadBalances(); }}
+          />
+        ) : (
+          <SettleAccountModal
+            customerId={c.id}
+            due={accountDue}
+            onClose={() => setSettleOpen(false)}
+            onDone={() => { setSettleOpen(false); loadBalances(); }}
+          />
+        )
       )}
 
       {tab === 'informations' && (

@@ -1167,7 +1167,7 @@ export default function CashRegister({
     receiptId: string,
     receiptNumber: string,
     loyaltyInfo?: { earned: number; redeemed: number; new_balance: number } | null,
-    giftCardsIssued?: Array<{ id: string; code: string; amount: number }>,
+    giftCardsIssued?: Array<{ id: string; code: string; amount: number; printed?: boolean }>,
     change?: number,
   ) {
     setReceipt({
@@ -1177,11 +1177,13 @@ export default function CashRegister({
       loyalty: loyaltyInfo ?? null,
       change: change && change > 0 ? change : undefined,
     });
-    // Carte(s) cadeau vendue(s) : on ouvre le PDF imprimable (code-barres) pour
-    // remise au client. Déclenché par l'action d'encaissement (pas bloqué par
-    // les popups). Chaque carte ouvre son PDF.
+    // Carte(s) cadeau / bon(s) d'achat vendu(s) : quand une imprimante ticket est
+    // configurée, le serveur les a déjà mis en file (gc.printed) — on n'ouvre
+    // alors PAS le PDF. Sinon, PDF imprimable (code-barres) en repli, à remettre
+    // au client. Déclenché par l'action d'encaissement (pas bloqué par les popups).
     if (giftCardsIssued?.length) {
       for (const gc of giftCardsIssued) {
+        if (gc.printed) continue;
         try { window.open(`/api/gift-cards/${gc.id}/pdf`, '_blank'); } catch { /* ignore */ }
       }
     }
