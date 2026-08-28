@@ -1,6 +1,7 @@
 import { readSessionFromCookie } from '@/lib/auth/session';
 import { userCan } from '@/lib/auth/permissions';
 import { accessibleStores } from '@/lib/auth/stores-server';
+import { resolveSettingsLockStoreId } from '@/lib/pos/current-store';
 import ReceiptPrinterForm from './ReceiptPrinterForm';
 
 export const dynamic = 'force-dynamic';
@@ -17,5 +18,9 @@ export default async function ReceiptPrinterPage() {
   }
   const canWrite = await userCan(user, 'settings.write');
   const stores = await accessibleStores(user);
-  return <ReceiptPrinterForm stores={stores} canWrite={canWrite} />;
+  // Sur un poste de caisse appairé, on verrouille la config imprimante sur SA
+  // boutique — celle que résout aussi l'impression (/api/pos/ip-printer). Sinon
+  // (back-office), null : le sélecteur reste, pour gérer toutes les boutiques.
+  const lockStoreId = await resolveSettingsLockStoreId(user.organizationId);
+  return <ReceiptPrinterForm stores={stores} canWrite={canWrite} lockStoreId={lockStoreId} />;
 }

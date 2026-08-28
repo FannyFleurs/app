@@ -20,12 +20,16 @@ function isValidHost(h: string): boolean {
  * l'impression n'est possible que depuis l'application native iOS/Android :
  * un navigateur web ne peut pas ouvrir de socket TCP vers l'imprimante.
  */
-export default function IpPrinterSection({ stores, canWrite }: {
+export default function IpPrinterSection({ stores, canWrite, lockStoreId = null }: {
   stores: { id: string; name: string }[]; canWrite: boolean;
+  /** Poste de caisse : la config est verrouillée sur SA boutique (celle que
+   *  l'impression résout aussi), pour éviter de saisir l'IP sur la mauvaise. */
+  lockStoreId?: string | null;
 }) {
-  // Par défaut on cible une boutique (pas le niveau organisation) : chaque
-  // boutique a sa propre imprimante avec une IP différente.
-  const [storeId, setStoreId] = useState(stores[0]?.id ?? '');
+  // Sur un poste de caisse, on force la boutique du poste ; sinon on cible la
+  // première (chaque boutique a sa propre imprimante avec une IP différente).
+  const [storeId, setStoreId] = useState(lockStoreId ?? stores[0]?.id ?? '');
+  const lockedStoreName = lockStoreId ? stores.find((s) => s.id === lockStoreId)?.name ?? null : null;
   const [enabled, setEnabled] = useState(false);
   const [host, setHost] = useState('');
   const [port, setPort] = useState(9100);
@@ -127,7 +131,13 @@ export default function IpPrinterSection({ stores, canWrite }: {
         réglage se saisit ici mais l’impression a lieu depuis l’app installée.
       </div>
 
-      {stores.length > 1 && (
+      {lockedStoreName ? (
+        <p className="text-sm text-ink-soft">
+          Poste de caisse : configuration de l&apos;imprimante de la boutique
+          <strong> {lockedStoreName}</strong>. C&apos;est cette adresse que la caisse
+          utilisera pour imprimer les tickets de cette boutique.
+        </p>
+      ) : stores.length > 1 && (
         <p className="text-sm text-ink-soft">
           Configuration <strong>par boutique</strong> : chaque boutique a sa propre
           imprimante avec une IP différente. Sélectionne la boutique puis saisis
@@ -142,11 +152,15 @@ export default function IpPrinterSection({ stores, canWrite }: {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <label className="block text-sm">
           <span className="text-ink-soft">Boutique</span>
-          <select className="input h-10 w-full mt-1" value={storeId}
-                  onChange={(e) => setStoreId(e.target.value)} disabled={!canWrite}>
-            <option value="">Toutes les boutiques</option>
-            {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
+          {lockStoreId ? (
+            <input className="input h-10 w-full mt-1" value={lockedStoreName ?? 'Cette boutique'} readOnly disabled />
+          ) : (
+            <select className="input h-10 w-full mt-1" value={storeId}
+                    onChange={(e) => setStoreId(e.target.value)} disabled={!canWrite}>
+              <option value="">Toutes les boutiques</option>
+              {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          )}
         </label>
         <label className="block text-sm">
           <span className="text-ink-soft">Adresse IP de l’imprimante</span>
