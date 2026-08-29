@@ -641,7 +641,7 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
               <div className="mt-1 flex-1 min-h-0 overflow-auto p-2">
                 <div
                   className="grid gap-2 grid-cols-3 sm:grid-cols-4 2xl:grid-cols-5"
-                  style={{ gridAutoRows: 'clamp(2.75rem, 6.5vh, 4rem)' }}
+                  style={{ gridAutoRows: 'clamp(3.65rem, 8.5vh, 5.25rem)' }}
                 >
                   {DENOMINATIONS.map((d) => {
                     const qty = denomCount[String(d.value)] ?? 0;
@@ -658,12 +658,13 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
                           qty > 0 ? 'border-[color:var(--primary)] bg-primary-soft/40' : 'border-border hover:bg-gray-50'
                         }`}
                       >
-                        {/* Valeur au centre ; nombre compté dans le coin bas droit. */}
+                        {/* Valeur au centre ; nombre compté dans une bulle jaune,
+                            coin bas droit. */}
                         <span className="font-semibold tabular-nums leading-none"
                               style={{ fontSize: 'clamp(0.85rem, 2vh, 1.1rem)' }}>{d.label}</span>
                         {qty > 0 && (
-                          <span className="absolute bottom-0.5 right-1.5 font-bold tabular-nums leading-none text-[color:var(--primary)]"
-                                style={{ fontSize: 'clamp(0.9rem, 2.2vh, 1.3rem)' }}>{qty}</span>
+                          <span className="absolute bottom-1 right-1 grid place-items-center min-w-[1.4rem] h-5 px-1.5 rounded-full font-bold tabular-nums leading-none shadow-sm bg-[color:var(--primary-soft)] text-[color:var(--primary-deep)]"
+                                style={{ fontSize: 'clamp(0.8rem, 1.9vh, 1.1rem)' }}>{qty}</span>
                         )}
                         {qty > 0 && !alreadySealed && (
                           <span
