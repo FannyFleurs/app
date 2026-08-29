@@ -930,6 +930,141 @@ enum HelloPosNativePrintScript {
             }
           }
 
+          async function printCreditNoteNative(url) {
+            console.log(
+              '### HELLOPOS NATIVE CREDIT NOTE PRINT INTERCEPT ###',
+              url.pathname
+            );
+
+            const pdfUrl = new URL(
+              url.pathname.replace(/\/print$/, '/pdf'),
+              window.location.origin
+            );
+
+            console.log(
+              '### HELLOPOS NATIVE CREDIT NOTE PDF FETCH ###',
+              pdfUrl.pathname
+            );
+
+            try {
+              /*
+               * IMPORTANT :
+               * on n'appelle PAS la route /print serveur.
+               * Sinon elle enverrait aussi le job à CloudPRNT.
+               */
+              const pdfResponse = await originalFetch(
+                pdfUrl.toString(),
+                {
+                  method: 'GET',
+                  credentials: 'include',
+                  cache: 'no-store'
+                }
+              );
+
+              if (!pdfResponse.ok) {
+                console.log(
+                  '### HELLOPOS NATIVE CREDIT NOTE PDF ERROR ###',
+                  pdfResponse.status
+                );
+
+                return new Response(
+                  JSON.stringify({
+                    ok: false,
+                    error: 'CREDIT_NOTE_PDF_FETCH_FAILED'
+                  }),
+                  {
+                    status: 500,
+                    headers: {
+                      'Content-Type': 'application/json'
+                    }
+                  }
+                );
+              }
+
+              const buffer =
+                await pdfResponse.arrayBuffer();
+
+              const bytes =
+                new Uint8Array(buffer);
+
+              console.log(
+                '### HELLOPOS NATIVE CREDIT NOTE PDF OK ###',
+                bytes.length,
+                'bytes'
+              );
+
+              let binary = '';
+              const chunkSize = 0x8000;
+
+              for (
+                let i = 0;
+                i < bytes.length;
+                i += chunkSize
+              ) {
+                binary += String.fromCharCode(
+                  ...bytes.subarray(
+                    i,
+                    i + chunkSize
+                  )
+                );
+              }
+
+              const pdfBase64 = btoa(binary);
+
+              const printer =
+                await getHelloPosNativePrinter();
+
+              const nativeResult =
+                await window.Capacitor
+                  .Plugins
+                  .HelloPosPrinter
+                  .printPdf({
+                    host: printer.host,
+                    port: printer.port,
+                    widthDots: printer.widthDots,
+                    pdfBase64
+                  });
+
+              console.log(
+                '### HELLOPOS NATIVE CREDIT NOTE PRINT SUCCESS ###',
+                JSON.stringify(nativeResult)
+              );
+
+              return new Response(
+                JSON.stringify({
+                  ok: true,
+                  native: true,
+                  printer_label: 'HelloPos iPad'
+                }),
+                {
+                  status: 200,
+                  headers: {
+                    'Content-Type': 'application/json'
+                  }
+                }
+              );
+
+            } catch (error) {
+              console.log(
+                '### HELLOPOS NATIVE CREDIT NOTE PRINT ERROR ###',
+                String(error)
+              );
+
+              return new Response(
+                JSON.stringify({
+                  ok: false,
+                  error: 'NATIVE_CREDIT_NOTE_PRINT_FAILED'
+                }),
+                {
+                  status: 500,
+                  headers: {
+                    'Content-Type': 'application/json'
+                  }
+                }
+              );
+            }
+          }
+
           async function printGiftCardPdfNative(pdfUrl) {
             const nativePdfUrl = new URL(
               pdfUrl.toString(),
@@ -1248,138 +1383,7 @@ enum HelloPosNativePrintScript {
                 /^\/api\/credit-notes\/[^/]+\/print$/.test(url.pathname);
 
               if (isCreditNotePrint) {
-                console.log(
-                  '### HELLOPOS NATIVE CREDIT NOTE PRINT INTERCEPT ###',
-                  url.pathname
-                );
-
-                const pdfUrl = new URL(
-                  url.pathname.replace(/\/print$/, '/pdf'),
-                  window.location.origin
-                );
-
-                console.log(
-                  '### HELLOPOS NATIVE CREDIT NOTE PDF FETCH ###',
-                  pdfUrl.pathname
-                );
-
-                try {
-                  /*
-                   * IMPORTANT :
-                   * on n'appelle PAS la route /print serveur.
-                   * Sinon elle enverrait aussi le job à CloudPRNT.
-                   */
-                  const pdfResponse = await originalFetch(
-                    pdfUrl.toString(),
-                    {
-                      method: 'GET',
-                      credentials: 'include',
-                      cache: 'no-store'
-                    }
-                  );
-
-                  if (!pdfResponse.ok) {
-                    console.log(
-                      '### HELLOPOS NATIVE CREDIT NOTE PDF ERROR ###',
-                      pdfResponse.status
-                    );
-
-                    return new Response(
-                      JSON.stringify({
-                        ok: false,
-                        error: 'CREDIT_NOTE_PDF_FETCH_FAILED'
-                      }),
-                      {
-                        status: 500,
-                        headers: {
-                          'Content-Type': 'application/json'
-                        }
-                      }
-                    );
-                  }
-
-                  const buffer =
-                    await pdfResponse.arrayBuffer();
-
-                  const bytes =
-                    new Uint8Array(buffer);
-
-                  console.log(
-                    '### HELLOPOS NATIVE CREDIT NOTE PDF OK ###',
-                    bytes.length,
-                    'bytes'
-                  );
-
-                  let binary = '';
-                  const chunkSize = 0x8000;
-
-                  for (
-                    let i = 0;
-                    i < bytes.length;
-                    i += chunkSize
-                  ) {
-                    binary += String.fromCharCode(
-                      ...bytes.subarray(
-                        i,
-                        i + chunkSize
-                      )
-                    );
-                  }
-
-                  const pdfBase64 = btoa(binary);
-
-                  const printer =
-                    await getHelloPosNativePrinter();
-
-                  const nativeResult =
-                    await window.Capacitor
-                      .Plugins
-                      .HelloPosPrinter
-                      .printPdf({
-                        host: printer.host,
-                        port: printer.port,
-                        widthDots: printer.widthDots,
-                        pdfBase64
-                      });
-
-                  console.log(
-                    '### HELLOPOS NATIVE CREDIT NOTE PRINT SUCCESS ###',
-                    JSON.stringify(nativeResult)
-                  );
-
-                  return new Response(
-                    JSON.stringify({
-                      ok: true,
-                      native: true,
-                      printer_label: 'HelloPos iPad'
-                    }),
-                    {
-                      status: 200,
-                      headers: {
-                        'Content-Type': 'application/json'
-                      }
-                    }
-                  );
-
-                } catch (error) {
-                  console.log(
-                    '### HELLOPOS NATIVE CREDIT NOTE PRINT ERROR ###',
-                    String(error)
-                  );
-
-                  return new Response(
-                    JSON.stringify({
-                      ok: false,
-                      error: 'NATIVE_CREDIT_NOTE_PRINT_FAILED'
-                    }),
-                    {
-                      status: 500,
-                      headers: {
-                        'Content-Type': 'application/json'
-                      }
-                    }
-                  );
-                }
+                return printCreditNoteNative(url);
               }
 
               if (isGiftCardPrint) {
