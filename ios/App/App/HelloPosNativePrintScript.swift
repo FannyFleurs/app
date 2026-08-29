@@ -196,82 +196,18 @@ enum HelloPosNativePrintScript {
                   url.pathname
                 );
 
-                (async () => {
-                  try {
-                    const pdfResponse =
-                      await originalFetch(
-                        url.toString(),
-                        {
-                          method: 'GET',
-                          credentials: 'include',
-                          cache: 'no-store'
-                        }
-                      );
-
-                    if (!pdfResponse.ok) {
-                      console.log(
-                        '### HELLOPOS NATIVE GIFT PDF ERROR ###',
-                        pdfResponse.status
-                      );
-                      return;
-                    }
-
-                    const buffer =
-                      await pdfResponse.arrayBuffer();
-
-                    const bytes =
-                      new Uint8Array(buffer);
-
-                    let binary = '';
-                    const chunkSize = 0x8000;
-
-                    for (
-                      let i = 0;
-                      i < bytes.length;
-                      i += chunkSize
-                    ) {
-                      binary += String.fromCharCode(
-                        ...bytes.subarray(
-                          i,
-                          i + chunkSize
-                        )
-                      );
-                    }
-
-                    const pdfBase64 = btoa(binary);
-
-                    console.log(
-                      '### HELLOPOS NATIVE GIFT PDF OK ###',
-                      bytes.length,
-                      'bytes'
-                    );
-
-                    const printer =
-                      await getHelloPosNativePrinter();
-
-                    const nativeResult =
-                      await window.Capacitor
-                        .Plugins
-                        .HelloPosPrinter
-                        .printPdf({
-                          host: printer.host,
-                          port: printer.port,
-                          widthDots: printer.widthDots,
-                          pdfBase64
-                        });
-
-                    console.log(
-                      '### HELLOPOS NATIVE GIFT PRINT SUCCESS ###',
-                      JSON.stringify(nativeResult)
-                    );
-
-                  } catch (error) {
+                /*
+                 * window.open ne peut pas attendre une Promise.
+                 * L'impression native est donc lancée en arrière-plan
+                 * et l'ouverture du PDF est neutralisée.
+                 */
+                printGiftCardPdfNative(url)
+                  .catch((error) => {
                     console.log(
                       '### HELLOPOS NATIVE GIFT PRINT ERROR ###',
                       String(error)
                     );
-                  }
-                })();
+                  });
 
                 return null;
               }
@@ -994,6 +930,90 @@ enum HelloPosNativePrintScript {
             }
           }
 
+          async function printGiftCardPdfNative(pdfUrl) {
+            const nativePdfUrl = new URL(
+              pdfUrl.toString(),
+              window.location.origin
+            );
+
+            nativePdfUrl.searchParams.set(
+              'native',
+              '1'
+            );
+
+            console.log(
+              '### HELLOPOS NATIVE GIFT PDF FETCH ###',
+              nativePdfUrl.pathname
+            );
+
+            const pdfResponse = await originalFetch(
+              nativePdfUrl.toString(),
+              {
+                method: 'GET',
+                credentials: 'include',
+                cache: 'no-store'
+              }
+            );
+
+            if (!pdfResponse.ok) {
+              throw new Error(
+                'GIFT_PDF_FETCH_FAILED_' +
+                pdfResponse.status
+              );
+            }
+
+            const buffer =
+              await pdfResponse.arrayBuffer();
+
+            const bytes =
+              new Uint8Array(buffer);
+
+            console.log(
+              '### HELLOPOS NATIVE GIFT PDF OK ###',
+              bytes.length,
+              'bytes'
+            );
+
+            let binary = '';
+            const chunkSize = 0x8000;
+
+            for (
+              let i = 0;
+              i < bytes.length;
+              i += chunkSize
+            ) {
+              binary += String.fromCharCode(
+                ...bytes.subarray(
+                  i,
+                  i + chunkSize
+                )
+              );
+            }
+
+            const pdfBase64 = btoa(binary);
+
+            const printer =
+              await getHelloPosNativePrinter();
+
+            const nativeResult =
+              await window.Capacitor
+                .Plugins
+                .HelloPosPrinter
+                .printPdf({
+                  host: printer.host,
+                  port: printer.port,
+                  widthDots: printer.widthDots,
+                  pdfBase64
+                });
+
+            console.log(
+              '### HELLOPOS NATIVE GIFT PRINT SUCCESS ###',
+              JSON.stringify(nativeResult)
+            );
+
+            return nativeResult;
+          }
+
           async function printGiftCardNative(url) {
             console.log(
               '### HELLOPOS NATIVE GIFT PRINT INTERCEPT ###',
@@ -1005,101 +1025,15 @@ enum HelloPosNativePrintScript {
               window.location.origin
             );
 
-            pdfUrl.searchParams.set(
-              'native',
-              '1'
-            );
-
-            console.log(
-              '### HELLOPOS NATIVE GIFT PRINT PDF FETCH ###',
-              pdfUrl.pathname
-            );
-
             try {
               /*
                * IMPORTANT :
-               * on n'appelle PAS originalFetch(input, init).
+               * on n'appelle PAS la route /print serveur.
                *
                * La route /print mettrait sinon également le document
                * en file CloudPRNT sur l'imprimante enregistrée.
                */
-              const pdfResponse = await originalFetch(
-                pdfUrl.toString(),
-                {
-                  method: 'GET',
-                  credentials: 'include',
-                  cache: 'no-store'
-                }
-              );
-
-              if (!pdfResponse.ok) {
-                console.log(
-                  '### HELLOPOS NATIVE GIFT PRINT PDF ERROR ###',
-                  pdfResponse.status
-                );
-
-                return new Response(
-                  JSON.stringify({
-                    ok: false,
-                    error: 'GIFT_PDF_FETCH_FAILED'
-                  }),
-                  {
-                    status: 500,
-                    headers: {
-                      'Content-Type': 'application/json'
-                    }
-                  }
-                );
-              }
-
-              const buffer =
-                await pdfResponse.arrayBuffer();
-
-              const bytes =
-                new Uint8Array(buffer);
-
-              console.log(
-                '### HELLOPOS NATIVE GIFT PRINT PDF OK ###',
-                bytes.length,
-                'bytes'
-              );
-
-              let binary = '';
-              const chunkSize = 0x8000;
-
-              for (
-                let i = 0;
-                i < bytes.length;
-                i += chunkSize
-              ) {
-                binary += String.fromCharCode(
-                  ...bytes.subarray(
-                    i,
-                    i + chunkSize
-                  )
-                );
-              }
-
-              const pdfBase64 = btoa(binary);
-
-              const printer =
-                await getHelloPosNativePrinter();
-
-              const nativeResult =
-                await window.Capacitor
-                  .Plugins
-                  .HelloPosPrinter
-                  .printPdf({
-                    host: printer.host,
-                    port: printer.port,
-                    widthDots: printer.widthDots,
-                    pdfBase64
-                  });
-
-              console.log(
-                '### HELLOPOS NATIVE GIFT PRINT SUCCESS ###',
-                JSON.stringify(nativeResult)
-              );
+              await printGiftCardPdfNative(pdfUrl);
 
               /*
                * TicketPrintButton vérifie uniquement r.ok.
@@ -1128,7 +1062,7 @@ enum HelloPosNativePrintScript {
               return new Response(
                 JSON.stringify({
                   ok: false,
-                  error: 'NATIVE_GIFT_PRINT_FAILED'
+                  error: String(error)
                 }),
                 {
                   status: 500,
