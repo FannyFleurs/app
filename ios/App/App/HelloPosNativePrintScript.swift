@@ -290,6 +290,141 @@ enum HelloPosNativePrintScript {
             );
           };
 
+          async function printReceiptNative(url, init) {
+            console.log(
+              '### HELLOPOS NATIVE PRINT INTERCEPT ###',
+              url.pathname
+            );
+
+            let printBody = {};
+
+            try {
+              printBody =
+                init && typeof init.body === 'string'
+                  ? JSON.parse(init.body)
+                  : {};
+            } catch {
+              printBody = {};
+            }
+
+            const pdfUrl = new URL(
+              url.pathname.replace(/\/print$/, '/pdf'),
+              window.location.origin
+            );
+
+            if (printBody.gift === true) {
+              pdfUrl.searchParams.set('gift', '1');
+
+              if (Array.isArray(printBody.lines) && printBody.lines.length > 0) {
+                pdfUrl.searchParams.set('lines', printBody.lines.join(','));
+              }
+            }
+
+            console.log(
+              '### HELLOPOS NATIVE PDF FETCH ###',
+              pdfUrl.pathname + pdfUrl.search
+            );
+
+            const pdfResponse = await originalFetch(
+              pdfUrl.toString(),
+              {
+                method: 'GET',
+                credentials: 'include',
+                cache: 'no-store'
+              }
+            );
+
+            if (!pdfResponse.ok) {
+              console.log(
+                '### HELLOPOS NATIVE PDF ERROR ###',
+                pdfResponse.status
+              );
+
+              return new Response(
+                JSON.stringify({
+                  ok: false,
+                  error: 'PDF_FETCH_FAILED'
+                }),
+                {
+                  status: 500,
+                  headers: {
+                    'Content-Type': 'application/json'
+                  }
+                }
+              );
+            }
+
+            const buffer = await pdfResponse.arrayBuffer();
+            const bytes = new Uint8Array(buffer);
+
+            console.log(
+              '### HELLOPOS NATIVE PDF OK ###',
+              bytes.length,
+              'bytes'
+            );
+
+            let binary = '';
+            const chunkSize = 0x8000;
+
+            for (let i = 0; i < bytes.length; i += chunkSize) {
+              binary += String.fromCharCode(
+                ...bytes.subarray(i, i + chunkSize)
+              );
+            }
+
+            const pdfBase64 = btoa(binary);
+
+            try {
+              const printer =
+                await getHelloPosNativePrinter();
+
+              const nativeResult =
+                await window.Capacitor.Plugins.HelloPosPrinter.printPdf({
+                  host: printer.host,
+                  port: printer.port,
+                  widthDots: printer.widthDots,
+                  pdfBase64
+                });
+
+              console.log(
+                '### HELLOPOS NATIVE PRINT SUCCESS ###',
+                JSON.stringify(nativeResult)
+              );
+
+              return new Response(
+                JSON.stringify({
+                  ok: true,
+                  printer_label: 'HelloPos iPad'
+                }),
+                {
+                  status: 200,
+                  headers: {
+                    'Content-Type': 'application/json'
+                  }
+                }
+              );
+
+            } catch (error) {
+              console.log(
+                '### HELLOPOS NATIVE PRINT ERROR ###',
+                String(error)
+              );
+
+              return new Response(
+                JSON.stringify({
+                  ok: false,
+                  error: 'NATIVE_PRINT_FAILED'
+                }),
+                {
+                  status: 500,
+                  headers: {
+                    'Content-Type': 'application/json'
+                  }
+                }
+              );
+            }
+          }
+
           window.fetch = async function(input, init) {
             try {
               const rawUrl = typeof input === 'string'
@@ -605,138 +740,7 @@ enum HelloPosNativePrintScript {
               }
 
               if (isReceiptPrint) {
-                console.log(
-                  '### HELLOPOS NATIVE PRINT INTERCEPT ###',
-                  url.pathname
-                );
-
-                let printBody = {};
-
-                try {
-                  printBody =
-                    init && typeof init.body === 'string'
-                      ? JSON.parse(init.body)
-                      : {};
-                } catch {
-                  printBody = {};
-                }
-
-                const pdfUrl = new URL(
-                  url.pathname.replace(/\/print$/, '/pdf'),
-                  window.location.origin
-                );
-
-                if (printBody.gift === true) {
-                  pdfUrl.searchParams.set('gift', '1');
-
-                  if (Array.isArray(printBody.lines) && printBody.lines.length > 0) {
-                    pdfUrl.searchParams.set('lines', printBody.lines.join(','));
-                  }
-                }
-
-                console.log(
-                  '### HELLOPOS NATIVE PDF FETCH ###',
-                  pdfUrl.pathname + pdfUrl.search
-                );
-
-                const pdfResponse = await originalFetch(
-                  pdfUrl.toString(),
-                  {
-                    method: 'GET',
-                    credentials: 'include',
-                    cache: 'no-store'
-                  }
-                );
-
-                if (!pdfResponse.ok) {
-                  console.log(
-                    '### HELLOPOS NATIVE PDF ERROR ###',
-                    pdfResponse.status
-                  );
-
-                  return new Response(
-                    JSON.stringify({
-                      ok: false,
-                      error: 'PDF_FETCH_FAILED'
-                    }),
-                    {
-                      status: 500,
-                      headers: {
-                        'Content-Type': 'application/json'
-                      }
-                    }
-                  );
-                }
-
-                const buffer = await pdfResponse.arrayBuffer();
-                const bytes = new Uint8Array(buffer);
-
-                console.log(
-                  '### HELLOPOS NATIVE PDF OK ###',
-                  bytes.length,
-                  'bytes'
-                );
-
-                let binary = '';
-                const chunkSize = 0x8000;
-
-                for (let i = 0; i < bytes.length; i += chunkSize) {
-                  binary += String.fromCharCode(
-                    ...bytes.subarray(i, i + chunkSize)
-                  );
-                }
-
-                const pdfBase64 = btoa(binary);
-
-                try {
-                  const printer =
-                    await getHelloPosNativePrinter();
-
-                  const nativeResult =
-                    await window.Capacitor.Plugins.HelloPosPrinter.printPdf({
-                      host: printer.host,
-                      port: printer.port,
-                      widthDots: printer.widthDots,
-                      pdfBase64
-                    });
-
-                  console.log(
-                    '### HELLOPOS NATIVE PRINT SUCCESS ###',
-                    JSON.stringify(nativeResult)
-                  );
-
-                  return new Response(
-                    JSON.stringify({
-                      ok: true,
-                      printer_label: 'HelloPos iPad'
-                    }),
-                    {
-                      status: 200,
-                      headers: {
-                        'Content-Type': 'application/json'
-                      }
-                    }
-                  );
-
-                } catch (error) {
-                  console.log(
-                    '### HELLOPOS NATIVE PRINT ERROR ###',
-                    String(error)
-                  );
-
-                  return new Response(
-                    JSON.stringify({
-                      ok: false,
-                      error: 'NATIVE_PRINT_FAILED'
-                    }),
-                    {
-                      status: 500,
-                      headers: {
-                        'Content-Type': 'application/json'
-                      }
-                    }
-                  );
-                }
+                return printReceiptNative(url, init);
               }
               if (isZPrint) {
                 console.log(
