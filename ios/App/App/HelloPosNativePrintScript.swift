@@ -290,6 +290,706 @@ enum HelloPosNativePrintScript {
             );
           };
 
+          async function printZNative(url) {
+            console.log(
+              '### HELLOPOS NATIVE Z PRINT INTERCEPT ###',
+              url.pathname
+            );
+
+            const closureIdMatch = url.pathname.match(
+              /^\/api\/closures\/([^/]+)\/z-print$/
+            );
+            const closureId = closureIdMatch
+              ? closureIdMatch[1]
+              : null;
+
+            if (!closureId) {
+              return new Response(
+                JSON.stringify({
+                  ok: false,
+                  error: 'Z_CLOSURE_ID_MISSING'
+                }),
+                {
+                  status: 500,
+                  headers: {
+                    'Content-Type': 'application/json'
+                  }
+                }
+              );
+            }
+
+            let webData = {};
+
+
+            /*
+             * La route z-print peut déjà fournir certaines
+             * informations utiles. On tente d'abord celles-ci.
+             */
+            let storeId = null;
+            let businessDate = null;
+
+            /*
+             * Si la route z-print ne renvoie pas boutique/date,
+             * on récupère la liste des clôtures.
+             *
+             * /api/reports/day sans paramètres sait résoudre
+             * la boutique du poste.
+             */
+            if (!storeId) {
+              const currentReportUrl = new URL(
+                '/api/reports/day',
+                window.location.origin
+              );
+
+              const currentReportResponse =
+                await originalFetch(
+                  currentReportUrl.toString(),
+                  {
+                    method: 'GET',
+                    credentials: 'include',
+                    cache: 'no-store'
+                  }
+                );
+
+              if (currentReportResponse.ok) {
+                try {
+                  const currentData =
+                    await currentReportResponse.json();
+
+                  storeId =
+                    currentData.store_id ||
+                    currentData.storeId ||
+                    null;
+                } catch {
+                  // résolution suivante
+                }
+              }
+            }
+
+            if (!storeId || !businessDate) {
+              const closuresUrl = new URL(
+                '/api/closures/daily',
+                window.location.origin
+              );
+
+              if (storeId) {
+                closuresUrl.searchParams.set(
+                  'store_id',
+                  storeId
+                );
+              }
+
+              const closuresResponse =
+                await originalFetch(
+                  closuresUrl.toString(),
+                  {
+                    method: 'GET',
+                    credentials: 'include',
+                    cache: 'no-store'
+                  }
+                );
+
+              if (closuresResponse.ok) {
+                try {
+                  const closuresData =
+                    await closuresResponse.json();
+
+                  const candidates =
+                    Array.isArray(closuresData)
+                      ? closuresData
+                      : (
+                          closuresData.closures ||
+                          closuresData.items ||
+                          []
+                        );
+
+                  const closure =
+                    Array.isArray(candidates)
+                      ? candidates.find(
+                          item =>
+                            item &&
+                            String(item.id) ===
+                              String(closureId)
+                        )
+                      : null;
+
+                  if (closure) {
+                    storeId =
+                      storeId ||
+                      closure.store_id ||
+                      closure.storeId ||
+                      null;
+
+                    businessDate =
+                      businessDate ||
+                      closure.business_date ||
+                      closure.businessDate ||
+                      closure.date ||
+                      null;
+                  }
+                } catch {
+                  // contrôlé juste après
+                }
+              }
+            }
+
+            if (!storeId || !businessDate) {
+              console.log(
+                '### HELLOPOS NATIVE Z CONTEXT ERROR ###',
+                JSON.stringify({
+                  closureId,
+                  storeId,
+                  businessDate,
+                  webData
+                })
+              );
+
+              return new Response(
+                JSON.stringify({
+                  ok: false,
+                  error: 'Z_CONTEXT_NOT_FOUND'
+                }),
+                {
+                  status: 500,
+                  headers: {
+                    'Content-Type': 'application/json'
+                  }
+                }
+              );
+            }
+
+            businessDate =
+              String(businessDate).slice(0, 10);
+
+            console.log(
+              '### HELLOPOS NATIVE Z CONTEXT ###',
+              JSON.stringify({
+                closureId,
+                storeId,
+                businessDate
+              })
+            );
+
+            const reportUrl = new URL(
+              '/api/reports/day',
+              window.location.origin
+            );
+
+            reportUrl.searchParams.set(
+              'store_id',
+              String(storeId)
+            );
+
+            reportUrl.searchParams.set(
+              'date',
+              businessDate
+            );
+
+            console.log(
+              '### HELLOPOS NATIVE Z REPORT FETCH ###',
+              reportUrl.pathname + reportUrl.search
+            );
+
+            const reportResponse =
+              await originalFetch(
+                reportUrl.toString(),
+                {
+                  method: 'GET',
+                  credentials: 'include',
+                  cache: 'no-store'
+                }
+              );
+
+            if (!reportResponse.ok) {
+              console.log(
+                '### HELLOPOS NATIVE Z REPORT ERROR ###',
+                reportResponse.status
+              );
+
+              return new Response(
+                JSON.stringify({
+                  ok: false,
+                  error: 'Z_REPORT_FETCH_FAILED'
+                }),
+                {
+                  status: 500,
+                  headers: {
+                    'Content-Type': 'application/json'
+                  }
+                }
+              );
+            }
+
+            const reportPayload =
+              await reportResponse.json();
+
+            const report =
+              reportPayload.report ||
+              reportPayload;
+
+            console.log(
+              '### HELLOPOS NATIVE Z REPORT OK ###'
+            );
+
+            const euro = value => {
+              const n = Number(value || 0);
+
+              return n
+                .toFixed(2)
+                .replace('.', ',') + ' EUR';
+            };
+
+            const number = value =>
+              String(Number(value || 0));
+
+            const dateTime = value => {
+              if (!value) return '-';
+
+              try {
+                return new Intl.DateTimeFormat(
+                  'fr-FR',
+                  {
+                    dateStyle: 'short',
+                    timeStyle: 'short'
+                  }
+                ).format(new Date(value));
+              } catch {
+                return String(value);
+              }
+            };
+
+            const paymentLabels = {
+              cash: 'Especes',
+              card: 'Carte bancaire',
+              check: 'Cheque',
+              transfer: 'Virement',
+              gift_card: 'Carte cadeau',
+              credit_note: 'Avoir',
+              deferred: 'En compte',
+              payment_link: 'Lien paiement',
+              other: 'Autre'
+            };
+
+            const lines = [];
+
+            const add = value => {
+              lines.push(
+                value == null ? '' : String(value)
+              );
+            };
+
+            const separator = () => {
+              add(
+                '------------------------------------------'
+              );
+            };
+
+            const section = title => {
+              add('');
+              separator();
+              add(title);
+              separator();
+            };
+
+            const amountLine = (label, value) => {
+              add(
+                String(label) +
+                ' : ' +
+                euro(value)
+              );
+            };
+
+            /*
+             * EN-TETE
+             */
+            add(
+              report.identity?.name ||
+              report.store_name ||
+              'HelloPos'
+            );
+
+            if (report.identity?.line1) {
+              add(report.identity.line1);
+            }
+
+            if (report.identity?.line2) {
+              add(report.identity.line2);
+            }
+
+            if (report.identity?.city) {
+              add(report.identity.city);
+            }
+
+            if (report.identity?.phone) {
+              add(
+                'Tel : ' +
+                report.identity.phone
+              );
+            }
+
+            if (report.identity?.siret) {
+              add(
+                'SIRET : ' +
+                report.identity.siret
+              );
+            }
+
+            if (report.identity?.vat_number) {
+              add(
+                'TVA : ' +
+                report.identity.vat_number
+              );
+            }
+
+            section('TICKET Z');
+
+            add(
+              'Journee : ' +
+              (
+                report.journee_number ??
+                '-'
+              )
+            );
+
+            add(
+              'Date : ' +
+              businessDate
+            );
+
+            add(
+              'Ouverture : ' +
+              dateTime(report.opened_at)
+            );
+
+            add(
+              'Fermeture : ' +
+              dateTime(
+                webData.sealed_at ||
+                report.closed_at
+              )
+            );
+
+            /*
+             * TOTAUX
+             */
+            section('TOTAUX');
+
+            amountLine(
+              'CA TTC',
+              report.totals?.ca_ttc
+            );
+
+            amountLine(
+              'CA HT',
+              report.totals?.ca_ht
+            );
+
+            amountLine(
+              'TVA',
+              report.totals?.ca_tva
+            );
+
+            add(
+              'Tickets : ' +
+              number(
+                report.totals?.ticket_count
+              )
+            );
+
+            amountLine(
+              'Ticket moyen',
+              report.totals?.ticket_moyen_ttc
+            );
+
+            amountLine(
+              'Remises',
+              report.totals?.discounts_total
+            );
+
+            if (
+              report.totals?.marge_brute_ht != null
+            ) {
+              amountLine(
+                'Marge brute HT',
+                report.totals.marge_brute_ht
+              );
+            }
+
+            /*
+             * TVA
+             */
+            if (
+              Array.isArray(report.tva_by_rate) &&
+              report.tva_by_rate.length
+            ) {
+              section('TVA');
+
+              report.tva_by_rate.forEach(row => {
+                add(
+                  'Taux ' +
+                  Number(row.rate)
+                    .toFixed(2)
+                    .replace('.', ',') +
+                  ' %'
+                );
+
+                amountLine(
+                  '  HT',
+                  row.ht
+                );
+
+                amountLine(
+                  '  TVA',
+                  row.tva
+                );
+
+                amountLine(
+                  '  TTC',
+                  row.ttc
+                );
+              });
+            }
+
+            /*
+             * REGLEMENTS
+             */
+            if (
+              Array.isArray(report.payments) &&
+              report.payments.length
+            ) {
+              section('REGLEMENTS');
+
+              report.payments.forEach(row => {
+                const label =
+                  paymentLabels[row.method] ||
+                  row.method;
+
+                add(
+                  label +
+                  ' (' +
+                  number(row.count) +
+                  ') : ' +
+                  euro(row.amount)
+                );
+              });
+            }
+
+            /*
+             * EN COMPTE HORS CA
+             */
+            if (
+              Array.isArray(report.settlements) &&
+              report.settlements.length
+            ) {
+              section('REGLEMENTS EN COMPTE');
+
+              report.settlements.forEach(row => {
+                const label =
+                  paymentLabels[row.method] ||
+                  row.method;
+
+                add(
+                  label +
+                  ' (' +
+                  number(row.count) +
+                  ') : ' +
+                  euro(row.amount)
+                );
+              });
+            }
+
+            /*
+             * ESPECES
+             */
+            section('ESPECES');
+
+            amountLine(
+              'Fonds de caisse',
+              report.cash?.fonds_de_caisse
+            );
+
+            amountLine(
+              'Entrees argent',
+              report.cash?.entrees_argent
+            );
+
+            amountLine(
+              'Remise banque',
+              report.cash?.remise_banque
+            );
+
+            amountLine(
+              'Especes fermeture',
+              report.cash
+                ?.total_espece_fermeture
+            );
+
+            const counted =
+              webData.cash_counted ??
+              report.cash?.counted;
+
+            const variance =
+              webData.cash_variance ??
+              report.cash?.variance;
+
+            if (counted != null) {
+              amountLine(
+                'Especes comptees',
+                counted
+              );
+            }
+
+            if (variance != null) {
+              amountLine(
+                'Ecart',
+                variance
+              );
+            }
+
+            /*
+             * VENDEURS
+             */
+            if (
+              Array.isArray(report.by_vendor) &&
+              report.by_vendor.length
+            ) {
+              section('PAR VENDEUR');
+
+              report.by_vendor.forEach(row => {
+                amountLine(
+                  row.name,
+                  row.ca_ttc
+                );
+              });
+            }
+
+            /*
+             * FAMILLES
+             */
+            if (
+              Array.isArray(report.by_category) &&
+              report.by_category.length
+            ) {
+              section('PAR FAMILLE');
+
+              report.by_category.forEach(row => {
+                amountLine(
+                  row.name,
+                  row.ca_ttc
+                );
+              });
+            }
+
+            /*
+             * MODES DE VENTE
+             */
+            if (
+              Array.isArray(report.by_mode) &&
+              report.by_mode.length
+            ) {
+              section('MODES DE VENTE');
+
+              report.by_mode.forEach(row => {
+                amountLine(
+                  row.mode,
+                  row.ca_ttc
+                );
+              });
+            }
+
+            section('TICKETS');
+
+            add(
+              'Nombre : ' +
+              number(
+                report.tickets?.normal_count
+              )
+            );
+
+            amountLine(
+              'Total',
+              report.tickets?.normal_total
+            );
+
+            const fiscalHash =
+              webData.fiscal_hash ||
+              report.fiscal_hash;
+
+            if (fiscalHash) {
+              section('EMPREINTE FISCALE');
+              add(fiscalHash);
+            }
+
+            add('');
+            separator();
+            add('HelloPos');
+            add('');
+
+            const reportText =
+              lines.join('\n');
+
+            console.log(
+              '### HELLOPOS NATIVE Z TEXT READY ###',
+              reportText.length
+            );
+
+            try {
+              const printer =
+                await getHelloPosNativePrinter();
+
+              const nativeResult =
+                await window.Capacitor
+                  .Plugins
+                  .HelloPosPrinter
+                  .printDayReport({
+                    host: printer.host,
+                    port: printer.port,
+                    text: reportText
+                  });
+
+              console.log(
+                '### HELLOPOS NATIVE Z PRINT SUCCESS ###',
+                JSON.stringify(nativeResult)
+              );
+
+              return new Response(
+                JSON.stringify({
+                  ok: true,
+                  printer_label:
+                    'HelloPos iPad'
+                }),
+                {
+                  status: 200,
+                  headers: {
+                    'Content-Type':
+                      'application/json'
+                  }
+                }
+              );
+
+            } catch (error) {
+              console.log(
+                '### HELLOPOS NATIVE Z PRINT ERROR ###',
+                String(error)
+              );
+
+              return new Response(
+                JSON.stringify({
+                  ok: false,
+                  error:
+                    'NATIVE_Z_PRINT_FAILED'
+                }),
+                {
+                  status: 500,
+                  headers: {
+                    'Content-Type':
+                      'application/json'
+                  }
+                }
+              );
+            }
+          }
+
           async function printReceiptNative(url, init) {
             console.log(
               '### HELLOPOS NATIVE PRINT INTERCEPT ###',
@@ -743,703 +1443,7 @@ enum HelloPosNativePrintScript {
                 return printReceiptNative(url, init);
               }
               if (isZPrint) {
-                console.log(
-                  '### HELLOPOS NATIVE Z PRINT INTERCEPT ###',
-                  url.pathname
-                );
-
-                const closureIdMatch = url.pathname.match(
-                  /^\/api\/closures\/([^/]+)\/z-print$/
-                );
-                const closureId = closureIdMatch
-                  ? closureIdMatch[1]
-                  : null;
-
-                if (!closureId) {
-                  return new Response(
-                    JSON.stringify({
-                      ok: false,
-                      error: 'Z_CLOSURE_ID_MISSING'
-                    }),
-                    {
-                      status: 500,
-                      headers: {
-                        'Content-Type': 'application/json'
-                      }
-                    }
-                  );
-                }
-
-                let webData = {};
-
-
-                /*
-                 * La route z-print peut déjà fournir certaines
-                 * informations utiles. On tente d'abord celles-ci.
-                 */
-                let storeId = null;
-                let businessDate = null;
-
-                /*
-                 * Si la route z-print ne renvoie pas boutique/date,
-                 * on récupère la liste des clôtures.
-                 *
-                 * /api/reports/day sans paramètres sait résoudre
-                 * la boutique du poste.
-                 */
-                if (!storeId) {
-                  const currentReportUrl = new URL(
-                    '/api/reports/day',
-                    window.location.origin
-                  );
-
-                  const currentReportResponse =
-                    await originalFetch(
-                      currentReportUrl.toString(),
-                      {
-                        method: 'GET',
-                        credentials: 'include',
-                        cache: 'no-store'
-                      }
-                    );
-
-                  if (currentReportResponse.ok) {
-                    try {
-                      const currentData =
-                        await currentReportResponse.json();
-
-                      storeId =
-                        currentData.store_id ||
-                        currentData.storeId ||
-                        null;
-                    } catch {
-                      // résolution suivante
-                    }
-                  }
-                }
-
-                if (!storeId || !businessDate) {
-                  const closuresUrl = new URL(
-                    '/api/closures/daily',
-                    window.location.origin
-                  );
-
-                  if (storeId) {
-                    closuresUrl.searchParams.set(
-                      'store_id',
-                      storeId
-                    );
-                  }
-
-                  const closuresResponse =
-                    await originalFetch(
-                      closuresUrl.toString(),
-                      {
-                        method: 'GET',
-                        credentials: 'include',
-                        cache: 'no-store'
-                      }
-                    );
-
-                  if (closuresResponse.ok) {
-                    try {
-                      const closuresData =
-                        await closuresResponse.json();
-
-                      const candidates =
-                        Array.isArray(closuresData)
-                          ? closuresData
-                          : (
-                              closuresData.closures ||
-                              closuresData.items ||
-                              []
-                            );
-
-                      const closure =
-                        Array.isArray(candidates)
-                          ? candidates.find(
-                              item =>
-                                item &&
-                                String(item.id) ===
-                                  String(closureId)
-                            )
-                          : null;
-
-                      if (closure) {
-                        storeId =
-                          storeId ||
-                          closure.store_id ||
-                          closure.storeId ||
-                          null;
-
-                        businessDate =
-                          businessDate ||
-                          closure.business_date ||
-                          closure.businessDate ||
-                          closure.date ||
-                          null;
-                      }
-                    } catch {
-                      // contrôlé juste après
-                    }
-                  }
-                }
-
-                if (!storeId || !businessDate) {
-                  console.log(
-                    '### HELLOPOS NATIVE Z CONTEXT ERROR ###',
-                    JSON.stringify({
-                      closureId,
-                      storeId,
-                      businessDate,
-                      webData
-                    })
-                  );
-
-                  return new Response(
-                    JSON.stringify({
-                      ok: false,
-                      error: 'Z_CONTEXT_NOT_FOUND'
-                    }),
-                    {
-                      status: 500,
-                      headers: {
-                        'Content-Type': 'application/json'
-                      }
-                    }
-                  );
-                }
-
-                businessDate =
-                  String(businessDate).slice(0, 10);
-
-                console.log(
-                  '### HELLOPOS NATIVE Z CONTEXT ###',
-                  JSON.stringify({
-                    closureId,
-                    storeId,
-                    businessDate
-                  })
-                );
-
-                const reportUrl = new URL(
-                  '/api/reports/day',
-                  window.location.origin
-                );
-
-                reportUrl.searchParams.set(
-                  'store_id',
-                  String(storeId)
-                );
-
-                reportUrl.searchParams.set(
-                  'date',
-                  businessDate
-                );
-
-                console.log(
-                  '### HELLOPOS NATIVE Z REPORT FETCH ###',
-                  reportUrl.pathname + reportUrl.search
-                );
-
-                const reportResponse =
-                  await originalFetch(
-                    reportUrl.toString(),
-                    {
-                      method: 'GET',
-                      credentials: 'include',
-                      cache: 'no-store'
-                    }
-                  );
-
-                if (!reportResponse.ok) {
-                  console.log(
-                    '### HELLOPOS NATIVE Z REPORT ERROR ###',
-                    reportResponse.status
-                  );
-
-                  return new Response(
-                    JSON.stringify({
-                      ok: false,
-                      error: 'Z_REPORT_FETCH_FAILED'
-                    }),
-                    {
-                      status: 500,
-                      headers: {
-                        'Content-Type': 'application/json'
-                      }
-                    }
-                  );
-                }
-
-                const reportPayload =
-                  await reportResponse.json();
-
-                const report =
-                  reportPayload.report ||
-                  reportPayload;
-
-                console.log(
-                  '### HELLOPOS NATIVE Z REPORT OK ###'
-                );
-
-                const euro = value => {
-                  const n = Number(value || 0);
-
-                  return n
-                    .toFixed(2)
-                    .replace('.', ',') + ' EUR';
-                };
-
-                const number = value =>
-                  String(Number(value || 0));
-
-                const dateTime = value => {
-                  if (!value) return '-';
-
-                  try {
-                    return new Intl.DateTimeFormat(
-                      'fr-FR',
-                      {
-                        dateStyle: 'short',
-                        timeStyle: 'short'
-                      }
-                    ).format(new Date(value));
-                  } catch {
-                    return String(value);
-                  }
-                };
-
-                const paymentLabels = {
-                  cash: 'Especes',
-                  card: 'Carte bancaire',
-                  check: 'Cheque',
-                  transfer: 'Virement',
-                  gift_card: 'Carte cadeau',
-                  credit_note: 'Avoir',
-                  deferred: 'En compte',
-                  payment_link: 'Lien paiement',
-                  other: 'Autre'
-                };
-
-                const lines = [];
-
-                const add = value => {
-                  lines.push(
-                    value == null ? '' : String(value)
-                  );
-                };
-
-                const separator = () => {
-                  add(
-                    '------------------------------------------'
-                  );
-                };
-
-                const section = title => {
-                  add('');
-                  separator();
-                  add(title);
-                  separator();
-                };
-
-                const amountLine = (label, value) => {
-                  add(
-                    String(label) +
-                    ' : ' +
-                    euro(value)
-                  );
-                };
-
-                /*
-                 * EN-TETE
-                 */
-                add(
-                  report.identity?.name ||
-                  report.store_name ||
-                  'HelloPos'
-                );
-
-                if (report.identity?.line1) {
-                  add(report.identity.line1);
-                }
-
-                if (report.identity?.line2) {
-                  add(report.identity.line2);
-                }
-
-                if (report.identity?.city) {
-                  add(report.identity.city);
-                }
-
-                if (report.identity?.phone) {
-                  add(
-                    'Tel : ' +
-                    report.identity.phone
-                  );
-                }
-
-                if (report.identity?.siret) {
-                  add(
-                    'SIRET : ' +
-                    report.identity.siret
-                  );
-                }
-
-                if (report.identity?.vat_number) {
-                  add(
-                    'TVA : ' +
-                    report.identity.vat_number
-                  );
-                }
-
-                section('TICKET Z');
-
-                add(
-                  'Journee : ' +
-                  (
-                    report.journee_number ??
-                    '-'
-                  )
-                );
-
-                add(
-                  'Date : ' +
-                  businessDate
-                );
-
-                add(
-                  'Ouverture : ' +
-                  dateTime(report.opened_at)
-                );
-
-                add(
-                  'Fermeture : ' +
-                  dateTime(
-                    webData.sealed_at ||
-                    report.closed_at
-                  )
-                );
-
-                /*
-                 * TOTAUX
-                 */
-                section('TOTAUX');
-
-                amountLine(
-                  'CA TTC',
-                  report.totals?.ca_ttc
-                );
-
-                amountLine(
-                  'CA HT',
-                  report.totals?.ca_ht
-                );
-
-                amountLine(
-                  'TVA',
-                  report.totals?.ca_tva
-                );
-
-                add(
-                  'Tickets : ' +
-                  number(
-                    report.totals?.ticket_count
-                  )
-                );
-
-                amountLine(
-                  'Ticket moyen',
-                  report.totals?.ticket_moyen_ttc
-                );
-
-                amountLine(
-                  'Remises',
-                  report.totals?.discounts_total
-                );
-
-                if (
-                  report.totals?.marge_brute_ht != null
-                ) {
-                  amountLine(
-                    'Marge brute HT',
-                    report.totals.marge_brute_ht
-                  );
-                }
-
-                /*
-                 * TVA
-                 */
-                if (
-                  Array.isArray(report.tva_by_rate) &&
-                  report.tva_by_rate.length
-                ) {
-                  section('TVA');
-
-                  report.tva_by_rate.forEach(row => {
-                    add(
-                      'Taux ' +
-                      Number(row.rate)
-                        .toFixed(2)
-                        .replace('.', ',') +
-                      ' %'
-                    );
-
-                    amountLine(
-                      '  HT',
-                      row.ht
-                    );
-
-                    amountLine(
-                      '  TVA',
-                      row.tva
-                    );
-
-                    amountLine(
-                      '  TTC',
-                      row.ttc
-                    );
-                  });
-                }
-
-                /*
-                 * REGLEMENTS
-                 */
-                if (
-                  Array.isArray(report.payments) &&
-                  report.payments.length
-                ) {
-                  section('REGLEMENTS');
-
-                  report.payments.forEach(row => {
-                    const label =
-                      paymentLabels[row.method] ||
-                      row.method;
-
-                    add(
-                      label +
-                      ' (' +
-                      number(row.count) +
-                      ') : ' +
-                      euro(row.amount)
-                    );
-                  });
-                }
-
-                /*
-                 * EN COMPTE HORS CA
-                 */
-                if (
-                  Array.isArray(report.settlements) &&
-                  report.settlements.length
-                ) {
-                  section('REGLEMENTS EN COMPTE');
-
-                  report.settlements.forEach(row => {
-                    const label =
-                      paymentLabels[row.method] ||
-                      row.method;
-
-                    add(
-                      label +
-                      ' (' +
-                      number(row.count) +
-                      ') : ' +
-                      euro(row.amount)
-                    );
-                  });
-                }
-
-                /*
-                 * ESPECES
-                 */
-                section('ESPECES');
-
-                amountLine(
-                  'Fonds de caisse',
-                  report.cash?.fonds_de_caisse
-                );
-
-                amountLine(
-                  'Entrees argent',
-                  report.cash?.entrees_argent
-                );
-
-                amountLine(
-                  'Remise banque',
-                  report.cash?.remise_banque
-                );
-
-                amountLine(
-                  'Especes fermeture',
-                  report.cash
-                    ?.total_espece_fermeture
-                );
-
-                const counted =
-                  webData.cash_counted ??
-                  report.cash?.counted;
-
-                const variance =
-                  webData.cash_variance ??
-                  report.cash?.variance;
-
-                if (counted != null) {
-                  amountLine(
-                    'Especes comptees',
-                    counted
-                  );
-                }
-
-                if (variance != null) {
-                  amountLine(
-                    'Ecart',
-                    variance
-                  );
-                }
-
-                /*
-                 * VENDEURS
-                 */
-                if (
-                  Array.isArray(report.by_vendor) &&
-                  report.by_vendor.length
-                ) {
-                  section('PAR VENDEUR');
-
-                  report.by_vendor.forEach(row => {
-                    amountLine(
-                      row.name,
-                      row.ca_ttc
-                    );
-                  });
-                }
-
-                /*
-                 * FAMILLES
-                 */
-                if (
-                  Array.isArray(report.by_category) &&
-                  report.by_category.length
-                ) {
-                  section('PAR FAMILLE');
-
-                  report.by_category.forEach(row => {
-                    amountLine(
-                      row.name,
-                      row.ca_ttc
-                    );
-                  });
-                }
-
-                /*
-                 * MODES DE VENTE
-                 */
-                if (
-                  Array.isArray(report.by_mode) &&
-                  report.by_mode.length
-                ) {
-                  section('MODES DE VENTE');
-
-                  report.by_mode.forEach(row => {
-                    amountLine(
-                      row.mode,
-                      row.ca_ttc
-                    );
-                  });
-                }
-
-                section('TICKETS');
-
-                add(
-                  'Nombre : ' +
-                  number(
-                    report.tickets?.normal_count
-                  )
-                );
-
-                amountLine(
-                  'Total',
-                  report.tickets?.normal_total
-                );
-
-                const fiscalHash =
-                  webData.fiscal_hash ||
-                  report.fiscal_hash;
-
-                if (fiscalHash) {
-                  section('EMPREINTE FISCALE');
-                  add(fiscalHash);
-                }
-
-                add('');
-                separator();
-                add('HelloPos');
-                add('');
-
-                const reportText =
-                  lines.join('\n');
-
-                console.log(
-                  '### HELLOPOS NATIVE Z TEXT READY ###',
-                  reportText.length
-                );
-
-                try {
-                  const printer =
-                    await getHelloPosNativePrinter();
-
-                  const nativeResult =
-                    await window.Capacitor
-                      .Plugins
-                      .HelloPosPrinter
-                      .printDayReport({
-                        host: printer.host,
-                        port: printer.port,
-                        text: reportText
-                      });
-
-                  console.log(
-                    '### HELLOPOS NATIVE Z PRINT SUCCESS ###',
-                    JSON.stringify(nativeResult)
-                  );
-
-                  return new Response(
-                    JSON.stringify({
-                      ok: true,
-                      printer_label:
-                        'HelloPos iPad'
-                    }),
-                    {
-                      status: 200,
-                      headers: {
-                        'Content-Type':
-                          'application/json'
-                      }
-                    }
-                  );
-
-                } catch (error) {
-                  console.log(
-                    '### HELLOPOS NATIVE Z PRINT ERROR ###',
-                    String(error)
-                  );
-
-                  return new Response(
-                    JSON.stringify({
-                      ok: false,
-                      error:
-                        'NATIVE_Z_PRINT_FAILED'
-                    }),
-                    {
-                      status: 500,
-                      headers: {
-                        'Content-Type':
-                          'application/json'
-                      }
-                    }
-                  );
-                }
+                return printZNative(url);
               }
 
               if (isSaleValidation) {
