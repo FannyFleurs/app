@@ -597,16 +597,42 @@ public class HelloPosPrinterPlugin: CAPPlugin, CAPBridgedPlugin {
         // Initialisation ESC/POS
         payload.append(contentsOf: [0x1B, 0x40])
 
-        // Raster GS v 0
-        payload.append(contentsOf: [
-            0x1D, 0x76, 0x30, 0x00,
-            UInt8(bytesPerRow & 0xFF),
-            UInt8((bytesPerRow >> 8) & 0xFF),
-            UInt8(heightDots & 0xFF),
-            UInt8((heightDots >> 8) & 0xFF)
-        ])
+        // Raster GS v 0.
+        //
+        // Les tickets PDF longs sont envoyés en plusieurs bandes :
+        // certaines imprimantes ESC/POS tronquent un raster trop haut
+        // même lorsque sa hauteur est techniquement encodable.
+        let maxRasterRows = 1024
+        var rasterY = 0
 
-        payload.append(raster)
+        while rasterY < heightDots {
+            let rows = min(
+                maxRasterRows,
+                heightDots - rasterY
+            )
+
+            payload.append(contentsOf: [
+                0x1D, 0x76, 0x30, 0x00,
+                UInt8(bytesPerRow & 0xFF),
+                UInt8((bytesPerRow >> 8) & 0xFF),
+                UInt8(rows & 0xFF),
+                UInt8((rows >> 8) & 0xFF)
+            ])
+
+            let start =
+                rasterY * bytesPerRow
+
+            let end =
+                start + rows * bytesPerRow
+
+            payload.append(
+                raster.subdata(
+                    in: start..<end
+                )
+            )
+
+            rasterY += rows
+        }
 
         // Avance + coupe
         payload.append(contentsOf: [0x1B, 0x64, 0x0A])
