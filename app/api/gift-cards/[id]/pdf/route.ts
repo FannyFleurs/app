@@ -4,7 +4,7 @@ import { requirePermission } from '@/lib/auth/guards';
 import { jsonError } from '@/lib/validation/api';
 import { renderGiftCardPdf } from '@/lib/services/gift-card-pdf';
 
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+export async function GET(req: Request, { params }: { params: { id: string } }) {
   const g = await requirePermission('pos.use');
   if ('response' in g) return g.response;
 
@@ -30,6 +30,8 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   if (rows.length === 0) return jsonError('NOT_FOUND', 404);
   const r = rows[0]!;
 
+  const nativePrint = new URL(req.url).searchParams.get('native') === '1';
+
   const buf = await renderGiftCardPdf(
     {
       code: r.code,
@@ -46,6 +48,9 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
       siret: r.org_siret,
       address: r.org_address,
       phone: r.org_phone,
+    },
+    {
+      nativePrint,
     },
   );
 

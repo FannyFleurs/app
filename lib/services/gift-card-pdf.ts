@@ -44,7 +44,11 @@ async function loadBwip(): Promise<BwipNode | null> {
  * PDF carte cadeau — format ticket imprimante 80mm (≈226pt de large).
  * Page haute (1000pt) puis trimmée par l'imprimante au feed papier.
  */
-export async function renderGiftCardPdf(data: GiftCardPdfData, org: OrgInfo): Promise<Buffer> {
+export async function renderGiftCardPdf(
+  data: GiftCardPdfData,
+  org: OrgInfo,
+  options: { nativePrint?: boolean } = {},
+): Promise<Buffer> {
   const W = 226;
 
   // Code-barre (PNG) si bwip-js est disponible
@@ -117,7 +121,10 @@ export async function renderGiftCardPdf(data: GiftCardPdfData, org: OrgInfo): Pr
     // Code-barre OU code en gros (jamais les deux pour ne pas chevaucher).
     // bwip-js insère déjà le numéro lisible sous le code-barre.
     if (barcodePng) {
-      const barcodeW = Math.min(W - 24, 200);
+      const barcodeW = options.nativePrint
+        ? Math.min(W - 76, 150)
+        : Math.min(W - 24, 200);
+
       const barcodeX = (W - barcodeW) / 2;
       doc.image(barcodePng, barcodeX, doc.y, { width: barcodeW });
       // Avance le curseur sous l'image
