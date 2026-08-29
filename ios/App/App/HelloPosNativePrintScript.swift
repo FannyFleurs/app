@@ -536,7 +536,7 @@ enum HelloPosNativePrintScript {
 
               return n
                 .toFixed(2)
-                .replace('.', ',') + ' EUR';
+                .replace('.', ',');
             };
 
             const number = value =>
@@ -578,23 +578,50 @@ enum HelloPosNativePrintScript {
               );
             };
 
-            const separator = () => {
+            const ticketWidth = 42;
+
+            const center = value => {
+              const text = String(value || '');
+
+              if (text.length >= ticketWidth) {
+                return text;
+              }
+
+              const left = Math.floor(
+                (ticketWidth - text.length) / 2
+              );
+
+              return ' '.repeat(left) + text;
+            };
+
+            const leftRight = (label, value) => {
+              const left = String(label || '');
+              const right = String(value || '');
+
+              const spaces = Math.max(
+                1,
+                ticketWidth - left.length - right.length
+              );
+
               add(
-                '------------------------------------------'
+                left +
+                ' '.repeat(spaces) +
+                right
               );
             };
 
+            const separator = () => {
+              add('-'.repeat(ticketWidth));
+            };
+
             const section = title => {
-              add('');
               separator();
-              add(title);
-              separator();
+              add(center(title));
             };
 
             const amountLine = (label, value) => {
-              add(
-                String(label) +
-                ' : ' +
+              leftRight(
+                label,
                 euro(value)
               );
             };
@@ -603,70 +630,84 @@ enum HelloPosNativePrintScript {
              * EN-TETE
              */
             add(
-              report.identity?.name ||
-              report.store_name ||
-              'HelloPos'
+              center(
+                report.identity?.name ||
+                report.store_name ||
+                'HelloPos'
+              )
             );
 
             if (report.identity?.line1) {
-              add(report.identity.line1);
+              add(
+                center(report.identity.line1)
+              );
             }
 
             if (report.identity?.line2) {
-              add(report.identity.line2);
+              add(
+                center(report.identity.line2)
+              );
             }
 
             if (report.identity?.city) {
-              add(report.identity.city);
+              add(
+                center(report.identity.city)
+              );
             }
 
             if (report.identity?.phone) {
               add(
-                'Tel : ' +
-                report.identity.phone
+                center(
+                  'Tel : ' +
+                  report.identity.phone
+                )
               );
             }
 
             if (report.identity?.siret) {
               add(
-                'SIRET : ' +
-                report.identity.siret
+                center(
+                  'SIRET : ' +
+                  report.identity.siret
+                )
               );
             }
 
             if (report.identity?.vat_number) {
               add(
-                'TVA : ' +
-                report.identity.vat_number
+                center(
+                  'TVA : ' +
+                  report.identity.vat_number
+                )
               );
             }
 
-            section('TICKET Z');
+            separator();
+            add(center('FINANCIER'));
+            add(center('Z'));
+            separator();
 
-            add(
-              'Journee : ' +
-              (
-                report.journee_number ??
-                '-'
-              )
+            leftRight(
+              'Numero de journee',
+              report.journee_number ?? '-'
             );
 
-            add(
-              'Date : ' +
-              businessDate
-            );
-
-            add(
-              'Ouverture : ' +
+            leftRight(
+              'Ouverture',
               dateTime(report.opened_at)
             );
 
-            add(
-              'Fermeture : ' +
+            leftRight(
+              'Fermeture',
               dateTime(
                 webData.sealed_at ||
                 report.closed_at
               )
+            );
+
+            leftRight(
+              'Date impression',
+              dateTime(new Date())
             );
 
             /*
@@ -675,7 +716,7 @@ enum HelloPosNativePrintScript {
             section('TOTAUX');
 
             amountLine(
-              'CA TTC',
+              'CA TOTAL',
               report.totals?.ca_ttc
             );
 
@@ -689,20 +730,20 @@ enum HelloPosNativePrintScript {
               report.totals?.ca_tva
             );
 
-            add(
-              'Tickets : ' +
+            leftRight(
+              'Nombre de tickets',
               number(
                 report.totals?.ticket_count
               )
             );
 
             amountLine(
-              'Ticket moyen',
+              'Ticket moyen TTC',
               report.totals?.ticket_moyen_ttc
             );
 
             amountLine(
-              'Remises',
+              'Total reduction',
               report.totals?.discounts_total
             );
 
@@ -716,48 +757,13 @@ enum HelloPosNativePrintScript {
             }
 
             /*
-             * TVA
-             */
-            if (
-              Array.isArray(report.tva_by_rate) &&
-              report.tva_by_rate.length
-            ) {
-              section('TVA');
-
-              report.tva_by_rate.forEach(row => {
-                add(
-                  'Taux ' +
-                  Number(row.rate)
-                    .toFixed(2)
-                    .replace('.', ',') +
-                  ' %'
-                );
-
-                amountLine(
-                  '  HT',
-                  row.ht
-                );
-
-                amountLine(
-                  '  TVA',
-                  row.tva
-                );
-
-                amountLine(
-                  '  TTC',
-                  row.ttc
-                );
-              });
-            }
-
-            /*
              * REGLEMENTS
              */
             if (
               Array.isArray(report.payments) &&
               report.payments.length
             ) {
-              section('REGLEMENTS');
+              section('Modes de reglement');
 
               report.payments.forEach(row => {
                 const label =
@@ -781,7 +787,7 @@ enum HelloPosNativePrintScript {
               Array.isArray(report.settlements) &&
               report.settlements.length
             ) {
-              section('REGLEMENTS EN COMPTE');
+              section('Reglements en compte');
 
               report.settlements.forEach(row => {
                 const label =
@@ -801,7 +807,7 @@ enum HelloPosNativePrintScript {
             /*
              * ESPECES
              */
-            section('ESPECES');
+            section("Entrees d'argent / especes");
 
             amountLine(
               'Fonds de caisse',
@@ -853,7 +859,7 @@ enum HelloPosNativePrintScript {
               Array.isArray(report.by_vendor) &&
               report.by_vendor.length
             ) {
-              section('PAR VENDEUR');
+              section('Donnees par vendeur');
 
               report.by_vendor.forEach(row => {
                 amountLine(
@@ -870,7 +876,7 @@ enum HelloPosNativePrintScript {
               Array.isArray(report.by_category) &&
               report.by_category.length
             ) {
-              section('PAR FAMILLE');
+              section('CA TTC familles');
 
               report.by_category.forEach(row => {
                 amountLine(
@@ -887,7 +893,7 @@ enum HelloPosNativePrintScript {
               Array.isArray(report.by_mode) &&
               report.by_mode.length
             ) {
-              section('MODES DE VENTE');
+              section('CA TTC Modes de ventes');
 
               report.by_mode.forEach(row => {
                 amountLine(
@@ -897,17 +903,17 @@ enum HelloPosNativePrintScript {
               });
             }
 
-            section('TICKETS');
+            section('Nombre de tickets');
 
-            add(
-              'Nombre : ' +
+            leftRight(
+              'Tickets normal',
               number(
                 report.tickets?.normal_count
               )
             );
 
             amountLine(
-              'Total',
+              'Total ticket NORMAL',
               report.tickets?.normal_total
             );
 
@@ -921,9 +927,7 @@ enum HelloPosNativePrintScript {
             }
 
             add('');
-            separator();
             add('HelloPos');
-            add('');
 
             const reportText =
               lines.join('\n');

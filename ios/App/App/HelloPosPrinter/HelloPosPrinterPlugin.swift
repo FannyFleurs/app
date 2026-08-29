@@ -775,27 +775,72 @@ public class HelloPosPrinterPlugin: CAPPlugin, CAPBridgedPlugin {
         }
 
         let widthDots = 576
-        let horizontalPadding: CGFloat = 12
-        let topPadding: CGFloat = 16
-        let bottomPadding: CGFloat = 24
+
+        // Rouleau 80 mm : on exploite pratiquement toute
+        // la largeur imprimable de 576 dots.
+        let horizontalPadding: CGFloat = 4
+        let topPadding: CGFloat = 12
+        let bottomPadding: CGFloat = 20
+
+        let availableWidth =
+            CGFloat(widthDots) - horizontalPadding * 2
+
+        /*
+         * Le ticket Z est construit sur 42 colonnes.
+         *
+         * On calcule automatiquement la plus grande police
+         * monospace possible pour que les 42 caractères
+         * tiennent exactement dans la largeur imprimable.
+         *
+         * Cela évite :
+         * - une police arbitrairement petite ;
+         * - les retours à la ligne avec une police trop grande ;
+         * - les tickets n'utilisant qu'une partie des 80 mm.
+         */
+        let targetColumns: CGFloat = 42
+        let preferredFontSize: CGFloat = 22
+
+        let probeFont = UIFont.monospacedSystemFont(
+            ofSize: preferredFontSize,
+            weight: .regular
+        )
+
+        let probeCharacterWidth =
+            ("0" as NSString).size(
+                withAttributes: [
+                    .font: probeFont
+                ]
+            ).width
+
+        let fittedFontSize =
+            preferredFontSize *
+            (
+                availableWidth /
+                (probeCharacterWidth * targetColumns)
+            )
+
+        let fontSize =
+            min(
+                preferredFontSize,
+                fittedFontSize
+            )
 
         let font = UIFont.monospacedSystemFont(
-            ofSize: 22,
+            ofSize: fontSize,
             weight: .regular
         )
 
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineBreakMode = .byWordWrapping
         paragraph.alignment = .left
+        paragraph.lineSpacing = 0
+        paragraph.paragraphSpacing = 0
 
         let attributes: [NSAttributedString.Key: Any] = [
             .font: font,
             .foregroundColor: UIColor.black,
             .paragraphStyle: paragraph
         ]
-
-        let availableWidth =
-            CGFloat(widthDots) - horizontalPadding * 2
 
         let bounding = (text as NSString).boundingRect(
             with: CGSize(
