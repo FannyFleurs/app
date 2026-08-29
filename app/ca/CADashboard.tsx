@@ -345,7 +345,9 @@ function XzView({
               -{formatEUR(returnsInfo.total)}
             </span>
           </div>
-          <div className="grid grid-cols-2 gap-3 mb-3">
+          {/* Seuls les compteurs : la liste détaillée (motifs, tickets) n'est
+              pas nécessaire ici. */}
+          <div className="grid grid-cols-2 gap-3">
             <div className="rounded-xl bg-warning/10 px-3 py-2">
               <div className="text-xs text-ink-soft">Retours</div>
               <div className="text-xl font-semibold tabular-nums">{returnsInfo.count}</div>
@@ -355,38 +357,6 @@ function XzView({
               <div className="text-xl font-semibold tabular-nums text-danger">{returnsInfo.cancelled_sales}</div>
             </div>
           </div>
-          <ul className="divide-y divide-border">
-            {returnsInfo.items.map((r) => (
-              <li key={r.id} className="py-2.5">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium flex items-center gap-1.5 flex-wrap">
-                      {r.sale_status === 'cancelled_by_credit_note' && (
-                        <span className="rounded-full bg-danger/10 text-danger px-1.5 py-0.5 text-[10px] font-semibold uppercase">
-                          Annulée
-                        </span>
-                      )}
-                      <span className="truncate">
-                        {r.receipt_number ? `Ticket ${r.receipt_number}` : `Avoir ${r.number}`}
-                      </span>
-                    </div>
-                    <div className="text-xs text-ink-soft truncate">
-                      {new Date(r.created_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                      {r.store_name && ` · ${r.store_name}`}
-                    </div>
-                  </div>
-                  <span className="tabular-nums font-medium text-warning whitespace-nowrap">
-                    -{formatEUR(Number(r.amount))}
-                  </span>
-                </div>
-                {r.reason && (
-                  <div className="mt-1 text-xs text-ink-soft italic">
-                    Motif : {r.reason}
-                  </div>
-                )}
-              </li>
-            ))}
-          </ul>
         </div>
       )}
 
