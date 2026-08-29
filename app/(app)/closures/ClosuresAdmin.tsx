@@ -633,21 +633,18 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
                   Touche une valeur = <strong>+1</strong>. Appui long = saisir le nombre exact.
                 </p>
               </div>
-              {/* Grille : seule zone qui peut défiler sur petit écran.
-                  Les tuiles occupent toute la hauteur disponible — les lignes
-                  s'étirent (1fr) sans jamais descendre sous une taille tactile
-                  confortable (minmax), auquel cas la zone défile. */}
-              {/* Padding intérieur : la pastille ✕ déborde de la tuile
-                  (-top-2 / -right-2) et serait rognée par le conteneur
-                  défilant sans cette marge. */}
-              <div className="mt-1 flex-1 min-h-0 overflow-auto p-2.5">
+              {/* Grille : seule zone qui peut défiler sur petit écran. Tuiles
+                  FINES à hauteur bornée (pas d'étirement 1fr, qui les rendait
+                  trop hautes et débordantes selon l'appareil) ; la zone défile
+                  si tout ne tient pas. Padding intérieur : la pastille ✕ déborde
+                  (-top-2 / -right-2) et serait rognée sans cette marge. */}
+              <div className="mt-1 flex-1 min-h-0 overflow-auto p-2">
                 <div
-                  className="grid h-full gap-2.5 grid-cols-3 sm:grid-cols-4 2xl:grid-cols-5"
-                  style={{ gridAutoRows: 'minmax(clamp(4.5rem, 11vh, 8rem), 1fr)' }}
+                  className="grid gap-2 grid-cols-3 sm:grid-cols-4 2xl:grid-cols-5"
+                  style={{ gridAutoRows: 'clamp(2.75rem, 6.5vh, 4rem)' }}
                 >
                   {DENOMINATIONS.map((d) => {
                     const qty = denomCount[String(d.value)] ?? 0;
-                    const sub = qty * d.value;
                     return (
                       <button
                         key={d.value}
@@ -657,18 +654,17 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
                         onPointerUp={() => pressEnd(d.value)}
                         onPointerLeave={pressCancel}
                         onContextMenu={(e) => e.preventDefault()}
-                        className={`relative rounded-xl border p-2 flex flex-col items-center justify-center gap-0.5 text-center select-none touch-none transition-colors disabled:opacity-50 ${
+                        className={`relative rounded-lg border px-2 flex items-center justify-center select-none touch-none transition-colors disabled:opacity-50 ${
                           qty > 0 ? 'border-[color:var(--primary)] bg-primary-soft/40' : 'border-border hover:bg-gray-50'
                         }`}
                       >
-                        {/* Tailles fluides : suivent la hauteur d'écran disponible,
-                            bornées pour rester lisibles sur petit comme sur grand. */}
-                        <div className="font-semibold tabular-nums leading-none"
-                             style={{ fontSize: 'clamp(0.8rem, 1.8vh, 1.15rem)' }}>{d.label}</div>
-                        <div className="font-bold tabular-nums leading-none"
-                             style={{ fontSize: 'clamp(1.5rem, 4vh, 3rem)' }}>{qty}</div>
-                        <div className="text-ink-soft tabular-nums leading-none"
-                             style={{ fontSize: 'clamp(0.65rem, 1.4vh, 0.95rem)' }}>{formatEUR(sub)}</div>
+                        {/* Valeur au centre ; nombre compté dans le coin bas droit. */}
+                        <span className="font-semibold tabular-nums leading-none"
+                              style={{ fontSize: 'clamp(0.85rem, 2vh, 1.1rem)' }}>{d.label}</span>
+                        {qty > 0 && (
+                          <span className="absolute bottom-0.5 right-1.5 font-bold tabular-nums leading-none text-[color:var(--primary)]"
+                                style={{ fontSize: 'clamp(0.9rem, 2.2vh, 1.3rem)' }}>{qty}</span>
+                        )}
                         {qty > 0 && !alreadySealed && (
                           <span
                             role="button"
@@ -679,7 +675,7 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
                               e.stopPropagation();
                               setDenomCount((c) => { const n = { ...c }; delete n[String(d.value)]; return n; });
                             }}
-                            className="absolute -top-2 -right-2 grid h-6 w-6 place-items-center rounded-full bg-danger text-white text-xs font-bold leading-none shadow-sm hover:opacity-90"
+                            className="absolute -top-2 -right-2 grid h-5 w-5 place-items-center rounded-full bg-danger text-white text-[10px] font-bold leading-none shadow-sm hover:opacity-90"
                           >
                             ✕
                           </span>
