@@ -107,7 +107,7 @@ export default function ReceiptSettingsForm({ stores, canEdit, lockedStoreId }: 
   }
 
   return (
-    <div className="p-6 md:p-8 max-w-4xl space-y-5">
+    <div className="p-6 md:p-8 w-full space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Paramétrage ticket</h1>
@@ -139,6 +139,33 @@ export default function ReceiptSettingsForm({ stores, canEdit, lockedStoreId }: 
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
         <div className="space-y-5">
+          <div className="card p-5 space-y-3">
+            <h2 className="font-semibold">Type d&apos;imprimante ticket</h2>
+            <p className="text-xs text-ink-soft">
+              Cette boutique a une seule imprimante ticket. Choisissez son type ;
+              son paramétrage (adresse IP, ou imprimante Star) se fait dans
+              « Imprimante ticket ».
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {([
+                ['cloudprnt', 'Star CloudPRNT', 'Imprimante Star réseau, pilotée par le serveur. Fonctionne au navigateur/PWA comme dans l’app.'],
+                ['ip', 'Réseau IP (ESC/POS)', 'Imprimante réseau par son adresse IP. Application iOS/Android uniquement.'],
+              ] as const).map(([val, title, desc]) => (
+                <button key={val} type="button" disabled={!canEdit}
+                  aria-pressed={form.printer_type === val}
+                  onClick={() => setForm({ ...form, printer_type: val })}
+                  className={`text-left rounded-xl border p-3 transition-colors ${
+                    form.printer_type === val
+                      ? 'border-accent bg-accent-soft'
+                      : 'border-border hover:bg-gray-50'
+                  } ${!canEdit ? 'opacity-50' : ''}`}>
+                  <div className="font-medium text-sm">{title}</div>
+                  <div className="text-xs text-ink-soft mt-0.5">{desc}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="card p-5 space-y-4">
             <h2 className="font-semibold">En-tête du ticket</h2>
 
@@ -215,33 +242,6 @@ export default function ReceiptSettingsForm({ stores, canEdit, lockedStoreId }: 
               <textarea className="input h-24" value={form.footer_message} disabled={!canEdit}
                         onChange={(e) => setForm({ ...form, footer_message: e.target.value })} />
             </Field>
-          </div>
-
-          <div className="card p-5 space-y-3">
-            <h2 className="font-semibold">Type d&apos;imprimante ticket</h2>
-            <p className="text-xs text-ink-soft">
-              Cette boutique a une seule imprimante ticket. Choisissez son type ;
-              son paramétrage (adresse IP, ou imprimante Star) se fait dans
-              « Imprimante ticket ».
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {([
-                ['cloudprnt', 'Star CloudPRNT', 'Imprimante Star réseau, pilotée par le serveur. Fonctionne au navigateur/PWA comme dans l’app.'],
-                ['ip', 'Réseau IP (ESC/POS)', 'Imprimante réseau par son adresse IP. Application iOS/Android uniquement.'],
-              ] as const).map(([val, title, desc]) => (
-                <button key={val} type="button" disabled={!canEdit}
-                  aria-pressed={form.printer_type === val}
-                  onClick={() => setForm({ ...form, printer_type: val })}
-                  className={`text-left rounded-xl border p-3 transition-colors ${
-                    form.printer_type === val
-                      ? 'border-accent bg-accent-soft'
-                      : 'border-border hover:bg-gray-50'
-                  } ${!canEdit ? 'opacity-50' : ''}`}>
-                  <div className="font-medium text-sm">{title}</div>
-                  <div className="text-xs text-ink-soft mt-0.5">{desc}</div>
-                </button>
-              ))}
-            </div>
           </div>
 
           <div className="card p-5 space-y-3">

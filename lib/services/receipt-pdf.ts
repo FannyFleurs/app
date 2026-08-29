@@ -87,14 +87,15 @@ export async function renderReceiptPdf(
   },
 ): Promise<Buffer> {
   return new Promise((resolve, reject) => {
+    // Deux passes : une MESURE (page très haute) donne la hauteur réelle du
+    // contenu, puis on rend à cette hauteur exacte. Sans ça, le ticket occupait
+    // une page fixe de 1200pt et laissait une énorme marge basse (aperçu, PDF,
+    // e-mail). Le contenu dessiné est identique d'une passe à l'autre.
+    const paint = (pageHeight: number): PDFKit.PDFDocument => {
     const doc = new PDFDocument({
-      size: [226, 1200],
+      size: [226, pageHeight],
       margins: { top: 12, bottom: 12, left: 10, right: 10 },
     });
-    const chunks: Buffer[] = [];
-    doc.on('data', (b: Buffer) => chunks.push(b));
-    doc.on('end', () => resolve(Buffer.concat(chunks)));
-    doc.on('error', reject);
 
     const rs = options.receipt;
     const gift = options.giftReceipt === true;
@@ -292,6 +293,23 @@ export async function renderReceiptPdf(
       center(rs.welcome_message.trim());
     }
 
+      return doc;
+    };
+
+    // Passe 1 : mesure de la hauteur réelle du contenu (page très haute pour
+    // ne jamais provoquer de saut de page pendant la mesure).
+    const measure = paint(20000);
+    const contentBottom = measure.y;
+    measure.end();
+    // Hauteur finale = contenu + marge basse (12pt), bornée pour rester sain.
+    const pageHeight = Math.min(2200, Math.max(140, Math.ceil(contentBottom) + 12));
+
+    // Passe 2 : rendu final, page ajustée au contenu (plus de marge basse).
+    const doc = paint(pageHeight);
+    const chunks: Buffer[] = [];
+    doc.on('data', (b: Buffer) => chunks.push(b));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
     doc.end();
   });
 }
