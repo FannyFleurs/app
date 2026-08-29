@@ -39,24 +39,39 @@ export async function POST(req: Request) {
     },
   });
 
+  const nativeIp = req.headers.get('x-hellopos-native-ip') === '1';
+
   let kicked = false;
-  try {
-    const printer = await resolveReceiptPrinter(g.user.organizationId, parsed.data.store_id ?? null);
-    if (printer) {
-      const payload = await buildDrawerKickStarPrnt();
-      await enqueueJob({
-        organizationId: g.user.organizationId,
-        printerId: printer.id,
-        contentType: STARPRNT_CONTENT_TYPE,
-        payload,
-        title: 'Ouverture tiroir',
-        userId: g.user.id,
-      });
-      kicked = true;
+
+  if (!nativeIp) {
+    try {
+      const printer = await resolveReceiptPrinter(
+        g.user.organizationId,
+        parsed.data.store_id ?? null
+      );
+
+      if (printer) {
+        const payload = await buildDrawerKickStarPrnt();
+
+        await enqueueJob({
+          organizationId: g.user.organizationId,
+          printerId: printer.id,
+          contentType: STARPRNT_CONTENT_TYPE,
+          payload,
+          title: 'Ouverture tiroir',
+          userId: g.user.id,
+        });
+
+        kicked = true;
+      }
+    } catch {
+      /* pas d'imprimante / erreur file : on reste sur l'audit seul */
     }
-  } catch {
-    /* pas d'imprimante / erreur file : on reste sur l'audit seul */
   }
 
-  return NextResponse.json({ ok: true, drawer_kick_queued: kicked });
+  return NextResponse.json({
+    ok: true,
+    drawer_kick_queued: kicked,
+    native_ip: nativeIp,
+  });
 }
