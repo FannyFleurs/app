@@ -206,8 +206,8 @@ export default function DashboardClient({ firstName, stores, lockedStoreId }: { 
 
       {/* Top / flop produits */}
       <section className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        <ProductTable title="Top produits" rows={topRows(data, ht, 'top')} ht={ht} />
-        <ProductTable title="Produits flop" rows={topRows(data, ht, 'flop')} ht={ht} />
+        <ProductTable title="Top produits" all={sortedProducts(data, ht, 'top')} ht={ht} />
+        <ProductTable title="Produits flop" all={sortedProducts(data, ht, 'flop')} ht={ht} />
       </section>
 
       {loading && <div className="text-center text-xs text-ink-soft">Actualisation…</div>}
@@ -215,11 +215,12 @@ export default function DashboardClient({ firstName, stores, lockedStoreId }: { 
   );
 }
 
-function topRows(data: DashboardData | null, ht: boolean, which: 'top' | 'flop') {
+/** Produits triés par CA (croissant), du flop au top, ou l'inverse. */
+function sortedProducts(data: DashboardData | null, ht: boolean, which: 'top' | 'flop') {
   if (!data) return [];
   const sorted = [...data.products].sort((a, b) =>
     (ht ? a.ca_ht : a.ca_ttc) - (ht ? b.ca_ht : b.ca_ttc));
-  return which === 'top' ? sorted.slice().reverse().slice(0, 5) : sorted.slice(0, 5);
+  return which === 'top' ? sorted.slice().reverse() : sorted;
 }
 
 /**
@@ -344,39 +345,72 @@ function Card({ title, value, children }: { title: string; value?: string; child
   );
 }
 
-function ProductTable({ title, rows, ht }: {
+type ProductRow = { label: string; qty: number; ca_ttc: number; ca_ht: number };
+
+function ProductTable({ title, all, ht }: {
   title: string;
-  rows: { label: string; qty: number; ca_ttc: number; ca_ht: number }[];
+  /** Liste complète triée ; l'aperçu montre les 5 premiers, « Voir » le reste. */
+  all: ProductRow[];
   ht: boolean;
 }) {
+  const [showAll, setShowAll] = useState(false);
+  const rows = all.slice(0, 5);
   return (
     <section className="card p-5">
-      <h2 className="font-semibold mb-3">{title}</h2>
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="font-semibold">{title}</h2>
+        {all.length > 5 && (
+          <button className="btn-soft text-xs h-8 px-3" onClick={() => setShowAll(true)}>
+            Voir ({all.length})
+          </button>
+        )}
+      </div>
       {rows.length === 0 ? (
         <div className="py-8">
           <EtatVide icone="tag" titre="Aucune donnée"
                     texte="Aucune vente par produit pour cette période." />
         </div>
       ) : (
-        <table className="w-full text-sm">
-          <thead className="text-ink-soft text-xs uppercase tracking-wider">
-            <tr>
-              <th className="text-left py-1.5">Produit</th>
-              <th className="text-right py-1.5">CA {ht ? 'HT' : 'TTC'}</th>
-              <th className="text-right py-1.5">Quantité</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((p) => (
-              <tr key={p.label} className="border-t border-border">
-                <td className="py-2 pr-2 truncate max-w-[220px]">{p.label}</td>
-                <td className="py-2 text-right tabular-nums whitespace-nowrap">{formatEUR(ht ? p.ca_ht : p.ca_ttc)}</td>
-                <td className="py-2 text-right tabular-nums">{p.qty}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <ProductRows rows={rows} ht={ht} />
+      )}
+
+      {showAll && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-ink/30 backdrop-blur-sm p-4 overflow-auto"
+             onClick={() => setShowAll(false)}>
+          <div className="card w-full max-w-2xl p-6 my-8 space-y-3" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold">{title} — liste complète</h2>
+              <button onClick={() => setShowAll(false)} className="text-ink-soft hover:text-ink" aria-label="Fermer">✕</button>
+            </div>
+            <div className="max-h-[70vh] overflow-auto">
+              <ProductRows rows={all} ht={ht} />
+            </div>
+          </div>
+        </div>
       )}
     </section>
+  );
+}
+
+function ProductRows({ rows, ht }: { rows: ProductRow[]; ht: boolean }) {
+  return (
+    <table className="w-full text-sm">
+      <thead className="text-ink-soft text-xs uppercase tracking-wider">
+        <tr>
+          <th className="text-left py-1.5">Produit</th>
+          <th className="text-right py-1.5">CA {ht ? 'HT' : 'TTC'}</th>
+          <th className="text-right py-1.5">Quantité</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((p) => (
+          <tr key={p.label} className="border-t border-border">
+            <td className="py-2 pr-2 truncate max-w-[220px]">{p.label}</td>
+            <td className="py-2 text-right tabular-nums whitespace-nowrap">{formatEUR(ht ? p.ca_ht : p.ca_ttc)}</td>
+            <td className="py-2 text-right tabular-nums">{p.qty}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
