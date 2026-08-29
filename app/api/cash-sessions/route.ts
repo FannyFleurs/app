@@ -73,8 +73,19 @@ export async function POST(req: Request) {
       LIMIT 1`,
     [g.user.organizationId, parsed.data.store_id],
   );
-  if ((sealed.rowCount ?? 0) > 0 && !(await userCan(g.user, 'closures.daily'))) {
-    return jsonError('DAY_SEALED', 403);
+  if ((sealed.rowCount ?? 0) > 0) {
+    // Journée déjà ROUVERTE (une session est de nouveau ouverte sur la boutique) :
+    // n'importe qui peut ouvrir/rejoindre. Sinon, la première réouverture après
+    // le scellé est réservée aux responsables (closures.daily).
+    const reopened = await query(
+      `SELECT 1 FROM cash_sessions
+        WHERE organization_id = $1 AND store_id = $2 AND status = 'open'
+        LIMIT 1`,
+      [g.user.organizationId, parsed.data.store_id],
+    );
+    if ((reopened.rowCount ?? 0) === 0 && !(await userCan(g.user, 'closures.daily'))) {
+      return jsonError('DAY_SEALED', 403);
+    }
   }
 
   const shared = await isSharedFloat(g.user.organizationId, parsed.data.store_id);

@@ -52,7 +52,7 @@ export default async function SettingsLayout({ children }: { children: React.Rea
     // Ticket et Étiquettes : l'imprimante et son paramétrage vont de pair,
     // on les réunit dans un dossier plutôt que de les disperser dans la liste.
     { href: '/settings/receipt',           label: 'Paramètres',            icon: 'print' as const,        perm: 'settings.write' as const,   boOnly: false, proOnly: false, group: 'ticket' as const },
-    { href: '/settings/receipt-printer',   label: 'Imprimante',            icon: 'print' as const,        perm: 'settings.read' as const,    boOnly: false, proOnly: false, group: 'ticket' as const }
+    { href: '/settings/receipt-printer',   label: 'Imprimante',            icon: 'print' as const,        perm: 'settings.read' as const,    boOnly: false, proOnly: false, group: 'ticket' as const },
     { href: '/settings/labels',            label: 'Paramètres',            icon: 'products' as const,     perm: 'settings.write' as const,   boOnly: false, proOnly: false, group: 'labels' as const },
     { href: '/settings/label-printer',     label: 'Imprimante',            icon: 'print' as const,        perm: 'settings.read' as const,    boOnly: false, proOnly: false, group: 'labels' as const },
     { href: '/settings/label-stations',    label: 'PDA',                   icon: 'products' as const,     perm: 'settings.read' as const,    boOnly: true,  proOnly: false },

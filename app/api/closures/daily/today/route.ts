@@ -37,13 +37,27 @@ export async function GET(req: Request) {
   // Aucune boutique résolue : on ne prétend pas que la journée est clôturée.
   if (!storeId) return NextResponse.json({ sealed_at: null, store_id: null });
 
-  const { rows } = await query<{ sealed_at: string }>(
-    `SELECT MAX(sealed_at) AS sealed_at
-       FROM daily_closures
-      WHERE organization_id = $1 AND store_id = $2 AND business_date = $3::date`,
-    [g.user.organizationId, storeId, date],
-  );
+  const [sealedQ, openQ] = await Promise.all([
+    query<{ sealed_at: string }>(
+      `SELECT MAX(sealed_at) AS sealed_at
+         FROM daily_closures
+        WHERE organization_id = $1 AND store_id = $2 AND business_date = $3::date`,
+      [g.user.organizationId, storeId, date],
+    ),
+    // Journée ROUVERTE : après un scellé, si une caisse a été rouverte (session
+    // « open »), la journée n'est plus fermée du point de vue de la caisse et de
+    // Ma journée. Sans ça, elle restait « clôturée » et redemandait sans cesse la
+    // réouverture, la réouverture ne « prenant » jamais.
+    query(
+      `SELECT 1 FROM cash_sessions
+        WHERE organization_id = $1 AND store_id = $2 AND status = 'open'
+        LIMIT 1`,
+      [g.user.organizationId, storeId],
+    ),
+  ]);
+  const reopened = (openQ.rowCount ?? 0) > 0;
+  const sealed_at = reopened ? null : (sealedQ.rows[0]?.sealed_at ?? null);
   // La boutique réellement interrogée est renvoyée : l'écran peut vérifier
   // qu'il parle bien de celle qu'il affiche.
-  return NextResponse.json({ sealed_at: rows[0]?.sealed_at ?? null, store_id: storeId });
+  return NextResponse.json({ sealed_at, store_id: storeId, reopened });
 }
