@@ -1477,49 +1477,46 @@ enum HelloPosNativePrintScript {
                   '### HELLOPOS NATIVE DRAWER INTERCEPT ###'
                 );
 
-                // On exécute d'abord la route Web pour conserver
-                // l'audit réglementaire de l'ouverture.
-                const webResponse = await originalFetch(input, init);
+                // Conserve l'appel backend pour l'audit, mais indique
+                // que l'ouverture physique sera effectuée nativement en IP.
+                const nativeHeaders = new Headers(init?.headers || {});
+
+                nativeHeaders.set(
+                  'x-hellopos-native-ip',
+                  '1'
+                );
+
+                const nativeInit = {
+                  ...init,
+                  headers: nativeHeaders
+                };
+
+                const webResponse =
+                  await originalFetch(input, nativeInit);
 
                 if (!webResponse.ok) {
                   return webResponse;
                 }
 
-                let responseData = {};
-
                 try {
-                  responseData = await webResponse.clone().json();
-                } catch {
-                  responseData = {};
-                }
+                  const printer =
+                    await getHelloPosNativePrinter();
 
-                // Si CloudPRNT a déjà envoyé l'impulsion,
-                // ne pas ouvrir une seconde fois.
-                if (responseData.drawer_kick_queued !== true) {
-                  try {
-                    const printer =
-                      await getHelloPosNativePrinter();
+                  const nativeResult =
+                    await window.Capacitor.Plugins.HelloPosPrinter.openDrawer({
+                      host: printer.host,
+                      port: printer.port
+                    });
 
-                    const nativeResult =
-                      await window.Capacitor.Plugins.HelloPosPrinter.openDrawer({
-                        host: printer.host,
-                        port: printer.port
-                      });
-
-                    console.log(
-                      '### HELLOPOS NATIVE DRAWER SUCCESS ###',
-                      JSON.stringify(nativeResult)
-                    );
-
-                  } catch (error) {
-                    console.log(
-                      '### HELLOPOS NATIVE DRAWER ERROR ###',
-                      String(error)
-                    );
-                  }
-                } else {
                   console.log(
-                    '### HELLOPOS DRAWER CLOUDPRNT ALREADY QUEUED ###'
+                    '### HELLOPOS NATIVE DRAWER SUCCESS ###',
+                    JSON.stringify(nativeResult)
+                  );
+
+                } catch (error) {
+                  console.log(
+                    '### HELLOPOS NATIVE DRAWER ERROR ###',
+                    String(error)
                   );
                 }
 
