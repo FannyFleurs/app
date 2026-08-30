@@ -7,15 +7,10 @@ import AdminNav from './AdminNav';
 import AdminLogoutButton from './AdminLogoutButton';
 
 function BrandLogo({ logoUrl, brandName, className }: { logoUrl: string | null; brandName: string; className?: string }) {
-  if (logoUrl) {
-    // eslint-disable-next-line @next/next/no-img-element
-    return <img src={logoUrl} alt={brandName} className={className ?? 'h-9 w-auto max-w-[150px] object-contain'} />;
-  }
-  return (
-    <span className="grid h-9 w-9 place-items-center rounded-xl accent-bar text-white font-semibold">
-      {brandName.charAt(0)}
-    </span>
-  );
+  // Uniquement le logo configuré : pas de monogramme « H » de repli.
+  if (!logoUrl) return null;
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={logoUrl} alt={brandName} className={className ?? 'h-9 w-auto max-w-[150px] object-contain'} />;
 }
 
 export default function AdminShell({

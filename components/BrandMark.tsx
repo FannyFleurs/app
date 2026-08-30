@@ -65,7 +65,9 @@ export default function BrandMark({
   const name = brand.brand_name || 'HelloPos';
   return (
     <div className={`flex items-center gap-3 ${className}`}>
-      {brand.logo_url ? (
+      {/* Uniquement le logo configuré. Pas de monogramme de repli : le client ne
+          veut voir QUE son logo uploadé. */}
+      {brand.logo_url && (
         // Hauteur fixe, largeur automatique : un logo « wordmark » reste
         // lisible (au lieu d'être écrasé dans un carré).
         // eslint-disable-next-line @next/next/no-img-element
@@ -75,13 +77,6 @@ export default function BrandMark({
           style={{ height: size, maxWidth: size * 4.5 }}
           className="w-auto object-contain object-left shrink-0"
         />
-      ) : (
-        <span
-          style={{ height: size, width: size }}
-          className="grid place-items-center rounded-2xl accent-bar text-white font-semibold shrink-0"
-        >
-          {name.charAt(0)}
-        </span>
       )}
       {showName && <span className="text-lg font-semibold tracking-tight">{name}</span>}
     </div>

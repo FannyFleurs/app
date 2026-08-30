@@ -8,6 +8,11 @@ import EmptyState from '@/components/EmptyState';
 import BankDepositModal from './BankDepositModal';
 import { promptThemed, confirmThemed } from '@/lib/ui/dialog';
 
+// Seuls ces modes se réconcilient à la clôture : espèces (comptées au tiroir),
+// CB et chèques. Les autres (carte cadeau, différé, virement, avoir…) ne se
+// comptent pas ici et sont donc masqués de la réconciliation.
+const RECONCILED_METHODS = new Set(['cash', 'card', 'check']);
+
 const DENOMINATIONS: Array<{ value: number; label: string }> = [
   { value: 500,  label: '500 €' },
   { value: 200,  label: '200 €' },
@@ -210,7 +215,7 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
   const paymentVariances = useMemo(() => {
     if (!preview) return [] as { method: string; variance: number }[];
     return preview.payments
-      .filter((p) => p.method !== 'cash')
+      .filter((p) => RECONCILED_METHODS.has(p.method) && p.method !== 'cash')
       .map((p) => {
         const dv = declared[p.method];
         const n = Number(dv);
@@ -242,7 +247,7 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
   const allPaymentsValidated = useMemo(() => {
     if (!preview) return false;
     const nonCashOk = preview.payments
-      .filter((p) => p.method !== 'cash')
+      .filter((p) => RECONCILED_METHODS.has(p.method) && p.method !== 'cash')
       .every((p) => {
         const dv = declared[p.method];
         return dv != null && dv !== '' && Number.isFinite(Number(dv));
@@ -524,9 +529,9 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
                   Saisissez ce que vous avez réellement reçu pour faire apparaître les écarts.
                 </p>
                 <div className="mt-4 space-y-2">
-                  {preview.payments.length === 0 ? (
+                  {preview.payments.filter((p) => RECONCILED_METHODS.has(p.method)).length === 0 ? (
                     <p className="text-sm text-ink-soft">Aucun paiement enregistré pour cette date.</p>
-                  ) : preview.payments.map((p) => {
+                  ) : preview.payments.filter((p) => RECONCILED_METHODS.has(p.method)).map((p) => {
                     const declaredVal = declared[p.method] ?? '';
                     const declaredNum = Number(declaredVal);
                     const hasDeclared = declaredVal !== '' && Number.isFinite(declaredNum);

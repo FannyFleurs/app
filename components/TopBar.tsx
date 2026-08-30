@@ -61,14 +61,10 @@ export default function TopBar({
           // eslint-disable-next-line @next/next/no-img-element
           <img src={brand.logo_url} alt={brand.brand_name || 'Logo'} className="h-11 w-auto max-w-[180px] object-contain" />
         ) : (
-          <>
-            <span className="grid h-12 w-12 place-items-center rounded-2xl accent-bar text-white font-semibold text-xl">
-              {(brand.brand_name || 'H').charAt(0).toUpperCase()}
-            </span>
-            <span className="font-semibold tracking-tight text-lg text-ink">
-              {brand.brand_name || 'HelloPos'}
-            </span>
-          </>
+          // Pas de monogramme « H » : seulement le nom si le logo manque.
+          <span className="font-semibold tracking-tight text-lg text-ink">
+            {brand.brand_name || 'HelloPos'}
+          </span>
         )}
       </Link>
 
