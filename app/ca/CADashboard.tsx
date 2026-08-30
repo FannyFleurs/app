@@ -223,14 +223,10 @@ function TopBar({
     >
       {/* Logo, sans fond (transparent sur blanc) — hauteur fixe, largeur
           automatique pour rester lisible (logo « wordmark »). */}
-      {logoUrl ? (
+      {/* Pas de monogramme « H » : uniquement le logo configuré. */}
+      {logoUrl && (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={logoUrl} alt={orgName} className="h-11 w-auto max-w-[150px] object-contain shrink-0" />
-      ) : (
-        <div className="h-11 w-11 rounded-lg grid place-items-center shrink-0 text-white font-semibold text-lg"
-             style={{ backgroundColor: 'var(--primary)' }}>
-          {(orgName || 'H').charAt(0).toUpperCase()}
-        </div>
       )}
 
       <div className="flex-1 min-w-0">

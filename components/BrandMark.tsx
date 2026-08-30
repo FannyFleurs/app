@@ -63,26 +63,19 @@ export default function BrandMark({
 }: { size?: number; showName?: boolean; className?: string }) {
   const brand = useBrand();
   const name = brand.brand_name || 'HelloPos';
+  // Le logo, ou rien. Aucun repli (ni monogramme, ni nom) quand il manque.
+  if (!brand.logo_url) return null;
   return (
     <div className={`flex items-center gap-3 ${className}`}>
-      {brand.logo_url ? (
-        // Hauteur fixe, largeur automatique : un logo « wordmark » reste
-        // lisible (au lieu d'être écrasé dans un carré).
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={brand.logo_url}
-          alt={name}
-          style={{ height: size, maxWidth: size * 4.5 }}
-          className="w-auto object-contain object-left shrink-0"
-        />
-      ) : (
-        <span
-          style={{ height: size, width: size }}
-          className="grid place-items-center rounded-2xl accent-bar text-white font-semibold shrink-0"
-        >
-          {name.charAt(0)}
-        </span>
-      )}
+      {/* Hauteur fixe, largeur automatique : un logo « wordmark » reste lisible
+          (au lieu d'être écrasé dans un carré). */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={brand.logo_url}
+        alt={name}
+        style={{ height: size, maxWidth: size * 4.5 }}
+        className="w-auto object-contain object-left shrink-0"
+      />
       {showName && <span className="text-lg font-semibold tracking-tight">{name}</span>}
     </div>
   );

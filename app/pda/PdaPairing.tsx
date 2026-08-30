@@ -38,13 +38,10 @@ export default function PdaPairing() {
     <div className="min-h-screen grid place-items-center bg-bg p-6 pt-safe pb-safe pl-safe pr-safe">
       <div className="card w-full max-w-sm p-6">
         <div className="flex items-center gap-3 mb-5">
-          {brand.logo_url ? (
+          {/* Pas de monogramme « H » : uniquement le logo configuré. */}
+          {brand.logo_url && (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={brand.logo_url} alt={brand.brand_name} className="h-9 w-auto max-w-[150px] object-contain" />
-          ) : (
-            <span className="grid h-9 w-9 place-items-center rounded-xl accent-bar text-white font-semibold">
-              {(brand.brand_name || 'H').charAt(0)}
-            </span>
           )}
           <div className="text-sm font-semibold text-ink-soft">PDA</div>
         </div>

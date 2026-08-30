@@ -103,17 +103,10 @@ export default function LeftRail({
           className={`flex items-center gap-2 h-14 shrink-0 ${collapsed ? 'justify-center px-0' : 'px-3'}`}
           title="Back-office"
         >
-          {(brand.bo_logo_url || brand.logo_url) ? (
+          {/* Pas de monogramme « H » : uniquement le logo configuré. */}
+          {(brand.bo_logo_url || brand.logo_url) && (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={brand.bo_logo_url || brand.logo_url} alt={brand.brand_name} className="h-10 w-auto max-w-[140px] object-contain shrink-0" />
-          ) : (
-            // Pastille jaune : un aplat vert sur un rail vert ne se voit pas.
-            <span
-              className="grid h-10 w-10 place-items-center rounded-2xl font-semibold text-lg shrink-0"
-              style={{ backgroundColor: 'var(--primary-soft)', color: 'var(--primary)' }}
-            >
-              {(brand.brand_name || 'H').charAt(0)}
-            </span>
           )}
           {!collapsed && (
             <div className="min-w-0">
@@ -223,20 +216,14 @@ export default function LeftRail({
         className="flex items-center justify-center shrink-0 h-20"
         title="Caisse"
       >
-        {brand.logo_url ? (
+        {/* Pas de monogramme « H » : uniquement le logo configuré. */}
+        {brand.logo_url && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={brand.logo_url}
             alt={brand.brand_name}
             className="h-14 w-14 rounded-2xl object-cover"
           />
-        ) : (
-          <span
-            className="grid h-14 w-14 place-items-center rounded-2xl text-white font-semibold text-xl"
-            style={{ backgroundColor: 'var(--primary)' }}
-          >
-            {(brand.brand_name || 'H').charAt(0)}
-          </span>
         )}
       </Link>
 
