@@ -69,12 +69,10 @@ export default function AllPagesOverlay({ role, hiddenPaths, permissions, backOf
         {/* Logo affiché uniquement sur mobile : sur desktop, le rail gauche
             (toujours visible) porte déjà le logo. */}
         <div className="flex items-center gap-2.5 md:hidden">
-          {brand.logo_url ? (
+          {/* Le logo, ou rien : aucun repli. */}
+          {brand.logo_url && (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={brand.logo_url} alt={brand.brand_name || 'Logo'} className="h-10 w-auto max-w-[170px] object-contain" />
-          ) : (
-            // Pas de monogramme « H » : seulement le nom si le logo manque.
-            <span className="font-semibold tracking-tight text-ink">{brand.brand_name || 'HelloPos'}</span>
           )}
         </div>
         <div className="ml-auto flex items-center gap-2">

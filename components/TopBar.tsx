@@ -57,14 +57,10 @@ export default function TopBar({
           on l'affiche en grand et sans dupliquer le nom en texte. Sinon,
           monogramme + nom de la marque. */}
       <Link href="/caisse" className="flex items-center gap-2.5 pl-3 pr-4 md:pl-4 md:pr-5 shrink-0 hover:bg-gray-50 transition-colors">
-        {brand.logo_url ? (
+        {/* Le logo, ou rien : aucun repli. */}
+        {brand.logo_url && (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={brand.logo_url} alt={brand.brand_name || 'Logo'} className="h-11 w-auto max-w-[180px] object-contain" />
-        ) : (
-          // Pas de monogramme « H » : seulement le nom si le logo manque.
-          <span className="font-semibold tracking-tight text-lg text-ink">
-            {brand.brand_name || 'HelloPos'}
-          </span>
         )}
       </Link>
 

@@ -334,11 +334,10 @@ const onUnknownCode = useCallback((code: string) => {
           minHeight: 'calc(3.75rem + env(safe-area-inset-top, 0px))',
         }}
       >
-        {brand.logo_url ? (
+        {/* Le logo, ou rien : aucun repli. */}
+        {brand.logo_url && (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={brand.logo_url} alt="" className="h-7 w-auto max-w-[120px] object-contain" />
-        ) : (
-          <span className="text-lg font-bold tracking-tight">{brand.brand_name || 'HelloPos'}</span>
         )}
         <span className="text-sm font-medium opacity-80">PDA</span>
       </header>

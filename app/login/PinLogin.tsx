@@ -217,11 +217,10 @@ export default function PinLogin({ onEmailLogin }: { onEmailLogin?: () => void }
         {/* En-tête commun : logo, « Connexion », et la consigne du moment. */}
         <header className="text-center mb-6">
           <div className="flex justify-center mb-3">
-            {brand.logo_url ? (
+            {/* Le logo, ou rien : aucun repli. */}
+            {brand.logo_url && (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={brand.logo_url} alt={APP_NAME} className="h-12 w-auto max-w-[180px] object-contain" />
-            ) : (
-              <span className="text-lg font-semibold tracking-tight" style={{ color: GOLD }}>{APP_NAME}</span>
             )}
           </div>
           <h1 className="text-3xl font-bold tracking-tight" style={{ color: GOLD }}>Connexion</h1>
