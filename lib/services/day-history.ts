@@ -142,9 +142,12 @@ export async function computeDayHistory(opts: {
       [...P],
     ),
 
-    // Journal d'audit. Il ne porte pas de boutique en colonne : on garde les
-    // lignes dont la charge utile désigne CETTE boutique, plus celles qui n'en
-    // désignent aucune (réglages, droits, connexions — de portée organisation).
+    // Journal d'audit, scopé à CETTE boutique. On ne garde QUE les lignes dont
+    // la charge utile désigne cette boutique : les événements sans boutique
+    // (portée organisation) ne doivent pas apparaître sur chaque boutique — une
+    // « connexion refusée » d'un poste de Plante Verte n'a rien à faire dans
+    // l'historique de Mortagne. Les événements de connexion portent désormais
+    // le store_id du poste (cf. auth/pin-login).
     query<{
       created_at: string; action: string; person: string | null;
       payload: Record<string, unknown>; severity: string;
@@ -155,7 +158,7 @@ export async function computeDayHistory(opts: {
         WHERE a.organization_id = $1
           AND a.created_at::date = $3::date
           AND a.action = ANY($4::text[])
-          AND (a.payload->>'store_id' IS NULL OR a.payload->>'store_id' = $2)
+          AND a.payload->>'store_id' = $2
         ORDER BY a.created_at`,
       [org, store, date, Object.keys(AUDIT_ACTIONS)],
     ),

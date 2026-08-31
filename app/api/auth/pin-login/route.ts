@@ -23,6 +23,18 @@ export async function POST(req: Request) {
   const ua = headers().get('user-agent');
   const ip = headers().get('x-forwarded-for')?.split(',')[0]?.trim() || headers().get('x-real-ip') || null;
 
+  // Boutique du poste (via le cookie device) : sert à rattacher l'événement de
+  // connexion à SA boutique dans l'historique, au lieu de le montrer partout.
+  const deviceId = cookies().get('webpos_device_id')?.value ?? null;
+  let deviceStoreId: string | null = null;
+  if (deviceId) {
+    const rReg = await query<{ store_id: string }>(
+      `SELECT store_id FROM registers WHERE device_id = $1 AND is_active = TRUE LIMIT 1`,
+      [deviceId],
+    );
+    deviceStoreId = rReg.rows[0]?.store_id ?? null;
+  }
+
   const userRes = await query<{
     id: string;
     organization_id: string;
@@ -43,7 +55,7 @@ export async function POST(req: Request) {
   if (!user || !user.is_active) {
     await audit({
       organizationId: null, userId: null, action: 'auth.pin_login.failed',
-      ip, userAgent: ua, payload: { user_id, reason: 'unknown_user' }, severity: 'security',
+      ip, userAgent: ua, payload: { user_id, reason: 'unknown_user', store_id: deviceStoreId }, severity: 'security',
     });
     return jsonError('INVALID_PIN', 401);
   }
@@ -68,7 +80,7 @@ export async function POST(req: Request) {
     await audit({
       organizationId: user.organization_id, userId: user.id,
       action: 'auth.pin_login.failed',
-      ip, userAgent: ua, payload: { attempts: newAttempts }, severity: 'security',
+      ip, userAgent: ua, payload: { attempts: newAttempts, store_id: deviceStoreId }, severity: 'security',
     });
     return jsonError('INVALID_PIN', 401);
   }
@@ -128,7 +140,7 @@ export async function POST(req: Request) {
 
   await audit({
     organizationId: user.organization_id, userId: user.id, action: 'auth.pin_login.ok',
-    ip, userAgent: ua, payload: { role: user.role }, severity: 'info',
+    ip, userAgent: ua, payload: { role: user.role, store_id: deviceStoreId }, severity: 'info',
   });
 
   return NextResponse.json({
