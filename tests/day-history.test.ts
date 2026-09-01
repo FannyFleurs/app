@@ -69,10 +69,13 @@ describe('Contenu du journal', () => {
     expect(service).toMatch(/if \(s\.closed_at && s\.closed_today\)/);
   });
 
-  it('n\'attribue pas à une boutique ce qui appartient à l\'organisation', () => {
-    // audit_logs ne porte pas de boutique : on garde les lignes qui désignent
-    // celle-ci, plus celles qui n'en désignent aucune (droits, réglages).
-    expect(service).toMatch(/payload->>'store_id' IS NULL OR a\.payload->>'store_id' = \$2/);
+  it('scope l\'audit à la boutique sélectionnée', () => {
+    // audit_logs ne porte pas de boutique en colonne : on ne garde QUE les
+    // lignes dont la charge utile désigne CETTE boutique. Les événements sans
+    // boutique (portée organisation) ne doivent pas s'afficher sur chacune —
+    // ex. une « connexion refusée » d'un poste d'une autre boutique.
+    expect(service).toMatch(/a\.payload->>'store_id' = \$2/);
+    expect(service).not.toMatch(/payload->>'store_id' IS NULL/);
   });
 
   it('signale ce qui mérite un œil', () => {
