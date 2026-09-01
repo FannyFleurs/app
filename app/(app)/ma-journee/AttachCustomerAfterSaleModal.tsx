@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { formatEUR } from '@/lib/services/money';
+import CustomerFormModal from '@/components/CustomerFormModal';
 
 interface Customer {
   id: string; display_name: string | null;
@@ -20,6 +21,7 @@ export default function AttachCustomerAfterSaleModal({ saleId, onClose, onSucces
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(async () => {
@@ -53,6 +55,7 @@ export default function AttachCustomerAfterSaleModal({ saleId, onClose, onSucces
   }
 
   return (
+    <>
     <div className="fixed inset-0 z-50 grid place-items-center bg-ink/30 backdrop-blur-sm p-4" onClick={onClose}>
       <div className="card w-full max-w-2xl lg:max-w-4xl p-5" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-3">
@@ -60,7 +63,13 @@ export default function AttachCustomerAfterSaleModal({ saleId, onClose, onSucces
             <h2 className="text-lg font-semibold">Attribuer un client</h2>
             <p className="text-sm text-ink-soft">La fidélité sera calculée automatiquement.</p>
           </div>
-          <button onClick={onClose} className="text-ink-soft hover:text-ink">✕</button>
+          <div className="flex items-center gap-2">
+            <button className="btn-soft text-sm h-9 px-3 whitespace-nowrap"
+                    onClick={() => setCreating(true)}>
+              + Nouveau
+            </button>
+            <button onClick={onClose} className="text-ink-soft hover:text-ink">✕</button>
+          </div>
         </div>
 
         <input
@@ -96,5 +105,14 @@ export default function AttachCustomerAfterSaleModal({ saleId, onClose, onSucces
         {error && <div className="mt-3 rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
       </div>
     </div>
+
+    {creating && (
+      <CustomerFormModal
+        customer={null}
+        onClose={() => setCreating(false)}
+        onSaved={(id) => { setCreating(false); void attach(id); }}
+      />
+    )}
+    </>
   );
 }
