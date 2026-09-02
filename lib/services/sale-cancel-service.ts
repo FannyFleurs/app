@@ -3,6 +3,8 @@ import { FiscalCore } from '@/lib/fiscal/core';
 import { round2 } from './money';
 import { STOCK_TRACKED_SQL } from './stock-tracking';
 import { joinPaymentMethods } from './payment-labels';
+import { CashSessionService } from './cash-session-service';
+import { isSharedFloat } from '@/lib/settings/cash-server';
 
 /**
  * Annulation totale d'une vente validée (contre-passation complète).
@@ -220,14 +222,19 @@ export class SaleCancelService {
       }
 
       // 7. Contre-passation des règlements, mode par mode
+      // Sortie espèces sur la session ACTUELLEMENT ouverte, résolue comme
+      // ailleurs (fonds commun => session de la boutique, sinon session du
+      // poste). Repli sur la session d'origine si aucune n'est ouverte.
       let cashSessionId: string | null = null;
       if (paymentsRes.rows.some((p) => p.method === 'cash')) {
-        const openSess = await client.query<{ id: string }>(
-          `SELECT id FROM cash_sessions WHERE register_id = $1 AND status = 'open'
-            ORDER BY opened_at DESC LIMIT 1`,
-          [sale.register_id],
-        );
-        cashSessionId = openSess.rows[0]?.id ?? sale.cash_session_id ?? null;
+        const shared = await isSharedFloat(args.organizationId, sale.store_id, client);
+        const openId = await CashSessionService.resolveOpenSessionId({
+          storeId: sale.store_id,
+          registerId: sale.register_id,
+          shared,
+          client,
+        });
+        cashSessionId = openId ?? sale.cash_session_id ?? null;
       }
       for (const p of paymentsRes.rows) {
         const amt = round2(Number(p.amount));

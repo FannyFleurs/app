@@ -1,7 +1,44 @@
+import type { PoolClient } from 'pg';
 import { withTransaction, query } from '@/lib/db/client';
 import { FiscalCore } from '@/lib/fiscal/core';
 
 export class CashSessionService {
+  /**
+   * Identifiant de la session ouverte qui FAIT FOI pour ce poste, en tenant
+   * compte du mode « fonds commun ».
+   *
+   * - Fonds commun (`shared` = true) : la session de la BOUTIQUE, ouverte par
+   *   n'importe quel poste (la plus ancienne encore ouverte, comme
+   *   getOpenForStore). Les postes qui l'ont rejointe n'ont pas de session
+   *   propre : les résoudre par `register_id` renverrait « aucune » à tort.
+   * - Fonds individuel : la session propre au poste (la plus récente).
+   *
+   * Point unique de résolution : l'affichage de la caisse, la création et la
+   * validation d'une vente s'appuient tous dessus, pour ne JAMAIS diverger
+   * (caisse « ouverte » d'un côté, NO_OPEN_CASH_SESSION de l'autre).
+   *
+   * `client` (optionnel) : reste dans la transaction d'une vente en cours.
+   */
+  static async resolveOpenSessionId(args: {
+    storeId: string;
+    registerId: string;
+    shared: boolean;
+    client?: PoolClient;
+  }): Promise<string | null> {
+    const sql = args.shared
+      ? `SELECT id FROM cash_sessions
+           WHERE store_id = $1 AND status = 'open'
+           ORDER BY opened_at ASC LIMIT 1`
+      : `SELECT id FROM cash_sessions
+           WHERE register_id = $1 AND status = 'open'
+           ORDER BY opened_at DESC LIMIT 1`;
+    const param = args.shared ? args.storeId : args.registerId;
+    const rows = args.client
+      ? (await args.client.query<{ id: string }>(sql, [param])).rows
+      : (await query<{ id: string }>(sql, [param])).rows;
+    return rows[0]?.id ?? null;
+  }
+
   /**
    * Session ouverte de la BOUTIQUE, quel que soit le poste qui l'a ouverte.
    *

@@ -6,6 +6,8 @@ import { parseJson, jsonError } from '@/lib/validation/api';
 import { audit } from '@/lib/audit/log';
 import { loadScopedSettingValue } from '@/lib/settings/scoped-server';
 import { CASH_KEY, mergeCashDefaults, type CashSettings } from '@/lib/settings/cash';
+import { isSharedFloat } from '@/lib/settings/cash-server';
+import { CashSessionService } from '@/lib/services/cash-session-service';
 import { loadReceiptSettings } from '@/lib/settings/receipt-server';
 import { resolveReceiptPrinter, enqueueJob } from '@/lib/services/cloudprnt/queue';
 import { buildBankDepositStarPrnt, STARPRNT_CONTENT_TYPE } from '@/lib/services/cloudprnt/receipt-star';
@@ -32,15 +34,21 @@ export async function POST(req: Request) {
   if ('response' in parsed) return parsed.response;
   const { register_id, movement_type, amount, reason } = parsed.data;
 
-  // Trouve la session ouverte sur cette caisse
-  const session = await query<{ id: string; store_id: string }>(
-    `SELECT id, store_id FROM cash_sessions
-      WHERE register_id = $1 AND organization_id = $2 AND status = 'open'
-      ORDER BY opened_at DESC LIMIT 1`,
+  // Boutique du poste : le fonds commun vit au niveau boutique, donc le
+  // mouvement d'espèces s'attache à la session de la BOUTIQUE quand le poste a
+  // rejoint le fonds d'un autre poste (sinon « NO_OPEN_SESSION » à tort).
+  const regRow = await query<{ store_id: string }>(
+    `SELECT store_id FROM registers WHERE id = $1 AND organization_id = $2`,
     [register_id, g.user.organizationId],
   );
-  if (session.rowCount === 0) return jsonError('NO_OPEN_SESSION', 400);
-  const s = session.rows[0]!;
+  if (regRow.rowCount === 0) return jsonError('REGISTER_NOT_FOUND', 404);
+  const storeId = regRow.rows[0]!.store_id;
+  const shared = await isSharedFloat(g.user.organizationId, storeId);
+  const sessionId = await CashSessionService.resolveOpenSessionId({
+    storeId, registerId: register_id, shared,
+  });
+  if (!sessionId) return jsonError('NO_OPEN_SESSION', 400);
+  const s = { id: sessionId, store_id: storeId };
 
   const ins = await query<{ id: string }>(
     `INSERT INTO cash_movements
@@ -123,13 +131,19 @@ export async function GET(req: Request) {
 
   let sessionId = sessionIdParam;
   if (!sessionId && registerId) {
-    const session = await query<{ id: string }>(
-      `SELECT id FROM cash_sessions
-        WHERE register_id = $1 AND organization_id = $2 AND status = 'open'
-        ORDER BY opened_at DESC LIMIT 1`,
+    // Même résolution qu'à l'écriture : en fonds commun, les mouvements se
+    // lisent sur la session de la BOUTIQUE, pas seulement celle du poste.
+    const regRow = await query<{ store_id: string }>(
+      `SELECT store_id FROM registers WHERE id = $1 AND organization_id = $2`,
       [registerId, g.user.organizationId],
     );
-    sessionId = session.rows[0]?.id ?? null;
+    const storeId = regRow.rows[0]?.store_id ?? null;
+    if (storeId) {
+      const shared = await isSharedFloat(g.user.organizationId, storeId);
+      sessionId = await CashSessionService.resolveOpenSessionId({
+        storeId, registerId, shared,
+      });
+    }
   }
   if (!sessionId) return NextResponse.json({ movements: [] });
 
