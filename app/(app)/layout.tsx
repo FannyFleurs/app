@@ -12,6 +12,7 @@ import BillingBlock from '@/components/BillingBlock';
 import { resolveEffectivePermissions } from '@/lib/auth/permissions';
 import SupportBanner from '@/components/support/SupportBanner';
 import SupportConsentGate from '@/components/support/SupportConsentGate';
+import NoZoom from '@/components/NoZoom';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   // Mode back-office : injecte par le middleware sur le sous-domaine bo.
@@ -90,6 +91,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <>
+      <NoZoom />
       <SupportBanner />
       {/* Le consentement de dépannage se décide au back-office (owner/manager),
           jamais sur une caisse de vente — important en multi-boutique. */}
