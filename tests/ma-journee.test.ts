@@ -80,7 +80,7 @@ describe('Composition de l\'écran', () => {
   it('porte les blocs de la journée', () => {
     for (const bloc of [
       'Caisse ouverte à', 'CA TTC', 'Trésorerie espèces', 'Espèces attendues',
-      'Clôturer la journée', 'Évolution du CA TTC',
+      'Fermer ma caisse', 'Évolution du CA TTC',
       'Répartition des ventes', 'Top catégories (CA TTC)', 'Actions rapides',
     ]) {
       expect(page, bloc).toContain(bloc);

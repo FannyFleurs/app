@@ -142,13 +142,16 @@ describe('Croisements vendus sans compte', () => {
     render(<SalesAccountsSection canEdit />);
     await waitFor(() => screen.getByText(/croisement sans compte/));
     // Le croisement déjà couvert n'a rien à faire dans une liste de manques.
-    expect(screen.getByText('1 croisement sans compte · 1 déjà couvert')).toBeTruthy();
+    // Le décompte est suivi d'une consigne dans le même paragraphe : on lit donc
+    // en « contient », pas en égalité stricte.
+    expect(screen.getByText(/1 croisement sans compte · 1 déjà couvert/)).toBeTruthy();
     // Une seule ligne, celle du croisement non couvert. (Les noms de boutique
-    // apparaissent aussi dans les filtres : on lit donc le tableau.)
+    // apparaissent aussi dans les filtres : on lit donc le tableau.) La dernière
+    // cellule porte les deux actions : voir le détail, et créer le compte.
     const lignes = [...document.querySelectorAll('tbody tr')]
       .map((tr) => [...tr.querySelectorAll('td')].map((td) => td.textContent));
     expect(lignes).toEqual([
-      ['Plantes vertes', '20 %', 'Fanny Fleurs Mortagne', '200.00 €', 'Créer le compte'],
+      ['Plantes vertes', '20 %', 'Fanny Fleurs Mortagne', '200.00 €', 'Voir le détailCréer le compte'],
     ]);
   });
 
