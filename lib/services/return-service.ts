@@ -2,6 +2,8 @@ import { withTransaction } from '@/lib/db/client';
 import { FiscalCore } from '@/lib/fiscal/core';
 import { round2 } from './money';
 import { STOCK_TRACKED_SQL } from './stock-tracking';
+import { CashSessionService } from './cash-session-service';
+import { isSharedFloat } from '@/lib/settings/cash-server';
 
 export interface ReturnLineInput {
   line_index: number;
@@ -311,16 +313,21 @@ export class ReturnService {
       }
 
       // 9. Effets par mode de remboursement (un ou plusieurs, ex. espèces + CB).
-      // Session ouverte du poste (pour toute sortie espèces), résolue une fois.
+      // Session ouverte ACTUELLE (pour toute sortie espèces), résolue une fois
+      // et de façon cohérente avec le reste de la caisse : en fonds commun,
+      // c'est la session de la boutique (le poste courant a pu rejoindre le
+      // fonds d'un autre poste). Repli sur la session d'origine si aucune n'est
+      // ouverte.
       let cashSessionId: string | null = null;
       if (refundLines.some((r) => r.method === 'cash')) {
-        const openSess = await client.query<{ id: string }>(
-          `SELECT id FROM cash_sessions
-            WHERE register_id = $1 AND status = 'open'
-            ORDER BY opened_at DESC LIMIT 1`,
-          [sale.register_id],
-        );
-        cashSessionId = openSess.rows[0]?.id ?? sale.cash_session_id ?? null;
+        const shared = await isSharedFloat(args.organizationId, sale.store_id, client);
+        const openId = await CashSessionService.resolveOpenSessionId({
+          storeId: sale.store_id,
+          registerId: sale.register_id,
+          shared,
+          client,
+        });
+        cashSessionId = openId ?? sale.cash_session_id ?? null;
       }
       for (const rf of refundLines) {
         if (rf.amount <= 0) continue;

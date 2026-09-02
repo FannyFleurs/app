@@ -1,5 +1,7 @@
 import { withTransaction } from '@/lib/db/client';
 import { FiscalCore } from '@/lib/fiscal/core';
+import { CashSessionService } from './cash-session-service';
+import { isSharedFloat } from '@/lib/settings/cash-server';
 import {
   computeLine,
   computeTotals,
@@ -55,13 +57,19 @@ export class SaleService {
   /** Crée un panier brouillon. Une vente est rattachée à la session caisse ouverte. */
   static async createDraft(args: CreateDraftArgs): Promise<{ id: string }> {
     return withTransaction(async (client) => {
-      const session = await client.query<{ id: string }>(
-        `SELECT id FROM cash_sessions
-          WHERE register_id = $1 AND status = 'open'
-          ORDER BY opened_at DESC LIMIT 1`,
-        [args.registerId],
-      );
-      if (session.rowCount === 0) {
+      // Session ouverte qui fait foi pour ce poste, en tenant compte du fonds
+      // commun : en fonds commun c'est la session de la BOUTIQUE (ouverte par
+      // n'importe quel poste), sinon celle du poste. Résolue exactement comme à
+      // l'affichage de la caisse (GET /api/cash-sessions), pour qu'une caisse
+      // affichée « ouverte » ne refuse jamais la création d'une vente.
+      const shared = await isSharedFloat(args.organizationId, args.storeId, client);
+      const openSessionId = await CashSessionService.resolveOpenSessionId({
+        storeId: args.storeId,
+        registerId: args.registerId,
+        shared,
+        client,
+      });
+      if (!openSessionId) {
         const err = new Error('NO_OPEN_CASH_SESSION');
         (err as Error & { status?: number }).status = 400;
         throw err;
@@ -77,7 +85,7 @@ export class SaleService {
           args.organizationId,
           args.storeId,
           args.registerId,
-          session.rows[0]!.id,
+          openSessionId,
           args.userId,
           args.customerId ?? null,
           args.clientRef ?? null,
@@ -240,22 +248,27 @@ export class SaleService {
         [sale.cash_session_id],
       );
       if (!sess.rows[0] || sess.rows[0].status !== 'open') {
-        const reopen = await client.query<{ id: string }>(
-          `SELECT id FROM cash_sessions
-            WHERE register_id = $1 AND status = 'open'
-            ORDER BY opened_at DESC LIMIT 1`,
-          [sale.register_id],
-        );
-        if (!reopen.rows[0]) {
+        // Rattachement à la session ROUVERTE, résolue comme partout ailleurs
+        // (fonds commun => session de la boutique, sinon session du poste) :
+        // une caisse rouverte sur un autre poste de la même boutique doit
+        // pouvoir sceller ce brouillon.
+        const shared = await isSharedFloat(args.organizationId, sale.store_id, client);
+        const reopenId = await CashSessionService.resolveOpenSessionId({
+          storeId: sale.store_id,
+          registerId: sale.register_id,
+          shared,
+          client,
+        });
+        if (!reopenId) {
           const err = new Error('CASH_SESSION_CLOSED');
           (err as Error & { status?: number }).status = 409;
           throw err;
         }
         await client.query(
           `UPDATE sales SET cash_session_id = $1 WHERE id = $2`,
-          [reopen.rows[0].id, sale.id],
+          [reopenId, sale.id],
         );
-        sale.cash_session_id = reopen.rows[0].id;
+        sale.cash_session_id = reopenId;
       }
 
       const totalTtc = Number(sale.total_ttc);

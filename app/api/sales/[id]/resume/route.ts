@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { requirePermission } from '@/lib/auth/guards';
 import { parseJson, jsonError } from '@/lib/validation/api';
 import { query } from '@/lib/db/client';
+import { CashSessionService } from '@/lib/services/cash-session-service';
+import { isSharedFloat } from '@/lib/settings/cash-server';
 
 const schema = z.object({ register_id: z.string().uuid() });
 
@@ -43,13 +45,16 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   // Isolation boutique : on ne reprend un ticket QUE dans sa boutique.
   if (sale.rows[0]!.store_id !== registerStore) return jsonError('CROSS_STORE_FORBIDDEN', 403);
 
-  // Session de caisse ouverte du poste courant (le tiroir de CETTE caisse).
-  const sess = await query<{ id: string }>(
-    `SELECT id FROM cash_sessions WHERE register_id = $1 AND status = 'open'
-      ORDER BY opened_at DESC LIMIT 1`,
-    [registerId],
-  );
-  const sessionId = sess.rows[0]?.id ?? null;
+  // Session de caisse ouverte qui fait foi pour ce poste. En fonds commun,
+  // c'est la session de la BOUTIQUE (le poste courant a pu rejoindre le fonds
+  // d'un autre poste) : la résoudre par register_id seul rattacherait le ticket
+  // à « aucune » session, et l'encaissement échouerait ensuite.
+  const shared = await isSharedFloat(org, registerStore);
+  const sessionId = await CashSessionService.resolveOpenSessionId({
+    storeId: registerStore,
+    registerId,
+    shared,
+  });
 
   await query(
     `UPDATE sales

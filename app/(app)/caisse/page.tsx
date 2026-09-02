@@ -4,6 +4,8 @@ import { query } from '@/lib/db/client';
 import CashRegister from './CashRegister';
 import NoZoom from '@/components/NoZoom';
 import { userCan } from '@/lib/auth/permissions';
+import { CashSessionService } from '@/lib/services/cash-session-service';
+import { isSharedFloat } from '@/lib/settings/cash-server';
 import Link from 'next/link';
 import {
   mergeWithDefaults,
@@ -114,12 +116,17 @@ export default async function CaissePage() {
   const bound = deviceId ? registers.rows.find((r) => r.device_id === deviceId) : undefined;
   let initial: { deviceId: string; storeId: string; registerId: string; sessionId: string | null } | null = null;
   if (deviceId && bound) {
-    const sess = await query<{ id: string }>(
-      `SELECT id FROM cash_sessions WHERE register_id = $1 AND status = 'open'
-        ORDER BY opened_at DESC LIMIT 1`,
-      [bound.id],
-    );
-    initial = { deviceId, storeId: bound.store_id, registerId: bound.id, sessionId: sess.rows[0]?.id ?? null };
+    // Résolution IDENTIQUE au client (GET /api/cash-sessions) : en fonds commun
+    // la session ouverte de la boutique fait foi, quel que soit le poste qui l'a
+    // ouverte. Un seed par `register_id` seul afficherait « caisse fermée » sur
+    // un poste ayant rejoint le fonds d'un autre poste.
+    const shared = await isSharedFloat(user.organizationId, bound.store_id);
+    const sessionId = await CashSessionService.resolveOpenSessionId({
+      storeId: bound.store_id,
+      registerId: bound.id,
+      shared,
+    });
+    initial = { deviceId, storeId: bound.store_id, registerId: bound.id, sessionId };
   }
 
   return (

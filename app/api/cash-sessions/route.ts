@@ -5,15 +5,7 @@ import { userCan } from '@/lib/auth/permissions';
 import { parseJson, jsonError } from '@/lib/validation/api';
 import { CashSessionService } from '@/lib/services/cash-session-service';
 import { query } from '@/lib/db/client';
-import { CASH_KEY, mergeCashDefaults, type CashSettings } from '@/lib/settings/cash';
-import { loadScopedSettingValue } from '@/lib/settings/scoped-server';
-
-/** Mode « fonds commun » configuré pour cette boutique. */
-async function isSharedFloat(organizationId: string, storeId: string | null): Promise<boolean> {
-  if (!storeId) return false;
-  const value = await loadScopedSettingValue<CashSettings>(organizationId, CASH_KEY, storeId);
-  return mergeCashDefaults(value).shared_float;
-}
+import { isSharedFloat } from '@/lib/settings/cash-server';
 
 const openSchema = z.object({
   store_id: z.string().uuid(),

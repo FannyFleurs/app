@@ -227,6 +227,16 @@ export default function SalesAccountsSection(
         </div>
       )}
 
+      {/* Tout ce qui s'est vendu a un compte : on félicite plutôt que de laisser
+          un vide qui se lit comme « rien à faire ? ou rien chargé ? ». */}
+      {crossings !== null && crossings.length > 0 && manquants.length === 0 && (
+        <div className="card p-4">
+          <p className="text-sm text-ink-soft">
+            Les croisements vendus ont tous un compte.
+          </p>
+        </div>
+      )}
+
       {loading ? (
         <div className="text-ink-soft text-sm">Chargement…</div>
       ) : visible.length === 0 ? (
