@@ -330,6 +330,11 @@ export default function CashRegister({
   // une fois le storeId connu — chaque boutique active/désactive la commande
   // différée indépendamment.
   const [deferredEnabled, setDeferredEnabled] = useState(deferredOrdersEnabled);
+  // « Écran & Livraison » réellement RÉSOLU pour cette boutique ? Le poste
+  // appairé est déjà seedé côté serveur à la valeur de SA boutique (donc
+  // résolu) ; sinon on attend la confirmation avant d'afficher le bouton, pour
+  // qu'il n'apparaisse JAMAIS puis disparaisse quand l'option est décochée.
+  const [deferredResolved, setDeferredResolved] = useState<boolean>(!!initial);
 
   // Charge produits + catégories + réglage écran/livraison (re-fetch a chaque
   // changement de boutique — la portee par boutique peut varier).
@@ -365,6 +370,9 @@ export default function CashRegister({
         setCategories(freshCategories);
       }
       if (sdRes.ok) setDeferredEnabled(Boolean((await sdRes.json()).settings?.enabled));
+      // Valeur confirmée pour cette boutique : le bouton peut désormais refléter
+      // l'état réel (affiché si activé, définitivement masqué sinon).
+      setDeferredResolved(true);
       // Met le cache à jour avec les données fraîches.
       if (freshProducts && freshCategories) {
         writeCatalogCache(storeId, { products: freshProducts, categories: freshCategories });
@@ -2004,7 +2012,7 @@ export default function CashRegister({
         </div>
 
         <div className="p-2.5 border-t border-border space-y-2">
-          {deferredEnabled && (
+          {deferredEnabled && deferredResolved && (
             <button
               disabled={lines.length === 0 || totals.ttc <= 0}
               className="btn-soft w-full h-12 text-base font-semibold"
