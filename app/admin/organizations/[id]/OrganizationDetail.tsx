@@ -143,6 +143,8 @@ export default function OrganizationDetail({ id, planNames }: { id: string; plan
 
       <BoundRegisters id={o.id} version={version} />
 
+      <OrderIntegrationPanel id={o.id} />
+
       <OrgUsers id={o.id} />
 
       <section>
@@ -274,6 +276,180 @@ function SupportAccessPanel({ id }: { id: string }) {
       )}
 
       {msg && <div className="rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{msg}</div>}
+    </section>
+  );
+}
+
+function OrderIntegrationPanel({ id }: { id: string }) {
+  const [loaded, setLoaded] = useState(false);
+  const [enabled, setEnabled] = useState(false);
+  const [tokenSet, setTokenSet] = useState(false);
+  const [tokenHint, setTokenHint] = useState<string | null>(null);
+  const [callbackUrl, setCallbackUrl] = useState('');
+  const [callbackSecretSet, setCallbackSecretSet] = useState(false);
+  const [stores, setStores] = useState<{ id: string; name: string }[]>([]);
+  const [labels, setLabels] = useState<Record<string, string>>({});
+  const [revealToken, setRevealToken] = useState<string | null>(null);
+  const [revealSecret, setRevealSecret] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  const load = useCallback(async () => {
+    const r = await fetch(`/api/admin/organizations/${id}/order-integration`);
+    if (!r.ok) { setError('Chargement impossible.'); setLoaded(true); return; }
+    const j = await r.json();
+    const integ = j.integration;
+    setEnabled(integ.enabled);
+    setTokenSet(integ.token_set);
+    setTokenHint(integ.token_hint);
+    setCallbackUrl(integ.callback_url ?? '');
+    setCallbackSecretSet(integ.callback_secret_set);
+    setStores(j.stores);
+    const inv: Record<string, string> = {};
+    for (const [label, storeId] of Object.entries(integ.boutique_map as Record<string, string>)) {
+      inv[storeId] = label;
+    }
+    const initLabels: Record<string, string> = {};
+    for (const s of j.stores as { id: string; name: string }[]) initLabels[s.id] = inv[s.id] ?? '';
+    setLabels(initLabels);
+    setLoaded(true);
+  }, [id]);
+  useEffect(() => { void load(); }, [load]);
+
+  async function call(body: Record<string, unknown>, tag: string) {
+    setBusy(tag); setError(null); setSaved(false);
+    const r = await fetch(`/api/admin/organizations/${id}/order-integration`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    setBusy(null);
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { setError(j.message ?? j.error ?? 'Erreur'); return null; }
+    return j;
+  }
+
+  async function save() {
+    const boutique_map: Record<string, string> = {};
+    for (const s of stores) { const l = (labels[s.id] ?? '').trim(); if (l) boutique_map[l] = s.id; }
+    const j = await call({ action: 'update', enabled, callback_url: callbackUrl.trim() || null, boutique_map }, 'save');
+    if (j) { setSaved(true); void load(); }
+  }
+  async function rotateToken() {
+    if (!(await confirmThemed({ message: "Générer un nouveau jeton ? L'ancien cessera de fonctionner." }))) return;
+    const j = await call({ action: 'rotate_token' }, 'token');
+    if (j?.token) { setRevealToken(j.token); setTokenSet(true); }
+  }
+  async function genSecret() {
+    const j = await call({ action: 'set_callback_secret' }, 'secret');
+    if (j?.secret) { setRevealSecret(j.secret); setCallbackSecretSet(true); }
+  }
+  async function clearSecret() {
+    const j = await call({ action: 'clear_callback_secret' }, 'clearsecret');
+    if (j) { setRevealSecret(null); setCallbackSecretSet(false); }
+  }
+
+  if (!loaded) {
+    return (
+      <section className="card p-5">
+        <h3 className="font-semibold">Intégration Commande</h3>
+        <p className="text-sm text-ink-soft mt-2">Chargement…</p>
+      </section>
+    );
+  }
+
+  const endpoint = typeof window !== 'undefined'
+    ? `${window.location.origin}/api/orders/incoming`
+    : '/api/orders/incoming';
+
+  return (
+    <section className="card p-5 space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h3 className="font-semibold">Intégration Commande (app externe)</h3>
+          <p className="text-xs text-ink-soft mt-0.5">
+            Reçoit des commandes en ventes « En attente », et signale « Payé » après encaissement.
+          </p>
+        </div>
+        <label className="flex items-center gap-2 text-sm whitespace-nowrap">
+          <input type="checkbox" className="h-4 w-4" checked={enabled}
+                 onChange={(e) => setEnabled(e.target.checked)} />
+          Activée
+        </label>
+      </div>
+
+      <div className="rounded-xl border border-border p-3 space-y-2">
+        <div className="text-sm font-medium">Endpoint entrant</div>
+        <code className="block text-xs bg-gray-50 rounded px-2 py-1 break-all">POST {endpoint}</code>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-ink-soft">
+            Jeton : {tokenSet ? `défini (…${tokenHint})` : 'aucun'}
+          </span>
+          <button onClick={() => void rotateToken()} disabled={busy !== null} className="btn-soft text-xs">
+            {tokenSet ? 'Régénérer' : 'Générer'} le jeton
+          </button>
+        </div>
+        {revealToken && (
+          <div className="rounded-lg bg-warning/10 p-2">
+            <div className="text-[11px] text-ink-soft mb-1">Copie ce jeton maintenant, il ne sera plus affiché :</div>
+            <code className="block text-xs bg-white border border-border rounded px-2 py-1 break-all select-all">{revealToken}</code>
+          </div>
+        )}
+        <p className="text-[11px] text-ink-soft">
+          L&apos;app commande l&apos;envoie en en-tête <code>Authorization: Bearer …</code> (ou <code>X-Order-Token</code>).
+        </p>
+      </div>
+
+      <div className="rounded-xl border border-border p-3 space-y-2">
+        <div className="text-sm font-medium">Correspondance boutiques</div>
+        <p className="text-[11px] text-ink-soft">
+          Pour chaque boutique HelloPos, le libellé exact envoyé par l&apos;app commande. Vide = ignorée.
+        </p>
+        <div className="space-y-2">
+          {stores.map((s) => (
+            <div key={s.id} className="flex items-center gap-2">
+              <span className="text-sm w-40 shrink-0 truncate">{s.name}</span>
+              <input className="input h-9 text-sm flex-1" placeholder="Libellé côté app commande"
+                     value={labels[s.id] ?? ''}
+                     onChange={(e) => setLabels((m) => ({ ...m, [s.id]: e.target.value }))} />
+            </div>
+          ))}
+          {stores.length === 0 && <p className="text-xs text-ink-soft">Aucune boutique active.</p>}
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-border p-3 space-y-2">
+        <div className="text-sm font-medium">Rappel « Payé » (callback)</div>
+        <input className="input h-9 text-sm" placeholder="https://… (URL appelée après encaissement)"
+               value={callbackUrl} onChange={(e) => setCallbackUrl(e.target.value)} />
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-ink-soft">Secret de signature : {callbackSecretSet ? 'défini' : 'aucun'}</span>
+          <button onClick={() => void genSecret()} disabled={busy !== null} className="btn-soft text-xs">
+            {callbackSecretSet ? 'Régénérer' : 'Générer'} le secret
+          </button>
+          {callbackSecretSet && (
+            <button onClick={() => void clearSecret()} disabled={busy !== null} className="btn-ghost text-xs text-danger">
+              Supprimer
+            </button>
+          )}
+        </div>
+        {revealSecret && (
+          <div className="rounded-lg bg-warning/10 p-2">
+            <div className="text-[11px] text-ink-soft mb-1">Copie ce secret maintenant (à renseigner côté app commande) :</div>
+            <code className="block text-xs bg-white border border-border rounded px-2 py-1 break-all select-all">{revealSecret}</code>
+          </div>
+        )}
+        <p className="text-[11px] text-ink-soft">
+          HelloPos signe le corps en HMAC-SHA256 (en-tête <code>X-HelloPos-Signature</code>).
+        </p>
+      </div>
+
+      {error && <div className="rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
+      <div className="flex items-center gap-3">
+        <button onClick={() => void save()} disabled={busy !== null} className="btn-primary text-sm">
+          {busy === 'save' ? 'Enregistrement…' : 'Enregistrer'}
+        </button>
+        {saved && <span className="text-xs text-success">Enregistré.</span>}
+      </div>
     </section>
   );
 }

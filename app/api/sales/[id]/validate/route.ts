@@ -10,6 +10,7 @@ import { autoSendReceiptIfEnabled } from '@/lib/email/auto-send';
 import { resolveReceiptPrinter, enqueueJob } from '@/lib/services/cloudprnt/queue';
 import { buildDrawerKickStarPrnt, STARPRNT_CONTENT_TYPE } from '@/lib/services/cloudprnt/receipt-star';
 import { enqueueGiftCardPrint, NoReceiptPrinterError as GiftCardNoPrinter } from '@/lib/services/cloudprnt/print-gift-card';
+import { notifyOrderPaidIfNeeded } from '@/lib/orders/notify-paid';
 
 const paymentSchema = z.object({
   method: z.enum(['cash','card','check','transfer','gift_card','credit_note','deferred','other','payment_link']),
@@ -121,6 +122,15 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         if (!(err instanceof GiftCardNoPrinter)) console.error('[giftcard.print.after_sale]', err);
       }
     }
+
+    // Commande entrante : signale « Payé » à l'app externe (best-effort, ne
+    // fait rien pour une vente ordinaire ni sans intégration configurée).
+    await notifyOrderPaidIfNeeded({
+      organizationId: g.user.organizationId,
+      saleId: out.saleId,
+      receiptNumber: out.receiptNumber,
+      totalTtc: Number((out.snapshot as { totals?: { total_ttc?: number } })?.totals?.total_ttc ?? 0),
+    });
 
     return NextResponse.json({
       sale_id: out.saleId,

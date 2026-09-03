@@ -60,10 +60,11 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     `UPDATE sales
         SET register_id = $1,
             cash_session_id = COALESCE($2, cash_session_id),
+            user_id = $5,
             status = 'draft',
             updated_at = now()
       WHERE id = $3 AND organization_id = $4`,
-    [registerId, sessionId, params.id, org],
+    [registerId, sessionId, params.id, org, g.user.id],
   );
   return NextResponse.json({ ok: true });
 }
