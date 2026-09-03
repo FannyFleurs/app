@@ -877,7 +877,10 @@ export class SaleService {
   static async listHeld(organizationId: string, storeId: string) {
     const { rows } = await withTransaction(async (client: PoolClient) =>
       client.query(
-        `SELECT id, held_label, total_ttc, created_at
+        // delivery_info lu via to_jsonb : ne casse pas la liste si la colonne
+        // (migration 0019) n'est pas présente sur une organisation ancienne.
+        `SELECT id, held_label, total_ttc, created_at,
+                to_jsonb(sales) -> 'delivery_info' AS delivery_info
            FROM sales
           WHERE organization_id = $1 AND store_id = $2 AND status = 'on_hold'
           ORDER BY created_at DESC`,
