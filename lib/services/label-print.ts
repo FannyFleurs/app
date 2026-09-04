@@ -1,4 +1,4 @@
-import { ean13Svg } from './barcode';
+import { barcodeSvg } from './barcode';
 import { type LabelSettings, LABEL_DEFAULTS } from '@/lib/settings/label';
 import { computeLabelLayout, barcodeSvgSize } from './label-layout';
 import { type LabelProduct, discountedPrice } from './label-print-core';
@@ -27,7 +27,7 @@ export function oneLabelHtml(p: LabelProduct, s: LabelSettings): string {
   for (const b of layout.blocks) {
     const box = `left:${b.xMm}mm;top:${b.yMm}mm;width:${b.wMm}mm;`;
     if (b.kind === 'barcode') {
-      const svg = p.barcode ? ean13Svg(p.barcode, barcodeSvgSize(b)) : null;
+      const svg = p.barcode ? barcodeSvg(p.barcode, barcodeSvgSize(b)) : null;
       const inner = svg
         ? svg.replace('<svg', '<svg preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;display:block"')
         : `<span style="font-family:monospace;font-size:${b.fontMm * 1.6}mm">${escapeHtml(p.barcode ?? '—')}</span>`;

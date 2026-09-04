@@ -147,13 +147,22 @@ async function drawBarcode(
   const barsH = toPxY(b.hMm);
   const digitsPx = Math.max(6, Math.round(toPxY(b.fontMm)));
 
-  if (!p.barcode) return;
+  const raw = String(p.barcode ?? '').trim();
+  if (!raw) return;
 
-  if (!isValidEan13(p.barcode)) {
-    // Code non normalisé : on imprime la valeur telle quelle, centrée, plutôt
-    // qu'un symbole que rien ne saura relire.
-    drawCenteredLine(ctx, p.barcode, boxX, boxW, boxY + barsH * 0.6, Math.round(barsH * 0.5), false);
-    return;
+  // Choix du symbole : EAN-13 valide -> ean13 ; UPC-A (12 chiffres) -> ean13
+  // avec 0 en tête ; tout le reste (EAN-8, SKU, checksum divergent…) -> code128,
+  // universel et scannable, plutôt qu'un simple texte illisible au scanner.
+  let bcid = 'code128';
+  let text = raw;
+  // Un EAN-13 fait 113 modules ; le code128 est plus étroit à contenu égal, mais
+  // on garde ce dénominateur comme borne haute prudente pour la largeur de module.
+  let widthModules = 113;
+  if (isValidEan13(raw)) {
+    bcid = 'ean13';
+  } else if (/^\d{12}$/.test(raw) && isValidEan13(`0${raw}`)) {
+    bcid = 'ean13';
+    text = `0${raw}`;
   }
 
   // Conversion d'unités, sans laquelle rien ne tombe juste : bwip travaille en
@@ -162,10 +171,14 @@ async function drawBarcode(
   // POINTS. Une hauteur passée en pixels donnait des chiffres démesurés qui
   // chevauchaient les barres.
   const BWIP_PX_PER_MM = 72 / 25.4;
-  // Un EAN-13 fait 113 modules de large, marges de silence comprises.
-  const modulePx = Math.max(1, Math.floor(boxW / 113));
+  if (bcid === 'code128') {
+    // Largeur d'un code128 : 11 modules par symbole + 35 (start, checksum, stop,
+    // barre finale). On dimensionne le module pour tenir dans la boîte.
+    widthModules = 11 * (text.length + 3) + 2;
+  }
+  const modulePx = Math.max(1, Math.floor(boxW / widthModules));
   const bcPng: Buffer = await bwip.toBuffer({
-    bcid: 'ean13', text: p.barcode,
+    bcid, text,
     scale: modulePx,
     height: Math.max(2, barsH / (modulePx * BWIP_PX_PER_MM)),
     includetext: true,
