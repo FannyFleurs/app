@@ -1,6 +1,6 @@
 'use client';
 
-import { ean13Svg } from '@/lib/services/barcode';
+import { barcodeSvg } from '@/lib/services/barcode';
 import { computeLabelLayout, barcodeSvgSize, type LabelBlock } from '@/lib/services/label-layout';
 import { type LabelProduct } from '@/lib/services/label-print-core';
 import {
@@ -66,7 +66,7 @@ export function LabelPreview({ settings, product = SAMPLE, widthPx = 340 }: {
           fontFamily: 'LabelPrint, Arial, Helvetica, sans-serif',
         };
         if (b.kind === 'barcode') {
-          const bcSvg = product.barcode ? ean13Svg(product.barcode, barcodeSvgSize(b as LabelBlock)) : null;
+          const bcSvg = product.barcode ? barcodeSvg(product.barcode, barcodeSvgSize(b as LabelBlock)) : null;
           return (
             <div
               key={i}
