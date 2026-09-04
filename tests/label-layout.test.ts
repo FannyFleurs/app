@@ -29,15 +29,19 @@ const settings = (over: Partial<LabelSettings> = {}): LabelSettings => ({
 const bottom = (b: { yMm: number; hMm: number }) => b.yMm + b.hMm;
 
 describe('Composition', () => {
-  it("place le nom tout en haut, avant le prix et le code-barres", () => {
-    const { blocks } = computeLabelLayout(LONG, settings({ show_sku: true }));
-    const order = blocks.map((b) => b.kind);
-    expect(order[0]).toBe('name');
-    expect(order.indexOf('name')).toBeLessThan(order.indexOf('price'));
-    expect(order.indexOf('price')).toBeLessThan(order.indexOf('barcode'));
+  it("place le nom en haut, puis code-barres à gauche et prix à droite", () => {
+    const { blocks, marginMm } = computeLabelLayout(LONG, settings({ show_sku: true }));
+    expect(blocks[0]!.kind).toBe('name');
 
     const name = blocks.find((b) => b.kind === 'name')!;
-    const { marginMm } = computeLabelLayout(LONG, settings());
+    const price = blocks.find((b) => b.kind === 'price')!;
+    const barcode = blocks.find((b) => b.kind === 'barcode')!;
+    // Nom tout en haut : le prix et le code-barres sont sous lui…
+    expect(name.yMm).toBeLessThan(price.yMm);
+    expect(name.yMm).toBeLessThan(barcode.yMm);
+    // …et partagent la bande basse : code-barres à GAUCHE, prix à DROITE.
+    expect(barcode.xMm).toBeLessThan(price.xMm);
+
     // « En haut » veut dire contre la marge, pas « quelque part au-dessus ».
     expect(name.yMm).toBeCloseTo(marginMm, 5);
   });
@@ -87,9 +91,9 @@ describe('Adaptation au format', () => {
     const prix = (r: typeof petite) => r.blocks.find((b) => b.kind === 'price')!.fontMm;
 
     expect(prix(grande)).toBeGreaterThan(prix(petite));
-    // Sur la plus petite étiquette du catalogue, le prix reste substantiel :
-    // au moins un cinquième de la hauteur.
-    expect(prix(petite)).toBeGreaterThan(25 * 0.2);
+    // Le prix partage désormais la bande basse avec le code-barres (colonne de
+    // droite) : plus compact qu'en pleine largeur, mais il doit rester lisible.
+    expect(prix(petite)).toBeGreaterThan(2);
   });
 
   it('occupe une part comparable de la hauteur quel que soit le format', () => {
@@ -146,20 +150,32 @@ describe('Tenue dans les bords', () => {
     }
   });
 
-  it('n\'empile jamais deux blocs l\'un sur l\'autre', () => {
-    // Balaie les combinaisons, dont « nom long + remise » : c'est celle qui
-    // faisait chevaucher le nom et l'ancien prix dans l'aperçu.
+  it('ne superpose jamais deux blocs (aire commune nulle)', () => {
+    // Le code-barres (gauche) et le prix (droite) partagent la bande basse :
+    // ils se recouvrent donc en Y, mais JAMAIS en aire — on vérifie l'absence
+    // de chevauchement rectangle à rectangle, pas un simple empilement vertical.
+    // Balaie « nom long + remise », le cas qui faisait chevaucher nom et prix.
     const remisé: LabelProduct = { ...LONG, discount_type: 'percent', discount_value: 10 };
+    const EPS = 0.01;
     for (const f of LABEL_SIZE_PRESETS) {
       for (const p of [SHORT, LONG, remisé]) {
         for (const sku of [false, true]) {
           const r = computeLabelLayout(p, settings({ width_mm: f.w, height_mm: f.h, show_sku: sku }));
-          const tries = [...r.blocks].sort((a, b) => a.yMm - b.yMm);
-          for (let i = 1; i < tries.length; i++) {
-            const prec = tries[i - 1]!;
-            const hautPrec = prec.kind === 'barcode' ? bottom(prec) + prec.fontMm * 1.25 : bottom(prec);
-            expect.soft(tries[i]!.yMm, `${f.w}×${f.h} ${prec.kind}→${tries[i]!.kind}`)
-              .toBeGreaterThanOrEqual(hautPrec - 0.01);
+          const rects = r.blocks.map((b) => ({
+            kind: b.kind,
+            x0: b.xMm, x1: b.xMm + b.wMm,
+            y0: b.yMm,
+            // Le symbole réserve la place de ses chiffres sous les barres.
+            y1: b.kind === 'barcode' ? b.yMm + b.hMm + b.fontMm * 1.25 : b.yMm + b.hMm,
+          }));
+          for (let i = 0; i < rects.length; i++) {
+            for (let j = i + 1; j < rects.length; j++) {
+              const a = rects[i]!, b = rects[j]!;
+              const chevX = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0);
+              const chevY = Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0);
+              const superposé = chevX > EPS && chevY > EPS;
+              expect.soft(superposé, `${f.w}×${f.h} ${a.kind}∩${b.kind}`).toBe(false);
+            }
           }
         }
       }

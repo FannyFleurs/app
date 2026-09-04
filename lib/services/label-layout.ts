@@ -276,54 +276,67 @@ export function computeLabelLayout(p: LabelProduct, s: LabelSettings, shiftMm = 
     consume(used);
   }
 
-  /* --- Prix : l'information la plus grosse, centrée. --- */
-  if (hasPrice) {
-    const h = takeBand('price');
-    const oldH = disc != null ? h * 0.30 : 0;
-    if (disc != null) {
-      const oldFit = fitText(formatEUR(p.sale_price_ttc), usableW, oldH, false, 1, Math.min(oldH, usableH * 0.11));
+  /* --- Bande basse : code-barres à GAUCHE, prix à DROITE (sur une même
+     ligne). Le nom reste en haut pleine largeur. Si un seul des deux est
+     présent, il occupe toute la largeur (centré), comme avant. --- */
+  if (hasPrice || hasBarcode) {
+    const bandY = y;
+    const bandH = restH;                         // tout le reste de la hauteur
+    const twoCols = hasPrice && hasBarcode;
+    const gap = twoCols ? Math.min(2, usableW * 0.05) : 0;
+    // Le symbole (que la douchette cherche) garde la plus grande part.
+    const priceColW = twoCols ? usableW * 0.36 : usableW;
+    const barcodeColW = twoCols ? usableW - priceColW - gap : usableW;
+    const barcodeColX = xLeft;
+    const priceColX = twoCols ? xLeft + barcodeColW + gap : xLeft;
+
+    /* Code-barres (colonne gauche), centré verticalement dans la bande. */
+    if (hasBarcode) {
+      // Les chiffres sous les barres appartiennent au symbole : on leur réserve
+      // leur place ici plutôt que de laisser le générateur rogner les barres.
+      const digitsMm = Math.min(2.4, Math.max(1.5, bandH * 0.22));
+      const barsH = Math.max(3, bandH - digitsMm * 1.25 - 0.3);
+      const barsW = Math.min(barcodeColW, barcodeColW * emph('barcode'));
+      const used = barsH + digitsMm * 1.25;
       blocks.push({
-        kind: 'price-old', lines: oldFit.lines,
-        xMm: xLeft, yMm: y, wMm: usableW, hMm: oldFit.fontMm * LINE_HEIGHT,
-        fontMm: oldFit.fontMm, bold: false, strike: true,
+        kind: 'barcode', lines: [],
+        xMm: barcodeColX + (barcodeColW - barsW) / 2,
+        yMm: bandY + Math.max(0, (bandH - used) / 2),
+        wMm: barsW, hMm: barsH, fontMm: digitsMm, bold: false,
       });
     }
-    const mainH = h - oldH;
-    const text = formatEUR(disc ?? p.sale_price_ttc);
-    const fit = fitText(text, usableW, mainH, true, 1, Math.min(mainH * 0.92, usableH * 0.42) * emph('price'));
-    const used = fit.fontMm * LINE_HEIGHT;
-    blocks.push({
-      kind: 'price', lines: fit.lines,
-      // Centré dans sa bande. Calé en haut, il laissait sous lui un vide que
-      // l'œil lit comme « le prix est trop haut, le code-barres trop bas ».
-      xMm: xLeft, yMm: y + oldH + Math.max(0, (mainH - used) / 2),
-      wMm: usableW, hMm: used,
-      fontMm: fit.fontMm, bold: true,
-    });
-    y += h;
-    consume(h);
-  }
 
-  /* --- Code-barres, en bas : c'est là que la douchette le cherche. --- */
-  if (hasBarcode) {
-    const h = takeBand('barcode');
-    // Les chiffres sous les barres appartiennent au symbole : on leur réserve
-    // leur place ici plutôt que de laisser le générateur rogner les barres.
-    const digitsMm = Math.min(2.4, Math.max(1.5, h * 0.22));
-    // La place réservée aux chiffres doit inclure leur interligne, sinon le
-    // symbole complet dépasse la bande de la hauteur qu'on croyait garder.
-    const barsH = Math.max(3, h - digitsMm * 1.25 - 0.3);
-    const barsW = Math.min(usableW, usableW * emph('barcode'));
-    const used = barsH + digitsMm * 1.25;
-    blocks.push({
-      kind: 'barcode', lines: [],
-      xMm: xLeft + (usableW - barsW) / 2,
-      // Centré lui aussi : le coller en haut de sa bande le décollait du prix
-      // sans pour autant l'éloigner du bord de fuite.
-      yMm: y + Math.max(0, (h - used) / 2),
-      wMm: barsW, hMm: barsH, fontMm: digitsMm, bold: false,
-    });
-    y += h;
+    /* Prix (colonne droite), centré verticalement dans la bande. La largeur de
+       colonne borne la taille : fitText réduit la police pour tenir. */
+    if (hasPrice) {
+      const text = formatEUR(disc ?? p.sale_price_ttc);
+      const mainCap = Math.min(bandH * 0.6, usableH * 0.42) * emph('price');
+      const fit = fitText(text, priceColW, bandH, true, 1, mainCap);
+      const mainUsed = fit.fontMm * LINE_HEIGHT;
+      let oldFit: ReturnType<typeof fitText> | null = null;
+      let oldUsed = 0;
+      if (disc != null) {
+        oldFit = fitText(
+          formatEUR(p.sale_price_ttc), priceColW, bandH * 0.3, false, 1,
+          Math.min(bandH * 0.22, usableH * 0.11),
+        );
+        oldUsed = oldFit.fontMm * LINE_HEIGHT;
+      }
+      const groupTop = bandY + Math.max(0, (bandH - (mainUsed + oldUsed)) / 2);
+      if (oldFit) {
+        blocks.push({
+          kind: 'price-old', lines: oldFit.lines,
+          xMm: priceColX, yMm: groupTop, wMm: priceColW, hMm: oldUsed,
+          fontMm: oldFit.fontMm, bold: false, strike: true,
+        });
+      }
+      blocks.push({
+        kind: 'price', lines: fit.lines,
+        xMm: priceColX, yMm: groupTop + oldUsed, wMm: priceColW, hMm: mainUsed,
+        fontMm: fit.fontMm, bold: true,
+      });
+    }
+    y += bandH;
   }
 
   return { widthMm: W, heightMm: H, marginMm: margin, marginBottomMm: marginBottom, blocks };
