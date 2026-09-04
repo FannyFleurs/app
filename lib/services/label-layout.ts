@@ -290,18 +290,23 @@ export function computeLabelLayout(p: LabelProduct, s: LabelSettings, shiftMm = 
     const barcodeColX = xLeft;
     const priceColX = twoCols ? xLeft + barcodeColW + gap : xLeft;
 
-    /* Code-barres (colonne gauche), centré verticalement dans la bande. */
+    /* Code-barres (colonne gauche), aligné en BAS de la bande utile. */
     if (hasBarcode) {
       // Les chiffres sous les barres appartiennent au symbole : on leur réserve
       // leur place ici plutôt que de laisser le générateur rogner les barres.
       const digitsMm = Math.min(2.4, Math.max(1.5, bandH * 0.22));
-      const barsH = Math.max(3, bandH - digitsMm * 1.25 - 0.3);
+      const fullBarsH = Math.max(3, bandH - digitsMm * 1.25 - 0.3);
+      // Hauteur des barres réduite de 25 % (largeur inchangée) : le symbole est
+      // plus bas, et une marge apparaît entre le nom et le code-barres.
+      const barsH = Math.max(2, fullBarsH * 0.75);
       const barsW = Math.min(barcodeColW, barcodeColW * emph('barcode'));
       const used = barsH + digitsMm * 1.25;
       blocks.push({
         kind: 'barcode', lines: [],
         xMm: barcodeColX + (barcodeColW - barsW) / 2,
-        yMm: bandY + Math.max(0, (bandH - used) / 2),
+        // Bas de la bande utile : les chiffres restent au-dessus de la marge de
+        // fuite (là où l'entraînement du média rogne), pas contre le bord.
+        yMm: bandY + bandH - used,
         wMm: barsW, hMm: barsH, fontMm: digitsMm, bold: false,
       });
     }
