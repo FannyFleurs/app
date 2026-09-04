@@ -42,6 +42,13 @@ const TYPE_LABEL: Record<string, string> = {
   association: 'Association',
 };
 
+function formatPhone(phone: string | null | undefined) {
+  if (!phone) return '—';
+  const digits = phone.replace(/\D/g, '');
+  if (digits.length !== 10) return phone;
+  return digits.replace(/(\d{2})(?=\d)/g, '$1 ');
+}
+
 interface CustomerDetail {
   customer: {
     id: string; type: string;
@@ -255,8 +262,8 @@ export default function CustomersList({ customers: initialCustomers, total, canW
               <div className="divide-y divide-border">
                 {filtered.map((c) => {
                   const isActive = c.id === selectedId;
-                  const subline =
-                    c.email ?? c.phone ?? (c.company_name ?? '—');
+    const subline =
+      c.email ?? (c.phone ? formatPhone(c.phone) : null) ?? (c.company_name ?? '—');
                   return (
                     <button
                       key={c.id}
@@ -535,7 +542,7 @@ function CustomerDetailContent({ tab, onTabChange, detail, canWrite, onEdit, onR
             <dl className="grid grid-cols-2 gap-3 text-sm">
               <Item label="Type" value={TYPE_LABEL[c.type] ?? c.type} />
               <Item label="Email" value={c.email ?? '—'} />
-              <Item label="Téléphone" value={c.phone ?? '—'} />
+              <Item label="Téléphone" value={formatPhone(c.phone)} />
               <Item label="Code fidélité" value={c.loyalty_code ?? '—'} />
               {c.type !== 'particulier' && (
                 <>
