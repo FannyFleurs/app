@@ -28,6 +28,8 @@ interface Sale {
   fiscal_hash: string;
   cashier: string;
   customer: string | null;
+  /** Le compte client a été créé lors de cette vente (pas préexistant). */
+  account_created_at_sale?: boolean;
 }
 
 interface SaleDetail {
@@ -766,7 +768,21 @@ function ListeVentesModal({ ventes, chargement, dateLabel, onFermer, onChoisir }
                         })}
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-ink-soft">{s.customer ?? '—'}</td>
+                    <td className="px-4 py-3 text-ink-soft">
+                      {s.customer ? (
+                        <span className="inline-flex items-center gap-1.5">
+                          <span>{s.customer}</span>
+                          {s.account_created_at_sale && (
+                            <span
+                              className="rounded-full bg-[color:var(--primary-soft)] text-[color:var(--primary-deep)] text-[10px] font-semibold px-1.5 py-0.5 uppercase tracking-wide"
+                              title="Compte client créé lors de cette vente"
+                            >
+                              Nouveau
+                            </span>
+                          )}
+                        </span>
+                      ) : '—'}
+                    </td>
                     <td className="px-4 py-3 text-ink-soft">{s.cashier}</td>
                     <td className={`px-4 py-3 text-right font-medium ${
                       s.status === 'cancelled_by_credit_note' ? 'line-through text-ink-soft' : ''
