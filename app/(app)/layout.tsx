@@ -97,18 +97,44 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   );
 
   // Page « Commandes » : visible seulement si l'option « Écran & Livraison »
-  // est active. Au back-office on prend le réglage au niveau organisation ; en
-  // caisse, celui de la boutique du poste appairé (repli organisation). Si
-  // l'option est décochée, on masque /orders du menu (sidebar + « Toutes les
-  // pages ») en l'ajoutant aux chemins masqués.
+  // est active. Le réglage est PAR BOUTIQUE (repli organisation). En caisse, on
+  // regarde la boutique du poste appairé ; au back-office (pas de boutique
+  // courante), on l'affiche dès qu'AU MOINS UNE boutique l'a activée. Si aucune
+  // ne l'a, on masque /orders du menu (sidebar + « Toutes les pages »).
   const hiddenPaths = [...(ui.hidden_sidebar_paths ?? [])];
-  const sdStoreId = backOffice ? null : await resolveDeviceStoreId(user.organizationId);
-  const screenDelivery = mergeScreenDeliveryDefaults(
-    await loadScopedSettingValue<ScreenDeliverySettings>(
-      user.organizationId, SCREEN_DELIVERY_KEY, sdStoreId,
-    ),
-  );
-  if (!screenDelivery.enabled && !hiddenPaths.includes('/orders')) {
+  let screenDeliveryActive: boolean;
+  if (backOffice) {
+    const [storesRes, sdRows] = await Promise.all([
+      query<{ id: string }>(
+        `SELECT id FROM stores WHERE organization_id = $1 AND is_active = TRUE`,
+        [user.organizationId],
+      ),
+      query<{ key: string; value: Partial<ScreenDeliverySettings> }>(
+        `SELECT key, value FROM settings
+          WHERE organization_id = $1 AND key LIKE 'screen_delivery%'`,
+        [user.organizationId],
+      ),
+    ]);
+    const orgVal = sdRows.rows.find((r) => r.key === SCREEN_DELIVERY_KEY)?.value ?? null;
+    const byStore = new Map(
+      sdRows.rows
+        .filter((r) => r.key.startsWith(`${SCREEN_DELIVERY_KEY}:`))
+        .map((r) => [r.key.slice(SCREEN_DELIVERY_KEY.length + 1), r.value]),
+    );
+    // Une boutique est « active » selon son réglage propre, sinon le repli org.
+    screenDeliveryActive = storesRes.rows.length === 0
+      ? mergeScreenDeliveryDefaults(orgVal).enabled
+      : storesRes.rows.some((s) =>
+          mergeScreenDeliveryDefaults(byStore.get(s.id) ?? orgVal).enabled);
+  } else {
+    const storeId = await resolveDeviceStoreId(user.organizationId);
+    screenDeliveryActive = mergeScreenDeliveryDefaults(
+      await loadScopedSettingValue<ScreenDeliverySettings>(
+        user.organizationId, SCREEN_DELIVERY_KEY, storeId,
+      ),
+    ).enabled;
+  }
+  if (!screenDeliveryActive && !hiddenPaths.includes('/orders')) {
     hiddenPaths.push('/orders');
   }
 
