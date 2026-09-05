@@ -1,9 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { SCREEN_DELIVERY_DEFAULTS, type ScreenDeliverySettings } from '@/lib/settings/screen-delivery';
 
 export default function ScreenDeliveryForm({ canEdit }: { canEdit: boolean }) {
+  const router = useRouter();
   const [s, setS] = useState<ScreenDeliverySettings>(SCREEN_DELIVERY_DEFAULTS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -42,6 +44,10 @@ export default function ScreenDeliveryForm({ canEdit }: { canEdit: boolean }) {
     }
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
+    // Le menu (« Commandes ») est calculé côté serveur dans le layout : sans
+    // rafraîchissement, il garde son état tant qu'on n'a pas rechargé la page.
+    // On invalide le rendu serveur pour que la bascule soit visible tout de suite.
+    router.refresh();
   }
 
   return (
