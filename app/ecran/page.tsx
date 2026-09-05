@@ -34,13 +34,12 @@ export default async function EcranPage() {
     );
   }
 
-  // L'option « Écran & livraison » peut être activée pour l'organisation ou
-  // pour une seule boutique (clés `screen_delivery` et `screen_delivery:<id>`).
+  // L'option « Écran & livraison » est un réglage AU NIVEAU ORGANISATION.
   const sd = await query<{ any: boolean }>(
     `SELECT EXISTS (
         SELECT 1 FROM settings
          WHERE organization_id = $1
-           AND (key = $2 OR key LIKE $2 || ':%')
+           AND key = $2
            AND COALESCE((value->>'enabled')::boolean, FALSE) = TRUE
       ) AS any`,
     [user.organizationId, SCREEN_DELIVERY_KEY],

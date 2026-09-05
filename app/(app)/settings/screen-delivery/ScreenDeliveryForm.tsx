@@ -2,32 +2,26 @@
 
 import { useEffect, useState } from 'react';
 import { SCREEN_DELIVERY_DEFAULTS, type ScreenDeliverySettings } from '@/lib/settings/screen-delivery';
-import StoreScopeSelect from '@/components/StoreScopeSelect';
 
-export default function ScreenDeliveryForm({ canEdit, stores, lockedStoreId }: {
-  canEdit: boolean; stores: { id: string; name: string }[];
-  lockedStoreId?: string | null;
-}) {
-  const [storeId, setStoreId] = useState<string>(lockedStoreId ?? stores[0]?.id ?? '');
+export default function ScreenDeliveryForm({ canEdit }: { canEdit: boolean }) {
   const [s, setS] = useState<ScreenDeliverySettings>(SCREEN_DELIVERY_DEFAULTS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Recharge la config écran/livraison de la boutique sélectionnée (repli org).
+  // Réglage AU NIVEAU ORGANISATION (une seule config pour toute la société).
   useEffect(() => {
-    if (!storeId) { setLoading(false); return; }
     let cancelled = false;
     setLoading(true); setError(null); setSaved(false);
     void (async () => {
-      const r = await fetch(`/api/settings/screen-delivery?store_id=${encodeURIComponent(storeId)}`);
+      const r = await fetch('/api/settings/screen-delivery');
       if (cancelled) return;
       if (r.ok) setS((await r.json()).settings as ScreenDeliverySettings);
       setLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [storeId]);
+  }, []);
 
   function patch<K extends keyof ScreenDeliverySettings>(k: K, v: ScreenDeliverySettings[K]) {
     if (!canEdit) return;
@@ -38,7 +32,7 @@ export default function ScreenDeliveryForm({ canEdit, stores, lockedStoreId }: {
     setSaving(true); setError(null); setSaved(false);
     const r = await fetch('/api/settings/screen-delivery', {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...s, store_id: storeId || undefined }),
+      body: JSON.stringify(s),
     });
     setSaving(false);
     if (!r.ok) {
@@ -52,15 +46,12 @@ export default function ScreenDeliveryForm({ canEdit, stores, lockedStoreId }: {
 
   return (
     <div className="p-6 md:p-8 max-w-3xl space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Écran &amp; Livraison</h1>
-          <p className="mt-1 text-sm text-ink-soft">
-            Commande différée (retrait à date, livraison) et affichage client —
-            configurables par boutique.
-          </p>
-        </div>
-        <StoreScopeSelect stores={stores} value={storeId} onChange={setStoreId} lockedStoreId={lockedStoreId} />
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Écran &amp; Livraison</h1>
+        <p className="mt-1 text-sm text-ink-soft">
+          Commande différée (retrait à date, livraison) et affichage client.
+          Option au niveau de l&apos;organisation.
+        </p>
       </div>
 
       <div className="card p-5 space-y-4">
@@ -162,8 +153,8 @@ export default function ScreenDeliveryForm({ canEdit, stores, lockedStoreId }: {
         {saved && <div className="rounded-xl bg-success/10 px-3 py-2 text-sm text-success">✓ Paramètres enregistrés</div>}
 
         {canEdit && (
-          <button onClick={() => void submit()} disabled={saving || loading || !storeId} className="btn-primary">
-            {loading ? 'Chargement…' : saving ? 'Enregistrement…' : 'Enregistrer cette boutique'}
+          <button onClick={() => void submit()} disabled={saving || loading} className="btn-primary">
+            {loading ? 'Chargement…' : saving ? 'Enregistrement…' : 'Enregistrer'}
           </button>
         )}
       </div>
