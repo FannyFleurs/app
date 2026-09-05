@@ -617,6 +617,7 @@ function TicketsView({ storeId, range }: { storeId: string; range: { from: strin
   const [items, setItems] = useState<Array<{
     id: string; receipt_number: string; validated_at: string;
     total_ttc: string; user_full_name: string; customer_name: string | null;
+    account_created_at_sale?: boolean;
   }>>([]);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
@@ -648,7 +649,19 @@ function TicketsView({ storeId, range }: { storeId: string; range: { from: strin
                     {new Date(t.validated_at).toLocaleString('fr-FR')}
                     {' · '}
                     {t.user_full_name}
-                    {t.customer_name && ` · ${t.customer_name}`}
+                    {t.customer_name && (
+                      <>
+                        {' · '}{t.customer_name}
+                        {t.account_created_at_sale && (
+                          <span
+                            className="ml-1.5 align-middle rounded-full bg-green-100 text-green-700 text-[9px] font-semibold px-1.5 py-0.5 uppercase tracking-wide"
+                            title="Compte client créé lors de cette vente"
+                          >
+                            Nouveau
+                          </span>
+                        )}
+                      </>
+                    )}
                   </div>
                 </div>
                 <div className="tabular-nums font-medium">{formatEUR(Number(t.total_ttc))}</div>

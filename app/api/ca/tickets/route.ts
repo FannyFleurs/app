@@ -36,12 +36,14 @@ export async function GET(req: Request) {
   const r = await query<{
     id: string; receipt_number: string; validated_at: string;
     total_ttc: string; user_full_name: string; customer_name: string | null;
+    account_created_at_sale: boolean;
   }>(
     `SELECT s.id, s.receipt_number, s.validated_at,
             s.total_ttc::text,
             u.full_name AS user_full_name,
             COALESCE(c.company_name,
-              NULLIF(TRIM(CONCAT(c.first_name, ' ', c.last_name)), '')) AS customer_name
+              NULLIF(TRIM(CONCAT(c.first_name, ' ', c.last_name)), '')) AS customer_name,
+            (c.id IS NOT NULL AND c.created_at >= s.created_at) AS account_created_at_sale
        FROM sales s
        JOIN users u ON u.id = s.user_id
        LEFT JOIN customers c ON c.id = s.customer_id
