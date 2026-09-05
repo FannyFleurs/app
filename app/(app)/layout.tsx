@@ -13,6 +13,13 @@ import { resolveEffectivePermissions } from '@/lib/auth/permissions';
 import SupportBanner from '@/components/support/SupportBanner';
 import SupportConsentGate from '@/components/support/SupportConsentGate';
 import NoZoom from '@/components/NoZoom';
+import {
+  SCREEN_DELIVERY_KEY,
+  mergeScreenDeliveryDefaults,
+  type ScreenDeliverySettings,
+} from '@/lib/settings/screen-delivery';
+import { loadScopedSettingValue } from '@/lib/settings/scoped-server';
+import { resolveDeviceStoreId } from '@/lib/pos/current-store';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   // Mode back-office : injecte par le middleware sur le sous-domaine bo.
@@ -89,6 +96,22 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     user.id, user.role, user.organizationId,
   );
 
+  // Page « Commandes » : visible seulement si l'option « Écran & Livraison »
+  // est active. Au back-office on prend le réglage au niveau organisation ; en
+  // caisse, celui de la boutique du poste appairé (repli organisation). Si
+  // l'option est décochée, on masque /orders du menu (sidebar + « Toutes les
+  // pages ») en l'ajoutant aux chemins masqués.
+  const hiddenPaths = [...(ui.hidden_sidebar_paths ?? [])];
+  const sdStoreId = backOffice ? null : await resolveDeviceStoreId(user.organizationId);
+  const screenDelivery = mergeScreenDeliveryDefaults(
+    await loadScopedSettingValue<ScreenDeliverySettings>(
+      user.organizationId, SCREEN_DELIVERY_KEY, sdStoreId,
+    ),
+  );
+  if (!screenDelivery.enabled && !hiddenPaths.includes('/orders')) {
+    hiddenPaths.push('/orders');
+  }
+
   return (
     <>
       <NoZoom />
@@ -98,7 +121,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       {backOffice && <SupportConsentGate role={user.role} />}
       <AppShell
         user={{ id: user.id, fullName: user.fullName, role: user.role, email: user.email }}
-        hiddenPaths={ui.hidden_sidebar_paths ?? []}
+        hiddenPaths={hiddenPaths}
         autoLogoutMode={ui.auto_logout_mode}
         autoLogoutMinutes={ui.auto_logout_minutes}
         headerTabs={ui.header_tabs ?? []}
