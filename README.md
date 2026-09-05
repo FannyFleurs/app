@@ -1,6 +1,6 @@
 # HelloPos
 
-**Caisse SaaS moderne pour fleuristes, magasins de plantes et commerces végétaux.**
+**Caisse SaaS moderne pour commerce.**
 Conçue *certification-ready* par rapport aux exigences françaises applicables aux
 systèmes de caisse (art. 286, I, 3°bis du CGI : inaltérabilité, sécurisation,
 conservation, archivage).
