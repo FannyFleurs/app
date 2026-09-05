@@ -6,7 +6,6 @@ import NoZoom from '@/components/NoZoom';
 import { userCan } from '@/lib/auth/permissions';
 import { CashSessionService } from '@/lib/services/cash-session-service';
 import { isSharedFloat } from '@/lib/settings/cash-server';
-import { loadScopedSettingValue } from '@/lib/settings/scoped-server';
 import Link from 'next/link';
 import {
   mergeWithDefaults,
@@ -130,18 +129,10 @@ export default async function CaissePage() {
     initial = { deviceId, storeId: bound.store_id, registerId: bound.id, sessionId };
   }
 
-  // Valeur « Écran & Livraison » RÉSOLUE POUR LA BOUTIQUE du poste appairé, pour
-  // que le bouton « Commande / Livraison » soit au bon état dès le 1er rendu.
-  // Sans ça, on partait de la valeur au niveau organisation puis on corrigeait
-  // par boutique côté client : le bouton clignotait (apparaît puis disparaît)
-  // quand l'option est décochée pour la boutique.
-  let deferredSeed = screenDelivery.enabled;
-  if (bound) {
-    const scoped = await loadScopedSettingValue<ScreenDeliverySettings>(
-      user.organizationId, SCREEN_DELIVERY_KEY, bound.store_id,
-    );
-    deferredSeed = mergeScreenDeliveryDefaults(scoped).enabled;
-  }
+  // « Écran & Livraison » est une option AU NIVEAU ORGANISATION : la valeur org
+  // (déjà chargée ci-dessus) sert de graine au bouton « Commande / Livraison »,
+  // au bon état dès le 1er rendu.
+  const deferredSeed = screenDelivery.enabled;
 
   return (
     <>
