@@ -25,6 +25,7 @@ export async function GET(req: Request) {
               s.status, s.fiscal_hash,
               u.full_name AS cashier,
               COALESCE(c.company_name, NULLIF(TRIM(CONCAT(c.first_name,' ',c.last_name)), '')) AS customer,
+              (c.id IS NOT NULL AND c.created_at >= s.created_at) AS account_created_at_sale,
               COALESCE((SELECT SUM(cn.amount) FROM credit_notes cn
                          WHERE cn.sale_id = s.id AND cn.status <> 'cancelled'), 0)::text AS refunded_total
          FROM sales s
@@ -48,6 +49,7 @@ export async function GET(req: Request) {
             s.status, s.fiscal_hash,
             u.full_name AS cashier,
             COALESCE(c.company_name, NULLIF(TRIM(CONCAT(c.first_name,' ',c.last_name)), '')) AS customer,
+            (c.id IS NOT NULL AND c.created_at >= s.created_at) AS account_created_at_sale,
             COALESCE((SELECT SUM(cn.amount) FROM credit_notes cn
                        WHERE cn.sale_id = s.id AND cn.status <> 'cancelled'), 0)::text AS refunded_total
        FROM sales s
