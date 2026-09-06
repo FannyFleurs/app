@@ -69,11 +69,15 @@ export default function LeftRail({
     .filter((i) => !i.perm || permissions.has(i.perm))
     .filter((i) => i.required || !hiddenPaths.includes(i.href));
 
-  // En back-office : menu complet, groupe par rubrique, sans caisse.
+  // En back-office : menu complet, groupe par rubrique, sans caisse. On respecte
+  // aussi les chemins masqués (hiddenPaths) — sinon une entrée désactivée par un
+  // réglage (ex. « Commandes » quand Écran & Livraison est décoché) restait
+  // visible dans le rail du back-office.
   const boItems = SIDEBAR_ITEMS
     .filter((i) => i.href !== '/caisse')
     .filter((i) => !i.appOnly)
-    .filter((i) => !i.perm || permissions.has(i.perm));
+    .filter((i) => !i.perm || permissions.has(i.perm))
+    .filter((i) => i.required || !hiddenPaths.includes(i.href));
 
   // Une seule entrée allumée à la fois, calculée sur la liste affichée.
   const boActive = activeNavHref(path, boItems.map((i) => i.href));
