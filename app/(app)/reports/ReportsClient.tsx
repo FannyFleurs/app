@@ -127,7 +127,7 @@ const REPORTS: Array<{
   },
   {
     key: 'shrinkage', label: 'Démarque', icon: 'products', endpoint: 'stock-movements',
-    help: "Tous les mouvements de stock de la période. Filtrez par type pour isoler la démarque : pertes, casse, produits jetés ou volés (type « Perte » / « Ajustement »). Le motif détaille chaque mouvement.",
+    help: "La démarque de la période : pertes et ajustements de stock (casse, jeté, périmé, vol, erreurs). Chaque ligne indique la quantité et le montant valorisé au prix d'achat HT, avec le motif. Total en bas.",
   },
 ];
 
@@ -623,101 +623,69 @@ function DebtsTable({ data }: { data: DebtsData }) {
 interface ShrinkageLine {
   id: string; date: string; type: string; product: string; sku: string | null;
   store: string | null; quantity_delta: number; new_quantity: number;
-  reason: string | null; source_type: string | null; user: string | null;
+  amount: number; reason: string | null; source_type: string | null; user: string | null;
 }
-interface ShrinkageData { lines: ShrinkageLine[]; from: string; to: string; store_id: string | null }
+interface ShrinkageData {
+  lines: ShrinkageLine[]; total_amount: number; from: string; to: string; store_id: string | null;
+}
 
+// L'endpoint ne renvoie que la démarque (pertes / ajustements) — pas les ventes.
 const MOVEMENT_TYPE_LABELS: Record<string, string> = {
-  purchase: 'Réception', sale: 'Vente', return: 'Retour',
-  adjustment: 'Ajustement', loss: 'Perte', transfer_in: 'Transfert +',
-  transfer_out: 'Transfert −', inventory: 'Inventaire',
+  adjustment: 'Ajustement', loss: 'Perte',
 };
-const MOVEMENT_TYPE_ORDER = [
-  'loss', 'adjustment', 'inventory', 'sale', 'return', 'purchase', 'transfer_in', 'transfer_out',
-];
 
 function ShrinkageTable({ data }: { data: ShrinkageData }) {
-  // Types réellement présents sur la période, dans un ordre lisible (démarque
-  // d'abord). Chips à bascule ; aucune sélection = tout afficher.
-  const present = MOVEMENT_TYPE_ORDER.filter((t) => data.lines.some((l) => l.type === t));
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const toggle = (t: string) => setSelected((prev) => {
-    const n = new Set(prev);
-    if (n.has(t)) n.delete(t); else n.add(t);
-    return n;
-  });
-  const lines = selected.size === 0 ? data.lines : data.lines.filter((l) => selected.has(l.type));
-  // Démarque visible : somme des sorties (quantités négatives) de la sélection.
-  const outQty = lines.reduce((s, l) => s + (l.quantity_delta < 0 ? -l.quantity_delta : 0), 0);
+  if (data.lines.length === 0) return <Empty />;
+  // Quantité totale sortie (démarque = deltas négatifs).
+  const outQty = data.lines.reduce((s, l) => s + (l.quantity_delta < 0 ? -l.quantity_delta : 0), 0);
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs text-ink-soft">Filtrer par type :</span>
-        {present.map((t) => {
-          const active = selected.has(t);
-          return (
-            <button key={t} onClick={() => toggle(t)} aria-pressed={active}
-              className={`rounded-full border px-3 h-8 text-xs font-medium transition-colors ${
-                active
-                  ? 'border-accent bg-accent-soft text-accent-deep'
-                  : 'border-border bg-surface text-ink-soft hover:border-gray-300 hover:text-ink'}`}>
-              {MOVEMENT_TYPE_LABELS[t] ?? t}
-            </button>
-          );
-        })}
-        {selected.size > 0 && (
-          <button onClick={() => setSelected(new Set())} className="text-xs text-ink-soft underline">
-            Tout afficher
-          </button>
-        )}
-      </div>
-
-      {lines.length === 0 ? <Empty /> : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm border-collapse">
-            <thead>
-              <tr className="text-[11px] uppercase tracking-wider text-ink-soft">
-                <Th sticky>Date</Th><Th>Produit</Th><Th>Boutique</Th><Th>Type</Th>
-                <Th right>Quantité</Th><Th right>Stock après</Th><Th>Motif</Th><Th>Par</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {lines.map((l) => (
-                <tr key={l.id} className="border-t border-border hover:bg-gray-50/60">
-                  <Td sticky>{frDateTime(l.date)}</Td>
-                  <Td>
-                    <span className="font-medium">{l.product}</span>
-                    {l.sku && <span className="text-ink-soft"> · {l.sku}</span>}
-                  </Td>
-                  <Td>{l.store ?? '—'}</Td>
-                  <Td>{MOVEMENT_TYPE_LABELS[l.type] ?? l.type}</Td>
-                  <Td right strong tone={l.quantity_delta < 0 ? 'warning' : undefined}>
-                    {l.quantity_delta > 0 ? '+' : ''}{l.quantity_delta}
-                  </Td>
-                  <Td right>{l.new_quantity}</Td>
-                  <Td><span className="text-ink-soft">{l.reason ?? '—'}</span></Td>
-                  <Td>{l.user ?? '—'}</Td>
-                </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr className="border-t-2 border-ink/20 font-semibold bg-gray-50">
-                <Td sticky>Total</Td>
-                <Td>{lines.length} mouvement{lines.length > 1 ? 's' : ''}</Td>
-                <Td /><Td />
-                <Td right tone="warning">−{outQty}</Td>
-                <Td />
-                <Td colSpan={2}>
-                  <span className="text-xs font-normal text-ink-soft">
-                    sorties (quantités négatives) sur la sélection
-                  </span>
-                </Td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      )}
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm border-collapse">
+        <thead>
+          <tr className="text-[11px] uppercase tracking-wider text-ink-soft">
+            <Th sticky>Date</Th><Th>Produit</Th><Th>Boutique</Th><Th>Type</Th>
+            <Th right>Quantité</Th><Th right>Montant</Th><Th right>Stock après</Th><Th>Motif</Th><Th>Par</Th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.lines.map((l) => (
+            <tr key={l.id} className="border-t border-border hover:bg-gray-50/60">
+              <Td sticky>{frDateTime(l.date)}</Td>
+              <Td>
+                <span className="font-medium">{l.product}</span>
+                {l.sku && <span className="text-ink-soft"> · {l.sku}</span>}
+              </Td>
+              <Td>{l.store ?? '—'}</Td>
+              <Td>{MOVEMENT_TYPE_LABELS[l.type] ?? l.type}</Td>
+              <Td right strong tone={l.quantity_delta < 0 ? 'warning' : undefined}>
+                {l.quantity_delta > 0 ? '+' : ''}{l.quantity_delta}
+              </Td>
+              <Td right tone={l.amount < 0 ? 'warning' : undefined}>
+                {l.amount < 0 ? '−' : ''}{formatEUR(Math.abs(l.amount))}
+              </Td>
+              <Td right>{l.new_quantity}</Td>
+              <Td><span className="text-ink-soft">{l.reason ?? '—'}</span></Td>
+              <Td>{l.user ?? '—'}</Td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr className="border-t-2 border-ink/20 font-semibold bg-gray-50">
+            <Td sticky>Total</Td>
+            <Td>{data.lines.length} ligne{data.lines.length > 1 ? 's' : ''}</Td>
+            <Td /><Td />
+            <Td right tone="warning">−{outQty}</Td>
+            <Td right tone="warning">
+              {data.total_amount < 0 ? '−' : ''}{formatEUR(Math.abs(data.total_amount))}
+            </Td>
+            <Td />
+            <Td colSpan={2}>
+              <span className="text-xs font-normal text-ink-soft">valorisé au prix d&apos;achat HT</span>
+            </Td>
+          </tr>
+        </tfoot>
+      </table>
     </div>
   );
 }
@@ -988,12 +956,12 @@ function csvRows(report: Report, data: Record<string, unknown>): string[][] {
 
   if (report === 'shrinkage') {
     const d = data as unknown as ShrinkageData;
-    rows.push(['Date', 'Produit', 'SKU', 'Boutique', 'Type', 'Quantité', 'Stock après', 'Motif', 'Par']);
+    rows.push(['Date', 'Produit', 'SKU', 'Boutique', 'Type', 'Quantité', 'Montant', 'Stock après', 'Motif', 'Par']);
     for (const l of d.lines) {
       rows.push([
         frDateTime(l.date), l.product, l.sku ?? '', l.store ?? '',
         MOVEMENT_TYPE_LABELS[l.type] ?? l.type,
-        String(l.quantity_delta), String(l.new_quantity), l.reason ?? '', l.user ?? '',
+        String(l.quantity_delta), n(l.amount), String(l.new_quantity), l.reason ?? '', l.user ?? '',
       ]);
     }
     return rows;

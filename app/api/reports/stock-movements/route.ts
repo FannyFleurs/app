@@ -28,12 +28,12 @@ export async function GET(req: Request) {
     quantity_delta: string; new_quantity: string;
     reason: string | null; source_type: string | null;
     product: string; sku: string | null; store: string | null;
-    user_name: string | null;
+    user_name: string | null; purchase_price_ht: string | null;
   }>(
     `SELECT m.id, m.created_at::text AS created_at, m.movement_type,
             m.quantity_delta::text, m.new_quantity::text,
             m.reason, m.source_type,
-            p.name AS product, p.sku,
+            p.name AS product, p.sku, p.purchase_price_ht::text,
             st.name AS store, u.full_name AS user_name
        FROM stock_movements m
        JOIN products p ON p.id = m.product_id
@@ -41,25 +41,38 @@ export async function GET(req: Request) {
        LEFT JOIN users u ON u.id = m.user_id
       WHERE m.organization_id = $1
         AND ${DAY} BETWEEN $2::date AND $3::date
+        -- Démarque uniquement : pertes et ajustements de stock (casse, jeté,
+        -- volé, périmé, erreurs…). On exclut ventes, retours, réceptions,
+        -- transferts et inventaires — ce ne sont pas de la démarque.
+        AND m.movement_type IN ('loss', 'adjustment')
         ${storeFilter}
       ORDER BY m.created_at DESC
       LIMIT 2000`,
     args,
   );
 
-  const lines = rows.map((r) => ({
-    id: r.id,
-    date: r.created_at,
-    type: r.movement_type,
-    product: r.product,
-    sku: r.sku,
-    store: r.store,
-    quantity_delta: Number(r.quantity_delta),
-    new_quantity: Number(r.new_quantity),
-    reason: r.reason,
-    source_type: r.source_type,
-    user: r.user_name,
-  }));
+  const lines = rows.map((r) => {
+    const qty = Number(r.quantity_delta);
+    const cost = r.purchase_price_ht != null ? Number(r.purchase_price_ht) : 0;
+    // Valorisation au coût (prix d'achat HT) : montant = quantité × coût. Signé
+    // comme la quantité (une perte, delta négatif, donne un montant négatif).
+    const amount = Number((qty * cost).toFixed(2));
+    return {
+      id: r.id,
+      date: r.created_at,
+      type: r.movement_type,
+      product: r.product,
+      sku: r.sku,
+      store: r.store,
+      quantity_delta: qty,
+      new_quantity: Number(r.new_quantity),
+      amount,
+      reason: r.reason,
+      source_type: r.source_type,
+      user: r.user_name,
+    };
+  });
 
-  return NextResponse.json({ lines, from, to, store_id: storeId });
+  const total_amount = Number(lines.reduce((s, l) => s + l.amount, 0).toFixed(2));
+  return NextResponse.json({ lines, total_amount, from, to, store_id: storeId });
 }
