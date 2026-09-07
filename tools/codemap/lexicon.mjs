@@ -7,7 +7,63 @@
 // tokens techniques associés (pour l'expansion de requête) et des indices de
 // chemin (pour classer les fichiers). Volontairement en données pures, faciles
 // à enrichir sans toucher au moteur.
-import { tokenize } from './indexer.mjs';
+import { tokenize, normalizeText, stem } from './indexer.mjs';
+
+// --------------------------------------------------------------- Aspects opposés
+// Concepts fonctionnellement DISTINCTS ou OPPOSÉS. Sert à orienter la pertinence
+// selon l'INTENTION : « ouverture » ≠ « clôture », « encaissement » ≠
+// « remboursement », etc. Générique : bénéficie à toute recherche, pas
+// seulement à un cas particulier.
+const n1 = (w) => stem(normalizeText(w));
+const S = (arr) => new Set(arr.map(n1));
+
+export const ASPECTS = [
+  { id: 'open_close', sides: {
+    open: S(['ouvrir', 'ouverture', 'ouvre', 'open', 'opening', 'opened']),
+    close: S(['cloture', 'cloturer', 'clore', 'fermer', 'fermeture', 'ferme', 'close', 'closing', 'closure', 'seal', 'sealed']),
+  } },
+  { id: 'in_out', sides: {
+    in: S(['entree', 'entrant', 'deposit', 'incoming', 'apport']),
+    out: S(['sortie', 'sortant', 'withdrawal', 'outgoing', 'retrait', 'prelevement']),
+  } },
+  { id: 'crud', sides: {
+    create: S(['creer', 'creation', 'create', 'nouveau', 'nouvelle', 'ajouter', 'ajout']),
+    remove: S(['supprimer', 'suppression', 'delete', 'remove', 'retirer', 'annuler', 'annulation', 'cancel']),
+  } },
+  { id: 'money', sides: {
+    collect: S(['encaissement', 'encaisser', 'paiement', 'payer', 'payment', 'collect']),
+    refund: S(['remboursement', 'rembourser', 'refund', 'avoir']),
+  } },
+  { id: 'auth', sides: {
+    login: S(['connexion', 'connecter', 'login', 'signin', 'authentification']),
+    logout: S(['deconnexion', 'deconnecter', 'logout', 'signout', 'disconnect']),
+  } },
+];
+
+/** Côté(s) exprimé(s) par la requête : { aspectId: { aspect, side } } — seulement
+ *  quand UN SEUL côté d'un aspect est présent (intention non ambiguë). */
+export function detectQuerySides(queryTokens) {
+  const set = new Set(queryTokens);
+  const out = {};
+  for (const a of ASPECTS) {
+    const present = Object.entries(a.sides)
+      .filter(([, s]) => [...s].some((t) => set.has(t)))
+      .map(([k]) => k);
+    if (present.length === 1) out[a.id] = { aspect: a, side: present[0] };
+  }
+  return out;
+}
+
+/** Nombre de tokens discriminants (≥ 4 lettres) de chaque côté présents dans un fichier. */
+export function sideCounts(fileTokenSet, aspect) {
+  const counts = {};
+  for (const [side, s] of Object.entries(aspect.sides)) {
+    let c = 0;
+    for (const t of s) if (t.length >= 4 && fileTokenSet.has(t)) c++;
+    counts[side] = c;
+  }
+  return counts;
+}
 
 export const CLUSTERS = [
   {

@@ -5,7 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { tokenize, normalizeText } from './indexer.mjs';
-import { expandQuery, classifyFile, CLUSTERS } from './lexicon.mjs';
+import { expandQuery, classifyFile, CLUSTERS, detectQuerySides, sideCounts } from './lexicon.mjs';
 
 const TYPE_WEIGHT = {
   route: 5, table: 5, component: 5, function: 5, hook: 5, text: 4, import: 2, comment: 1,
@@ -24,9 +24,12 @@ const STOPWORDS = new Set([
   'je', 'tu', 'il', 'on', 'nous', 'vous', 'me', 'ma', 'mon', 'mes', 'la', 'le', 'les',
   'un', 'une', 'des', 'du', 'de', 'dans', 'sur', 'pour', 'avec', 'sans', 'ou', 'et',
   'veux', 'veut', 'veu', 'souhaite', 'souhait', 'voudrais', 'aimerais', 'comment',
-  'modifier', 'modifie', 'changer', 'change', 'ajouter', 'ajoute', 'editer', 'edite',
-  'supprimer', 'faire', 'ce', 'cette', 'ces', 'quand', 'que', 'qui', 'est',
-  'i', 'want', 'to', 'the', 'a', 'an', 'change', 'modify', 'add', 'edit', 'my', 'in', 'on', 'for',
+  'modifier', 'modifie', 'changer', 'editer', 'edite',
+  'faire', 'ce', 'cette', 'ces', 'quand', 'que', 'qui', 'est', 'lorsque', 'lorsqu',
+  // Mots d'interface génériques (non discriminants) : la fenêtre, l'affichage…
+  'fenetre', 'fenetres', 'modale', 'popup', 'affiche', 'afficher', 'affichage',
+  'saisit', 'saisir', 'saisie', 'vendeur', 'vendeuse', 'ecran',
+  'i', 'want', 'to', 'the', 'a', 'an', 'change', 'modify', 'edit', 'my', 'in', 'on', 'for',
 ]);
 
 /** Recherche principale. Renvoie une liste de résultats triés par pertinence. */
@@ -48,6 +51,23 @@ export function search(ctx, rawQuery, { limit = 40 } = {}) {
   const clusterPaths = [];
   for (const c of clusters) for (const p of c.paths) clusterPaths.push(p);
 
+  // IDF : un mot présent partout (« caisse ») est peu discriminant ; un mot rare
+  // (« ouverture », « fond », « remboursement ») l'est beaucoup. On pondère
+  // TOUTES les contributions par l'IDF du mot → le moteur ne « compte » plus les
+  // correspondances, il valorise les mots qui distinguent réellement la requête.
+  const N = index.fileCount || 1;
+  const idfCache = new Map();
+  const idf = (t) => {
+    if (idfCache.has(t)) return idfCache.get(t);
+    const df = contentPost.get(t)?.size ?? 0;
+    const v = Math.log(1 + N / (df + 1)); // ~0.7 (très commun) … ~6.5 (rare)
+    idfCache.set(t, v);
+    return v;
+  };
+  // Intention (aspects opposés) exprimée par la requête.
+  const desired = detectQuerySides([...original]);
+  const desiredAspects = Object.values(desired);
+
   // Fichiers candidats : union des postings (structurés + contenu).
   const candidates = new Set();
   for (const t of [...original, ...extra]) {
@@ -64,37 +84,49 @@ export function search(ctx, rawQuery, { limit = 40 } = {}) {
     const matches = [];
     const nameTokens = new Set(tokenize(f.name));
     const pathTokens = new Set(tokenize(rel));
+    const fileSet = new Set(f.tokens);
 
+    // Contributions pondérées par IDF (nom de fichier / chemin / contenu).
     for (const t of original) {
-      if (nameTokens.has(t)) { score += FILENAME_WEIGHT; covered.add(t); }
-      if (pathTokens.has(t)) { score += PATH_WEIGHT; covered.add(t); }
-      if (f.tokens.includes(t)) { score += CONTENT_WEIGHT; covered.add(t); }
+      const w = idf(t);
+      if (nameTokens.has(t)) { score += FILENAME_WEIGHT * w; covered.add(t); }
+      if (pathTokens.has(t)) { score += PATH_WEIGHT * w; covered.add(t); }
+      if (fileSet.has(t)) { score += CONTENT_WEIGHT * w; covered.add(t); }
     }
     for (const t of extra) {
-      if (f.tokens.includes(t)) score += CONTENT_WEIGHT * 0.4;
+      if (fileSet.has(t)) score += CONTENT_WEIGHT * 0.35 * idf(t);
     }
 
-    // Bonus « bonne zone » : le fichier appartient à la fonctionnalité déduite
-    // de la requête (ex. « connexion » -> app/login, api/auth). Fait remonter la
-    // vraie page/route plutôt qu'un simple texte contenant le mot.
+    // Bonus « bonne zone » (fonctionnalité déduite). Modéré : l'intention (ci-dessous) affine.
     const relLower = rel.toLowerCase();
-    if (clusterPaths.some((p) => relLower.includes(p))) score += 8;
+    if (clusterPaths.some((p) => relLower.includes(p))) score += 6;
 
-    // Occurrences structurées (définitions mises en avant).
+    // Occurrences structurées (définitions mises en avant, pondérées IDF).
+    // Anti-volume : on ne SOMME pas toutes les occurrences (un fichier bavard,
+    // avec 30 textes contenant « caisse », gonflait artificiellement). On somme
+    // les meilleures DÉFINITIONS (peu nombreuses, signifiantes) et on ne garde
+    // que la MEILLEURE occurrence non-définition par type.
+    const defW = [];
+    const bestNonDef = new Map();
     for (const o of f.occ) {
       const on = tokenize(`${o.name}`);
-      const hitOrig = on.some((x) => original.has(x));
+      const hitTok = on.filter((x) => original.has(x));
+      const hitOrig = hitTok.length > 0;
       const hitExtra = !hitOrig && on.some((x) => extra.has(x));
       if (!hitOrig && !hitExtra) continue;
-      let w = (TYPE_WEIGHT[o.type] ?? 1) * (hitOrig ? 1 : 0.5) + (o.def ? DEF_BONUS : 0);
-      // Correspondance EXACTE d'une définition avec un nom technique recherché.
+      const wIdf = hitOrig ? Math.max(...hitTok.map(idf)) : 0.6;
+      let w = ((TYPE_WEIGHT[o.type] ?? 1) + (o.def ? DEF_BONUS : 0)) * wIdf;
       if (exactName && o.def && normalizeText(o.name) === exactName) w += 25;
-      score += w;
-      for (const x of on) if (original.has(x)) covered.add(x);
+      if (o.def) defW.push(w);
+      else bestNonDef.set(o.type, Math.max(bestNonDef.get(o.type) ?? 0, w));
+      for (const x of hitTok) covered.add(x);
       if (matches.length < 12) {
         matches.push({ type: o.type, name: o.name, line: o.line, text: o.text, def: !!o.def, weight: w });
       }
     }
+    defW.sort((a, b) => b - a);
+    for (const w of defW.slice(0, 4)) score += w;         // au plus 4 définitions
+    for (const w of bestNonDef.values()) score += w;       // 1 par type (texte, import…)
 
     if (score <= 0) continue;
 
@@ -107,6 +139,39 @@ export function search(ctx, rawQuery, { limit = 40 } = {}) {
       const hay = `${normalizeText(f.name)} ${normalizeText(f.role)} ${matches.map((m) => normalizeText(m.text || m.name)).join(' ')}`;
       if (hay.includes(normQuery)) score += 6;
     }
+
+    // ---- Intention (aspects opposés) : bonus si le fichier est du bon côté,
+    //      pénalité s'il appartient clairement au côté OPPOSÉ. Générique.
+    //  Le signal le plus fort est l'IDENTITÉ du fichier : un fichier dont le NOM
+    //  ou le CHEMIN est le concept opposé (« ClosuresAdmin », .../closures/…)
+    //  est fortement rétrogradé pour une requête sur le concept demandé.
+    let penalty = 1;
+    for (const { aspect, side } of desiredAspects) {
+      const sideTokens = aspect.sides[side];
+      const otherTokens = new Set();
+      for (const [k, s] of Object.entries(aspect.sides)) if (k !== side) for (const t of s) otherTokens.add(t);
+
+      const inName = (set) => [...set].some((t) => t.length >= 4 && (nameTokens.has(t) || pathTokens.has(t)));
+      // L'IDENTITÉ (nom de fichier / chemin) prime : un symbole interne du côté
+      // demandé (ex. « openingFloat » dans la page de clôture) donne un bonus
+      // mais NE protège PAS un fichier dont l'identité est le concept opposé.
+      const desiredInPath = inName(sideTokens);
+      const desiredInDef = f.occ.some((o) => o.def && tokenize(o.name).some((x) => sideTokens.has(x)));
+      const oppositeInPath = inName(otherTokens);
+
+      const counts = sideCounts(fileSet, aspect);
+      const d = counts[side] || 0;
+      let opp = 0;
+      for (const [k, v] of Object.entries(counts)) if (k !== side) opp = Math.max(opp, v);
+
+      if (desiredInPath) score += 18;              // le fichier EST du bon concept (nom/chemin)
+      else if (desiredInDef) score += 10;          // une définition du bon concept
+      if (d > 0) score += 6 + 3 * Math.min(3, d);  // il en parle dans son contenu
+
+      if (oppositeInPath && !desiredInPath) penalty = Math.min(penalty, 0.2);            // identité opposée
+      else if (opp >= 3 && opp >= d * 2 && !desiredInPath && !desiredInDef) penalty = Math.min(penalty, 0.4); // contenu opposé dominant
+    }
+    score *= penalty;
 
     // Les définitions d'abord dans les extraits affichés.
     matches.sort((a, b) => (b.def - a.def) || (b.weight - a.weight) || (a.line - b.line));
