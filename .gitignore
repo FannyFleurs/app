@@ -17,3 +17,6 @@ dist/
 next-env.d.ts
 /data/
 /archives/
+
+# Cache de l'outil de dev local CodeMap (tools/codemap) — jamais versionné.
+/tools/codemap/.index.json

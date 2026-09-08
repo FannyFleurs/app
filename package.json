@@ -11,6 +11,7 @@
     "start": "next start -p 3000",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
+    "codemap": "node tools/codemap/server.mjs",
     "db:migrate": "tsx scripts/migrate.ts",
     "db:migrate:resync": "tsx scripts/migrate-resync.ts",
     "db:seed": "tsx scripts/seed.ts",

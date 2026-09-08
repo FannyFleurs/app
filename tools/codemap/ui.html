@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>CodeMap — HelloPos</title>
+<style>
+  :root {
+    --bg:#f5f4f0; --surface:#fff; --border:#e2e0d9; --ink:#2c2c2a; --soft:#8a887f;
+    --accent:#27500A; --accent-soft:#EAF3DE; --accent-deep:#1c3a07;
+    --amber:#8b6a18; --amber-soft:#f5ecd2; --grey-soft:#eeece6;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 'DM Sans',system-ui,-apple-system,sans-serif}
+  header{position:sticky;top:0;background:var(--bg);padding:20px 24px 12px;border-bottom:1px solid var(--border);z-index:5}
+  h1{font-size:20px;margin:0 0 12px;letter-spacing:-.01em}
+  .bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  #q{flex:1;min-width:280px;height:48px;border:1px solid var(--border);border-radius:12px;background:var(--surface);
+     padding:0 16px;font-size:16px;outline:none}
+  #q:focus{border-color:var(--accent)}
+  .toggle{display:flex;border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--surface)}
+  .toggle button{border:0;background:transparent;padding:0 14px;height:40px;font:inherit;cursor:pointer;color:var(--soft)}
+  .toggle button.on{background:var(--accent-soft);color:var(--accent-deep);font-weight:600}
+  .btn{border:1px solid var(--border);background:var(--surface);border-radius:10px;height:40px;padding:0 14px;
+       cursor:pointer;font:inherit;color:var(--ink)}
+  .btn.primary{background:var(--accent-soft);border-color:#c0dd97;color:var(--accent-deep);font-weight:600}
+  .btn:disabled{opacity:.5;cursor:default}
+  .meta{color:var(--soft);font-size:12px;margin-top:8px;display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+  main{padding:16px 24px 60px;max-width:1100px}
+  .group{margin-bottom:20px}
+  .group>h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--soft);margin:0 0 8px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:10px}
+  .row{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+  .path{font-family:var(--mono);font-size:12px;color:var(--soft);word-break:break-all}
+  .name{font-weight:600;font-size:15px;margin:2px 0}
+  .role{color:var(--soft);font-size:13px;margin:2px 0 6px}
+  .why{font-size:12px;color:var(--accent-deep)}
+  .rel{white-space:nowrap;font-size:11px;font-weight:600;border-radius:999px;padding:3px 9px}
+  .rel.h{background:var(--accent-soft);color:var(--accent-deep)}
+  .rel.m{background:var(--amber-soft);color:var(--amber)}
+  .rel.l{background:var(--grey-soft);color:var(--soft)}
+  .snips{margin-top:8px;border-top:1px dashed var(--border);padding-top:8px;display:none}
+  .card.open .snips{display:block}
+  .snip{display:flex;gap:10px;align-items:baseline;padding:2px 0;font-family:var(--mono);font-size:12px}
+  .snip .ln{color:var(--soft);min-width:38px;text-align:right}
+  .snip .tx{white-space:pre-wrap;word-break:break-word;flex:1}
+  .tag{display:inline-block;font-size:10px;padding:1px 7px;border-radius:999px;margin-right:6px;
+       background:var(--grey-soft);color:var(--soft);font-family:'DM Sans',sans-serif;font-weight:600}
+  .tag.def{background:var(--accent);color:#fff}
+  .tag.route{background:#e6efff;color:#264a8a}
+  .tag.table{background:#f3e6ff;color:#5a2a8a}
+  .tag.text{background:#fff2e0;color:#8a5a1a}
+  .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+  .chip{font-size:11px;background:var(--grey-soft);color:var(--soft);border-radius:999px;padding:2px 9px}
+  .acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  .acts .btn{height:30px;font-size:12px;padding:0 10px;border-radius:8px}
+  .expand{cursor:pointer}
+  details.arch{margin-top:24px;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:8px 16px}
+  details.arch summary{cursor:pointer;font-weight:600;padding:8px 0}
+  .archgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;padding:8px 0 16px}
+  .archbox{border:1px solid var(--border);border-radius:10px;padding:10px}
+  .archbox b{font-size:13px}
+  .archbox .c{color:var(--soft);font-size:12px}
+  .empty{color:var(--soft);padding:30px 0;text-align:center}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;
+    padding:10px 16px;border-radius:10px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none}
+  .toast.show{opacity:1}
+</style>
+</head>
+<body>
+<header>
+  <h1>Que souhaitez-vous modifier&nbsp;?</h1>
+  <div class="bar">
+    <input id="q" placeholder="ex. impression ticket · clôture caisse · rendu monnaie · Stripe · nom de fonction/table/route…" autofocus />
+    <div class="toggle" id="mode">
+      <button data-m="search" class="on">Recherche</button>
+      <button data-m="where">Où modifier&nbsp;?</button>
+    </div>
+    <button class="btn" id="reindex">Réindexer</button>
+  </div>
+  <div class="meta">
+    <span id="metaInfo">…</span>
+    <button class="btn primary" id="copyClaude" style="height:30px;font-size:12px;padding:0 12px" disabled>Copier pour Claude Code</button>
+  </div>
+</header>
+<main>
+  <div id="results"><div class="empty">Saisissez une recherche ci-dessus.</div></div>
+  <details class="arch" id="archPanel">
+    <summary>Carte du projet (Architecture)</summary>
+    <div id="archBody"><div class="empty">Cliquez pour analyser…</div></div>
+  </details>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = (s)=>document.querySelector(s);
+let mode='search', lastQuery='', lastFlat=[];
+
+function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1600);}
+function relClass(l){return l==='Élevée'?'h':l==='Moyenne'?'m':'l';}
+function esc(s){return String(s??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+function linesOf(r){return [...new Set(r.matches.map(m=>m.line).filter(Boolean))].sort((a,b)=>a-b);}
+
+async function loadMeta(){
+  const m = await fetch('/api/meta').then(r=>r.json());
+  const d = new Date(m.indexedAt);
+  $('#metaInfo').textContent = `Indexé le ${d.toLocaleString('fr-FR')} · ${m.fileCount} fichiers`;
+}
+
+function cardHTML(r){
+  const lines = linesOf(r);
+  const snips = r.matches.map(m=>`
+    <div class="snip"><span class="ln">${m.line||''}</span><span class="tx">${
+      (m.def?'<span class="tag def">définition</span>':'')+
+      (m.type&&m.type!=='content'?`<span class="tag ${['route','table','text'].includes(m.type)?m.type:''}">${TYPE_FR[m.type]||m.type}</span>`:'')
+    }${esc(m.text||m.name||'')}</span></div>`).join('');
+  return `<div class="card" data-rel="${esc(r.rel)}">
+    <div class="row">
+      <div class="expand" style="flex:1">
+        <div class="path">${esc(r.rel)}</div>
+        <div class="name">${esc(r.name)}</div>
+        <div class="role">${esc(r.role||'')}</div>
+        <div class="why">${esc(r.why||'')}${lines.length?` · lignes ${lines.join(', ')}`:''}</div>
+        ${r.clusterLabels&&r.clusterLabels.length?`<div class="chips">${r.clusterLabels.map(c=>`<span class="chip">${esc(c)}</span>`).join('')}</div>`:''}
+      </div>
+      ${r.relevanceLabel?`<span class="rel ${relClass(r.relevanceLabel)}">${r.relevanceLabel} ${r.relevance||''}</span>`:''}
+    </div>
+    <div class="acts">
+      <button class="btn" data-act="copy">Copier le chemin</button>
+      <button class="btn" data-act="vscode" data-line="${lines[0]||''}">Ouvrir dans VS Code</button>
+      <button class="btn" data-act="toggle">Voir le contexte</button>
+    </div>
+    <div class="snips">${snips||'<span class="role">Aucun extrait.</span>'}</div>
+  </div>`;
+}
+const TYPE_FR={route:'route',table:'table',component:'composant',function:'fonction',hook:'hook',text:'texte',import:'import',comment:'commentaire',content:'contenu'};
+
+function renderSearch(data){
+  lastFlat = data.results;
+  if(!data.results.length){$('#results').innerHTML='<div class="empty">Aucun résultat.</div>';return;}
+  // Regroupe visuellement par fonctionnalité (cluster principal), groupes triés
+  // par meilleur score, résultats conservant l'ordre de pertinence.
+  const groups=new Map();
+  for(const r of data.results){
+    const key=(r.clusterLabels&&r.clusterLabels[0])||'Autres';
+    if(!groups.has(key))groups.set(key,[]);
+    groups.get(key).push(r);
+  }
+  let html='';
+  for(const [label,items] of groups){
+    html+=`<div class="group"><h2>${esc(label)} · ${items.length}</h2>${items.map(cardHTML).join('')}</div>`;
+  }
+  $('#results').innerHTML=html;
+}
+
+function renderWhere(data){
+  lastFlat=[...(data.principal||[]),...(data.associes||[]),...(data.base||[])];
+  const sec=(title,items)=> items&&items.length?`<div class="group"><h2>${title}</h2>${items.map(cardHTML).join('')}</div>`:'';
+  let html='';
+  if(data.clusters&&data.clusters.length) html+=`<div class="chips" style="margin-bottom:12px">${data.clusters.map(c=>`<span class="chip">${esc(c)}</span>`).join('')}</div>`;
+  html+=sec('Fichier principal',data.principal);
+  html+=sec('Fichiers associés',data.associes);
+  html+=sec('Base / SQL / API éventuellement concernés',data.base);
+  $('#results').innerHTML = html || '<div class="empty">Aucun résultat.</div>';
+}
+
+let timer;
+function run(){
+  const q=$('#q').value.trim(); lastQuery=q;
+  $('#copyClaude').disabled = !q;
+  if(!q){$('#results').innerHTML='<div class="empty">Saisissez une recherche ci-dessus.</div>';lastFlat=[];return;}
+  fetch(`/api/search?mode=${mode}&q=${encodeURIComponent(q)}`).then(r=>r.json()).then(d=>{
+    mode==='where'?renderWhere(d):renderSearch(d);
+  });
+}
+$('#q').addEventListener('input',()=>{clearTimeout(timer);timer=setTimeout(run,180);});
+$('#mode').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+  mode=b.dataset.m;[...$('#mode').children].forEach(x=>x.classList.toggle('on',x===b));run();});
+
+$('#results').addEventListener('click',async e=>{
+  const card=e.target.closest('.card'); if(!card)return;
+  const rel=card.dataset.rel;
+  const act=e.target.closest('[data-act]')?.dataset.act || (e.target.closest('.expand')?'toggle':null);
+  if(act==='copy'){await navigator.clipboard.writeText(rel);toast('Chemin copié');}
+  else if(act==='vscode'){
+    const line=e.target.closest('[data-act="vscode"]')?.dataset.line||'';
+    const res=await fetch('/api/open',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({path:rel,line:line?Number(line):undefined})}).then(r=>r.json());
+    toast(res.ok?'Ouvert dans VS Code':(res.error||'Échec ouverture'));
+  }
+  else if(act==='toggle'){card.classList.toggle('open');}
+});
+
+$('#reindex').addEventListener('click',async()=>{
+  $('#reindex').disabled=true;$('#reindex').textContent='Réindexation…';
+  await fetch('/api/reindex',{method:'POST'});
+  await loadMeta();run();
+  $('#reindex').disabled=false;$('#reindex').textContent='Réindexer';toast('Réindexé');
+});
+
+$('#copyClaude').addEventListener('click',async()=>{
+  if(!lastFlat.length){toast('Aucun résultat à copier');return;}
+  const top=lastFlat.slice(0,6);
+  const list=top.map(r=>{const l=linesOf(r);return `- ${r.rel} — ${r.role||''}${l.length?` — lignes ${l.join(', ')}`:''}`;}).join('\n');
+  const prompt=`Je souhaite modifier : ${lastQuery}.\n\nCodeMap a identifié les fichiers suivants comme probablement concernés :\n\n${list}\n\nAnalyse ces fichiers et leurs dépendances avant toute modification.\nExplique-moi d'abord ce qu'il faut modifier et pourquoi.\nNe modifie aucun fichier avant mon accord.`;
+  await navigator.clipboard.writeText(prompt);
+  toast('Prompt copié pour Claude Code');
+});
+
+$('#archPanel').addEventListener('toggle',async function(){
+  if(!this.open || this.dataset.loaded)return;
+  const a=await fetch('/api/architecture').then(r=>r.json());
+  const S=a.sectionCounts;
+  const secLabels={pages:'Pages',api:'Routes API',components:'Composants',services:'Services',settings:'Paramètres',hooks:'Hooks',migrations:'Migrations',utils:'Utilitaires'};
+  let html='<div class="archgrid">';
+  for(const k in secLabels) html+=`<div class="archbox"><b>${secLabels[k]}</b><div class="c">${S[k]||0} fichiers</div></div>`;
+  html+='</div><h2 style="font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--soft)">Fonctionnalités</h2><div class="archgrid">';
+  for(const c of a.clusters) html+=`<div class="archbox"><b>${esc(c.label)}</b><div class="c">${c.count} fichiers</div></div>`;
+  html+='</div>';
+  $('#archBody').innerHTML=html;this.dataset.loaded='1';
+});
+
+loadMeta();
+</script>
+</body>
+</html>
