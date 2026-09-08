@@ -186,6 +186,14 @@ export default function InventoryDetail({ inventoryId }: { inventoryId: string }
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {(isReviewing || isFinalized) && (
+            <button
+              onClick={printReport}
+              className="btn-soft h-10 text-sm font-semibold px-4"
+            >
+              🖨 Rapport d&apos;inventaire
+            </button>
+          )}
           <StatusBadge status={status} />
         </div>
       </div>
@@ -351,14 +359,6 @@ export default function InventoryDetail({ inventoryId }: { inventoryId: string }
             className="btn-soft h-12 text-base font-semibold px-6"
           >
             Passer au pointage
-          </button>
-        )}
-        {(isReviewing || isFinalized) && (
-          <button
-            onClick={printReport}
-            className="btn-soft h-12 text-base font-semibold px-6"
-          >
-            🖨 Rapport d&apos;inventaire
           </button>
         )}
         {isReviewing && (

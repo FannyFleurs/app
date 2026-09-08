@@ -54,8 +54,13 @@ function tronque(doc: PDFKit.PDFDocument, texte: string, largeur: number): strin
 }
 
 const nb = (v: number) => (Number.isInteger(v) ? String(v) : v.toFixed(3).replace(/\.?0+$/, ''));
+// Le séparateur de milliers de `fr-FR` est une espace fine insécable (U+202F),
+// absente de l'encodage WinAnsi des polices standard de pdfkit : elle sortait
+// comme un « / » dans le document. On la remplace (ainsi que l'insécable
+// classique) par une espace ordinaire.
 const eur = (v: number) =>
-  `${v.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
+  `${v.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    .replace(/\s/g, ' ')} €`;
 
 export async function renderInventoryPdf(
   inv: InventoryPdfHeader, lines: InventoryPdfLine[],
