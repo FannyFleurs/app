@@ -401,9 +401,6 @@ export default function ProductFormModal({
             {/* 1. INFORMATIONS PRODUIT */}
             <section className="rounded-2xl border border-border bg-white p-4 sm:p-5">
               <div className="mb-4 flex items-start gap-3">
-                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[color:var(--primary)]/10 text-lg">
-                  ◇
-                </div>
                 <div>
                   <h3 className="font-semibold text-ink">1. Informations produit</h3>
                   <p className="text-sm text-ink-soft">
@@ -536,9 +533,6 @@ export default function ProductFormModal({
             {/* 2. PRIX ET MARGE */}
             <section className="rounded-2xl border border-border bg-white p-4 sm:p-5">
               <div className="mb-4 flex items-start gap-3">
-                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[color:var(--primary)]/10 text-xl font-semibold">
-                  €
-                </div>
                 <div>
                   <h3 className="font-semibold text-ink">2. Prix et marge</h3>
                   <p className="text-sm text-ink-soft">
@@ -720,9 +714,6 @@ export default function ProductFormModal({
             <details className="group rounded-2xl border border-border bg-white">
               <summary className="flex cursor-pointer list-none items-center justify-between p-4 sm:p-5">
                 <div className="flex items-start gap-3">
-                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[color:var(--primary)]/10">
-                    ▥
-                  </div>
                   <div>
                     <h3 className="font-semibold text-ink">5. Références et codes-barres</h3>
                     <p className="text-sm text-ink-soft">
@@ -812,9 +803,6 @@ export default function ProductFormModal({
             <details className="group rounded-2xl border border-border bg-white">
               <summary className="flex cursor-pointer list-none items-center justify-between p-4 sm:p-5">
                 <div className="flex items-start gap-3">
-                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[color:var(--primary)]/10">
-                    ⚙
-                  </div>
                   <div>
                     <h3 className="font-semibold text-ink">Options avancées</h3>
                     <p className="text-sm text-ink-soft">
@@ -940,9 +928,6 @@ export default function ProductFormModal({
             {/* 3. STOCK */}
             <section className="rounded-2xl border border-border bg-white p-4 sm:p-5">
               <div className="mb-4 flex items-start gap-3">
-                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[color:var(--primary)]/10">
-                  ◇
-                </div>
                 <div>
                   <h3 className="font-semibold text-ink">3. Stock et disponibilité</h3>
                   <p className="text-sm text-ink-soft">
@@ -1036,9 +1021,6 @@ export default function ProductFormModal({
             {/* 4. AFFICHAGE CAISSE */}
             <section className="rounded-2xl border border-border bg-white p-4 sm:p-5">
               <div className="mb-4 flex items-start gap-3">
-                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[color:var(--primary)]/10">
-                  ▣
-                </div>
                 <div>
                   <h3 className="font-semibold text-ink">4. Affichage en caisse</h3>
                   <p className="text-sm text-ink-soft">
