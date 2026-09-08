@@ -165,6 +165,12 @@ export default function InventoryDetail({ inventoryId }: { inventoryId: string }
     window.open(`/api/inventories/${inventoryId}/discrepancies-pdf`, '_blank');
   }
 
+  // Rapport complet : toutes les lignes comptées, valeur du stock par famille
+  // et total. C'est la pièce qu'on archive, distincte de la liste des écarts.
+  function printReport() {
+    window.open(`/api/inventories/${inventoryId}/report-pdf`, '_blank');
+  }
+
   if (loading || !inv) {
     return <div className="p-8 text-sm text-ink-soft">Chargement…</div>;
   }
@@ -345,6 +351,14 @@ export default function InventoryDetail({ inventoryId }: { inventoryId: string }
             className="btn-soft h-12 text-base font-semibold px-6"
           >
             Passer au pointage
+          </button>
+        )}
+        {(isReviewing || isFinalized) && (
+          <button
+            onClick={printReport}
+            className="btn-soft h-12 text-base font-semibold px-6"
+          >
+            🖨 Rapport d&apos;inventaire
           </button>
         )}
         {isReviewing && (
