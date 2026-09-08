@@ -49,6 +49,7 @@ describe('Suivi du stock', () => {
   it('propose la case sur la fiche article', () => {
     const form = readFileSync('app/(app)/products/ProductFormModal.tsx', 'utf8');
     expect(form).toContain('label="Gérer le stock"');
+    expect(form).toContain('checked={form.track_stock}');
     expect(form).toMatch(/track_stock: form\.track_stock/);
     // La liste doit renvoyer la colonne, sinon la case s'ouvre toujours vide.
     expect(readFileSync('app/api/products/route.ts', 'utf8')).toMatch(/p\.track_stock,/);
