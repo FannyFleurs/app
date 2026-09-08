@@ -343,7 +343,7 @@ export default function ProductFormModal({
       : 'fixed inset-0 z-50 grid place-items-center bg-ink/30 backdrop-blur-sm p-2 sm:p-4 overflow-auto'}>
       <div className={inline
         ? 'card w-full p-4 sm:p-6'
-        : 'card w-full max-w-2xl lg:max-w-4xl p-4 sm:p-6 my-4 sm:my-8'}>
+        : 'card w-full max-w-7xl p-4 sm:p-6 my-4 sm:my-8'}>
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2 min-w-0">
             <h2 className="text-lg font-semibold">{product ? 'Modifier produit' : 'Nouveau produit'}</h2>
@@ -393,375 +393,787 @@ export default function ProductFormModal({
             stores={stores}
           />
         ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Field label="Nom" full>
-            <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          </Field>
-          <Field label="Description courte" full>
-            <input className="input" value={form.short_description}
-                   onChange={(e) => setForm({ ...form, short_description: e.target.value })} />
-          </Field>
-          <Field label="SKU">
-            <input className="input" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} />
-          </Field>
-          <Field label="Code-barres (EAN-13)">
-            <div className="flex gap-2">
-              <input
-                className="input flex-1"
-                value={form.barcode}
-                onChange={(e) => setForm({ ...form, barcode: e.target.value })}
-                placeholder="13 chiffres"
-                maxLength={13}
-              />
-              <button
-                type="button"
-                className="btn-soft text-xs whitespace-nowrap"
-                onClick={() => setForm({ ...form, barcode: generateEan13('20') })}
-                title="Génère un EAN-13 valide avec préfixe interne 20"
-              >
-                Générer EAN
-              </button>
-            </div>
-            {/* Multi-EAN : codes-barres supplémentaires. Le scan reconnaît
-                l'article via son code principal OU l'un de ces codes. */}
-            <div className="mt-2 space-y-2">
-              {form.extra_barcodes.map((code, idx) => (
-                <div key={idx} className="flex gap-2">
+        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.55fr)_minmax(360px,0.85fr)] gap-4">
+
+          {/* COLONNE PRINCIPALE */}
+          <div className="space-y-4">
+
+            {/* 1. INFORMATIONS PRODUIT */}
+            <section className="rounded-2xl border border-border bg-white p-4 sm:p-5">
+              <div className="mb-4 flex items-start gap-3">
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[color:var(--primary)]/10 text-lg">
+                  ◇
+                </div>
+                <div>
+                  <h3 className="font-semibold text-ink">1. Informations produit</h3>
+                  <p className="text-sm text-ink-soft">
+                    Identifiez l&apos;article et renseignez ses informations principales.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <Field label="Nom de l'article">
                   <input
-                    className="input flex-1 text-sm"
-                    value={code}
-                    onChange={(e) => {
-                      const next = [...form.extra_barcodes];
-                      next[idx] = e.target.value;
-                      setForm({ ...form, extra_barcodes: next });
-                    }}
-                    placeholder="Code-barres supplémentaire"
-                    maxLength={80}
+                    className="input h-11 text-base"
+                    value={form.name}
+                    placeholder="Ex. Monstera Deliciosa"
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
                   />
-                  <button
-                    type="button"
-                    className="btn-ghost text-danger text-sm px-3"
-                    onClick={() => setForm({ ...form, extra_barcodes: form.extra_barcodes.filter((_, i) => i !== idx) })}
-                    aria-label="Retirer ce code"
-                  >
-                    ✕
-                  </button>
-                </div>
-              ))}
-              <button
-                type="button"
-                className="btn-soft text-xs"
-                onClick={() => setForm({ ...form, extra_barcodes: [...form.extra_barcodes, ''] })}
-              >
-                + Ajouter un code-barres
-              </button>
-            </div>
-          </Field>
-          <Field label="Catégorie">
-            {newCat === null ? (
-              <div className="flex gap-2">
-                <select
-                  className="input h-11 text-base flex-1"
-                  value={form.category_id ?? ''}
-                  onChange={(e) => setForm({ ...form, category_id: e.target.value })}
-                >
-                  <option value="">— Aucune catégorie —</option>
-                  {liveCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-                <button type="button" className="btn-soft whitespace-nowrap"
-                        onClick={() => setNewCat('')} title="Créer une catégorie">+ Créer</button>
-              </div>
-            ) : (
-              <div className="flex gap-2">
-                <input className="input h-11 flex-1" autoFocus value={newCat}
-                       placeholder="Nom de la catégorie"
-                       onChange={(e) => setNewCat(e.target.value)}
-                       onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void addCategory(); } }} />
-                <button type="button" className="btn-primary whitespace-nowrap"
-                        disabled={inlineBusy || !newCat.trim()} onClick={() => void addCategory()}>Ajouter</button>
-                <button type="button" className="btn-ghost" onClick={() => setNewCat(null)}>✕</button>
-              </div>
-            )}
-          </Field>
-          <Field label="Fournisseur">
-            {newSup === null ? (
-              <div className="flex gap-2">
-                <select
-                  className="input h-11 text-base flex-1"
-                  value={form.supplier_id ?? ''}
-                  onChange={(e) => setForm({ ...form, supplier_id: e.target.value })}
-                >
-                  <option value="">— Aucun fournisseur —</option>
-                  {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-                <button type="button" className="btn-soft whitespace-nowrap"
-                        onClick={() => setNewSup('')} title="Créer un fournisseur">+ Créer</button>
-              </div>
-            ) : (
-              <div className="flex gap-2">
-                <input className="input h-11 flex-1" autoFocus value={newSup}
-                       placeholder="Nom du fournisseur"
-                       onChange={(e) => setNewSup(e.target.value)}
-                       onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void addSupplier(); } }} />
-                <button type="button" className="btn-primary whitespace-nowrap"
-                        disabled={inlineBusy || !newSup.trim()} onClick={() => void addSupplier()}>Ajouter</button>
-                <button type="button" className="btn-ghost" onClick={() => setNewSup(null)}>✕</button>
-              </div>
-            )}
-          </Field>
-          <Field label="Taux TVA">
-            <select
-              className="input h-11 text-base"
-              value={form.tax_rate_id}
-              onChange={(e) => setForm({ ...form, tax_rate_id: e.target.value })}
-            >
-              {taxRates.map((t) => (
-                <option key={t.id} value={t.id}>{t.rate}%</option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Prix TTC (€)">
-            <input
-              type="text" inputMode="decimal"
-              className="input h-11 text-base"
-              value={form.sale_price_ttc}
-              onChange={(e) => setForm({ ...form, sale_price_ttc: e.target.value.replace(/[^0-9.,]/g, '') })}
-              disabled={form.price_is_free}
-              placeholder="0,00"
-            />
-          </Field>
-          <Field label="Prix d'achat HT (€)">
-            <input
-              type="text" inputMode="decimal"
-              className="input h-11 text-base"
-              value={form.purchase_price_ht}
-              onChange={(e) => setForm({ ...form, purchase_price_ht: e.target.value.replace(/[^0-9.,]/g, '') })}
-              placeholder="0,00"
-            />
-          </Field>
-          <Field label="Coût transport HT (€)">
-            <input
-              type="text" inputMode="decimal"
-              className="input h-11 text-base"
-              value={form.transport_cost_ht}
-              onChange={(e) => setForm({ ...form, transport_cost_ht: e.target.value.replace(/[^0-9.,]/g, '') })}
-              placeholder="hérité de la catégorie"
-            />
-            <p className="mt-1 text-xs text-ink-soft">Vide = coût par défaut de la catégorie (Réglages → Coûts de transport).</p>
-          </Field>
-          <Field label="Remise (affichée sur l'étiquette)" full>
-            <div className="flex flex-wrap items-center gap-2">
-              <select
-                className="input h-11 w-auto"
-                value={form.discount_type}
-                onChange={(e) => setForm({ ...form, discount_type: e.target.value as '' | 'percent' | 'amount' })}
-              >
-                <option value="">Aucune remise</option>
-                <option value="percent">Pourcentage (%)</option>
-                <option value="amount">Montant (€)</option>
-              </select>
-              {form.discount_type && (
-                <input
-                  type="text" inputMode="decimal"
-                  className="input h-11 w-28"
-                  value={form.discount_value}
-                  onChange={(e) => setForm({ ...form, discount_value: e.target.value.replace(/[^0-9.,]/g, '') })}
-                  placeholder={form.discount_type === 'percent' ? 'ex : 20' : 'ex : 5,00'}
-                />
-              )}
-              {form.discount_type && parseAmount(form.discount_value) > 0 && (() => {
-                const price = parseAmount(form.sale_price_ttc);
-                const raw = form.discount_type === 'percent'
-                  ? price * (1 - parseAmount(form.discount_value) / 100)
-                  : price - parseAmount(form.discount_value);
-                const disc = Math.max(0, raw);
-                return (
-                  <span className="text-sm">
-                    <span className="text-ink-soft line-through mr-1">{price.toFixed(2)} €</span>
-                    <span className="font-semibold text-success">{disc.toFixed(2)} €</span>
-                  </span>
-                );
-              })()}
-            </div>
-          </Field>
-          <Field label="Marge calculée" full>
-            {(() => {
-              const purchase = parseAmount(form.purchase_price_ht);
-              const transport = parseAmount(form.transport_cost_ht);
-              const sellTtc = parseAmount(form.sale_price_ttc);
-              const taxRate = taxRates.find((t) => t.id === form.tax_rate_id)?.rate ?? 0;
-              const sellHt = sellTtc / (1 + taxRate / 100);
-              if (purchase <= 0 || sellHt <= 0) {
-                return <div className="text-sm text-ink-soft italic">
-                  Renseignez prix d&apos;achat HT + prix de vente TTC pour voir la marge.
-                </div>;
-              }
-              const cost = purchase + transport;
-              const margin = sellHt - cost;
-              const marginPct = (margin / sellHt) * 100;
-              const coeff = sellHt / cost;
-              return (
-                <div className="grid grid-cols-3 gap-2 sm:gap-3">
-                  <Stat label="Marge brute" value={`${margin.toFixed(2)} €`} tone={margin > 0 ? 'success' : 'danger'} />
-                  <Stat label="Taux de marge" value={`${marginPct.toFixed(1)} %`} tone={marginPct >= 50 ? 'success' : marginPct >= 30 ? 'warning' : 'danger'} />
-                  <Stat label="Coefficient" value={`× ${coeff.toFixed(2)}`} />
-                </div>
-              );
-            })()}
-          </Field>
-          <Field label="Options" full>
-            <div className="grid grid-cols-2 gap-y-1.5 gap-x-4 mt-2">
-              <Check label="Gérer le stock" checked={form.track_stock}
-                     onChange={(v) => setForm({ ...form, track_stock: v })} />
-              <Check label="Prix libre" checked={form.price_is_free}
-                     onChange={(v) => setForm({ ...form, price_is_free: v, sale_price_ttc: v ? '' : form.sale_price_ttc })} />
-              <Check label="Top produit (épinglé en grille)" checked={form.is_top_product}
-                     onChange={(v) => setForm({ ...form, is_top_product: v })} />
-              {/* « Actif » a été retiré : deux commandes pour un même effet
-                  (la case et le bouton Archiver) se contredisaient à la
-                  première hésitation. C'est le bouton qui décide. */}
-              <Check label="Visible en caisse" checked={form.visible_in_pos}
-                     onChange={(v) => setForm({ ...form, visible_in_pos: v })} />
-            </div>
-            <p className="mt-2 text-xs text-ink-soft">
-              {form.track_stock
-                ? 'Chaque vente en caisse décompte cet article, et chaque retour le recrédite. Les inventaires et les alertes de réassort le prennent en compte.'
-                : 'Cet article se vend sans être décompté : aucun mouvement de stock, donc aucune quantité négative à corriger. À réserver à ce qui n\'a pas de stock à tenir — article assemblé au comptoir, prestation, carte cadeau.'}
-            </p>
-            {form.is_top_product && (
-              <p className="mt-2 text-xs text-ink-soft">
-                Les produits Top sont affichés en première ligne de la grille catégories
-                (4 maximum). Au-delà, seuls les 4 premiers sont retenus.
-              </p>
-            )}
-          </Field>
+                </Field>
 
-          <Field label="Couleur de la tuile (caisse)" full>
-            <div className="flex flex-wrap gap-2 mt-1">
-              {PRODUCT_COLORS.map((c) => {
-                const isSelected = form.color === c.value;
-                return (
-                  <button
-                    key={c.label}
-                    type="button"
-                    onClick={() => setForm({ ...form, color: c.value })}
-                    title={c.label}
-                    className={`h-9 w-9 rounded-lg border transition-all ${
-                      isSelected ? 'ring-2 shadow-sm' : 'hover:scale-105'
-                    } ${c.value === null ? 'border-dashed border-border bg-white' : 'border-border'}`}
-                    style={{
-                      backgroundColor: c.value ?? '#fff',
-                      ...(isSelected ? { ['--tw-ring-color' as string]: 'var(--primary)' } : {}),
-                    }}
-                  >
-                    {c.value === null && (
-                      <span className="text-xs text-ink-soft">—</span>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Field label="Catégorie">
+                    {newCat === null ? (
+                      <div className="flex gap-2">
+                        <select
+                          className="input h-11 text-base flex-1"
+                          value={form.category_id ?? ''}
+                          onChange={(e) => setForm({ ...form, category_id: e.target.value })}
+                        >
+                          <option value="">— Aucune catégorie —</option>
+                          {liveCategories.map((c) => (
+                            <option key={c.id} value={c.id}>{c.name}</option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          className="btn-soft whitespace-nowrap"
+                          onClick={() => setNewCat('')}
+                        >
+                          + Créer
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex gap-2">
+                        <input
+                          className="input h-11 flex-1"
+                          autoFocus
+                          value={newCat}
+                          placeholder="Nom de la catégorie"
+                          onChange={(e) => setNewCat(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              void addCategory();
+                            }
+                          }}
+                        />
+                        <button
+                          type="button"
+                          className="btn-primary whitespace-nowrap"
+                          disabled={inlineBusy || !newCat.trim()}
+                          onClick={() => void addCategory()}
+                        >
+                          Ajouter
+                        </button>
+                        <button type="button" className="btn-ghost" onClick={() => setNewCat(null)}>✕</button>
+                      </div>
                     )}
-                  </button>
-                );
-              })}
-            </div>
-            <p className="mt-1 text-xs text-ink-soft">
-              Couleur de fond appliquée à la tuile article sur la grille caisse.
-            </p>
-          </Field>
+                  </Field>
 
-          <Field label="Photo de l'article" full>
-            <div className="mt-1 flex items-center gap-4">
-              <div className="h-20 w-20 rounded-xl border border-border bg-gray-50 grid place-items-center overflow-hidden shrink-0">
-                {(photo || existingPhoto)
-                  // eslint-disable-next-line @next/next/no-img-element
-                  ? <img src={(photo || existingPhoto)!} alt="" className="h-full w-full object-cover" />
-                  : null}
+                  <Field label="Fournisseur">
+                    {newSup === null ? (
+                      <div className="flex gap-2">
+                        <select
+                          className="input h-11 text-base flex-1"
+                          value={form.supplier_id ?? ''}
+                          onChange={(e) => setForm({ ...form, supplier_id: e.target.value })}
+                        >
+                          <option value="">— Aucun fournisseur —</option>
+                          {suppliers.map((s) => (
+                            <option key={s.id} value={s.id}>{s.name}</option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          className="btn-soft whitespace-nowrap"
+                          onClick={() => setNewSup('')}
+                        >
+                          + Créer
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex gap-2">
+                        <input
+                          className="input h-11 flex-1"
+                          autoFocus
+                          value={newSup}
+                          placeholder="Nom du fournisseur"
+                          onChange={(e) => setNewSup(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              void addSupplier();
+                            }
+                          }}
+                        />
+                        <button
+                          type="button"
+                          className="btn-primary whitespace-nowrap"
+                          disabled={inlineBusy || !newSup.trim()}
+                          onClick={() => void addSupplier()}
+                        >
+                          Ajouter
+                        </button>
+                        <button type="button" className="btn-ghost" onClick={() => setNewSup(null)}>✕</button>
+                      </div>
+                    )}
+                  </Field>
+                </div>
+
+                <Field label="Description courte">
+                  <input
+                    className="input h-11 text-base"
+                    value={form.short_description}
+                    placeholder="Ex. Plante d'intérieur facile d'entretien…"
+                    onChange={(e) => setForm({ ...form, short_description: e.target.value })}
+                  />
+                </Field>
               </div>
-              <div className="space-y-2">
-                <button type="button" onClick={() => photoInputRef.current?.click()} className="btn-soft h-10 px-3 text-sm">
-                  📷 Prendre une photo
-                </button>
-                {(photo || existingPhoto) && (
-                  <button type="button"
-                          onClick={() => { setPhoto(null); setExistingPhoto(null); }}
-                          className="block text-xs text-danger hover:underline">
-                    Retirer la photo
+            </section>
+
+            {/* 2. PRIX ET MARGE */}
+            <section className="rounded-2xl border border-border bg-white p-4 sm:p-5">
+              <div className="mb-4 flex items-start gap-3">
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[color:var(--primary)]/10 text-xl font-semibold">
+                  €
+                </div>
+                <div>
+                  <h3 className="font-semibold text-ink">2. Prix et marge</h3>
+                  <p className="text-sm text-ink-soft">
+                    Renseignez les prix pour calculer automatiquement la marge.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Field label="Prix d'achat HT (€)">
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    className="input h-11 text-base"
+                    value={form.purchase_price_ht}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        purchase_price_ht: e.target.value.replace(/[^0-9.,]/g, ''),
+                      })
+                    }
+                    placeholder="0,00"
+                  />
+                </Field>
+
+                <Field label="Taux TVA">
+                  <select
+                    className="input h-11 text-base"
+                    value={form.tax_rate_id}
+                    onChange={(e) => setForm({ ...form, tax_rate_id: e.target.value })}
+                  >
+                    {taxRates.map((t) => (
+                      <option key={t.id} value={t.id}>{t.rate}%</option>
+                    ))}
+                  </select>
+                </Field>
+
+                <Field label="Prix de vente TTC (€)">
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    className="input h-11 text-base"
+                    value={form.sale_price_ttc}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        sale_price_ttc: e.target.value.replace(/[^0-9.,]/g, ''),
+                      })
+                    }
+                    disabled={form.price_is_free}
+                    placeholder="0,00"
+                  />
+                </Field>
+              </div>
+
+              <div className="mt-4">
+                {(() => {
+                  const purchase = parseAmount(form.purchase_price_ht);
+                  const transport = parseAmount(form.transport_cost_ht);
+                  const sellTtc = parseAmount(form.sale_price_ttc);
+                  const taxRate = taxRates.find((t) => t.id === form.tax_rate_id)?.rate ?? 0;
+                  const sellHt = sellTtc / (1 + taxRate / 100);
+                  const cost = purchase + transport;
+
+                  if (purchase <= 0 || sellHt <= 0) {
+                    return (
+                      <div className="rounded-2xl bg-[color:var(--primary)]/5 px-4 py-4">
+                        <div className="text-sm font-medium text-ink">Marge estimée</div>
+                        <div className="mt-1 text-sm text-ink-soft">
+                          Renseignez le prix d&apos;achat HT et le prix de vente TTC pour afficher la marge.
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  const margin = sellHt - cost;
+                  const marginPct = (margin / sellHt) * 100;
+                  const coeff = cost > 0 ? sellHt / cost : 0;
+
+                  return (
+                    <div className="rounded-2xl bg-[color:var(--primary)]/5 px-4 py-4">
+                      <div className="mb-3 text-sm font-medium text-ink">Marge estimée</div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <Stat
+                          label="Marge brute"
+                          value={`${margin.toFixed(2)} €`}
+                          tone={margin > 0 ? 'success' : 'danger'}
+                        />
+                        <Stat
+                          label="Taux de marge"
+                          value={`${marginPct.toFixed(1)} %`}
+                          tone={marginPct >= 50 ? 'success' : marginPct >= 30 ? 'warning' : 'danger'}
+                        />
+                        <Stat label="Coefficient" value={`× ${coeff.toFixed(2)}`} />
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Field label="Coût transport HT (€)">
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    className="input h-11 text-base"
+                    value={form.transport_cost_ht}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        transport_cost_ht: e.target.value.replace(/[^0-9.,]/g, ''),
+                      })
+                    }
+                    placeholder="Hérité de la catégorie"
+                  />
+                  <p className="mt-1 text-xs text-ink-soft">
+                    Laissez vide pour utiliser le coût défini dans la catégorie.
+                  </p>
+                </Field>
+
+                <Field label="Remise affichée sur l'étiquette">
+                  <div className="flex gap-2">
+                    <select
+                      className="input h-11 flex-1"
+                      value={form.discount_type}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          discount_type: e.target.value as '' | 'percent' | 'amount',
+                        })
+                      }
+                    >
+                      <option value="">Aucune remise</option>
+                      <option value="percent">Pourcentage (%)</option>
+                      <option value="amount">Montant (€)</option>
+                    </select>
+
+                    {form.discount_type && (
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        className="input h-11 w-28"
+                        value={form.discount_value}
+                        onChange={(e) =>
+                          setForm({
+                            ...form,
+                            discount_value: e.target.value.replace(/[^0-9.,]/g, ''),
+                          })
+                        }
+                        placeholder={form.discount_type === 'percent' ? '20' : '5,00'}
+                      />
+                    )}
+                  </div>
+
+                  {form.discount_type && parseAmount(form.discount_value) > 0 && (() => {
+                    const price = parseAmount(form.sale_price_ttc);
+                    const raw =
+                      form.discount_type === 'percent'
+                        ? price * (1 - parseAmount(form.discount_value) / 100)
+                        : price - parseAmount(form.discount_value);
+                    const discounted = Math.max(0, raw);
+
+                    return (
+                      <div className="mt-2 text-sm">
+                        <span className="mr-2 text-ink-soft line-through">
+                          {price.toFixed(2)} €
+                        </span>
+                        <span className="font-semibold text-success">
+                          {discounted.toFixed(2)} €
+                        </span>
+                      </div>
+                    );
+                  })()}
+                </Field>
+              </div>
+            </section>
+
+            {/* 5. REFERENCES */}
+            <details className="group rounded-2xl border border-border bg-white">
+              <summary className="flex cursor-pointer list-none items-center justify-between p-4 sm:p-5">
+                <div className="flex items-start gap-3">
+                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[color:var(--primary)]/10">
+                    ▥
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-ink">5. Références et codes-barres</h3>
+                    <p className="text-sm text-ink-soft">
+                      SKU, code-barres principal et codes additionnels.
+                    </p>
+                  </div>
+                </div>
+                <span className="text-xl text-ink-soft transition-transform group-open:rotate-180">⌄</span>
+              </summary>
+
+              <div className="border-t border-border px-4 pb-5 pt-4 sm:px-5">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Field label="SKU">
+                    <input
+                      className="input h-11"
+                      value={form.sku}
+                      onChange={(e) => setForm({ ...form, sku: e.target.value })}
+                    />
+                  </Field>
+
+                  <Field label="Code-barres principal">
+                    <div className="flex gap-2">
+                      <input
+                        className="input h-11 flex-1"
+                        value={form.barcode}
+                        onChange={(e) => setForm({ ...form, barcode: e.target.value })}
+                        placeholder="EAN-13"
+                        maxLength={13}
+                      />
+                      <button
+                        type="button"
+                        className="btn-soft whitespace-nowrap text-xs"
+                        onClick={() => setForm({ ...form, barcode: generateEan13('20') })}
+                      >
+                        Générer EAN
+                      </button>
+                    </div>
+                  </Field>
+                </div>
+
+                <div className="mt-4 space-y-2">
+                  {form.extra_barcodes.map((code, idx) => (
+                    <div key={idx} className="flex gap-2">
+                      <input
+                        className="input h-11 flex-1"
+                        value={code}
+                        onChange={(e) => {
+                          const next = [...form.extra_barcodes];
+                          next[idx] = e.target.value;
+                          setForm({ ...form, extra_barcodes: next });
+                        }}
+                        placeholder="Code-barres supplémentaire"
+                        maxLength={80}
+                      />
+                      <button
+                        type="button"
+                        className="btn-ghost px-3 text-danger"
+                        onClick={() =>
+                          setForm({
+                            ...form,
+                            extra_barcodes: form.extra_barcodes.filter((_, i) => i !== idx),
+                          })
+                        }
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+
+                  <button
+                    type="button"
+                    className="btn-soft text-xs"
+                    onClick={() =>
+                      setForm({
+                        ...form,
+                        extra_barcodes: [...form.extra_barcodes, ''],
+                      })
+                    }
+                  >
+                    + Ajouter un code-barres
                   </button>
+                </div>
+              </div>
+            </details>
+
+            {/* OPTIONS AVANCEES */}
+            <details className="group rounded-2xl border border-border bg-white">
+              <summary className="flex cursor-pointer list-none items-center justify-between p-4 sm:p-5">
+                <div className="flex items-start gap-3">
+                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[color:var(--primary)]/10">
+                    ⚙
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-ink">Options avancées</h3>
+                    <p className="text-sm text-ink-soft">
+                      Réglages complémentaires de l&apos;article.
+                    </p>
+                  </div>
+                </div>
+                <span className="text-xl text-ink-soft transition-transform group-open:rotate-180">⌄</span>
+              </summary>
+
+              <div className="border-t border-border px-4 pb-5 pt-4 sm:px-5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Check
+                    label="Prix libre"
+                    checked={form.price_is_free}
+                    onChange={(v) =>
+                      setForm({
+                        ...form,
+                        price_is_free: v,
+                        sale_price_ttc: v ? '' : form.sale_price_ttc,
+                      })
+                    }
+                  />
+                  <Check
+                    label="Article saisonnier"
+                    checked={form.is_seasonal}
+                    onChange={(v) => setForm({ ...form, is_seasonal: v })}
+                  />
+                  <Check
+                    label="Article personnalisable"
+                    checked={form.is_customizable}
+                    onChange={(v) => setForm({ ...form, is_customizable: v })}
+                  />
+                  <Check
+                    label="Exclure des remises"
+                    checked={form.no_discount}
+                    onChange={(v) => setForm({ ...form, no_discount: v })}
+                  />
+                </div>
+
+                {product && (
+                  <div className="mt-4">
+                    <Field label="Raison du changement de prix">
+                      <input
+                        className="input h-11"
+                        value={form.price_change_reason}
+                        onChange={(e) =>
+                          setForm({ ...form, price_change_reason: e.target.value })
+                        }
+                        placeholder="Ex. hausse fournisseur, promotion…"
+                      />
+                      <p className="mt-1 text-xs text-ink-soft">
+                        Le changement de prix est enregistré dans l&apos;historique de l&apos;article.
+                      </p>
+                    </Field>
+                  </div>
                 )}
               </div>
-              <input ref={photoInputRef} type="file" accept="image/*" capture="environment"
-                     className="hidden" onChange={onPhotoFile} />
-            </div>
-            <p className="mt-1 text-xs text-ink-soft">
-              Enregistrée sur l&apos;article — sert de vignette en caisse et sur le PDA.
-            </p>
-          </Field>
+            </details>
+          </div>
 
-          {backOffice && stores.length > 0 && (
-            <Field label="Boutiques concernées" full>
-              <div className="mt-1 space-y-1.5">
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={form.store_ids.length === 0 || stores.every((s) => form.store_ids.includes(s.id))}
-                    onChange={(e) => {
-                      if (e.target.checked) setForm({ ...form, store_ids: [] });
-                    }}
-                  />
-                  <span className="font-medium">Toutes les boutiques</span>
+          {/* COLONNE DROITE */}
+          <div className="space-y-4">
+
+            {/* PHOTO */}
+            <section className="rounded-2xl border border-border bg-white p-4 sm:p-5">
+              <h3 className="mb-3 font-semibold text-ink">Photo de l&apos;article</h3>
+
+              <div className="flex flex-wrap items-center gap-4">
+                <div className="grid h-36 w-36 shrink-0 place-items-center overflow-hidden rounded-2xl border border-dashed border-border bg-gray-50">
+                  {(photo || existingPhoto) ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={(photo || existingPhoto)!}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="px-3 text-center text-xs text-ink-soft">
+                      Aucune photo
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => photoInputRef.current?.click()}
+                    className="btn-soft h-10 px-3 text-sm"
+                  >
+                    📷 {photo || existingPhoto ? 'Changer la photo' : 'Prendre une photo'}
+                  </button>
+
+                  {(photo || existingPhoto) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPhoto(null);
+                        setExistingPhoto(null);
+                      }}
+                      className="block text-xs text-danger hover:underline"
+                    >
+                      Retirer la photo
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={onPhotoFile}
+              />
+
+              <p className="mt-3 text-xs text-ink-soft">
+                Sert de vignette en caisse et sur le PDA.
+              </p>
+            </section>
+
+            {/* 3. STOCK */}
+            <section className="rounded-2xl border border-border bg-white p-4 sm:p-5">
+              <div className="mb-4 flex items-start gap-3">
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[color:var(--primary)]/10">
+                  ◇
+                </div>
+                <div>
+                  <h3 className="font-semibold text-ink">3. Stock et disponibilité</h3>
+                  <p className="text-sm text-ink-soft">
+                    Gérez le stock et choisissez où l&apos;article est disponible.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <label className="flex cursor-pointer items-center justify-between gap-4">
+                  <div>
+                    <div className="text-sm font-medium text-ink">Gérer le stock</div>
+                    <div className="text-xs text-ink-soft">
+                      Décompte automatiquement les ventes.
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={form.track_stock}
+                    onClick={() =>
+                      setForm({ ...form, track_stock: !form.track_stock })
+                    }
+                    className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
+                      form.track_stock ? 'bg-[color:var(--primary)]' : 'bg-gray-300'
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                        form.track_stock ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
                 </label>
-                {form.store_ids.length > 0 && !stores.every((s) => form.store_ids.includes(s.id)) && (
-                  <div className="ml-6 space-y-1 border-l border-border pl-3">
-                    {stores.map((s) => {
-                      const checked = form.store_ids.includes(s.id);
+
+                <label className="flex cursor-pointer items-center justify-between gap-4">
+                  <div>
+                    <div className="text-sm font-medium text-ink">Disponible en caisse</div>
+                    <div className="text-xs text-ink-soft">
+                      Affiche l&apos;article dans la caisse.
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={form.visible_in_pos}
+                    onClick={() =>
+                      setForm({ ...form, visible_in_pos: !form.visible_in_pos })
+                    }
+                    className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
+                      form.visible_in_pos ? 'bg-[color:var(--primary)]' : 'bg-gray-300'
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                        form.visible_in_pos ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </label>
+              </div>
+
+              {backOffice && stores.length > 0 && (
+                <div className="mt-5 border-t border-border pt-4">
+                  <div className="mb-3 text-sm font-semibold text-ink">Boutiques concernées</div>
+
+                  <div className="space-y-3">
+                    <label className="flex cursor-pointer items-center gap-2 text-sm">
+                      <input
+                        type="radio"
+                        name="product-store-scope"
+                        checked={
+                          form.store_ids.length === 0 ||
+                          stores.every((s) => form.store_ids.includes(s.id))
+                        }
+                        onChange={() => setForm({ ...form, store_ids: [] })}
+                      />
+                      <span>Toutes les boutiques</span>
+                    </label>
+
+                    <label className="flex cursor-pointer items-center gap-2 text-sm">
+                      <input
+                        type="radio"
+                        name="product-store-scope"
+                        checked={
+                          form.store_ids.length > 0 &&
+                          !stores.every((s) => form.store_ids.includes(s.id))
+                        }
+                        onChange={() =>
+                          setForm({
+                            ...form,
+                            store_ids: stores[0] ? [stores[0].id] : [],
+                          })
+                        }
+                      />
+                      <span>Certaines boutiques</span>
+                    </label>
+
+                    {form.store_ids.length > 0 &&
+                      !stores.every((s) => form.store_ids.includes(s.id)) && (
+                        <div className="ml-6 space-y-2 rounded-xl bg-gray-50 p-3">
+                          {stores.map((s) => {
+                            const checked = form.store_ids.includes(s.id);
+
+                            return (
+                              <label key={s.id} className="flex items-center gap-2 text-sm">
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={(e) => {
+                                    const next = e.target.checked
+                                      ? [...form.store_ids, s.id]
+                                      : form.store_ids.filter((x) => x !== s.id);
+
+                                    setForm({ ...form, store_ids: next });
+                                  }}
+                                />
+                                {s.name}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
+                  </div>
+                </div>
+              )}
+            </section>
+
+            {/* 4. AFFICHAGE CAISSE */}
+            <section className="rounded-2xl border border-border bg-white p-4 sm:p-5">
+              <div className="mb-4 flex items-start gap-3">
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[color:var(--primary)]/10">
+                  ▣
+                </div>
+                <div>
+                  <h3 className="font-semibold text-ink">4. Affichage en caisse</h3>
+                  <p className="text-sm text-ink-soft">
+                    Personnalisez l&apos;apparence de l&apos;article sur la caisse.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-[120px_minmax(0,1fr)] gap-4">
+                <div>
+                  <div className="mb-2 text-xs font-medium text-ink-soft">Aperçu de la tuile</div>
+                  <div
+                    className="overflow-hidden rounded-2xl border border-border p-2 shadow-sm"
+                    style={{ backgroundColor: form.color ?? '#fff' }}
+                  >
+                    <div className="aspect-square overflow-hidden rounded-xl bg-white/70">
+                      {(photo || existingPhoto) ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={(photo || existingPhoto)!}
+                          alt=""
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <div className="grid h-full place-items-center text-xs text-ink-soft">
+                          Photo
+                        </div>
+                      )}
+                    </div>
+                    <div className="mt-2 truncate text-center text-sm font-medium">
+                      {form.name || 'Nom article'}
+                    </div>
+                    <div className="text-center text-sm font-semibold">
+                      {parseAmount(form.sale_price_ttc).toFixed(2)} €
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="mb-2 text-xs font-medium text-ink-soft">Couleur de la tuile</div>
+                  <div className="flex flex-wrap gap-2">
+                    {PRODUCT_COLORS.map((c) => {
+                      const selected = form.color === c.value;
+
                       return (
-                        <label key={s.id} className="flex items-center gap-2 text-sm">
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={(e) => {
-                              const next = e.target.checked
-                                ? [...form.store_ids, s.id]
-                                : form.store_ids.filter((x) => x !== s.id);
-                              setForm({ ...form, store_ids: next });
-                            }}
-                          />
-                          {s.name}
-                        </label>
+                        <button
+                          key={c.label}
+                          type="button"
+                          onClick={() => setForm({ ...form, color: c.value })}
+                          title={c.label}
+                          className={`h-9 w-9 rounded-lg border transition-all ${
+                            selected ? 'ring-2 shadow-sm' : 'hover:scale-105'
+                          } ${
+                            c.value === null
+                              ? 'border-dashed border-border bg-white'
+                              : 'border-border'
+                          }`}
+                          style={{
+                            backgroundColor: c.value ?? '#fff',
+                            ...(selected
+                              ? { ['--tw-ring-color' as string]: 'var(--primary)' }
+                              : {}),
+                          }}
+                        >
+                          {c.value === null && (
+                            <span className="text-xs text-ink-soft">—</span>
+                          )}
+                        </button>
                       );
                     })}
                   </div>
-                )}
-                {(form.store_ids.length === 0 || stores.every((s) => form.store_ids.includes(s.id))) && stores.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => setForm({ ...form, store_ids: [stores[0]!.id] })}
-                    className="ml-6 text-xs text-accent-deep hover:underline"
-                  >
-                    ↳ Limiter à certaines boutiques
-                  </button>
-                )}
-              </div>
-              <p className="mt-2 text-xs text-ink-soft">
-                « Toutes les boutiques » = l&apos;article est vendu sur <strong>chaque</strong> caisse.
-                Pour le limiter, cochez « Limiter à certaines boutiques » puis sélectionnez-les.
-                Un article apparaît uniquement sur la caisse des boutiques cochées.
-              </p>
-            </Field>
-          )}
 
-          {product && (
-            <Field label="Raison du changement de prix" full>
-              <input className="input" value={form.price_change_reason}
-                     onChange={(e) => setForm({ ...form, price_change_reason: e.target.value })}
-                     placeholder="ex : hausse fournisseur, promotion…" />
-              <p className="mt-1 text-xs text-ink-soft">
-                Tout changement de prix est tracé dans l&apos;historique produit (append-only).
-              </p>
-            </Field>
-          )}
+                  <label className="mt-4 flex cursor-pointer items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={form.is_top_product}
+                      onChange={(e) =>
+                        setForm({ ...form, is_top_product: e.target.checked })
+                      }
+                    />
+                    <span>Épingler en haut de la caisse</span>
+                  </label>
+
+                  {form.is_top_product && (
+                    <p className="mt-2 text-xs text-ink-soft">
+                      Les produits épinglés sont affichés en priorité dans la grille caisse.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </section>
+          </div>
         </div>
         )}
         {error && tab === 'details' && <div className="mt-3 rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
         {tab === 'details' ? (
-          <div className="mt-4 flex flex-wrap justify-between gap-2">
+          <div className="sticky bottom-0 z-10 mt-4 flex flex-wrap justify-between gap-2 border-t border-border bg-white/95 py-3 backdrop-blur">
             <div className="flex gap-2">
               <button type="button" onClick={() => setShowLabel(true)}
                       className="btn-soft" title="Imprimer une étiquette avec code-barres et prix">
