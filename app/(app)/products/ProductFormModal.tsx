@@ -951,58 +951,20 @@ export default function ProductFormModal({
                 </div>
               </div>
 
-              <div className="space-y-3">
-                <label className="flex cursor-pointer items-center justify-between gap-4">
-                  <div>
-                    <div className="text-sm font-medium text-ink">Gérer le stock</div>
-                    <div className="text-xs text-ink-soft">
-                      Décompte automatiquement les ventes.
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={form.track_stock}
-                    onClick={() =>
-                      setForm({ ...form, track_stock: !form.track_stock })
-                    }
-                    className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
-                      form.track_stock ? 'bg-[color:var(--primary)]' : 'bg-gray-300'
-                    }`}
-                  >
-                    <span
-                      className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-transform ${
-                        form.track_stock ? 'translate-x-6' : 'translate-x-1'
-                      }`}
-                    />
-                  </button>
-                </label>
+              <div className="space-y-4">
+                <Toggle
+                  label="Gérer le stock"
+                  description="Décompte automatiquement les ventes."
+                  checked={form.track_stock}
+                  onChange={(v) => setForm({ ...form, track_stock: v })}
+                />
 
-                <label className="flex cursor-pointer items-center justify-between gap-4">
-                  <div>
-                    <div className="text-sm font-medium text-ink">Disponible en caisse</div>
-                    <div className="text-xs text-ink-soft">
-                      Affiche l&apos;article dans la caisse.
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={form.visible_in_pos}
-                    onClick={() =>
-                      setForm({ ...form, visible_in_pos: !form.visible_in_pos })
-                    }
-                    className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
-                      form.visible_in_pos ? 'bg-[color:var(--primary)]' : 'bg-gray-300'
-                    }`}
-                  >
-                    <span
-                      className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-transform ${
-                        form.visible_in_pos ? 'translate-x-6' : 'translate-x-1'
-                      }`}
-                    />
-                  </button>
-                </label>
+                <Toggle
+                  label="Disponible en caisse"
+                  description="Affiche l'article dans la caisse."
+                  checked={form.visible_in_pos}
+                  onChange={(v) => setForm({ ...form, visible_in_pos: v })}
+                />
               </div>
 
               {backOffice && stores.length > 0 && (
@@ -1239,6 +1201,49 @@ function Field({ label, children, full }: { label: string; children: React.React
     </div>
   );
 }
+function Toggle({
+  label,
+  description,
+  checked,
+  onChange,
+}: {
+  label: string;
+  description?: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <label className="flex cursor-pointer items-center justify-between gap-4">
+      <div>
+        <div className="text-sm font-medium text-ink">{label}</div>
+        {description && (
+          <div className="text-xs text-ink-soft">{description}</div>
+        )}
+      </div>
+
+      <span className="relative inline-flex h-7 w-12 shrink-0 items-center">
+        <input
+          type="checkbox"
+          className="sr-only"
+          checked={checked}
+          onChange={(e) => onChange(e.target.checked)}
+          aria-label={label}
+        />
+        <span
+          className={`absolute inset-0 rounded-full transition-colors ${
+            checked ? 'bg-[color:var(--primary)]' : 'bg-gray-300'
+          }`}
+        />
+        <span
+          className={`absolute left-1 top-1 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+            checked ? 'translate-x-5' : 'translate-x-0'
+          }`}
+        />
+      </span>
+    </label>
+  );
+}
+
 function Check({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
     <label className="flex items-center gap-2 text-sm">
