@@ -145,6 +145,7 @@ export default function ProductFormModal({
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [tab, setTab] = useState<'details' | 'stock' | 'movement' | 'history'>('details');
   const [showLabel, setShowLabel] = useState(false);
+  const [duplicateMode, setDuplicateMode] = useState(false);
 
   // Création rapide en ligne (catégorie / fournisseur inexistant).
   const [newCat, setNewCat] = useState<string | null>(null);   // null = fermé
@@ -160,6 +161,20 @@ export default function ProductFormModal({
   const [photo, setPhoto] = useState<string | null>(null);
   const [existingPhoto, setExistingPhoto] = useState<string | null>(product?.image_url ?? null);
   const photoInputRef = useRef<HTMLInputElement>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
+
+  // À chaque ouverture de la fiche, repartir en haut.
+  // En création, placer immédiatement le curseur dans le nom de l'article.
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+
+    if (!product) {
+      requestAnimationFrame(() => {
+        nameInputRef.current?.focus();
+        nameInputRef.current?.select();
+      });
+    }
+  }, [product]);
 
   /**
    * Archive l'article, ou le remet en service.
@@ -248,6 +263,38 @@ export default function ProductFormModal({
     } finally { setInlineBusy(false); }
   }
 
+  function duplicateProduct() {
+    if (!product) return;
+
+    setDuplicateMode(true);
+    setTab('details');
+    setError(null);
+    setSavedAt(null);
+
+    setForm((f) => ({
+      ...f,
+
+      // Champs volontairement vidés pour le nouvel article
+      purchase_price_ht: '',
+      sale_price_ttc: '',
+      barcode: '',
+      extra_barcodes: [],
+
+      // Le SKU doit également être unique en base
+      sku: '',
+
+      // Ce champ ne concerne que les modifications d'un produit existant
+      price_change_reason: '',
+    }));
+
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+
+    requestAnimationFrame(() => {
+      nameInputRef.current?.focus();
+      nameInputRef.current?.select();
+    });
+  }
+
   async function submit() {
     setSaving(true); setError(null);
     const payload: Record<string, unknown> = {
@@ -285,11 +332,15 @@ export default function ProductFormModal({
     //  - app, modification : on ne touche pas au périmètre existant.
     if (backOffice) {
       payload.store_ids = form.store_ids.length > 0 ? form.store_ids : stores.map((s) => s.id);
-    } else if (!product && posteStoreId) {
+    } else if ((!product || duplicateMode) && posteStoreId) {
       payload.store_ids = [posteStoreId];
     }
-    if (product && form.price_change_reason) payload.price_change_reason = form.price_change_reason;
-    const res = product
+    if (product && !duplicateMode && form.price_change_reason) {
+      payload.price_change_reason = form.price_change_reason;
+    }
+    const isCreating = !product || duplicateMode;
+
+    const res = !isCreating
       ? await fetch(`/api/products/${product.id}`, {
           method: 'PATCH', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
@@ -308,9 +359,18 @@ export default function ProductFormModal({
     // data URL compressée dépasse la limite du POST produit). Retrait pris en
     // charge (image_url vidée) si une photo existante a été retirée.
     let nouvelId: string | undefined;
-    if (!product) { try { nouvelId = (await res.json()).id as string; } catch { /* ignore */ } }
+    if (!product || duplicateMode) {
+      try { nouvelId = (await res.json()).id as string; } catch { /* ignore */ }
+    }
     const photoRemoved = !photo && !existingPhoto && !!product?.image_url;
-    if (photo || photoRemoved) {
+
+    if (duplicateMode && nouvelId && (photo || existingPhoto)) {
+      await fetch(`/api/products/${nouvelId}/photo`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image_url: photo ?? existingPhoto ?? '' }),
+      }).catch(() => { /* non bloquant */ });
+    } else if (photo || photoRemoved) {
       const id = product?.id ?? nouvelId;
       if (id) {
         await fetch(`/api/products/${id}/photo`, {
@@ -346,7 +406,9 @@ export default function ProductFormModal({
         : 'card w-full max-w-7xl p-4 sm:p-6 my-4 sm:my-8'}>
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2 min-w-0">
-            <h2 className="text-lg font-semibold">{product ? 'Modifier produit' : 'Nouveau produit'}</h2>
+            <h2 className="text-lg font-semibold">
+              {duplicateMode ? 'Dupliquer le produit' : product ? 'Modifier produit' : 'Nouveau produit'}
+            </h2>
             {product && !form.is_active && (
               <span className="rounded-full bg-warning/15 text-warning px-2 py-0.5 text-xs font-medium">
                 Archivé — hors caisse
@@ -359,7 +421,7 @@ export default function ProductFormModal({
 
         {/* Onglets Détails / Historique (l'historique n'existe que pour un
             produit déjà créé). */}
-        {product && (
+        {product && !duplicateMode && (
           <div className="mb-4 flex gap-1 border-b border-border">
             {(['details', 'stock', 'movement', 'history'] as const).map((t) => (
               <button
@@ -415,6 +477,7 @@ export default function ProductFormModal({
               <div className="space-y-4">
                 <Field label="Nom de l'article">
                   <input
+                    ref={nameInputRef}
                     className="input h-11 text-base"
                     value={form.name}
                     placeholder="Ex. Monstera Deliciosa"
@@ -855,7 +918,7 @@ export default function ProductFormModal({
                   />
                 </div>
 
-                {product && (
+                {product && !duplicateMode && (
                   <div className="mt-4">
                     <Field label="Raison du changement de prix">
                       <input
@@ -1141,7 +1204,18 @@ export default function ProductFormModal({
                       className="btn-soft" title="Imprimer une étiquette avec code-barres et prix">
                 Imprimer étiquette
               </button>
-              {product && (
+              {product && !duplicateMode && (
+                <button
+                  type="button"
+                  onClick={duplicateProduct}
+                  className="btn-soft"
+                  title="Créer un nouvel article à partir de celui-ci"
+                >
+                  Dupliquer
+                </button>
+              )}
+
+              {product && !duplicateMode && (
                 <button type="button" onClick={() => void toggleArchive()} disabled={archiving}
                         className="btn-soft"
                         title={form.is_active
@@ -1150,7 +1224,7 @@ export default function ProductFormModal({
                   {archiving ? '…' : form.is_active ? 'Archiver' : 'Désarchiver'}
                 </button>
               )}
-              {product && (
+              {product && !duplicateMode && (
                 <button type="button" onClick={() => void remove()} disabled={deleting}
                         className="btn-soft text-danger" title="Supprimer cet article">
                   {deleting ? 'Suppression…' : '🗑 Supprimer'}
@@ -1163,7 +1237,13 @@ export default function ProductFormModal({
               )}
               <button onClick={onClose} className="btn-ghost">Fermer</button>
               <button disabled={saving || !form.name.trim()} onClick={() => void submit()} className="btn-primary">
-                {saving ? 'Enregistrement…' : (product ? 'Enregistrer' : 'Créer')}
+                {saving
+                  ? 'Enregistrement…'
+                  : duplicateMode
+                    ? 'Créer la copie'
+                    : product
+                      ? 'Enregistrer'
+                      : 'Créer'}
               </button>
             </div>
           </div>
