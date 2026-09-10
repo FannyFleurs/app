@@ -277,14 +277,43 @@ export default function CashRegister({
     else if (intent === 'close' && dx > 60) setMobileCartOpen(false);
   }
 
+  // Mac (app iOS « Conçue pour iPad » exécutée sur Mac) : on y agrandit
+  // uniquement les éléments PÉRIPHÉRIQUES de la caisse (barre de recherche/
+  // actions, panier ticket), jamais la zone centrale des tuiles. La détection
+  // reste côté client (jamais `navigator` au rendu serveur) : l'état démarre à
+  // false, identique au SSR, puis se met à jour après montage — pas de
+  // désynchronisation d'hydratation.
+  const [isMacApp, setIsMacApp] = useState(false);
+  useEffect(() => {
+    try {
+      const nav = window.navigator;
+      const apple = /Mac|iPad|iPhone/.test(nav.platform || '')
+        || /Mac|iPad|iPhone/.test(nav.userAgent || '');
+      const touchLike = (nav.maxTouchPoints ?? 0) > 0;
+      const finePointerHover = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+      // iPad/iPhone réels : pointeur grossier, pas de hover -> exclus.
+      // Mac en navigateur classique : aucun point tactile -> exclu.
+      // App iPad sur Mac : plateforme Apple + tactile émulé + souris/trackpad.
+      setIsMacApp(apple && touchLike && finePointerHover);
+    } catch { /* pas de matchMedia : on reste en affichage standard */ }
+  }, []);
+
   // Largeur du panier ticket (redimensionnable, persistée en localStorage)
   const DEFAULT_TICKET_WIDTH = 360; // 300 * 1.2
+  // Sur Mac, un ticket un peu plus large accompagne l'agrandissement des
+  // éléments périphériques sans empiéter sur la zone des tuiles.
+  const MAC_TICKET_WIDTH = 450;
   const [ticketWidth, setTicketWidth] = useState<number>(DEFAULT_TICKET_WIDTH);
   const dragging = useRef(false);
   useEffect(() => {
-    const stored = Number(localStorage.getItem('webpos_ticket_width') ?? '');
-    if (Number.isFinite(stored) && stored >= 280 && stored <= 600) setTicketWidth(stored);
-  }, []);
+    const raw = localStorage.getItem('webpos_ticket_width');
+    const stored = Number(raw ?? '');
+    if (raw != null && Number.isFinite(stored) && stored >= 280 && stored <= 600) {
+      setTicketWidth(stored);          // choix explicite de l'utilisateur : prioritaire
+    } else if (isMacApp) {
+      setTicketWidth(MAC_TICKET_WIDTH); // défaut Mac, seulement sans réglage enregistré
+    }
+  }, [isMacApp]);
   useEffect(() => {
     function onMove(e: MouseEvent) {
       if (!dragging.current) return;
@@ -1558,7 +1587,7 @@ export default function CashRegister({
 
   return (
     <div
-      className="md:grid h-full flex flex-col overflow-hidden min-h-0"
+      className={`md:grid h-full flex flex-col overflow-hidden min-h-0 ${isMacApp ? 'hellopos-mac' : ''}`}
       style={{ gridTemplateColumns: `1fr 6px ${ticketWidth}px` }}
     >
       {/* Gauche : catalogue. Sur mobile, écouter les swipes (gauche → ouvre panier).
@@ -1572,7 +1601,7 @@ export default function CashRegister({
         onTouchEnd={(e) => onTouchEnd(e, 'open')}
       >
         <OfflineBanner />
-        <div className="relative flex items-center gap-2 px-3 md:px-5 h-[68px] shrink-0 border-b border-border bg-white">
+        <div className="pos-topbar relative flex items-center gap-2 px-3 md:px-5 h-[68px] shrink-0 border-b border-border bg-white">
           {/* Barre de recherche VISIBLE : champ dès qu'ouverte, sinon une barre
               cliquable claire (pas une simple loupe). */}
           {searchOpen ? (
@@ -1647,7 +1676,7 @@ export default function CashRegister({
           </button>
         </div>
 
-        <div ref={catalogScrollRef} className="relative flex-1 overflow-auto p-3 md:p-5 pb-24 md:pb-5">
+        <div ref={catalogScrollRef} className="pos-catalog relative flex-1 overflow-auto p-3 md:p-5 pb-24 md:pb-5">
           {showingProducts ? (
             <>
               {/* Bouton retour en haut à gauche + libellé contextuel */}
@@ -1717,7 +1746,7 @@ export default function CashRegister({
       {/* Splitter pour redimensionner le ticket (desktop uniquement) */}
       <div
         onMouseDown={() => { dragging.current = true; document.body.style.cursor = 'col-resize'; }}
-        onDoubleClick={() => { setTicketWidth(DEFAULT_TICKET_WIDTH); localStorage.setItem('webpos_ticket_width', String(DEFAULT_TICKET_WIDTH)); }}
+        onDoubleClick={() => { const reset = isMacApp ? MAC_TICKET_WIDTH : DEFAULT_TICKET_WIDTH; setTicketWidth(reset); localStorage.setItem('webpos_ticket_width', String(reset)); }}
         className="hidden md:flex cursor-col-resize hover:bg-accent-soft transition-colors items-center justify-center group"
         title="Glisser pour redimensionner · Double-clic pour reset"
       >
@@ -1755,7 +1784,7 @@ export default function CashRegister({
         onTouchStart={onTouchStart}
         onTouchEnd={(e) => onTouchEnd(e, 'close')}
         className={`
-          size-original
+          size-original pos-ticket
           flex flex-col bg-white min-w-0 min-h-0 overflow-hidden
           md:border-l md:border-border md:static md:translate-x-0 md:visible md:opacity-100 md:p-0
           fixed inset-0 z-40 transition-transform duration-300 pt-safe pb-safe
