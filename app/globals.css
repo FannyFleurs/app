@@ -84,6 +84,21 @@
 .size-original .text-3xl  { font-size: 30px; line-height: 36px; }
 .size-original .text-4xl  { font-size: 36px; line-height: 40px; }
 
+/* Mac (app iOS « Conçue pour iPad » exécutée sur Mac) : le rendu iPad y paraît
+   petit. On agrandit UNIQUEMENT les éléments périphériques de la caisse — la
+   barre de recherche / actions (`.pos-topbar`) et le panier ticket
+   (`.pos-ticket`) — via un `zoom` ciblé sur ces deux sous-arbres. Volontaire :
+   pas de `zoom` ni de `transform: scale()` global, qui agrandiraient aussi les
+   tuiles. La classe `.hellopos-mac` n'est posée qu'après détection Mac côté
+   client ; iPad, iPhone et navigateur desktop restent inchangés. */
+.hellopos-mac .pos-topbar { zoom: 1.15; }
+.hellopos-mac .pos-ticket { zoom: 1.15; }
+/* La zone centrale des tuiles (catégories / articles / top produits) garde
+   exactement sa taille et sa densité. Elle n'est pas descendante d'un élément
+   zoomé ; cette règle est une garantie explicite qu'aucun agrandissement Mac
+   ne l'atteint. */
+.hellopos-mac .pos-catalog { zoom: 1; }
+
 body[data-theme="hellopos"]   { --primary: #013E37; --primary-deep: #012B26; --primary-soft: #FFEFB3; }
 body[data-theme="sage"]       { --primary: #5C6F5D; --primary-deep: #45543F; --primary-soft: #EDF1ED; }
 body[data-theme="charcoal"]   { --primary: #2A2F33; --primary-deep: #15191C; --primary-soft: #EEEEF0; }
