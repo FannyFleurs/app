@@ -1,13 +1,15 @@
 /**
  * Échelle de l'interface, réglée PAR APPAREIL (cet écran), pas au niveau
  * organisation : chaque poste a un écran différent, et le confort de lecture
- * dépend de sa taille. On mémorise donc le facteur en localStorage et on
- * l'applique en `zoom` sur `<html>`.
+ * dépend de sa taille. On mémorise le facteur en localStorage ; l'AppShell
+ * l'applique à sa racine.
  *
- * `zoom` sur la racine agit comme un zoom navigateur : TOUT est mis à l'échelle
- * d'un coup (police, sidebar, boutons, panier) et les unités de viewport
- * (`100dvh` de la caisse) continuent de remplir l'écran visible — contrairement
- * à un `transform: scale()` qui laisserait la boîte de mise en page inchangée.
+ * L'application se fait en `zoom` sur la racine du shell AVEC compensation de
+ * taille (`width: 100vw / s`, `height: 100dvh / s`) : mesuré, `zoom:s` seul
+ * agrandit aussi le conteneur `100dvh` et fait déborder la page (scroll) ;
+ * avec la compensation, le shell occupe EXACTEMENT l'écran quelle que soit
+ * l'échelle, et seules les zones internes (catalogue, panier) défilent. On
+ * évite `transform: scale()` qui laisserait la boîte de mise en page inchangée.
  *
  * Volontairement sans dépendance React : lisible depuis l'AppShell (qui
  * applique) comme depuis la page de réglages (qui écrit).
@@ -39,22 +41,10 @@ export function readUiScale(): number {
   }
 }
 
-/** Applique l'échelle au document. `1` retire l'attribut (rendu natif). */
-export function applyUiScale(scale: number): void {
-  try {
-    const s = clampScale(scale);
-    const el = document.documentElement;
-    // `setProperty('zoom', …)` : `zoom` n'est pas typé sur CSSStyleDeclaration.
-    if (s === UI_SCALE_DEFAULT) el.style.removeProperty('zoom');
-    else el.style.setProperty('zoom', String(s));
-  } catch {
-    /* pas de DOM (SSR) : rien à faire */
-  }
-}
-
 /**
- * Enregistre l'échelle pour cet appareil, l'applique et prévient l'AppShell
- * (événement) pour un rendu immédiat. Renvoie la valeur effectivement retenue.
+ * Enregistre l'échelle pour cet appareil et prévient l'AppShell (événement)
+ * pour un rendu immédiat. L'application visuelle est faite par l'AppShell, qui
+ * seul connaît sa racine. Renvoie la valeur effectivement retenue.
  */
 export function setUiScale(scale: number): number {
   const s = clampScale(scale);
@@ -62,9 +52,8 @@ export function setUiScale(scale: number): number {
     if (s === UI_SCALE_DEFAULT) localStorage.removeItem(UI_SCALE_KEY);
     else localStorage.setItem(UI_SCALE_KEY, String(s));
   } catch {
-    /* stockage indisponible : on applique quand même pour la session */
+    /* stockage indisponible : l'événement applique quand même pour la session */
   }
-  applyUiScale(s);
   try {
     window.dispatchEvent(new CustomEvent(UI_SCALE_EVENT, { detail: s }));
   } catch {

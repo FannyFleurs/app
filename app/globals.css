@@ -122,6 +122,20 @@ body[data-theme="lavender"]   { --primary: #6D5D9C; --primary-deep: #524879; --p
   height: 100dvh;
 }
 
+/* Échelle de l'interface réglée par écran (voir lib/ui/ui-scale.ts). On zoome
+   toute la racine du shell ET on compense sa taille : mesuré, `zoom:s` seul
+   agrandit aussi le conteneur `100dvh` et fait déborder la page ; avec
+   `width: 100vw/s` et `height: 100dvh/s`, le shell occupe EXACTEMENT l'écran
+   quelle que soit l'échelle, sans scroll global. Seules les zones internes
+   (catalogue, lignes du panier) défilent, comme prévu. La spécificité à deux
+   classes l'emporte sur la hauteur de `.h-app`. */
+.app-shell-root.ui-scaled {
+  zoom: var(--ui-scale);
+  width: calc(100vw / var(--ui-scale));
+  height: calc(100vh / var(--ui-scale));
+  height: calc(100dvh / var(--ui-scale));
+}
+
 html, body {
   height: 100%;
   background: var(--bg);
