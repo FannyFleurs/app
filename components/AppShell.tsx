@@ -12,7 +12,7 @@ import SchoolModeBanner from './SchoolModeBanner';
 import SessionKeepAlive from './SessionKeepAlive';
 import type { Role, Permission } from '@/lib/auth/rbac';
 import { BRAND_THEME, type AutoLogoutMode } from '@/lib/settings/pos-ui';
-import { applyUiScale, readUiScale, UI_SCALE_KEY, UI_SCALE_EVENT } from '@/lib/ui/ui-scale';
+import { readUiScale, UI_SCALE_KEY, UI_SCALE_EVENT, UI_SCALE_DEFAULT } from '@/lib/ui/ui-scale';
 
 interface User { id: string; fullName: string; role: Role; email: string }
 
@@ -67,17 +67,19 @@ export default function AppShell({
     document.body.setAttribute('data-theme', appliedTheme);
   }, [appliedTheme]);
 
-  // Échelle de l'interface, réglée par appareil (cet écran) : on l'applique dès
-  // le montage de l'app, et on réagit en direct au changement fait depuis la
-  // page de réglages (événement) ou depuis un autre onglet (storage).
+  // Échelle de l'interface, réglée par appareil (cet écran). On démarre à 1
+  // (identique au rendu serveur, pas de désync d'hydratation) puis on lit la
+  // valeur locale après montage, et on réagit en direct au changement fait
+  // depuis la page de réglages (événement) ou depuis un autre onglet (storage).
+  const [uiScale, setUiScale] = useState<number>(UI_SCALE_DEFAULT);
   useEffect(() => {
-    applyUiScale(readUiScale());
+    setUiScale(readUiScale());
     const onScale = (e: Event) => {
       const detail = (e as CustomEvent<number>).detail;
-      applyUiScale(typeof detail === 'number' ? detail : readUiScale());
+      setUiScale(typeof detail === 'number' ? detail : readUiScale());
     };
     const onStorage = (e: StorageEvent) => {
-      if (e.key === UI_SCALE_KEY) applyUiScale(readUiScale());
+      if (e.key === UI_SCALE_KEY) setUiScale(readUiScale());
     };
     window.addEventListener(UI_SCALE_EVENT, onScale);
     window.addEventListener('storage', onStorage);
@@ -153,7 +155,10 @@ export default function AppShell({
   }, [autoLogoutMode]);
 
   return (
-    <div className="h-app overflow-hidden flex flex-col bg-bg pt-safe pl-safe pr-safe pb-safe">
+    <div
+      className={`app-shell-root h-app overflow-hidden flex flex-col bg-bg pt-safe pl-safe pr-safe pb-safe ${uiScale !== UI_SCALE_DEFAULT ? 'ui-scaled' : ''}`}
+      style={uiScale !== UI_SCALE_DEFAULT ? ({ ['--ui-scale' as string]: String(uiScale) } as React.CSSProperties) : undefined}
+    >
       <SessionKeepAlive />
       <SchoolModeBanner />
       <div className="flex-1 flex flex-row overflow-hidden min-h-0">
