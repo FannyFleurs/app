@@ -12,6 +12,7 @@ import SchoolModeBanner from './SchoolModeBanner';
 import SessionKeepAlive from './SessionKeepAlive';
 import type { Role, Permission } from '@/lib/auth/rbac';
 import { BRAND_THEME, type AutoLogoutMode } from '@/lib/settings/pos-ui';
+import { applyUiScale, readUiScale, UI_SCALE_KEY, UI_SCALE_EVENT } from '@/lib/ui/ui-scale';
 
 interface User { id: string; fullName: string; role: Role; email: string }
 
@@ -65,6 +66,26 @@ export default function AppShell({
   useEffect(() => {
     document.body.setAttribute('data-theme', appliedTheme);
   }, [appliedTheme]);
+
+  // Échelle de l'interface, réglée par appareil (cet écran) : on l'applique dès
+  // le montage de l'app, et on réagit en direct au changement fait depuis la
+  // page de réglages (événement) ou depuis un autre onglet (storage).
+  useEffect(() => {
+    applyUiScale(readUiScale());
+    const onScale = (e: Event) => {
+      const detail = (e as CustomEvent<number>).detail;
+      applyUiScale(typeof detail === 'number' ? detail : readUiScale());
+    };
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === UI_SCALE_KEY) applyUiScale(readUiScale());
+    };
+    window.addEventListener(UI_SCALE_EVENT, onScale);
+    window.addEventListener('storage', onStorage);
+    return () => {
+      window.removeEventListener(UI_SCALE_EVENT, onScale);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, []);
 
   // Le rail gauche reste visible sous l'overlay « Toutes les pages ». Si
   // l'utilisateur clique un item du rail, la route change : on referme alors

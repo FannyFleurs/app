@@ -15,6 +15,14 @@ import {
 } from '@/lib/settings/pos-ui';
 import { SIDEBAR_ITEMS } from '@/components/Sidebar';
 import Badge from '@/components/Badge';
+import {
+  UI_SCALE_MIN,
+  UI_SCALE_MAX,
+  UI_SCALE_STEP,
+  UI_SCALE_DEFAULT,
+  readUiScale,
+  setUiScale,
+} from '@/lib/ui/ui-scale';
 
 interface Props {
   initial: PosUiSettings;
@@ -30,6 +38,15 @@ export default function POSSettingsForm({ initial, canWrite }: Props) {
   const [error, setError] = useState<string | null>(null);
   const firstRender = useRef(true);
   const lastSaved = useRef<PosUiSettings>(initial);
+
+  // Échelle de l'interface : réglage PROPRE À CET ÉCRAN (localStorage), pas au
+  // niveau organisation — chaque poste a sa taille d'écran. Indépendant de
+  // `canWrite` (préférence d'affichage locale, pas un réglage partagé).
+  const [uiScale, setUiScaleState] = useState<number>(UI_SCALE_DEFAULT);
+  useEffect(() => { setUiScaleState(readUiScale()); }, []);
+  function changeUiScale(next: number) {
+    setUiScaleState(setUiScale(next)); // persiste + applique en direct + diffuse
+  }
 
   // Plus de choix d'apparence ici : HelloPos a un seul habillage, clair, posé
   // par l'AppShell. Une caisse à la couleur d'un poste et une autre à celle du
@@ -88,6 +105,54 @@ export default function POSSettingsForm({ initial, canWrite }: Props) {
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
       {/* Colonne gauche : sections de réglages */}
       <div className="lg:col-span-2 space-y-5">
+        <Section
+          title="Taille de l'affichage (cet écran)"
+          description="Agrandit d'un coup toute l'interface (police, sidebar, boutons, panier) sur CET appareil, pour l'adapter à la taille de son écran. Réglage local à ce poste, appliqué immédiatement."
+        >
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => changeUiScale(uiScale - UI_SCALE_STEP)}
+              disabled={uiScale <= UI_SCALE_MIN}
+              className="h-11 w-11 shrink-0 rounded-xl border border-border bg-white text-2xl leading-none font-semibold text-ink hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              aria-label="Réduire la taille de l'affichage"
+            >
+              −
+            </button>
+            <div className="w-20 text-center tabular-nums text-2xl font-semibold shrink-0">
+              {Math.round(uiScale * 100)}&nbsp;%
+            </div>
+            <button
+              type="button"
+              onClick={() => changeUiScale(uiScale + UI_SCALE_STEP)}
+              disabled={uiScale >= UI_SCALE_MAX}
+              className="h-11 w-11 shrink-0 rounded-xl border border-border bg-white text-2xl leading-none font-semibold text-ink hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              aria-label="Augmenter la taille de l'affichage"
+            >
+              +
+            </button>
+            <input
+              type="range"
+              min={UI_SCALE_MIN}
+              max={UI_SCALE_MAX}
+              step={UI_SCALE_STEP}
+              value={uiScale}
+              onChange={(e) => changeUiScale(Number(e.target.value))}
+              className="flex-1 min-w-[140px] accent-sage"
+              aria-label="Taille de l'affichage (curseur)"
+            />
+            {uiScale !== UI_SCALE_DEFAULT && (
+              <button
+                type="button"
+                onClick={() => changeUiScale(UI_SCALE_DEFAULT)}
+                className="btn-ghost text-sm whitespace-nowrap shrink-0"
+              >
+                Réinitialiser (100&nbsp;%)
+              </button>
+            )}
+          </div>
+        </Section>
+
         <Section
           title="Apparence des tuiles produit"
           description="Taille des cartes affichées sur la grille produits de la caisse."
