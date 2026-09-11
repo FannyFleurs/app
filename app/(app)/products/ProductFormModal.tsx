@@ -1300,10 +1300,30 @@ function Toggle({
 }
 
 function Check({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
+  // Interrupteur (toggle) plutôt qu'une case à cocher, cohérent avec le reste
+  // de la fiche. Même style que le composant Toggle ci-dessus.
   return (
-    <label className="flex items-center gap-2 text-sm">
-      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
-      {label}
+    <label className="flex cursor-pointer items-center justify-between gap-3 text-sm">
+      <span>{label}</span>
+      <span className="relative inline-flex h-7 w-12 shrink-0 items-center">
+        <input
+          type="checkbox"
+          className="sr-only"
+          checked={checked}
+          onChange={(e) => onChange(e.target.checked)}
+          aria-label={label}
+        />
+        <span
+          className={`absolute inset-0 rounded-full transition-colors ${
+            checked ? 'bg-[color:var(--primary)]' : 'bg-gray-300'
+          }`}
+        />
+        <span
+          className={`absolute left-1 top-1 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+            checked ? 'translate-x-5' : 'translate-x-0'
+          }`}
+        />
+      </span>
     </label>
   );
 }
