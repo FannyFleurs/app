@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { withTransaction } from '@/lib/db/client';
+import { withTransaction, query } from '@/lib/db/client';
 import { requirePermission } from '@/lib/auth/guards';
 import { parseJson, jsonError } from '@/lib/validation/api';
 import { audit } from '@/lib/audit/log';
@@ -82,6 +82,21 @@ export async function POST(req: Request) {
       action: 'stock.movement.batch', entityType: 'store', entityId: d.store_id,
       payload: { count: applied, movement_type: d.movement_type, reason: d.reason },
     });
+
+    // Gérer le stock d'un article via un mouvement manuel implique qu'on le
+    // suit : on active track_stock si ce n'était pas le cas, sinon les ventes
+    // ne décompteraient pas ce stock et n'apparaîtraient pas dans l'historique.
+    // Best-effort, hors transaction : ne doit pas faire échouer l'entrée.
+    if (applied > 0) {
+      try {
+        const ids = [...new Set(d.items.filter((it) => it.quantity_delta !== 0).map((it) => it.product_id))];
+        await query(
+          `UPDATE products SET track_stock = TRUE
+            WHERE organization_id = $1 AND id = ANY($2::uuid[]) AND COALESCE(track_stock, FALSE) = FALSE`,
+          [g.user.organizationId, ids],
+        );
+      } catch { /* colonne track_stock absente : rien à faire */ }
+    }
 
     return NextResponse.json({ applied }, { status: 201 });
   } catch (err) {
