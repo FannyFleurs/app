@@ -777,6 +777,19 @@ export class SaleService {
                 );
                 noLoyaltyIds = new Set(ndRes.rows.map((r) => r.id));
               } catch { /* colonne no_discount absente : ignore */ }
+              // Catégorie marquée « hors fidélité » : ses articles ne rapportent
+              // pas de points (migration 0074). Les articles sans catégorie
+              // restent éligibles.
+              try {
+                const catRes = await client.query<{ id: string }>(
+                  `SELECT p.id FROM products p
+                     JOIN product_categories c ON c.id = p.category_id
+                    WHERE p.id = ANY($1::uuid[])
+                      AND COALESCE(c.loyalty_eligible, TRUE) = FALSE`,
+                  [productIds],
+                );
+                for (const r of catRes.rows) noLoyaltyIds.add(r.id);
+              } catch { /* colonne loyalty_eligible absente : tout éligible */ }
             }
             const eligibleTtc = linesRes.rows.reduce((s: number, l: {
               product_id: string | null; line_ttc: string;

@@ -15,6 +15,7 @@ const patchSchema = z.object({
   store_ids: z.array(z.string().uuid()).optional(),
   transport_cost_ht: z.number().min(0).nullable().optional(),
   transport_cost_pct: z.number().min(0).max(1000).nullable().optional(),
+  loyalty_eligible: z.boolean().optional(),
 });
 
 // Introspection : une colonne de product_categories existe-t-elle ? (mise en
@@ -126,6 +127,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   if (patch.store_ids !== undefined && !(await hasColumn('store_ids'))) delete patch.store_ids;
   if (patch.transport_cost_ht !== undefined && !(await hasColumn('transport_cost_ht'))) delete patch.transport_cost_ht;
   if (patch.transport_cost_pct !== undefined && !(await hasColumn('transport_cost_pct'))) delete patch.transport_cost_pct;
+  if (patch.loyalty_eligible !== undefined && !(await hasColumn('loyalty_eligible'))) delete patch.loyalty_eligible;
 
   const fields = Object.keys(patch);
   if (fields.length === 0) return NextResponse.json({ ok: true });
