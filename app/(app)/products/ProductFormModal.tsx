@@ -904,7 +904,17 @@ export default function ProductFormModal({
                     checked={form.no_discount}
                     onChange={(v) => setForm({ ...form, no_discount: v })}
                   />
+                  <Check
+                    label="Top produit (épinglé en caisse)"
+                    checked={form.is_top_product}
+                    onChange={(v) => setForm({ ...form, is_top_product: v })}
+                  />
                 </div>
+                {form.is_top_product && (
+                  <p className="mt-2 text-xs text-ink-soft">
+                    Les produits épinglés sont affichés en priorité dans la grille caisse.
+                  </p>
+                )}
 
                 {product && !duplicateMode && (
                   <div className="mt-4">
@@ -1155,23 +1165,6 @@ export default function ProductFormModal({
                       );
                     })}
                   </div>
-
-                  <label className="mt-4 flex cursor-pointer items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={form.is_top_product}
-                      onChange={(e) =>
-                        setForm({ ...form, is_top_product: e.target.checked })
-                      }
-                    />
-                    <span>Épingler en haut de la caisse</span>
-                  </label>
-
-                  {form.is_top_product && (
-                    <p className="mt-2 text-xs text-ink-soft">
-                      Les produits épinglés sont affichés en priorité dans la grille caisse.
-                    </p>
-                  )}
                 </div>
               </div>
             </section>
