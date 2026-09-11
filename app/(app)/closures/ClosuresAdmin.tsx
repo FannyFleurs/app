@@ -44,7 +44,10 @@ interface PreviewData {
     expected: number;
   };
   movements: { id: string; movement_type: 'in' | 'out'; amount: number; reason: string; created_at: string }[];
-  sealed: { id: string; sealed_at: string } | null;
+  sealed: {
+    id: string; sealed_at: string;
+    cash_counted?: number; cash_variance?: number; cash_expected?: number;
+  } | null;
   reopened?: boolean;
   held_count: number;
 }
@@ -207,6 +210,19 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
   // Écart = compté − attendu, TOUJOURS. Tant qu'on n'a rien compté (0), l'écart
   // affiche donc −(montant attendu) : on « doit » encore compter cette somme.
   const cashVariance = Number((countedCash - expectedCash).toFixed(2));
+
+  // Une fois la journée scellée, le comptage local est purgé (countedCash = 0)
+  // pendant que l'attendu reste calculé : l'écart affiché deviendrait
+  // −(attendu), un faux écart. Après scellement, on affiche donc les montants
+  // FIGÉS à la clôture (comptés / attendu / écart réels renvoyés par l'aperçu).
+  const sealedCash = preview?.sealed ?? null;
+  const isSealedView = sealedCash != null;
+  const displayExpected = isSealedView && sealedCash.cash_expected != null
+    ? sealedCash.cash_expected : expectedCash;
+  const displayCounted = isSealedView && sealedCash.cash_counted != null
+    ? sealedCash.cash_counted : countedCash;
+  const displayVariance = isSealedView && sealedCash.cash_variance != null
+    ? sealedCash.cash_variance : cashVariance;
 
   // --- Détection des ÉCARTS (erreurs de caisse) ---
   // Espèces : écart uniquement si l'on a compté quelque chose et que ça ne
@@ -711,21 +727,21 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
                 </div>
                 <div className="mt-1.5 flex justify-between text-sm">
                   <span className="text-ink-soft">Espèces attendues</span>
-                  <span className="font-medium tabular-nums">{formatEUR(expectedCash)}</span>
+                  <span className="font-medium tabular-nums">{formatEUR(displayExpected)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-ink-soft">Espèces comptées</span>
-                  <span className="font-medium tabular-nums">{formatEUR(countedCash)}</span>
+                  <span className="font-medium tabular-nums">{formatEUR(displayCounted)}</span>
                 </div>
                 <div className="mt-1.5 pt-1.5 border-t border-border/70 flex items-baseline justify-between">
                   <span className="font-semibold">Écart de caisse</span>
                   <span className={`text-2xl font-bold tabular-nums ${
-                    cashVariance === 0 ? 'text-success' :
-                    cashVariance > 0 ? 'text-warning' : 'text-danger'}`}>
-                    {cashVariance >= 0 ? '+' : ''}{formatEUR(cashVariance)}
+                    displayVariance === 0 ? 'text-success' :
+                    displayVariance > 0 ? 'text-warning' : 'text-danger'}`}>
+                    {displayVariance >= 0 ? '+' : ''}{formatEUR(displayVariance)}
                   </span>
                 </div>
-                {expectedCash > 0 && countedCash < expectedCash && (
+                {!isSealedView && expectedCash > 0 && countedCash < expectedCash && (
                   <div className="mt-0.5 text-xs text-danger text-right">
                     Reste {formatEUR(expectedCash - countedCash)} à compter
                   </div>
