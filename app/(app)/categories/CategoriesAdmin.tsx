@@ -18,6 +18,7 @@ interface Category {
   position: number;
   visible_in_pos: boolean;
   store_ids: string[];
+  loyalty_eligible: boolean;
 }
 
 const COLOR_PRESETS = ['#FFFFFF', '#F5F5F5', '#E8EFE2', '#EFE6D6', '#D8E8D8', '#F0E4D7', '#F3E8E0', '#E6E2D8'];
@@ -73,7 +74,7 @@ export default function CategoriesAdmin({ canEdit, backOffice = false, stores = 
     const r = await fetch(`/api/categories${qs}`);
     if (r.ok) {
       const cats = (await r.json()).categories as Category[];
-      setItems(cats.map((c) => ({ ...c, store_ids: c.store_ids ?? [] })));
+      setItems(cats.map((c) => ({ ...c, store_ids: c.store_ids ?? [], loyalty_eligible: c.loyalty_eligible ?? true })));
     }
     setLoading(false);
   }
@@ -148,7 +149,10 @@ export default function CategoriesAdmin({ canEdit, backOffice = false, stores = 
                   </td>
                   <td className="px-3 py-2.5 font-medium">{c.name}</td>
                   <td className="px-4 py-2.5">
-                    {c.visible_in_pos ? <Badge tone="soft">Visible</Badge> : <Badge tone="neutral">Masquée</Badge>}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {c.visible_in_pos ? <Badge tone="soft">Visible</Badge> : <Badge tone="neutral">Masquée</Badge>}
+                      {!c.loyalty_eligible && <Badge tone="neutral">Hors fidélité</Badge>}
+                    </div>
                   </td>
                   {backOffice && (
                     <td className="px-4 py-2.5 text-ink-soft">
@@ -198,6 +202,7 @@ function CategoryFormModal({ category, backOffice, stores, posteStoreId, deleteS
     icon: category?.icon ?? null as string | null,
     image_url: category?.image_url ?? '',
     visible_in_pos: category?.visible_in_pos ?? true,
+    loyalty_eligible: category?.loyalty_eligible ?? true,
     store_ids: category?.store_ids ?? [],
   });
   const [saving, setSaving] = useState(false);
@@ -233,6 +238,7 @@ function CategoryFormModal({ category, backOffice, stores, posteStoreId, deleteS
       icon: form.icon,
       image_url: form.image_url.trim() || null,
       visible_in_pos: form.visible_in_pos,
+      loyalty_eligible: form.loyalty_eligible,
     };
     // Boutiques (même logique que les articles) :
     //  - back-office : sélection explicite. « Toutes » (aucune cochée) est
@@ -344,6 +350,30 @@ function CategoryFormModal({ category, backOffice, stores, posteStoreId, deleteS
                    onChange={(e) => setForm({ ...form, visible_in_pos: e.target.checked })} />
             Visible sur la grille caisse
           </label>
+
+          <div className="rounded-xl border border-border p-3">
+            <label className="flex items-center justify-between gap-3 cursor-pointer">
+              <span>
+                <span className="text-sm font-medium">Éligible à la fidélité</span>
+                <span className="block text-xs text-ink-soft mt-0.5">
+                  Décochez pour que les articles de cette catégorie ne rapportent aucun point de fidélité.
+                </span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setForm({ ...form, loyalty_eligible: !form.loyalty_eligible })}
+                className={`relative h-6 w-11 rounded-full transition-colors shrink-0 ${
+                  form.loyalty_eligible ? 'bg-sage' : 'bg-border'
+                }`}
+                aria-pressed={form.loyalty_eligible}
+                aria-label="Éligible à la fidélité"
+              >
+                <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
+                  form.loyalty_eligible ? 'translate-x-5' : ''
+                }`} />
+              </button>
+            </label>
+          </div>
 
           {backOffice && stores.length > 0 && (
             <div>

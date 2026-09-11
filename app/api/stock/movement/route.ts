@@ -76,6 +76,17 @@ export async function POST(req: Request) {
       payload: d,
     });
 
+    // Gérer le stock d'un article via un mouvement manuel implique qu'on le
+    // suit : on active track_stock si besoin, sinon les ventes ne décompteraient
+    // pas ce stock et n'apparaîtraient pas dans l'historique. Best-effort.
+    try {
+      await query(
+        `UPDATE products SET track_stock = TRUE
+          WHERE organization_id = $1 AND id = $2 AND COALESCE(track_stock, FALSE) = FALSE`,
+        [g.user.organizationId, d.product_id],
+      );
+    } catch { /* colonne track_stock absente : rien à faire */ }
+
     return NextResponse.json(out, { status: 201 });
   } catch (err) {
     // eslint-disable-next-line no-console

@@ -10,7 +10,13 @@ export interface ClosurePreview {
     cash_out: number; bank_deposits: number; expected: number;
   };
   movements: { id: string; movement_type: 'in' | 'out'; amount: number; reason: string; created_at: string }[];
-  sealed: { id: string; sealed_at: string } | null;
+  // Une fois scellée, on renvoie les montants espèces FIGÉS à la clôture
+  // (comptés / attendu / écart réels), pour que l'écran affiche l'écart validé
+  // et non un écart recalculé à partir d'un comptage remis à zéro.
+  sealed: {
+    id: string; sealed_at: string;
+    cash_counted: number; cash_variance: number; cash_expected: number;
+  } | null;
   reopened: boolean;
   held_count: number;
 }
@@ -23,8 +29,13 @@ export interface ClosurePreview {
  * un clic). Toutes les requêtes sont filtrées par store_id (unique par org).
  */
 export async function computeClosurePreview(storeId: string, date: string): Promise<ClosurePreview> {
-  const lastClose = await query<{ id: string; sealed_at: string; seq: number }>(
-    `SELECT id, sealed_at, seq FROM daily_closures
+  const lastClose = await query<{
+    id: string; sealed_at: string; seq: number;
+    cash_counted: string | null; cash_variance: string | null; cash_expected: string | null;
+  }>(
+    `SELECT id, sealed_at, seq,
+            cash_counted::text, cash_variance::text, cash_expected::text
+       FROM daily_closures
       WHERE store_id = $1 AND business_date = $2
       ORDER BY seq DESC LIMIT 1`,
     [storeId, date],
@@ -156,7 +167,13 @@ export async function computeClosurePreview(storeId: string, date: string): Prom
   );
 
   const sealedRow = !reopened && lastSeal
-    ? { id: lastSeal.id, sealed_at: lastSeal.sealed_at }
+    ? {
+        id: lastSeal.id,
+        sealed_at: lastSeal.sealed_at,
+        cash_counted: Number(lastSeal.cash_counted ?? 0),
+        cash_variance: Number(lastSeal.cash_variance ?? 0),
+        cash_expected: Number(lastSeal.cash_expected ?? 0),
+      }
     : null;
 
   const held = await query<{ c: string }>(

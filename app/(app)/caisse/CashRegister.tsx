@@ -562,7 +562,20 @@ export default function CashRegister({
         const r = await fetch(`/api/sales/${stored}`);
         if (!r.ok) { localStorage.removeItem(cartKey); return; }
         const j = await r.json();
-        if (j.sale?.status !== 'draft' && j.sale?.status !== 'on_hold') {
+        const s = j.sale as { status?: string; user_id?: string; customer_id?: string | null } | undefined;
+        // On ne restaure QUE SON PROPRE panier en cours (draft). Un panier en
+        // attente (on_hold) ne revient pas tout seul : il se reprend depuis
+        // « En attente ». Un draft d'un AUTRE utilisateur (déconnexion sans mise
+        // en attente, plantage) est basculé en attente puis retiré du poste —
+        // jamais injecté dans le panier courant du suivant.
+        if (!s || s.status !== 'draft' || s.user_id !== currentUser.id) {
+          if (s && s.status === 'draft' && s.user_id && s.user_id !== currentUser.id) {
+            const heure = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+            void fetch(`/api/sales/${stored}/hold`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ label: `Panier ${heure}` }),
+            }).catch(() => {});
+          }
           localStorage.removeItem(cartKey);
           return;
         }
@@ -579,14 +592,14 @@ export default function CashRegister({
           tax_rate_code: l.tax_rate_code as string,
           metadata: (l.metadata as Record<string, unknown>) ?? {},
         })));
-        await restoreCustomerForSale(j.sale.customer_id ?? null);
+        await restoreCustomerForSale(s.customer_id ?? null);
       } finally {
         // On n'autorise la persistance qu'après cette tentative.
         restoreAttemptedRef.current = true;
         setRestoreDone(true);
       }
     })();
-  }, [cartKey]);
+  }, [cartKey, currentUser.id]);
 
   useEffect(() => {
     if (!cartKey || typeof window === 'undefined') return;

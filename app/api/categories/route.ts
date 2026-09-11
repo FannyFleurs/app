@@ -13,6 +13,7 @@ const schema = z.object({
   position: z.number().int().nonnegative().default(0),
   visible_in_pos: z.boolean().default(true),
   store_ids: z.array(z.string().uuid()).optional(),
+  loyalty_eligible: z.boolean().optional(),
 });
 
 // Introspection : la colonne product_categories.store_ids (migration 0046)
@@ -46,6 +47,22 @@ async function hasTransportColumn(): Promise<boolean> {
     _hasTransport = rows[0]?.exists ?? false;
   } catch { _hasTransport = false; }
   return _hasTransport;
+}
+
+// Introspection : colonne loyalty_eligible (migration 0074).
+let _hasLoyalty: boolean | null = null;
+async function hasLoyaltyColumn(): Promise<boolean> {
+  if (_hasLoyalty !== null) return _hasLoyalty;
+  try {
+    const { rows } = await query<{ exists: boolean }>(
+      `SELECT EXISTS (
+         SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'product_categories' AND column_name = 'loyalty_eligible'
+       ) AS exists`,
+    );
+    _hasLoyalty = rows[0]?.exists ?? false;
+  } catch { _hasLoyalty = false; }
+  return _hasLoyalty;
 }
 
 export async function GET(req: Request) {
@@ -98,8 +115,9 @@ export async function GET(req: Request) {
   const hasTransport = await hasTransportColumn();
   const transportCol = hasTransport ? 'transport_cost_ht' : '0 AS transport_cost_ht';
   const pctCol = hasTransport ? 'transport_cost_pct' : 'NULL::numeric AS transport_cost_pct';
+  const loyaltyCol = (await hasLoyaltyColumn()) ? 'loyalty_eligible' : 'TRUE AS loyalty_eligible';
   const { rows } = await query(
-    `SELECT id, name, parent_id, color, icon, image_url, position, visible_in_pos, is_active, ${storeCol}, ${transportCol}, ${pctCol}
+    `SELECT id, name, parent_id, color, icon, image_url, position, visible_in_pos, is_active, ${storeCol}, ${transportCol}, ${pctCol}, ${loyaltyCol}
        FROM product_categories
       WHERE ${where}
       ORDER BY position ASC, name ASC`,
@@ -118,8 +136,9 @@ export async function POST(req: Request) {
     // Rattachement boutique : fourni (back-office) → tel quel ; absent (app) →
     // boutique(s) de l'utilisateur (owner/sans rattachement = catégorie
     // partagée, store_ids vide).
-    let storeCols = '';
-    const extra: unknown[] = [];
+    // Colonnes optionnelles selon migrations déployées.
+    const extraCols: string[] = [];
+    const extraVals: unknown[] = [];
     if (await hasStoreIdsColumn()) {
       let storeIds: string[];
       if (c.store_ids !== undefined) {
@@ -133,24 +152,30 @@ export async function POST(req: Request) {
         );
         storeIds = acc.rows.map((r) => r.store_id);
       }
-      storeCols = ', store_ids';
-      extra.push(storeIds);
+      extraCols.push('store_ids');
+      extraVals.push(storeIds);
     }
+    if (await hasLoyaltyColumn()) {
+      extraCols.push('loyalty_eligible');
+      extraVals.push(c.loyalty_eligible ?? true);
+    }
+    const baseVals: unknown[] = [
+      g.user.organizationId,
+      c.name,
+      c.parent_id ?? null,
+      c.color ?? null,
+      c.icon ?? null,
+      c.image_url ?? null,
+      c.position,
+      c.visible_in_pos,
+    ];
+    const allVals = [...baseVals, ...extraVals];
+    const cols = ['organization_id', 'name', 'parent_id', 'color', 'icon', 'image_url', 'position', 'visible_in_pos', ...extraCols];
+    const placeholders = allVals.map((_, i) => `$${i + 1}`).join(',');
     const ins = await query<{ id: string }>(
-      `INSERT INTO product_categories
-         (organization_id, name, parent_id, color, icon, image_url, position, visible_in_pos${storeCols})
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8${storeCols ? ',$9' : ''}) RETURNING id`,
-      [
-        g.user.organizationId,
-        c.name,
-        c.parent_id ?? null,
-        c.color ?? null,
-        c.icon ?? null,
-        c.image_url ?? null,
-        c.position,
-        c.visible_in_pos,
-        ...extra,
-      ],
+      `INSERT INTO product_categories (${cols.join(', ')})
+       VALUES (${placeholders}) RETURNING id`,
+      allVals,
     );
     return NextResponse.json({ id: ins.rows[0]!.id }, { status: 201 });
   } catch (err) {
