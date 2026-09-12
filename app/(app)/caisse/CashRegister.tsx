@@ -873,7 +873,17 @@ export default function CashRegister({
     setLines((cur) => {
       const weights = cur.map((l) => round2(l.unit_price_ttc * l.quantity - l.discount_amount));
       const parts = distributeProrata(apply, weights);
-      return cur.map((l, i) => ({ ...l, discount_amount: round2(l.discount_amount + (parts[i] ?? 0)) }));
+      return cur.map((l, i) => {
+        const part = parts[i] ?? 0;
+        if (part <= 0) return l;
+        // On marque la ligne : la remise fidélité doit être identifiable
+        // (rapport Remises → « Remise fidélité » au lieu de « Sans motif »).
+        return {
+          ...l,
+          discount_amount: round2(l.discount_amount + part),
+          metadata: { ...l.metadata, loyalty_discount: true },
+        };
+      });
     });
     setLoyalty((cur) => ({ ...cur, used: apply, balance_euros: cur.balance_euros - apply }));
   }
