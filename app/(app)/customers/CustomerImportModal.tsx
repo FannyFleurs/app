@@ -4,14 +4,25 @@ import { useEffect, useState } from 'react';
 
 interface Store { id: string; name: string; is_active?: boolean }
 interface ImportResult {
-  created: number; updated: number; loyalty_updated: number; skipped: number;
+  created: number; updated: number; ambiguous: number; loyalty_updated: number; skipped: number;
   errors: { row: number; message: string }[];
 }
+interface PreviewSummary {
+  total: number; create: number; update: number; ambiguous: number; invalid: number;
+  with_points: number; by_email: number; by_phone: number; by_name: number;
+}
+interface PreviewItem { row: number; label: string; action: string; matched_by?: string; points: number; error?: string }
+interface Preview { summary: PreviewSummary; items: PreviewItem[] }
+
+const ACTION_LABEL: Record<string, string> = {
+  create: 'Nouveau', update: 'Fusion', ambiguous: 'Ambigu', invalid: 'Invalide',
+};
 
 /**
  * Import de clients (+ points de fidélité) depuis un fichier Excel.
- * L'utilisateur choisit la ou les boutiques : les points sont crédités sur
- * leur compte fidélité. Un modèle .xlsx est téléchargeable pour être rempli.
+ * L'utilisateur choisit la ou les boutiques (les points y sont crédités), peut
+ * PRÉVISUALISER le résultat (rapprochement e-mail / téléphone / nom, sans rien
+ * écrire) puis confirmer l'import.
  */
 export default function CustomerImportModal({ onClose, onDone }: {
   onClose: () => void; onDone: () => void;
@@ -20,7 +31,9 @@ export default function CustomerImportModal({ onClose, onDone }: {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<Preview | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
 
   useEffect(() => {
@@ -42,6 +55,23 @@ export default function CustomerImportModal({ onClose, onDone }: {
     });
   }
 
+  async function doPreview() {
+    if (!file) { setError('Sélectionnez le fichier Excel rempli.'); return; }
+    setPreviewing(true); setError(null); setPreview(null);
+    const fd = new FormData();
+    fd.append('file', file);
+    try {
+      const r = await fetch('/api/customers/import/preview', { method: 'POST', body: fd });
+      const j = await r.json().catch(() => null);
+      if (!r.ok) setError(j?.message ?? 'Aperçu impossible.');
+      else setPreview(j as Preview);
+    } catch {
+      setError('Erreur réseau pendant l’aperçu.');
+    } finally {
+      setPreviewing(false);
+    }
+  }
+
   async function doImport() {
     if (selected.size === 0) { setError('Choisissez au moins une boutique.'); return; }
     if (!file) { setError('Sélectionnez le fichier Excel rempli.'); return; }
@@ -61,6 +91,8 @@ export default function CustomerImportModal({ onClose, onDone }: {
     }
   }
 
+  const s = preview?.summary;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => !busy && onClose()}>
       <div className="card w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
@@ -75,12 +107,12 @@ export default function CustomerImportModal({ onClose, onDone }: {
             <div>
               <div className="text-sm font-medium mb-1">1. Boutique(s) où créditer les points de fidélité</div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                {stores.map((s) => (
-                  <label key={s.id} className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm cursor-pointer transition-colors ${
-                    selected.has(s.id) ? 'border-transparent text-white' : 'border-border hover:bg-gray-50'
-                  }`} style={selected.has(s.id) ? { backgroundColor: 'var(--primary)' } : undefined}>
-                    <input type="checkbox" className="accent-current" checked={selected.has(s.id)} onChange={() => toggle(s.id)} />
-                    <span className="truncate">{s.name}</span>
+                {stores.map((st) => (
+                  <label key={st.id} className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm cursor-pointer transition-colors ${
+                    selected.has(st.id) ? 'border-transparent text-white' : 'border-border hover:bg-gray-50'
+                  }`} style={selected.has(st.id) ? { backgroundColor: 'var(--primary)' } : undefined}>
+                    <input type="checkbox" className="accent-current" checked={selected.has(st.id)} onChange={() => toggle(st.id)} />
+                    <span className="truncate">{st.name}</span>
                   </label>
                 ))}
                 {stores.length === 0 && <p className="text-xs text-ink-soft">Aucune boutique.</p>}
@@ -99,20 +131,59 @@ export default function CustomerImportModal({ onClose, onDone }: {
 
             {/* Étape 3 : fichier rempli */}
             <div>
-              <div className="text-sm font-medium mb-1">3. Importer le fichier rempli</div>
+              <div className="text-sm font-medium mb-1">3. Choisir le fichier rempli, puis prévisualiser</div>
               <input
                 type="file"
                 accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                onChange={(e) => { setFile(e.target.files?.[0] ?? null); setError(null); }}
+                onChange={(e) => { setFile(e.target.files?.[0] ?? null); setError(null); setPreview(null); }}
                 className="block w-full text-sm text-ink-soft file:mr-3 file:rounded-lg file:border-0 file:bg-accent-soft file:text-accent-deep file:px-3 file:py-2 file:text-sm file:font-medium"
               />
             </div>
 
+            {/* Aperçu (simulation) */}
+            {s && (
+              <div className="rounded-xl border border-border p-3 text-sm space-y-2">
+                <div className="font-medium">Aperçu — {s.total} ligne(s), rien n&apos;est encore enregistré</div>
+                <div className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-0.5 text-ink-soft">
+                  <span>Nouveaux clients</span><span className="text-right font-semibold text-ink tabular-nums">{s.create}</span>
+                  <span>Fusions (fiches mises à jour)</span><span className="text-right font-semibold text-ink tabular-nums">{s.update}</span>
+                  <span className="pl-3 text-xs">· par e-mail / téléphone / nom</span>
+                  <span className="text-right text-xs tabular-nums">{s.by_email} / {s.by_phone} / {s.by_name}</span>
+                  {s.ambiguous > 0 && (<><span className="text-warning">Ambigus (créés, à vérifier)</span><span className="text-right text-warning tabular-nums">{s.ambiguous}</span></>)}
+                  {s.invalid > 0 && (<><span className="text-danger">Invalides (ignorés)</span><span className="text-right text-danger tabular-nums">{s.invalid}</span></>)}
+                  <span>Lignes avec points fidélité</span><span className="text-right tabular-nums">{s.with_points}</span>
+                </div>
+                <p className="text-[11px] text-ink-soft">
+                  Les points sont <strong>cumulés</strong> au solde existant de la (des) boutique(s) choisie(s) (rapatriement).
+                  L&apos;e-mail d&apos;une fiche fusionnée n&apos;est jamais écrasé.
+                </p>
+                <details className="text-xs">
+                  <summary className="cursor-pointer text-ink-soft">Voir le détail par ligne</summary>
+                  <div className="mt-1 max-h-40 overflow-y-auto space-y-0.5">
+                    {preview!.items.map((it) => (
+                      <div key={it.row} className="flex items-center justify-between gap-2 border-b border-border/50 py-0.5 last:border-0">
+                        <span className="truncate">L{it.row} · {it.label || '—'}</span>
+                        <span className={`shrink-0 ${
+                          it.action === 'invalid' ? 'text-danger'
+                          : it.action === 'ambiguous' ? 'text-warning'
+                          : it.action === 'update' ? 'text-accent-deep' : 'text-ink-soft'}`}>
+                          {ACTION_LABEL[it.action] ?? it.action}{it.matched_by ? ` (${it.matched_by})` : ''}{it.error ? ` — ${it.error}` : ''}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              </div>
+            )}
+
             {error && <p className="text-sm text-danger">{error}</p>}
 
             <div className="flex justify-end gap-2 pt-1">
-              <button className="btn-secondary h-10 px-4" disabled={busy} onClick={onClose}>Annuler</button>
-              <button className="btn-primary h-10 px-4" disabled={busy || selected.size === 0 || !file} onClick={() => void doImport()}>
+              <button className="btn-secondary h-10 px-4" disabled={busy || previewing} onClick={onClose}>Annuler</button>
+              <button className="btn-soft h-10 px-4" disabled={busy || previewing || !file} onClick={() => void doPreview()}>
+                {previewing ? 'Analyse…' : 'Prévisualiser'}
+              </button>
+              <button className="btn-primary h-10 px-4" disabled={busy || previewing || selected.size === 0 || !file} onClick={() => void doImport()}>
                 {busy ? 'Import en cours…' : 'Importer'}
               </button>
             </div>
@@ -124,7 +195,8 @@ export default function CustomerImportModal({ onClose, onDone }: {
               <div className="font-semibold">Import terminé</div>
               <ul className="mt-1 space-y-0.5">
                 <li>{result.created} client(s) créé(s)</li>
-                <li>{result.updated} mis à jour</li>
+                <li>{result.updated} fusionné(s) (fiche existante mise à jour)</li>
+                {result.ambiguous > 0 && <li className="text-warning">{result.ambiguous} ambigu(s) créé(s) — à vérifier</li>}
                 <li>{result.loyalty_updated} avec points de fidélité crédités</li>
                 {result.skipped > 0 && <li className="text-warning">{result.skipped} ligne(s) ignorée(s)</li>}
               </ul>
