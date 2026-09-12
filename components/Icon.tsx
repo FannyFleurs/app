@@ -45,7 +45,8 @@ export type IconName =
   | 'close'
   | 'warning'
   | 'sparkle'
-  | 'transfer';
+  | 'transfer'
+  | 'discount';
 
 const ICONS: Record<IconName, React.ReactNode> = {
   dashboard: (
@@ -282,6 +283,14 @@ const ICONS: Record<IconName, React.ReactNode> = {
       <path d="M14 5l3 3-3 3" />
       <path d="M20 16H7" />
       <path d="M10 19l-3-3 3-3" />
+    </>
+  ),
+  discount: (
+    // Symbole pourcentage — remises.
+    <>
+      <line x1="19" y1="5" x2="5" y2="19" />
+      <circle cx="7.5" cy="7.5" r="2.5" />
+      <circle cx="16.5" cy="16.5" r="2.5" />
     </>
   ),
 };

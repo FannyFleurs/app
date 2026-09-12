@@ -58,6 +58,7 @@ export const SIDEBAR_ITEMS: SidebarItem[] = [
   // Pilotage (en bas — pas en haut)
   { href: '/dashboard',    label: 'Tableau de bord',      icon: 'dashboard',    group: 'Pilotage', perm: 'settings.read' },
   { href: '/reports',      label: 'Rapports',             icon: 'exports',      group: 'Pilotage', perm: 'settings.read', boOnly: true },
+  { href: '/remises',      label: 'Remises',              icon: 'discount',     group: 'Pilotage', perm: 'settings.read', boOnly: true },
   // Journal des espèces et des gestes sensibles. Sous `closures.daily` : c'est
   // le registre de qui ouvre le tiroir et annule une vente — il regarde le
   // travail de l'équipe, il ne s'adresse pas à elle.
