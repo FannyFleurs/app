@@ -42,8 +42,8 @@ export async function GET() {
     '4. Particulier : renseignez Prénom / Nom. Professionnel / collectivité / association : renseignez Société.',
     '5. Colonnes « Consentement » : écrivez oui ou non.',
     '6. Colonne « Points fidélité » : un nombre entier (ex. 120). Laissez vide pour ne pas toucher aux points.',
-    '7. À l’import, vous choisirez la ou les boutiques concernées : les points seront crédités sur leur compte fidélité.',
-    '8. Un client existant est reconnu par son Email : ses informations sont alors mises à jour (pas de doublon).',
+    '7. À l’import, vous choisirez la ou les boutiques concernées : les points y sont CUMULÉS au solde existant (rapatriement).',
+    '8. Dédoublonnage : un client existant est reconnu par son Email, sinon son Téléphone, sinon son Nom / sa Société. Sa fiche est alors mise à jour (fusion), sans doublon. Un aperçu est proposé avant l’import.',
     '',
     'Ne modifiez pas la ligne d’en-têtes (elle sert à identifier les colonnes).',
   ];

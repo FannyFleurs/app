@@ -72,9 +72,11 @@ describe('Clients archivés', () => {
   });
 
   it('ne servent plus de point d\'ancrage à l\'import', () => {
-    // Réimporter un email archivé doit créer une fiche neuve, sinon la mise à
+    // Réimporter une fiche archivée doit créer une fiche neuve, sinon la mise à
     // jour partirait dans une fiche invisible : l'import semblerait sans effet.
-    expect(lire('app/api/customers/import/route.ts')).toMatch(/email = \$2[\s\S]{0,120}archived_at IS NULL/);
+    // Le rapprochement (email / téléphone / nom) ne considère que les fiches
+    // ACTIVES : l'index des existants est chargé avec archived_at IS NULL.
+    expect(lire('app/api/customers/import/route.ts')).toMatch(/FROM customers[\s\S]{0,160}archived_at IS NULL/);
   });
 });
 

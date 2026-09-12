@@ -22,14 +22,25 @@ export async function GET(req: Request) {
   where += archived === 'only' ? ` AND archived_at IS NOT NULL` : ` AND archived_at IS NULL`;
   if (q) {
     params.push(`%${q}%`);
+    const idxLike = params.length;
     params.push(q);
-    where += ` AND (
-      lower(COALESCE(company_name,'')) LIKE $${params.length - 1}
-      OR lower(COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) LIKE $${params.length - 1}
-      OR lower(COALESCE(email,'')) LIKE $${params.length - 1}
-      OR COALESCE(phone,'') = $${params.length}
-      OR COALESCE(siret,'') = $${params.length}
-    )`;
+    const idxExact = params.length;
+    const conds = [
+      `lower(COALESCE(company_name,'')) LIKE $${idxLike}`,
+      `lower(COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) LIKE $${idxLike}`,
+      `lower(COALESCE(email,'')) LIKE $${idxLike}`,
+      `COALESCE(siret,'') = $${idxExact}`,
+    ];
+    // Recherche par téléphone insensible aux espaces / séparateurs : depuis le
+    // formatage automatique (« 06 12 34 56 78 »), une égalité stricte ne
+    // matchait plus une saisie « 0612345678 ». On compare chiffre à chiffre, en
+    // sous-chaîne, dès qu'au moins 3 chiffres sont saisis (sinon trop large).
+    const qDigits = q.replace(/[^0-9]/g, '');
+    if (qDigits.length >= 3) {
+      params.push(`%${qDigits}%`);
+      conds.push(`regexp_replace(COALESCE(phone,''), '[^0-9]', '', 'g') LIKE $${params.length}`);
+    }
+    where += ` AND (${conds.join(' OR ')})`;
   }
   params.push(limit);
 
