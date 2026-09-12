@@ -3,20 +3,14 @@ import { cookies, headers } from 'next/headers';
 import { revokeSession, SESSION_COOKIE } from '@/lib/auth/session';
 import { audit } from '@/lib/audit/log';
 import { readSessionFromCookie } from '@/lib/auth/session';
-import { SaleService } from '@/lib/services/sale-service';
 
 export async function POST() {
   const user = await readSessionFromCookie();
-  // Panier en cours à la déconnexion : on le met en attente (liste partagée),
-  // pour qu'il ne revienne pas tout seul dans le panier du prochain utilisateur
-  // sur ce poste. La déconnexion prime : une erreur ici ne doit pas la bloquer.
-  if (user) {
-    try {
-      await SaleService.holdOpenDraftsForUser(user.organizationId, user.id);
-    } catch {
-      /* on continue la déconnexion quoi qu'il arrive */
-    }
-  }
+  // Pas de mise en attente automatique du panier à la déconnexion : le panier
+  // en cours reste un « draft » rattaché à l'utilisateur, jamais poussé dans la
+  // liste « En attente ». Le prochain utilisateur ne l'hérite pas (la caisse ne
+  // restaure que son propre draft) ; pour mettre un panier de côté, on utilise
+  // le bouton « Mettre en attente ».
   const c = cookies().get(SESSION_COOKIE);
   if (c) await revokeSession(c.value);
   cookies().set({
