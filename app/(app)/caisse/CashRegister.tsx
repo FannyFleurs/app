@@ -563,19 +563,11 @@ export default function CashRegister({
         if (!r.ok) { localStorage.removeItem(cartKey); return; }
         const j = await r.json();
         const s = j.sale as { status?: string; user_id?: string; customer_id?: string | null } | undefined;
-        // On ne restaure QUE SON PROPRE panier en cours (draft). Un panier en
-        // attente (on_hold) ne revient pas tout seul : il se reprend depuis
-        // « En attente ». Un draft d'un AUTRE utilisateur (déconnexion sans mise
-        // en attente, plantage) est basculé en attente puis retiré du poste —
-        // jamais injecté dans le panier courant du suivant.
+        // On ne restaure QUE SON PROPRE panier en cours (draft). C'est ce qui
+        // empêche un collègue d'hériter du panier d'un autre. Tout le reste
+        // (panier d'un autre utilisateur, vente déjà en attente / validée) n'est
+        // simplement PAS rechargé ici — aucune mise en attente automatique.
         if (!s || s.status !== 'draft' || s.user_id !== currentUser.id) {
-          if (s && s.status === 'draft' && s.user_id && s.user_id !== currentUser.id) {
-            const heure = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-            void fetch(`/api/sales/${stored}/hold`, {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ label: `Panier ${heure}` }),
-            }).catch(() => {});
-          }
           localStorage.removeItem(cartKey);
           return;
         }

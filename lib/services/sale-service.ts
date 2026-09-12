@@ -183,34 +183,6 @@ export class SaleService {
   }
 
   /**
-   * Met EN ATTENTE les paniers « draft » NON VIDES d'un utilisateur, à sa
-   * déconnexion. Sans ça, le panier est mémorisé PAR POSTE (localStorage) et un
-   * collègue qui ouvre sa session sur le même appareil voit la vente revenir
-   * automatiquement dans son panier. En attente, elle rejoint la liste partagée
-   * « ventes en attente » de la boutique, reprenable par n'importe qui. Les
-   * paniers vides (aucune ligne) sont ignorés : rien à conserver.
-   * Renvoie le nombre de paniers basculés.
-   */
-  static async holdOpenDraftsForUser(organizationId: string, userId: string): Promise<number> {
-    return withTransaction(async (client) => {
-      const res = await client.query(
-        `UPDATE sales s
-            SET status = 'on_hold',
-                held_label = COALESCE((
-                  SELECT NULLIF(TRIM(COALESCE(c.company_name,
-                           NULLIF(TRIM(COALESCE(c.first_name, '') || ' ' || COALESCE(c.last_name, '')), ''))), '')
-                    FROM customers c WHERE c.id = s.customer_id
-                ), 'Panier') || ' · ' || to_char(now() AT TIME ZONE 'Europe/Paris', 'HH24:MI'),
-                updated_at = now()
-          WHERE s.organization_id = $1 AND s.user_id = $2 AND s.status = 'draft'
-            AND EXISTS (SELECT 1 FROM sale_lines sl WHERE sl.sale_id = s.id)`,
-        [organizationId, userId],
-      );
-      return res.rowCount ?? 0;
-    });
-  }
-
-  /**
    * Encaisse une vente :
    *   1. lock + validations
    *   2. insertion paiements (vérification somme = total_ttc)
