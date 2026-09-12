@@ -296,6 +296,21 @@ function DiscountDetailModal({ id, onClose }: { id: string; onClose: () => void 
           <div className="py-10 text-center text-sm text-ink-soft">Chargement du détail…</div>
         ) : (
           <div className="mt-4 space-y-5">
+            {(() => {
+              const motifs = [...new Set(detail.lines.filter((l) => l.discount_amount > 0 && l.motif).map((l) => l.motif as string))];
+              if (motifs.length === 0) return null;
+              return (
+                <div className="rounded-xl border border-warning/30 bg-warning/5 px-4 py-3">
+                  <div className="text-[10px] uppercase tracking-widest text-warning font-semibold mb-1">
+                    Motif{motifs.length > 1 ? 's' : ''} de remise
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {motifs.map((m) => <Badge key={m} tone="warning">{m}</Badge>)}
+                  </div>
+                </div>
+              );
+            })()}
+
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="text-ink-soft text-[10px] uppercase tracking-widest border-b border-border">

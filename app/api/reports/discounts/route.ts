@@ -42,9 +42,17 @@ export async function GET(req: Request) {
   );
 
   // Classement par motif (niveau ligne : le motif y est natif).
+  // Priorité : justification manuelle (texte saisi, ex. « Geste commercial ») >
+  // remise fidélité > remise client (remise systématique automatique). Le reste
+  // (promos produit sans trace) reste sans motif.
   const byReasonRes = await query<{ motif: string | null; total: string; ventes: string }>(
-    `SELECT COALESCE(NULLIF(sl.metadata->>'cart_discount_reason', ''),
-                     NULLIF(sl.metadata->>'manual_discount_reason', '')) AS motif,
+    `SELECT COALESCE(
+              NULLIF(sl.metadata->>'cart_discount_reason', ''),
+              NULLIF(sl.metadata->>'manual_discount_reason', ''),
+              CASE WHEN (sl.metadata->>'loyalty_discount') = 'true' THEN 'Remise fidélité' END,
+              CASE WHEN COALESCE(NULLIF(sl.metadata->>'auto_discount_pct', '')::numeric, 0) > 0
+                   THEN 'Remise client' END
+            ) AS motif,
             SUM(sl.discount_amount)::text AS total,
             COUNT(DISTINCT s.id)::text    AS ventes
        FROM sale_lines sl
@@ -77,7 +85,11 @@ export async function GET(req: Request) {
        LEFT JOIN LATERAL (
          SELECT COALESCE(
                   MAX(NULLIF(sl.metadata->>'cart_discount_reason', '')),
-                  MAX(NULLIF(sl.metadata->>'manual_discount_reason', ''))
+                  MAX(NULLIF(sl.metadata->>'manual_discount_reason', '')),
+                  CASE WHEN bool_or((sl.metadata->>'loyalty_discount') = 'true')
+                       THEN 'Remise fidélité' END,
+                  CASE WHEN bool_or(COALESCE(NULLIF(sl.metadata->>'auto_discount_pct', '')::numeric, 0) > 0)
+                       THEN 'Remise client' END
                 ) AS motif
            FROM sale_lines sl WHERE sl.sale_id = s.id
        ) m ON TRUE

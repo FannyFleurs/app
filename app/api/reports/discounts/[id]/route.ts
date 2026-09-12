@@ -38,12 +38,17 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   const linesRes = await query<{
     label: string; quantity: string; unit_price_ttc: string;
     discount_amount: string; line_ttc: string; tax_rate: string;
-    cart_reason: string | null; line_reason: string | null;
+    motif: string | null;
   }>(
     `SELECT label, quantity::text, unit_price_ttc::text, discount_amount::text,
             line_ttc::text, tax_rate::text,
-            NULLIF(metadata->>'cart_discount_reason', '') AS cart_reason,
-            NULLIF(metadata->>'manual_discount_reason', '') AS line_reason
+            COALESCE(
+              NULLIF(metadata->>'cart_discount_reason', ''),
+              NULLIF(metadata->>'manual_discount_reason', ''),
+              CASE WHEN (metadata->>'loyalty_discount') = 'true' THEN 'Remise fidélité' END,
+              CASE WHEN COALESCE(NULLIF(metadata->>'auto_discount_pct', '')::numeric, 0) > 0
+                   THEN 'Remise client' END
+            ) AS motif
        FROM sale_lines
       WHERE sale_id = $1
       ORDER BY line_index`,
@@ -64,7 +69,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
       discount_amount: Number(l.discount_amount),
       line_ttc: Number(l.line_ttc),
       tax_rate: Number(l.tax_rate),
-      motif: l.cart_reason ?? l.line_reason ?? null,
+      motif: l.motif ?? null,
     })),
     payments: paymentsRes.rows.map((p) => ({ method: p.method, amount: Number(p.amount) })),
   });
