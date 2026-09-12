@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { formatEUR } from '@/lib/services/money';
+import { confirmThemed } from '@/lib/ui/dialog';
 
 interface DeliveryInfo {
   source?: string;
@@ -15,19 +16,50 @@ interface Held {
 }
 
 export default function HoldListModal({
-  storeId, onClose, onPick,
-}: { storeId: string; onClose: () => void; onPick: (id: string) => void }) {
+  storeId, onClose, onPick, onCleared,
+}: { storeId: string; onClose: () => void; onPick: (id: string) => void; onCleared?: () => void }) {
   const [items, setItems] = useState<Held[]>([]);
-  useEffect(() => {
-    void (async () => {
-      // Tickets en attente de la BOUTIQUE (toutes ses caisses).
-      const res = await fetch(`/api/sales/held?store_id=${encodeURIComponent(storeId)}`);
+  const [clearing, setClearing] = useState(false);
+
+  async function reload() {
+    // Tickets en attente de la BOUTIQUE (toutes ses caisses).
+    const res = await fetch(`/api/sales/held?store_id=${encodeURIComponent(storeId)}`);
+    if (res.ok) {
+      const j = await res.json();
+      setItems(j.held);
+    }
+  }
+  useEffect(() => { void reload(); /* eslint-disable-next-line */ }, [storeId]);
+
+  // Paniers « vidables » : tout sauf les commandes entrantes (préservées).
+  const clearable = items.filter((it) => it.delivery_info?.source !== 'commande').length;
+
+  async function clearAll() {
+    if (clearable === 0) return;
+    const ok = await confirmThemed({
+      title: 'Vider les paniers en attente',
+      message: `Supprimer ${clearable} panier${clearable > 1 ? 's' : ''} en attente ?\n\n`
+        + 'Les commandes entrantes (Commande / Retrait) sont conservées. '
+        + 'Cette action est définitive — ces paniers n\'ont jamais été encaissés.',
+      confirmLabel: 'Vider',
+      cancelLabel: 'Annuler',
+      danger: true,
+    });
+    if (!ok) return;
+    setClearing(true);
+    try {
+      const res = await fetch('/api/sales/held/clear', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ store_id: storeId }),
+      });
       if (res.ok) {
-        const j = await res.json();
-        setItems(j.held);
+        await reload();
+        onCleared?.();
       }
-    })();
-  }, [storeId]);
+    } finally {
+      setClearing(false);
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-ink/30 backdrop-blur-sm p-4">
@@ -75,6 +107,19 @@ export default function HoldListModal({
             );
           })}
         </div>
+
+        {clearable > 0 && (
+          <div className="mt-4 pt-3 border-t border-border flex justify-end">
+            <button
+              onClick={() => void clearAll()}
+              disabled={clearing}
+              className="btn-ghost text-sm text-danger hover:bg-danger/10 disabled:opacity-50"
+              title="Supprimer tous les paniers en attente (hors commandes entrantes)"
+            >
+              {clearing ? 'Suppression…' : `🗑 Vider les paniers en attente (${clearable})`}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
