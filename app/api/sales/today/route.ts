@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { query } from '@/lib/db/client';
 import { requirePermission } from '@/lib/auth/guards';
 import { resolveDeviceStoreId } from '@/lib/pos/current-store';
+import { storeInOrg } from '@/lib/auth/stores-server';
 import { depositReasonSql } from '@/lib/services/cash-deposit';
 
 export async function GET(req: Request) {
@@ -12,9 +13,14 @@ export async function GET(req: Request) {
   const scan = url.searchParams.get('scan')?.trim();
 
   // Isolation multi-boutiques : sur un poste de caisse appairé, on ne montre
-  // QUE la journée de la boutique du poste. Null (poste non appairé /
-  // back-office) => toutes boutiques (comportement historique).
-  const storeId = await resolveDeviceStoreId(g.user.organizationId);
+  // QUE la journée de la boutique du poste. En back-office, la page de
+  // consultation des ventes peut passer un filtre boutique explicite
+  // (`store_id`) ; sinon null (poste non appairé / BO sans filtre) => toutes
+  // boutiques (comportement historique).
+  const storeParam = url.searchParams.get('store_id');
+  const storeId = storeParam
+    ? ((await storeInOrg(storeParam, g.user.organizationId)) ? storeParam : null)
+    : await resolveDeviceStoreId(g.user.organizationId);
 
   // Recherche par scan : si un numéro de ticket est fourni, on filtre directement
   // dessus, sans restreindre par date (utile pour scanner un ancien ticket).

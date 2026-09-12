@@ -32,6 +32,9 @@ export const SIDEBAR_ITEMS: SidebarItem[] = [
   // « Ma journée » suit une caisse ouverte sur un poste : à distance, il n'y a
   // pas de journée à tenir, c'est le tableau de bord qui répond.
   { href: '/ma-journee',   label: 'Ma journée',           icon: 'my-day',       group: 'Vente',    perm: 'pos.use', appOnly: true },
+  // Consultation des ventes au back-office (l'équivalent « à distance » de la
+  // liste des ventes de Ma journée) : par jour, filtrable par boutique.
+  { href: '/ventes',       label: 'Ventes',               icon: 'cart',         group: 'Vente',    perm: 'pos.use', boOnly: true },
   { href: '/orders',       label: 'Commandes',            icon: 'orders',       group: 'Vente',    perm: 'pos.use' },
   // Pas d'entrée « Écran atelier » : c'est une application à part, sur le
   // sous-domaine ecran., posée sur une tablette murale et rattachée à sa
