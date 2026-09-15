@@ -11,7 +11,7 @@ const dt = (iso: string | null) => (iso ? new Date(iso).toLocaleString('fr-FR') 
 const PAYMENT_LABELS: Record<string, string> = {
   cash: 'Espèces', card: 'Carte bancaire', check: 'Chèque', transfer: 'Virement',
   gift_card: 'Carte cadeau', credit_note: 'Avoir', deferred: 'Mise en compte',
-  payment_link: 'Lien de paiement', other: 'Autre',
+  payment_link: 'Lien de paiement', loyalty: 'Fidélité', other: 'Autre',
 };
 
 function Row({ label, value, bold }: { label: string; value: string; bold?: boolean }) {

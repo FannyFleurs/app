@@ -13,7 +13,7 @@ import { enqueueGiftCardPrint, NoReceiptPrinterError as GiftCardNoPrinter } from
 import { notifyOrderPaidIfNeeded } from '@/lib/orders/notify-paid';
 
 const paymentSchema = z.object({
-  method: z.enum(['cash','card','check','transfer','gift_card','credit_note','deferred','other','payment_link']),
+  method: z.enum(['cash','card','check','transfer','gift_card','credit_note','deferred','other','payment_link','loyalty']),
   amount: z.number().positive(),
   given_amount: z.number().min(0).optional(),
   reference: z.string().max(80).optional(),

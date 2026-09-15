@@ -42,6 +42,7 @@ const PAYMENT_LABELS: Record<string, string> = {
   gift_card: 'Carte cadeau',
   credit_note: 'Avoir',
   deferred: 'En compte',
+  loyalty: 'Fidelite',
   other: 'Autre',
 };
 

@@ -18,5 +18,6 @@ export const PAYMENT_LABELS: Record<string, string> = {
   gift_card: 'Carte cadeau',
   credit_note: 'Avoir',
   deferred: 'Différé client',
+  loyalty: 'Fidélité',
   other: 'Autre',
 };
