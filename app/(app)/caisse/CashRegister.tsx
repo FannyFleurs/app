@@ -1894,9 +1894,6 @@ export default function CashRegister({
                   <div className="text-sm font-medium truncate underline decoration-dotted underline-offset-2">
                     {customer.display_name}
                   </div>
-                  {customer.default_discount_pct && customer.default_discount_pct > 0 && (
-                    <div className="text-xs text-warning">Remise systématique : -{customer.default_discount_pct}%</div>
-                  )}
                 </a>
                 <div className="flex items-center gap-1.5">
                   <button
