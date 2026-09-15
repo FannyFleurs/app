@@ -36,7 +36,8 @@ export interface SalePaymentInput {
     | 'credit_note'
     | 'deferred'
     | 'other'
-    | 'payment_link';
+    | 'payment_link'
+    | 'loyalty';
   amount: number;
   given_amount?: number;
   reference?: string;
@@ -285,6 +286,15 @@ export class SaleService {
         if (Math.abs(sumPayments - totalTtc) > 0.005) {
           throw new Error('PAYMENTS_MISMATCH');
         }
+      }
+
+      // Règlement « Fidélité » : c'est un moyen de paiement adossé au compte du
+      // client. Sans client rattaché, impossible d'en débiter le solde.
+      const loyaltyTendered = round2(
+        args.payments.filter((p) => p.method === 'loyalty').reduce((s, p) => s + Number(p.amount), 0),
+      );
+      if (loyaltyTendered > 0 && !sale.customer_id) {
+        throw new Error('LOYALTY_NO_CUSTOMER');
       }
 
       const linesRes = await client.query(
@@ -667,7 +677,13 @@ export class SaleService {
         const enabled = loyaltyCfg?.enabled === true;
         const earnedPer = Number(loyaltyCfg?.euros_earned ?? 0);
         const perSpent = Number(loyaltyCfg?.per_euros_spent ?? 0);
-        const redeemed = Number(args.loyaltyRedemptionAmount ?? 0);
+        // Montant de fidélité utilisé = le règlement « Fidélité » du ticket
+        // (nouveau modèle : moyen de paiement). Repli sur l'ancien champ
+        // `loyaltyRedemptionAmount` pour les ventes hors-ligne mises en file
+        // AVANT ce changement (où la fidélité était une remise).
+        const redeemed = loyaltyTendered > 0
+          ? loyaltyTendered
+          : Number(args.loyaltyRedemptionAmount ?? 0);
         // Groupe fidélité selon le périmètre configuré + boutique de la vente.
         // Repli sur le modèle historique tant que la migration 0034 (colonne
         // group_key) n'est pas appliquée : on ne casse jamais l'encaissement.

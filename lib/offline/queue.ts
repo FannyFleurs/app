@@ -24,7 +24,7 @@ export interface QueuedSale {
     metadata?: Record<string, unknown>;
   }>;
   payments: Array<{
-    method: 'cash' | 'card' | 'check' | 'transfer' | 'gift_card' | 'credit_note' | 'deferred' | 'other';
+    method: 'cash' | 'card' | 'check' | 'transfer' | 'gift_card' | 'credit_note' | 'deferred' | 'other' | 'loyalty';
     amount: number;
     given_amount?: number;
     reference?: string;

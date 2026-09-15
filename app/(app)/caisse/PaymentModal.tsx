@@ -1,10 +1,10 @@
 'use client';
 import { alertThemed } from '@/lib/ui/dialog';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { formatEUR, round2 } from '@/lib/services/money';
 
-type Method = 'cash' | 'card' | 'check' | 'transfer' | 'gift_card' | 'credit_note' | 'payment_link' | 'other' | 'deferred';
+type Method = 'cash' | 'card' | 'check' | 'transfer' | 'gift_card' | 'credit_note' | 'payment_link' | 'other' | 'deferred' | 'loyalty';
 
 const FALLBACK_METHODS: Array<{ kind: Method; label: string }> = [
   { kind: 'cash', label: 'Espèces' },
@@ -41,7 +41,7 @@ interface Props {
    *  enregistre la vente en local au lieu d'appeler le serveur. */
   offlineEnabled?: boolean;
   onOfflineFinalize?: (
-    payments: Array<{ method: 'cash'|'card'|'check'|'transfer'|'gift_card'|'credit_note'|'deferred'|'other'; amount: number; given_amount?: number; reference?: string }>,
+    payments: Array<{ method: 'cash'|'card'|'check'|'transfer'|'gift_card'|'credit_note'|'deferred'|'other'|'loyalty'; amount: number; given_amount?: number; reference?: string }>,
     loyaltyUsed: number,
   ) => Promise<void>;
   onClose: () => void;
@@ -61,6 +61,7 @@ export default function PaymentModal({ saleId, totalTtc, lines = [], storeId, ha
   const [lookupKind, setLookupKind] = useState<'credit_note' | 'gift_card' | null>(null);
   const [lookupLabel, setLookupLabel] = useState('');
   const [lookupAmountSeed, setLookupAmountSeed] = useState(0);
+  const loyaltyAddedRef = useRef(false);
 
   // Saisie clavier physique
   useEffect(() => {
@@ -91,6 +92,23 @@ export default function PaymentModal({ saleId, totalTtc, lines = [], storeId, ha
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storeId]);
+
+  // Fidélité pré-sélectionnée au comptoir : on l'applique comme un MOYEN DE
+  // PAIEMENT « Fidélité » (le solde règle une partie du ticket), et non comme
+  // une remise. Ajouté une seule fois, plafonné au total ; retirable comme un
+  // paiement classique.
+  useEffect(() => {
+    if (loyaltyAddedRef.current) return;
+    if (settlement) return;
+    if (loyaltyRedemption && loyaltyRedemption > 0) {
+      loyaltyAddedRef.current = true;
+      const amt = round2(Math.min(loyaltyRedemption, totalTtc));
+      if (amt > 0) {
+        setPayments((cur) => [...cur, { key: cryptoKey(), method: 'loyalty', label: 'Fidélité', amount: amt }]);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loyaltyRedemption, totalTtc]);
 
   const paidAllocated = useMemo(
     () => round2(payments.reduce((s, p) => s + p.amount, 0)),
@@ -243,10 +261,11 @@ export default function PaymentModal({ saleId, totalTtc, lines = [], storeId, ha
       try {
         await onOfflineFinalize(
           payments.map((p) => ({
-            method: p.method as 'cash'|'card'|'check'|'transfer'|'gift_card'|'credit_note'|'deferred'|'other',
+            method: p.method as 'cash'|'card'|'check'|'transfer'|'gift_card'|'credit_note'|'deferred'|'other'|'loyalty',
             amount: p.amount, given_amount: p.given_amount, reference: p.reference,
           })),
-          loyaltyRedemption && loyaltyRedemption > 0 ? loyaltyRedemption : 0,
+          // Fidélité réellement mise au règlement (0 si le tender a été retiré).
+          round2(payments.filter((p) => p.method === 'loyalty').reduce((s, p) => s + p.amount, 0)),
         );
       } finally { setLoading(false); }
       return;
@@ -263,7 +282,9 @@ export default function PaymentModal({ saleId, totalTtc, lines = [], storeId, ha
             given_amount: p.given_amount,
             reference: p.reference,
           })),
-          loyalty_redemption_amount: loyaltyRedemption && loyaltyRedemption > 0 ? loyaltyRedemption : undefined,
+          // La fidélité est désormais un paiement (méthode « loyalty ») inclus
+          // dans `payments` : le débit du compte est piloté par ce montant côté
+          // serveur. Plus de champ séparé (qui débitait même tender retiré).
         }),
       });
       if (!res.ok) {

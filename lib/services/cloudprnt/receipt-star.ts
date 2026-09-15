@@ -22,7 +22,8 @@ function columns(paperWidthMm?: number): number {
 
 const PAYMENT_LABELS: Record<string, string> = {
   cash: 'Especes', card: 'Carte Bancaire', check: 'Cheque', transfer: 'Virement',
-  gift_card: 'Carte cadeau', credit_note: 'Avoir', deferred: 'En compte', other: 'Autre',
+  gift_card: 'Carte cadeau', credit_note: 'Avoir', deferred: 'En compte',
+  loyalty: 'Fidelite', other: 'Autre',
 };
 
 const n2 = (x: number) => x.toFixed(2).replace('.', ',');

@@ -860,34 +860,17 @@ export default function CashRegister({
     const subtotal = lines.reduce((s, l) => s + round2(l.unit_price_ttc * l.quantity - l.discount_amount), 0);
     const apply = Math.min(round2(amountEuros), round2(subtotal));
     if (apply <= 0) return;
-    // Réparti proportionnellement sur les lignes (pour conserver la TVA), au
-    // centime près : la somme des parts vaut exactement `apply` (plus fort reste).
-    setLines((cur) => {
-      const weights = cur.map((l) => round2(l.unit_price_ttc * l.quantity - l.discount_amount));
-      const parts = distributeProrata(apply, weights);
-      return cur.map((l, i) => {
-        const part = parts[i] ?? 0;
-        if (part <= 0) return l;
-        // On marque la ligne : la remise fidélité doit être identifiable
-        // (rapport Remises → « Remise fidélité » au lieu de « Sans motif »).
-        return {
-          ...l,
-          discount_amount: round2(l.discount_amount + part),
-          metadata: { ...l.metadata, loyalty_discount: true },
-        };
-      });
-    });
+    // La fidélité est un MOYEN DE PAIEMENT « Fidélité », pas une remise : on ne
+    // touche PAS aux lignes (articles à plein prix, CA/TVA pleins). On mémorise
+    // seulement le montant à porter au règlement (déjà plafonné au total).
     setLoyalty((cur) => ({ ...cur, used: apply, balance_euros: cur.balance_euros - apply }));
   }
 
   function removeLoyalty() {
     if (!loyalty.used) return;
-    // Restaure le solde et recalcule : pour simplicité, on relit le solde côté serveur au prochain client switch
+    // Rien à défaire sur les lignes (la fidélité n'y touche plus) : on restaure
+    // le solde disponible et on annule le montant réservé au règlement.
     setLoyalty((cur) => ({ ...cur, balance_euros: cur.balance_euros + cur.used, used: 0 }));
-    // On enlève la part proportionnelle qu'on avait ajoutée — version naïve : on remet
-    // discount_amount à sa valeur initiale en relisant depuis la BDD via syncLines.
-    // Plus simple : on demande à l'utilisateur de re-saisir si besoin via le picker.
-    void syncLines();
   }
 
   function addFreeBouquet(amount: number, taxCode: string, label: string) {
@@ -1142,7 +1125,7 @@ export default function CashRegister({
    * vers le serveur (qui scellera) à la reprise réseau. Idempotent.
    */
   async function finalizeOffline(
-    payments: Array<{ method: 'cash'|'card'|'check'|'transfer'|'gift_card'|'credit_note'|'deferred'|'other'; amount: number; given_amount?: number; reference?: string }>,
+    payments: Array<{ method: 'cash'|'card'|'check'|'transfer'|'gift_card'|'credit_note'|'deferred'|'other'|'loyalty'; amount: number; given_amount?: number; reference?: string }>,
     loyaltyUsed: number,
   ) {
     const clientRef = (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
@@ -1966,7 +1949,7 @@ export default function CashRegister({
               )}
               {loyalty.used > 0 && (
                 <div className="flex items-center justify-between rounded-xl bg-success/10 px-3 py-2 text-sm">
-                  <span className="text-success font-medium">Fidélité utilisée : -{formatEUR(loyalty.used)}</span>
+                  <span className="text-success font-medium">Fidélité au règlement : {formatEUR(loyalty.used)}</span>
                   <button onClick={() => removeLoyalty()} className="text-ink-soft hover:text-danger text-xs">retirer</button>
                 </div>
               )}
