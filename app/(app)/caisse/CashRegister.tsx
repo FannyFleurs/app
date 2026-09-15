@@ -758,6 +758,12 @@ export default function CashRegister({
     return { ttc, ht, tva, discount, breakdown: Array.from(byRate.entries()).sort((a,b)=>b[0]-a[0]) };
   }, [lines]);
 
+  // Fidélité portée au règlement : affichée dans le bloc total du panier
+  // (Total plein − fidélité = reste à payer). Le total fiscal reste plein ;
+  // c'est un affichage. Plafonné au total du ticket.
+  const loyaltyApplied = round2(Math.min(loyalty.used, totals.ttc));
+  const resteAPayer = round2(Math.max(0, totals.ttc - loyaltyApplied));
+
   // Vente d'un PACK : on l'éclate en lignes composant (chacune avec son prix et
   // sa TVA). La remise du pack est répartie au prorata sur les composants — la
   // somme des lignes vaut donc le prix du pack. Chaque composant portant son
@@ -1766,7 +1772,7 @@ export default function CashRegister({
               {lines.length}
             </span>
           </span>
-          <span className="text-lg font-semibold">{formatEUR(totals.ttc)}</span>
+          <span className="text-lg font-semibold">{formatEUR(loyaltyApplied > 0 ? resteAPayer : totals.ttc)}</span>
           <span className="rounded-xl accent-bar text-white px-4 py-2 text-sm font-semibold inline-flex items-center gap-1">
             Voir
             <Icon name="chevron-right" size={14} />
@@ -2032,10 +2038,27 @@ export default function CashRegister({
               <span>Remises</span><span>-{formatEUR(totals.discount)}</span>
             </div>
           )}
-          <div className="flex items-center justify-between pt-1">
-            <span className="text-base font-semibold">Total</span>
-            <span className="text-2xl font-semibold tracking-tight">{formatEUR(totals.ttc)}</span>
-          </div>
+          {loyaltyApplied > 0 ? (
+            <>
+              <div className="flex items-center justify-between">
+                <span className="text-ink-soft">Total</span>
+                <span className="font-medium tabular-nums">{formatEUR(totals.ttc)}</span>
+              </div>
+              <div className="flex items-center justify-between text-success">
+                <span>Remise fidélité</span>
+                <span className="tabular-nums">-{formatEUR(loyaltyApplied)}</span>
+              </div>
+              <div className="flex items-center justify-between pt-1">
+                <span className="text-base font-semibold">Reste à payer</span>
+                <span className="text-2xl font-semibold tracking-tight tabular-nums">{formatEUR(resteAPayer)}</span>
+              </div>
+            </>
+          ) : (
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-base font-semibold">Total</span>
+              <span className="text-2xl font-semibold tracking-tight">{formatEUR(totals.ttc)}</span>
+            </div>
+          )}
         </div>
 
         <div className="p-2.5 border-t border-border space-y-2">
