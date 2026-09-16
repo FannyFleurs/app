@@ -46,6 +46,8 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
               NULLIF(metadata->>'cart_discount_reason', ''),
               NULLIF(metadata->>'manual_discount_reason', ''),
               CASE WHEN (metadata->>'loyalty_discount') = 'true' THEN 'Remise fidélité' END,
+              CASE WHEN COALESCE(NULLIF(metadata->>'product_disc_unit', '')::numeric, 0) > 0
+                   THEN 'Remise fiche article' END,
               CASE WHEN COALESCE(NULLIF(metadata->>'auto_discount_pct', '')::numeric, 0) > 0
                    THEN 'Remise client' END
             ) AS motif

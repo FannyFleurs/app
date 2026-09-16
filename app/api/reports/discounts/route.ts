@@ -61,6 +61,8 @@ export async function GET(req: Request) {
               NULLIF(sl.metadata->>'cart_discount_reason', ''),
               NULLIF(sl.metadata->>'manual_discount_reason', ''),
               CASE WHEN (sl.metadata->>'loyalty_discount') = 'true' THEN 'Remise fidélité' END,
+              CASE WHEN COALESCE(NULLIF(sl.metadata->>'product_disc_unit', '')::numeric, 0) > 0
+                   THEN 'Remise fiche article' END,
               CASE WHEN COALESCE(NULLIF(sl.metadata->>'auto_discount_pct', '')::numeric, 0) > 0
                    THEN 'Remise client' END
             ) AS motif,
@@ -105,6 +107,8 @@ export async function GET(req: Request) {
                   MAX(NULLIF(sl.metadata->>'manual_discount_reason', '')),
                   CASE WHEN bool_or((sl.metadata->>'loyalty_discount') = 'true')
                        THEN 'Remise fidélité' END,
+                  CASE WHEN bool_or(COALESCE(NULLIF(sl.metadata->>'product_disc_unit', '')::numeric, 0) > 0)
+                       THEN 'Remise fiche article' END,
                   CASE WHEN bool_or(COALESCE(NULLIF(sl.metadata->>'auto_discount_pct', '')::numeric, 0) > 0)
                        THEN 'Remise client' END
                 ) AS motif

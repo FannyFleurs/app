@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { formatEUR } from '@/lib/services/money';
+import { formatEUR, round2 } from '@/lib/services/money';
 
 interface Props {
   cartTotal: number;
@@ -24,8 +24,10 @@ export default function CartActionsModal({
   const [comment, setComment] = useState(currentComment);
 
   const computed = mode === 'percent'
-    ? Math.round((cartTotal * percent / 100) * 100) / 100
-    : Math.min(amount, cartTotal);
+    ? round2(cartTotal * percent / 100)
+    : round2(Math.min(amount, cartTotal));
+  const finalTotal = Math.max(0, round2(cartTotal - computed));
+  const effectivePct = cartTotal > 0 ? round2((computed / cartTotal) * 100) : 0;
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-ink/30 backdrop-blur-sm p-4" onClick={onClose}>
@@ -58,7 +60,9 @@ export default function CartActionsModal({
 
         {tab === 'discount' ? (
           <>
-            <div className="flex gap-2 mb-3">
+            <p className="text-xs text-ink-soft">Total ticket : {formatEUR(cartTotal)}</p>
+
+            <div className="mt-2 flex gap-2 mb-1">
               <button onClick={() => setMode('percent')}
                       className={`flex-1 rounded-xl h-12 text-base font-semibold border ${
                         mode === 'percent' ? 'accent-bar text-white border-transparent' : 'bg-white border-border'
@@ -70,32 +74,51 @@ export default function CartActionsModal({
             </div>
 
             {mode === 'percent' ? (
-              <div>
-                <label className="text-xs font-medium text-ink-soft">Pourcentage</label>
-                <input
-                  type="number" step="0.5" min={0} max={100}
-                  className="input mt-1 h-14 text-2xl font-semibold"
-                  value={percent || ''}
-                  onChange={(e) => setPercent(Number(e.target.value) || 0)}
-                  autoFocus
-                />
+              <div className="mt-3">
+                <label className="text-xs font-medium text-ink-soft">Pourcentage de remise</label>
+                <div className="flex items-center gap-2 mt-1">
+                  <input
+                    type="number" step="0.1" min={0} max={100}
+                    className="input h-14 text-3xl font-semibold"
+                    value={percent || ''}
+                    onChange={(e) => setPercent(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
+                    placeholder="0"
+                    autoFocus
+                  />
+                  <span className="text-3xl font-semibold text-ink-soft">%</span>
+                </div>
+                <div className="mt-3 grid grid-cols-5 gap-2">
+                  {[5, 10, 15, 20, 30].map((p) => (
+                    <button key={p} type="button" onClick={() => setPercent(p)}
+                            className="btn-ghost h-11 text-sm font-medium">-{p}%</button>
+                  ))}
+                </div>
               </div>
             ) : (
-              <div>
-                <label className="text-xs font-medium text-ink-soft">Montant (€)</label>
+              <div className="mt-3">
+                <label className="text-xs font-medium text-ink-soft">Montant de remise (€)</label>
                 <input
                   type="number" step="0.01" min={0} max={cartTotal}
-                  className="input mt-1 h-14 text-2xl font-semibold"
+                  className="input mt-1 h-14 text-3xl font-semibold"
                   value={amount || ''}
-                  onChange={(e) => setAmount(Number(e.target.value) || 0)}
+                  onChange={(e) => setAmount(Math.max(0, Math.min(cartTotal, Number(e.target.value) || 0)))}
+                  placeholder="0,00"
                   autoFocus
                 />
               </div>
             )}
 
-            <div className="mt-3 rounded-xl bg-gray-50 p-3 flex items-baseline justify-between text-sm">
-              <span>Remise calculée</span>
-              <span className="text-xl font-semibold text-warning">-{formatEUR(computed)}</span>
+            <div className="mt-4 rounded-xl bg-gray-50 p-3 space-y-1 text-sm">
+              <div className="flex justify-between">
+                <span className="text-ink-soft">Remise appliquée</span>
+                <span className="font-medium text-warning">
+                  -{formatEUR(computed)}{effectivePct > 0 ? ` · ${effectivePct} %` : ''}
+                </span>
+              </div>
+              <div className="flex items-baseline justify-between pt-1 border-t border-border">
+                <span className="font-semibold">Nouveau total ticket</span>
+                <span className="text-xl font-semibold">{formatEUR(finalTotal)}</span>
+              </div>
             </div>
 
             <button

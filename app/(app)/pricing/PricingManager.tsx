@@ -26,6 +26,8 @@ interface Row {
   sale: string;       // prix de vente TTC (texte)
   tax_rate: number;
   catTransport: number; // défaut de la catégorie (pour savoir si surcharge)
+  transportPct: number | null; // taux transport (% du prix d'achat) de la catégorie, si défini
+  transportManual: boolean;    // true si le transport est une surcharge manuelle (fixe)
   dirty: boolean;
   saving: boolean;
   saved: boolean;
@@ -37,12 +39,14 @@ function parseNum(s: string): number {
 }
 const fmt = (n: number) => (Math.round(n * 100) / 100).toLocaleString('fr-FR', { maximumFractionDigits: 2 });
 
-function toRow(p: ApiProduct, catTransport: number): Row {
+function toRow(p: ApiProduct, catTransport: number, catPct: number | null): Row {
   const purchase = p.purchase_price_ht ?? 0;
   const sale = p.sale_price_ttc ?? 0;
   const coef = purchase > 0 ? round2(sale / purchase) : 0;
-  // Transport effectif : surcharge article si définie, sinon défaut catégorie.
-  const transport = p.transport_cost_ht != null ? Number(p.transport_cost_ht) : catTransport;
+  // Transport effectif : surcharge article si définie (fixe), sinon défaut
+  // catégorie (montant fixe ou % du prix d'achat).
+  const manual = p.transport_cost_ht != null;
+  const transport = manual ? Number(p.transport_cost_ht) : catTransport;
   return {
     id: p.id,
     name: p.name,
@@ -52,6 +56,10 @@ function toRow(p: ApiProduct, catTransport: number): Row {
     sale: sale ? String(sale) : '',
     tax_rate: p.tax_rate,
     catTransport,
+    // Le transport ne se recalcule sur le prix d'achat que s'il suit un TAUX
+    // de la catégorie et n'a pas été surchargé manuellement.
+    transportPct: manual ? null : catPct,
+    transportManual: manual,
     dirty: false, saving: false, saved: false,
   };
 }
@@ -106,7 +114,11 @@ export default function PricingManager() {
   );
   useEffect(() => {
     const next: Record<string, Row> = {};
-    for (const p of visible) next[p.id] = rows[p.id] ?? toRow(p, catTransport(p.category_id, Number(p.purchase_price_ht ?? 0)));
+    for (const p of visible) {
+      const c = categories.find((x) => x.id === p.category_id);
+      next[p.id] = rows[p.id]
+        ?? toRow(p, catTransport(p.category_id, Number(p.purchase_price_ht ?? 0)), c?.transport_cost_pct ?? null);
+    }
     setRows(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [catId, products, categories]);
@@ -114,13 +126,21 @@ export default function PricingManager() {
   function patchRow(id: string, changes: Partial<Row>) {
     setRows((cur) => ({ ...cur, [id]: { ...cur[id]!, ...changes, dirty: true, saved: false } }));
   }
-  // Change achat → recalcule la vente à coef constant.
+  // Change achat → recalcule la vente à coef constant, et le transport si celui-ci
+  // suit un taux (%) de la catégorie sans surcharge manuelle.
   function onPurchase(id: string, v: string) {
     const r = rows[id]!;
     const purchase = parseNum(v);
     const coef = parseNum(r.coef);
     const sale = coef > 0 ? round2(purchase * coef) : parseNum(r.sale);
-    patchRow(id, { purchase: v, sale: sale ? String(sale) : r.sale });
+    const changes: Partial<Row> = { purchase: v, sale: sale ? String(sale) : r.sale };
+    if (r.transportPct != null && !r.transportManual) {
+      const transport = round2((purchase * r.transportPct) / 100);
+      // On garde l'héritage (override=null) en alignant aussi le défaut catégorie.
+      changes.transport = transport ? String(transport) : '';
+      changes.catTransport = transport;
+    }
+    patchRow(id, changes);
   }
   // Change coef → recalcule la vente.
   function onCoef(id: string, v: string) {
@@ -138,9 +158,9 @@ export default function PricingManager() {
     const coef = purchase > 0 ? round2(sale / purchase) : 0;
     patchRow(id, { sale: v, coef: coef ? String(coef) : r.coef });
   }
-  // Change transport → n'impacte que la marge.
+  // Change transport → surcharge manuelle (fixe) : ne suit plus le taux catégorie.
   function onTransport(id: string, v: string) {
-    patchRow(id, { transport: v });
+    patchRow(id, { transport: v, transportManual: true });
   }
 
   async function save(id: string) {
