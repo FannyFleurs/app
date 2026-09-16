@@ -981,6 +981,19 @@ export default function CashRegister({
     void refreshHeldCount();
   }
 
+  // « Vider le panier » : retire les articles SANS annuler la vente. La vente
+  // brouillon reste ouverte (elle sera resynchronisée à vide par l'effet
+  // debounce) : aucun appel d'annulation, donc AUCUN ticket annulé n'est généré.
+  // On garde le client rattaché ; on annule seulement la fidélité portée au
+  // règlement (plus d'articles à couvrir).
+  function clearCart() {
+    setLines([]);
+    setCartComment('');
+    setLoyalty((cur) => ({ ...cur, used: 0, balance_euros: cur.balance_euros + cur.used }));
+    setView({ kind: 'categories' });
+    setSearch('');
+  }
+
   // Ouverture manuelle du tiroir-caisse (sans vente). Le tiroir physique est
   // piloté par l'imprimante ticket (drawer kick) ; on trace l'ouverture côté
   // serveur (audit / Z). Bouton volontairement discret (voir en-tête ticket).
@@ -1816,7 +1829,17 @@ export default function CashRegister({
             >
               Mettre en attente
             </button>
-            {/* Action destructive (remplace aussi « Vider » : même effet). */}
+            {/* Vider : retire les articles sans annuler la vente (pas de ticket
+                annulé). Distinct de « Annuler » qui abandonne la vente. */}
+            <button
+              disabled={lines.length === 0}
+              onClick={async () => { setMobileCartOpen(true); if (await confirmThemed({ title: 'Vider le panier', message: 'Les articles seront retirés du panier. La vente n\'est pas annulée (aucun ticket annulé).', confirmLabel: 'Vider', cancelLabel: 'Retour' })) clearCart(); }}
+              className="text-base min-h-[56px] px-5 rounded-xl font-medium whitespace-nowrap border border-border text-ink hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Vider le panier (sans annuler la vente)"
+            >
+              Vider
+            </button>
+            {/* Action destructive : abandonne la vente en cours. */}
             <button
               disabled={lines.length === 0 && !saleId}
               onClick={async () => { setMobileCartOpen(true); if (await confirmThemed({ title: 'Annuler ce ticket', message: 'La vente en cours sera définitivement abandonnée.', confirmLabel: 'Annuler le ticket', cancelLabel: 'Retour', danger: true })) void cancelTicket(); }}
