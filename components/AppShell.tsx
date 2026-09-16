@@ -89,6 +89,30 @@ export default function AppShell({
     };
   }, []);
 
+  // App native iOS : au retour d'arrière-plan, le WebView conserve parfois une
+  // mise en page à l'échelle calculée sur un viewport périmé — l'affichage
+  // apparaît « cassé » jusqu'à un relancement complet de l'app. À chaque
+  // reprise (onglet redevenu visible / rotation), on ré-applique l'échelle EN
+  // DEUX TEMPS — retour à 100 % puis valeur enregistrée à l'image suivante —
+  // ce qui force le moteur à recalculer la mise en page, comme le ferait un
+  // relancement. Sans effet si aucune échelle n'est réglée.
+  useEffect(() => {
+    function reapply() {
+      if (readUiScale() === UI_SCALE_DEFAULT) return;
+      setUiScale(UI_SCALE_DEFAULT);
+      requestAnimationFrame(() => setUiScale(readUiScale()));
+    }
+    function onVis() { if (document.visibilityState === 'visible') reapply(); }
+    document.addEventListener('visibilitychange', onVis);
+    window.addEventListener('pageshow', reapply);
+    window.addEventListener('orientationchange', reapply);
+    return () => {
+      document.removeEventListener('visibilitychange', onVis);
+      window.removeEventListener('pageshow', reapply);
+      window.removeEventListener('orientationchange', reapply);
+    };
+  }, []);
+
   // Le rail gauche reste visible sous l'overlay « Toutes les pages ». Si
   // l'utilisateur clique un item du rail, la route change : on referme alors
   // l'overlay pour révéler la page demandée.
