@@ -426,7 +426,7 @@ function XzView({
                   <div className="flex-1 min-w-0">
                     <div className="truncate font-medium">{v.full_name}</div>
                     <div className="text-xs text-ink-soft">
-                      {v.tickets_count} ticket{v.tickets_count > 1 ? 's' : ''} · panier moyen {formatEUR(v.avg_ticket_ttc)}
+                      {v.tickets_count} ticket{v.tickets_count > 1 ? 's' : ''} · PM {formatEUR(v.avg_ticket_ttc)}
                       {v.discount > 0 && <> · remise {v.discount_rate} %</>}
                     </div>
                   </div>
