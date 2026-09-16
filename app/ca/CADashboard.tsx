@@ -32,7 +32,13 @@ interface ReturnsInfo {
 interface Vendor {
   user_id: string; full_name: string;
   tickets_count: number; ca_ttc: number; ca_ht: number; avg_ticket_ttc: number;
+  discount: number; discount_rate: number;
 }
+interface DiscountRow {
+  id: string; receipt: string | null; date: string; cashier: string | null;
+  montant: number; taux: number; motif: string | null;
+}
+interface Discounts { total: number; rows: DiscountRow[] }
 
 type Period = 'today' | 'yesterday' | 'week' | 'month' | 'custom';
 type Tab = 'xz' | 'tickets' | 'account';
@@ -70,6 +76,7 @@ export default function CADashboard({
   const [products, setProducts] = useState<Product[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [tva, setTva] = useState<TvaRow[]>([]);
+  const [discounts, setDiscounts] = useState<Discounts | null>(null);
   const [returnsInfo, setReturnsInfo] = useState<ReturnsInfo | null>(null);
   const [loading, setLoading] = useState(false);
   const [refreshedAt, setRefreshedAt] = useState<Date | null>(null);
@@ -85,12 +92,13 @@ export default function CADashboard({
     const qs = new URLSearchParams({ from: range.from, to: range.to });
     if (storeId) qs.set('store_id', storeId);
     try {
-      const [rS, rH, rP, rV, rT, rR] = await Promise.all([
+      const [rS, rH, rP, rV, rT, rD, rR] = await Promise.all([
         fetch(`/api/ca/summary?${qs.toString()}`),
         fetch(`/api/ca/hourly?${qs.toString()}`),
         fetch(`/api/ca/products?${qs.toString()}&sort=ca_ttc&order=desc&limit=100`),
         fetch(`/api/ca/vendors?${qs.toString()}`),
         fetch(`/api/ca/tva?${qs.toString()}`),
+        fetch(`/api/ca/discounts?${qs.toString()}`),
         fetch(`/api/ca/returns?${qs.toString()}`),
       ]);
       if (rS.ok) setSummary(await rS.json());
@@ -98,6 +106,7 @@ export default function CADashboard({
       if (rP.ok) setProducts((await rP.json()).products);
       if (rV.ok) setVendors((await rV.json()).vendors);
       if (rT.ok) setTva((await rT.json()).tva);
+      if (rD.ok) setDiscounts(await rD.json());
       if (rR.ok) setReturnsInfo(await rR.json());
       setRefreshedAt(new Date());
     } finally {
@@ -181,6 +190,7 @@ export default function CADashboard({
             products={products}
             vendors={vendors}
             tva={tva}
+            discounts={discounts}
             returnsInfo={returnsInfo}
             period={period}
             setPeriod={setPeriod}
@@ -267,7 +277,7 @@ function TopBar({
 /* ------------------------------------------------------------------ */
 
 function XzView({
-  summary, hours, products, vendors, tva, returnsInfo,
+  summary, hours, products, vendors, tva, discounts, returnsInfo,
   period, setPeriod, customFrom, setCustomFrom, customTo, setCustomTo, today,
   showFullSales, setShowFullSales, refreshedAt,
 }: {
@@ -276,6 +286,7 @@ function XzView({
   products: Product[];
   vendors: Vendor[];
   tva: TvaRow[];
+  discounts: Discounts | null;
   returnsInfo: ReturnsInfo | null;
   period: Period; setPeriod: (p: Period) => void;
   customFrom: string; setCustomFrom: (v: string) => void;
@@ -285,6 +296,10 @@ function XzView({
   refreshedAt: Date | null;
 }) {
   const topProducts = showFullSales ? products : products.slice(0, 5);
+  // Taux de remise global = remises accordées / CA brut (TTC + remises).
+  const remiseRate = summary && (summary.ca_ttc + summary.discount) > 0
+    ? Number(((summary.discount / (summary.ca_ttc + summary.discount)) * 100).toFixed(1))
+    : 0;
 
   return (
     <div className="px-4 py-4 space-y-4">
@@ -330,6 +345,16 @@ function XzView({
         <StatCard label="Articles vendus"
                   value={summary ? String(summary.items_sold) : '—'}
                   hint={summary ? `${summary.unique_products_sold} produits` : undefined} />
+      </div>
+
+      {/* Remises */}
+      <div className="grid grid-cols-2 gap-3">
+        <StatCard label="Remises"
+                  value={summary ? formatEUR(summary.discount) : '—'}
+                  tone={summary && summary.discount > 0 ? 'warning' : undefined} />
+        <StatCard label="Taux de remise"
+                  value={summary ? `${remiseRate} %` : '—'}
+                  hint="du CA brut" />
       </div>
 
       {/* Retours & annulations — visibles à distance, avec les motifs */}
@@ -402,6 +427,7 @@ function XzView({
                     <div className="truncate font-medium">{v.full_name}</div>
                     <div className="text-xs text-ink-soft">
                       {v.tickets_count} ticket{v.tickets_count > 1 ? 's' : ''} · panier moyen {formatEUR(v.avg_ticket_ttc)}
+                      {v.discount > 0 && <> · remise {v.discount_rate} %</>}
                     </div>
                   </div>
                   <div className="text-right">
@@ -411,6 +437,32 @@ function XzView({
                 </li>
               );
             })}
+          </ul>
+        </div>
+      )}
+
+      {/* Remises : les lignes de remises de la période, avec montant, taux et motif. */}
+      {discounts && discounts.rows.length > 0 && (
+        <div className="rounded-2xl bg-white border border-border p-4">
+          <div className="flex items-baseline justify-between mb-3">
+            <h3 className="font-semibold">Remises</h3>
+            <span className="text-sm font-semibold text-warning tabular-nums">-{formatEUR(discounts.total)}</span>
+          </div>
+          <ul className="space-y-2">
+            {discounts.rows.map((d) => (
+              <li key={d.id} className="flex items-center gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="truncate font-medium">{d.motif ?? 'Sans motif'}</div>
+                  <div className="text-xs text-ink-soft truncate">
+                    {d.receipt ?? '—'}{d.cashier ? ` · ${d.cashier}` : ''} · {new Date(d.date).toLocaleDateString('fr-FR')}
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="font-medium tabular-nums text-warning">-{formatEUR(d.montant)}</div>
+                  <div className="text-xs text-ink-soft tabular-nums">{d.taux} %</div>
+                </div>
+              </li>
+            ))}
           </ul>
         </div>
       )}
@@ -453,11 +505,12 @@ function XzView({
 
 function StatCard({ label, value, hint, tone }: {
   label: string; value: string; hint?: string;
-  tone?: 'success' | 'danger';
+  tone?: 'success' | 'danger' | 'warning';
 }) {
   const color =
     tone === 'success' ? 'text-success' :
-    tone === 'danger' ? 'text-danger' : 'text-ink';
+    tone === 'danger' ? 'text-danger' :
+    tone === 'warning' ? 'text-warning' : 'text-ink';
   return (
     <div className="rounded-2xl bg-white border border-border p-4">
       <div className="text-xs text-ink-soft font-medium">{label}</div>
