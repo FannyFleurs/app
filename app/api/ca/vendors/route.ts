@@ -35,12 +35,13 @@ export async function GET(req: Request) {
 
   const r = await query<{
     user_id: string; full_name: string;
-    tickets_count: number; ca_ttc: string; ca_ht: string;
+    tickets_count: number; ca_ttc: string; ca_ht: string; discount: string;
   }>(
     `SELECT s.user_id, u.full_name,
             COUNT(*)::int AS tickets_count,
             SUM(s.total_ttc)::text AS ca_ttc,
-            SUM(s.total_ht)::text AS ca_ht
+            SUM(s.total_ht)::text AS ca_ht,
+            COALESCE(SUM(s.total_discount), 0)::text AS discount
        FROM sales s
        JOIN users u ON u.id = s.user_id
       WHERE s.organization_id = $1
@@ -53,15 +54,23 @@ export async function GET(req: Request) {
   );
 
   return NextResponse.json({
-    vendors: r.rows.map((v) => ({
-      user_id: v.user_id,
-      full_name: v.full_name,
-      tickets_count: v.tickets_count,
-      ca_ttc: Number(v.ca_ttc),
-      ca_ht: Number(v.ca_ht),
-      avg_ticket_ttc: v.tickets_count > 0
-        ? Number((Number(v.ca_ttc) / v.tickets_count).toFixed(2))
-        : 0,
-    })),
+    vendors: r.rows.map((v) => {
+      const caTtc = Number(v.ca_ttc);
+      const discount = Number(v.discount);
+      // Taux de remise = remise / CA brut (TTC + remise accordée).
+      const gross = caTtc + discount;
+      return {
+        user_id: v.user_id,
+        full_name: v.full_name,
+        tickets_count: v.tickets_count,
+        ca_ttc: caTtc,
+        ca_ht: Number(v.ca_ht),
+        discount,
+        discount_rate: gross > 0 ? Number(((discount / gross) * 100).toFixed(1)) : 0,
+        avg_ticket_ttc: v.tickets_count > 0
+          ? Number((caTtc / v.tickets_count).toFixed(2))
+          : 0,
+      };
+    }),
   });
 }
