@@ -61,6 +61,8 @@ export async function GET(req: Request) {
          SELECT COALESCE(
                   MAX(NULLIF(sl.metadata->>'cart_discount_reason', '')),
                   MAX(NULLIF(sl.metadata->>'manual_discount_reason', '')),
+                  CASE WHEN bool_or(COALESCE(NULLIF(sl.metadata->>'product_disc_unit', '')::numeric, 0) > 0)
+                       THEN 'Remise fiche article' END,
                   CASE WHEN bool_or(COALESCE(NULLIF(sl.metadata->>'auto_discount_pct', '')::numeric, 0) > 0)
                        THEN 'Remise client' END
                 ) AS motif
