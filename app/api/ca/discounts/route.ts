@@ -43,12 +43,20 @@ export async function GET(req: Request) {
     id: string; receipt: string | null; date: string;
     cashier: string | null; discount: string; ttc: string; motif: string | null;
   }>(
+    // Remise « réelle » = remises sur les lignes SAUF cartes cadeaux / bons
+    // d'achat (metadata.gift_card) : ils ne font pas partie de la catégorie
+    // remise. Les avoirs ne sont pas des lignes de vente → déjà hors calcul.
     `SELECT s.id, s.receipt_number AS receipt, s.validated_at::text AS date,
             u.full_name AS cashier,
-            s.total_discount::text AS discount, s.total_ttc::text AS ttc,
+            d.real_discount::text AS discount, s.total_ttc::text AS ttc,
             m.motif
        FROM sales s
        LEFT JOIN users u ON u.id = s.user_id
+       JOIN LATERAL (
+         SELECT COALESCE(SUM(sl.discount_amount)
+                  FILTER (WHERE COALESCE(sl.metadata->>'gift_card', '') <> 'true'), 0) AS real_discount
+           FROM sale_lines sl WHERE sl.sale_id = s.id
+       ) d ON TRUE
        LEFT JOIN LATERAL (
          SELECT COALESCE(
                   MAX(NULLIF(sl.metadata->>'cart_discount_reason', '')),
@@ -60,9 +68,9 @@ export async function GET(req: Request) {
        ) m ON TRUE
       WHERE s.organization_id = $1 AND s.status = 'validated'
         AND s.validated_at::date BETWEEN $2::date AND $3::date
-        AND s.total_discount > 0
+        AND d.real_discount > 0
         ${storeFilter}
-      ORDER BY s.total_discount DESC, s.validated_at DESC
+      ORDER BY d.real_discount DESC, s.validated_at DESC
       LIMIT 200`,
     args,
   );

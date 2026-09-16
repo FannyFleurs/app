@@ -60,12 +60,16 @@ export async function GET(req: Request) {
   // Marge HT (basee sur purchase_price_ht courant du produit, quantite vendue)
   const margin = await query<{
     items_sold: string; unique_products: number;
-    revenue_ht: string; cost_ht: string;
+    revenue_ht: string; cost_ht: string; real_discount: string;
   }>(
+    // real_discount = remises sur les lignes SAUF cartes cadeaux / bons d'achat
+    // (metadata.gift_card) : ceux-ci ne comptent pas comme des remises.
     `SELECT COALESCE(SUM(sl.quantity), 0)::text AS items_sold,
             COUNT(DISTINCT sl.product_id)::int AS unique_products,
             COALESCE(SUM(sl.line_ht), 0)::text AS revenue_ht,
-            COALESCE(SUM(COALESCE(p.purchase_price_ht, 0) * sl.quantity), 0)::text AS cost_ht
+            COALESCE(SUM(COALESCE(p.purchase_price_ht, 0) * sl.quantity), 0)::text AS cost_ht,
+            COALESCE(SUM(sl.discount_amount)
+              FILTER (WHERE COALESCE(sl.metadata->>'gift_card', '') <> 'true'), 0)::text AS real_discount
        FROM sale_lines sl
        JOIN sales s ON s.id = sl.sale_id
        LEFT JOIN products p ON p.id = sl.product_id
@@ -90,7 +94,7 @@ export async function GET(req: Request) {
     ca_ttc,
     ca_ht: Number(rowS.ca_ht),
     tva: Number(rowS.tva),
-    discount: Number(rowS.discount),
+    discount: Number(rowM.real_discount),
     marge_ht,
     marge_pct,
     cost_ht,

@@ -37,13 +37,20 @@ export async function GET(req: Request) {
     user_id: string; full_name: string;
     tickets_count: number; ca_ttc: string; ca_ht: string; discount: string;
   }>(
+    // La remise par vendeur exclut les cartes cadeaux / bons d'achat
+    // (metadata.gift_card) : ils ne comptent pas comme des remises.
     `SELECT s.user_id, u.full_name,
             COUNT(*)::int AS tickets_count,
             SUM(s.total_ttc)::text AS ca_ttc,
             SUM(s.total_ht)::text AS ca_ht,
-            COALESCE(SUM(s.total_discount), 0)::text AS discount
+            COALESCE(SUM(d.real_discount), 0)::text AS discount
        FROM sales s
        JOIN users u ON u.id = s.user_id
+       JOIN LATERAL (
+         SELECT COALESCE(SUM(sl.discount_amount)
+                  FILTER (WHERE COALESCE(sl.metadata->>'gift_card', '') <> 'true'), 0) AS real_discount
+           FROM sale_lines sl WHERE sl.sale_id = s.id
+       ) d ON TRUE
       WHERE s.organization_id = $1
         AND s.status = 'validated'
         AND s.validated_at::date BETWEEN $2::date AND $3::date
