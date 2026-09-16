@@ -30,14 +30,25 @@ export async function GET(req: Request) {
   const totalsRes = await query<{
     total_discount: string; total_ttc: string; discounted: string; sales: string;
   }>(
-    `SELECT COALESCE(SUM(s.total_discount), 0)::text AS total_discount,
-            COALESCE(SUM(s.total_ttc), 0)::text     AS total_ttc,
-            COUNT(*) FILTER (WHERE s.total_discount > 0)::text AS discounted,
+    // Remise « réelle » = remises sur les lignes SAUF cartes cadeaux / bons
+    // d'achat (metadata.gift_card) : offrir/vendre un bon d'achat moins cher
+    // n'est pas une remise commerciale sur des marchandises. Les avoirs, eux,
+    // ne sont pas des lignes de vente (moyen de paiement) → déjà hors calcul.
+    `SELECT COALESCE(SUM(sd.real_discount), 0)::text AS total_discount,
+            COALESCE(SUM(sd.total_ttc), 0)::text     AS total_ttc,
+            COUNT(*) FILTER (WHERE sd.real_discount > 0)::text AS discounted,
             COUNT(*)::text AS sales
-       FROM sales s
-      WHERE s.organization_id = $1 AND s.status = 'validated'
-        AND ${DAY} BETWEEN $2::date AND $3::date
-        ${storeFilter}`,
+       FROM (
+         SELECT s.id, s.total_ttc,
+                COALESCE(SUM(sl.discount_amount)
+                  FILTER (WHERE COALESCE(sl.metadata->>'gift_card', '') <> 'true'), 0) AS real_discount
+           FROM sales s
+           JOIN sale_lines sl ON sl.sale_id = s.id
+          WHERE s.organization_id = $1 AND s.status = 'validated'
+            AND ${DAY} BETWEEN $2::date AND $3::date
+            ${storeFilter}
+          GROUP BY s.id, s.total_ttc
+       ) sd`,
     args,
   );
 
@@ -60,6 +71,7 @@ export async function GET(req: Request) {
       WHERE s.organization_id = $1 AND s.status = 'validated'
         AND ${DAY} BETWEEN $2::date AND $3::date
         AND sl.discount_amount > 0
+        AND COALESCE(sl.metadata->>'gift_card', '') <> 'true'
         ${storeFilter}
       GROUP BY 1
       ORDER BY SUM(sl.discount_amount) DESC`,
@@ -76,12 +88,17 @@ export async function GET(req: Request) {
             u.full_name AS cashier,
             COALESCE(c.company_name, NULLIF(TRIM(CONCAT(c.first_name, ' ', c.last_name)), '')) AS customer,
             st.name AS store,
-            s.total_discount::text AS discount, s.total_ttc::text AS ttc,
+            d.real_discount::text AS discount, s.total_ttc::text AS ttc,
             m.motif
        FROM sales s
        LEFT JOIN users u ON u.id = s.user_id
        LEFT JOIN customers c ON c.id = s.customer_id
        LEFT JOIN stores st ON st.id = s.store_id
+       JOIN LATERAL (
+         SELECT COALESCE(SUM(sl.discount_amount)
+                  FILTER (WHERE COALESCE(sl.metadata->>'gift_card', '') <> 'true'), 0) AS real_discount
+           FROM sale_lines sl WHERE sl.sale_id = s.id
+       ) d ON TRUE
        LEFT JOIN LATERAL (
          SELECT COALESCE(
                   MAX(NULLIF(sl.metadata->>'cart_discount_reason', '')),
@@ -95,7 +112,7 @@ export async function GET(req: Request) {
        ) m ON TRUE
       WHERE s.organization_id = $1 AND s.status = 'validated'
         AND ${DAY} BETWEEN $2::date AND $3::date
-        AND s.total_discount > 0
+        AND d.real_discount > 0
         ${storeFilter}
       ORDER BY s.validated_at DESC
       LIMIT 500`,
