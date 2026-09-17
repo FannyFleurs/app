@@ -463,6 +463,8 @@ export default function ProductsList({
                 key={packEditing ?? 'new-pack'}
                 packId={packEditing}
                 inline
+                backOffice={backOffice}
+                posteStoreId={posteStoreId}
                 onClose={() => setPackEditing(undefined)}
                 onSaved={() => { setPackEditing(undefined); void reload(); }}
               />

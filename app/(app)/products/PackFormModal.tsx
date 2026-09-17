@@ -16,12 +16,18 @@ interface SearchResult { id: string; name: string; sale_price_ttc: number; is_pa
  * composants (décomptés chacun de leur stock).
  */
 export default function PackFormModal({
-  packId, onClose, onSaved, inline = false,
+  packId, onClose, onSaved, inline = false, backOffice = false, posteStoreId = null,
 }: {
   packId?: string | null;
   onClose: () => void;
   onSaved: (id: string) => void;
   inline?: boolean;
+  /** Back-office : pas de rattachement automatique boutique (pack partagé). */
+  backOffice?: boolean;
+  /** Boutique du poste (application) : un nouveau pack y est rattaché, comme un
+   *  article, sinon il resterait « toutes boutiques » et le filtrage strict par
+   *  boutique le masquerait de la liste en multi-boutique. */
+  posteStoreId?: string | null;
 }) {
   const [name, setName] = useState('');
   const [visibleInPos, setVisibleInPos] = useState(true);
@@ -102,13 +108,22 @@ export default function PackFormModal({
     if (!name.trim()) { setError('Donnez un nom au pack.'); return; }
     if (items.length === 0) { setError('Ajoutez au moins un produit au pack.'); return; }
     setSaving(true);
-    const body = {
+    const body: {
+      name: string; visible_in_pos: boolean; is_active: boolean; discount_ttc: number;
+      items: { product_id: string; quantity: number }[]; store_ids?: string[];
+    } = {
       name: name.trim(),
       visible_in_pos: visibleInPos,
       is_active: isActive,
       discount_ttc: discountNum,
       items: items.map((i) => ({ product_id: i.product_id, quantity: i.quantity })),
     };
+    // Création dans l'application (hors BO) : rattache le pack à la boutique du
+    // poste, comme un article. Sans ça, il serait « toutes boutiques » et le
+    // filtrage strict par boutique le masquerait de la liste en multi-boutique.
+    if (!packId && !backOffice && posteStoreId) {
+      body.store_ids = [posteStoreId];
+    }
     const r = await fetch(packId ? `/api/products/packs/${packId}` : '/api/products/packs', {
       method: packId ? 'PATCH' : 'POST',
       headers: { 'Content-Type': 'application/json' },
