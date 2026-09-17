@@ -1833,7 +1833,7 @@ export default function CashRegister({
                 annulé). Distinct de « Annuler » qui abandonne la vente. */}
             <button
               disabled={lines.length === 0}
-              onClick={async () => { setMobileCartOpen(true); if (await confirmThemed({ title: 'Vider le panier', message: 'Les articles seront retirés du panier. La vente n\'est pas annulée (aucun ticket annulé).', confirmLabel: 'Vider', cancelLabel: 'Retour' })) clearCart(); }}
+              onClick={async () => { setMobileCartOpen(true); if (await confirmThemed({ title: 'Vider le panier', message: 'Les articles seront retirés du panier.', confirmLabel: 'Vider', cancelLabel: 'Retour' })) clearCart(); }}
               className="text-base min-h-[56px] px-5 rounded-xl font-medium whitespace-nowrap border border-border text-ink hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
               title="Vider le panier (sans annuler la vente)"
             >
