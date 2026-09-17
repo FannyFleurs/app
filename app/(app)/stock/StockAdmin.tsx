@@ -91,7 +91,6 @@ const NAV: Array<{ key: Section; group: 'Gestion' | 'Catalogue' | 'Inventaire'; 
   { key: 'movements',  group: 'Gestion',    label: 'Visualiser mouvements',  icon: 'orders' },
   { key: 'zero',       group: 'Catalogue',  label: 'Stock à 0',              icon: 'warning' },
   { key: 'archived',   group: 'Catalogue',  label: 'Produits archivés',      icon: 'package' },
-  { key: 'inventory',  group: 'Inventaire', label: 'Inventaire',             icon: 'invoices' },
 ];
 
 export default function StockAdmin({ canAdjust, stores, lockedStoreId }: { canAdjust: boolean; stores: Store[]; lockedStoreId?: string | null }) {
