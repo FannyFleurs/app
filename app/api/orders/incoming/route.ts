@@ -10,6 +10,7 @@ export const dynamic = 'force-dynamic';
 const schema = z.object({
   external_ref: z.string().min(1).max(200),
   boutique: z.string().min(1).max(120),
+  subtype: z.string().max(40).nullable().optional(),
   lines: z.array(z.object({
     label: z.string().min(1).max(300),
     amount_ttc: z.number(),
@@ -81,6 +82,7 @@ export async function POST(req: Request) {
       storeId,
       externalRef: d.external_ref,
       boutiqueLabel: d.boutique,
+      subtype: d.subtype ?? null,
       lines: d.lines,
       client: d.client ?? null,
       delivery: d.delivery ?? null,
