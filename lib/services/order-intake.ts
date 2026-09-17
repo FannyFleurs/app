@@ -17,6 +17,7 @@ export interface IncomingOrderInput {
   /** Référence commande côté app externe : idempotence (client_ref). */
   externalRef: string;
   boutiqueLabel: string;
+  subtype?: string | null;
   lines: IncomingOrderLine[];
   client?: { name?: string | null; phone?: string | null; email?: string | null } | null;
   delivery?: {
