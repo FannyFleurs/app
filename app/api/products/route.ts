@@ -209,8 +209,13 @@ export async function GET(req: Request) {
     if (inPos || !backOffice) {
       strict = (await activeStoreCount(g.user.organizationId)) > 1;
     }
+    // Exception packs : un pack « toutes boutiques » (store_ids vide) reste
+    // visible partout, même en filtrage strict. Contrairement aux articles
+    // ordinaires (où « vide » peut venir d'un oubli de rattachement), un pack
+    // est cree deliberement ; le masquer le rendrait introuvable en caisse.
     where += strict
-      ? ` AND p.store_ids @> ARRAY[$${storeParamIdx}]::uuid[]`
+      ? ` AND (p.store_ids @> ARRAY[$${storeParamIdx}]::uuid[]
+              OR (COALESCE(p.is_pack, FALSE) = TRUE AND COALESCE(array_length(p.store_ids, 1), 0) = 0))`
       : ` AND (COALESCE(array_length(p.store_ids, 1), 0) = 0 OR p.store_ids @> ARRAY[$${storeParamIdx}]::uuid[])`;
   }
 
