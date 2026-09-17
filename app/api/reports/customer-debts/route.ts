@@ -6,12 +6,18 @@ import { reportRange, localDay } from '@/lib/reports/range';
 export const dynamic = 'force-dynamic';
 
 /**
- * Dettes clients : les ventes réglées « en compte » sur la période.
+ * Dettes clients : les ventes réglées « en compte » sur la période, pour les
+ * clients qui doivent ENCORE de l'argent aujourd'hui.
  *
  * Une ligne par ticket ayant un règlement différé. On expose à la fois le
  * montant mis en compte SUR CE TICKET et le solde ACTUEL du client : le
  * premier explique d'où vient la dette, le second dit ce qui reste dû
  * aujourd'hui, après d'éventuels règlements ultérieurs.
+ *
+ * On ne garde que les clients dont le solde de compte est négatif
+ * (`account_balance < 0` = dette : un règlement différé débite le solde,
+ * cf. SaleService). Un client qui a tout remboursé (solde 0) n'apparaît plus,
+ * même si l'un de ses tickets de la période avait été mis en compte.
  */
 export async function GET(req: Request) {
   const g = await requirePermission('settings.read');
@@ -48,7 +54,7 @@ export async function GET(req: Request) {
         AND ${DAY} BETWEEN $2::date AND $3::date
         ${storeFilter}
       GROUP BY s.id, u.full_name, c.company_name, c.first_name, c.last_name, st.name
-      HAVING SUM(p.amount) > 0
+      HAVING SUM(p.amount) > 0 AND MAX(c.account_balance) < 0
       ORDER BY s.validated_at DESC
       LIMIT 1000`,
     args,

@@ -17,7 +17,10 @@ export interface IncomingOrderInput {
   /** Référence commande côté app externe : idempotence (client_ref). */
   externalRef: string;
   boutiqueLabel: string;
+  /** Sous-type commande (ex. "ogf") : sert au rattachement du compte client. */
   subtype?: string | null;
+  /** Canal d'origine : "OGF", "WEB", ou null. Affiché en tag dans « En attente ». */
+  source?: string | null;
   lines: IncomingOrderLine[];
   client?: { name?: string | null; phone?: string | null; email?: string | null } | null;
   delivery?: {
@@ -146,6 +149,9 @@ export async function createIncomingOrder(input: IncomingOrderInput): Promise<In
     const requestedAt = input.delivery?.date ? isoOrNull(input.delivery.date) : null;
     const deliveryInfo = {
       source: 'commande' as const,
+      // Canal d'origine (OGF / WEB / null) : clé distincte de `source` (qui
+      // marque « commande entrante ») pour ne pas casser la détection en caisse.
+      order_source: normalizeSource(input.source),
       external_ref: input.externalRef,
       boutique: input.boutiqueLabel,
       pickup_or_delivery: kind,
@@ -216,6 +222,12 @@ export async function createIncomingOrder(input: IncomingOrderInput): Promise<In
 
     return { id: saleId, status: 'on_hold', duplicate: false };
   });
+}
+
+/** Canal normalisé : on ne retient que "OGF" ou "WEB", sinon null. */
+function normalizeSource(source: string | null | undefined): 'OGF' | 'WEB' | null {
+  const s = String(source ?? '').trim().toUpperCase();
+  return s === 'OGF' || s === 'WEB' ? s : null;
 }
 
 function isoOrNull(dateStr: string): string | null {
