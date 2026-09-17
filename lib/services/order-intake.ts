@@ -76,6 +76,24 @@ export async function createIncomingOrder(input: IncomingOrderInput): Promise<In
       [input.storeId, input.organizationId],
     );
     if (!reg.rows[0]) throw new Error('NO_ACTIVE_REGISTER');
+   
+    // Compte client imposé pour les commandes OGF.
+    let customerId: string | null = null;
+
+    if (String(input.subtype || '').toLowerCase() === 'ogf') {
+      const customerRes = await client.query<{ id: string }>(
+        `SELECT id
+           FROM customers
+          WHERE organization_id = $1
+            AND LOWER(TRIM(company_name)) = LOWER(TRIM($2))
+            AND is_anonymized = FALSE
+            AND archived_at IS NULL
+          LIMIT 1`,
+        [input.organizationId, 'OGF Services Financiers'],
+      );
+
+      customerId = customerRes.rows[0]?.id ?? null;
+    }
 
     // 3. Utilisateur porteur : le propriétaire (ou le plus ancien). L'attribution
     //    fiscale réelle se fait au caissier lors de l'encaissement.
@@ -150,18 +168,19 @@ export async function createIncomingOrder(input: IncomingOrderInput): Promise<In
     try {
       const ins = await client.query<{ id: string }>(
         `INSERT INTO sales
-           (organization_id, store_id, register_id, user_id, status,
-            total_ht, total_tva, total_ttc, total_discount, tva_breakdown,
-            notes, held_label, client_ref, delivery_info)
-         VALUES ($1,$2,$3,$4,'on_hold',$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb)
-         RETURNING id`,
+   (organization_id, store_id, register_id, user_id, customer_id, status,
+    total_ht, total_tva, total_ttc, total_discount, tva_breakdown,
+    notes, held_label, client_ref, delivery_info)
+ VALUES ($1,$2,$3,$4,$5,'on_hold',$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb)
+ RETURNING id`,
         [
-          input.organizationId, input.storeId, reg.rows[0].id, usr.rows[0].id,
-          totals.total_ht, totals.total_tva, totals.total_ttc, totals.total_discount,
-          JSON.stringify(totals.tva_breakdown),
-          input.comment ?? null, heldLabel, input.externalRef,
-          JSON.stringify(deliveryInfo),
-        ],
+  input.organizationId, input.storeId, reg.rows[0].id, usr.rows[0].id,
+  customerId,
+  totals.total_ht, totals.total_tva, totals.total_ttc, totals.total_discount,
+  JSON.stringify(totals.tva_breakdown),
+  input.comment ?? null, heldLabel, input.externalRef,
+  JSON.stringify(deliveryInfo),
+],
       );
       saleId = ins.rows[0]!.id;
     } catch (e) {
