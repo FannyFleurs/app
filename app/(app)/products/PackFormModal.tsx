@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { formatEUR, round2 } from '@/lib/services/money';
 import { MAX_PACK_ITEMS } from '@/lib/products/pack';
+import { confirmThemed } from '@/lib/ui/dialog';
 
 interface PackItem { product_id: string; name: string; price: number; quantity: number }
 
@@ -29,6 +30,7 @@ export default function PackFormModal({
   const [discount, setDiscount] = useState('');
   const [loading, setLoading] = useState(!!packId);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Recherche de composants
@@ -120,6 +122,23 @@ export default function PackFormModal({
     }
     const j = await r.json();
     onSaved(j.id ?? packId ?? '');
+  }
+
+  // Suppression du pack. Un pack est un produit (is_pack) : on passe par la
+  // route générique de suppression d'article. S'il a déjà été vendu, elle
+  // l'archive au lieu de le supprimer, pour préserver l'historique.
+  async function remove() {
+    if (!packId) return;
+    if (!(await confirmThemed({
+      title: `Supprimer « ${name.trim() || 'ce pack'} »`, danger: true, confirmLabel: 'Supprimer',
+      message: "S'il a déjà été vendu, il sera archivé (retiré des listes) pour préserver "
+        + "l'historique. Sinon, il sera supprimé définitivement.",
+    }))) return;
+    setDeleting(true); setError(null);
+    const r = await fetch(`/api/products/${packId}`, { method: 'DELETE' });
+    setDeleting(false);
+    if (r.ok) { onSaved(packId); }
+    else { setError('Suppression impossible.'); }
   }
 
   return (
@@ -220,8 +239,17 @@ export default function PackFormModal({
         )}
 
         <div className="border-t border-border px-5 py-3 flex items-center justify-end gap-2 shrink-0">
+          {packId && (
+            <button
+              className="mr-auto text-sm font-medium text-danger hover:underline disabled:opacity-50"
+              disabled={saving || loading || deleting}
+              onClick={() => void remove()}
+            >
+              {deleting ? 'Suppression…' : 'Supprimer le pack'}
+            </button>
+          )}
           <button className="btn-ghost" onClick={onClose}>Annuler</button>
-          <button className="btn-primary" disabled={saving || loading} onClick={() => void save()}>
+          <button className="btn-primary" disabled={saving || loading || deleting} onClick={() => void save()}>
             {saving ? 'Enregistrement…' : packId ? 'Enregistrer' : 'Créer le pack'}
           </button>
         </div>

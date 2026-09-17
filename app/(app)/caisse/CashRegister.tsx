@@ -563,11 +563,23 @@ export default function CashRegister({
         if (!r.ok) { localStorage.removeItem(cartKey); return; }
         const j = await r.json();
         const s = j.sale as { status?: string; user_id?: string; customer_id?: string | null } | undefined;
-        // On ne restaure QUE SON PROPRE panier en cours (draft). C'est ce qui
-        // empêche un collègue d'hériter du panier d'un autre. Tout le reste
-        // (panier d'un autre utilisateur, vente déjà en attente / validée) n'est
-        // simplement PAS rechargé ici — aucune mise en attente automatique.
+        const hasLines = Array.isArray(j.lines) && j.lines.length > 0;
+        // On ne restaure QUE SON PROPRE panier en cours (draft) : un collègue
+        // n'hérite pas silencieusement du panier d'un autre.
         if (!s || s.status !== 'draft' || s.user_id !== currentUser.id) {
+          // Panier « draft » abandonné par un AUTRE utilisateur sur ce poste
+          // (changement d'utilisateur) : au lieu de le perdre, on le met
+          // automatiquement en attente. Il rejoint la liste « En attente »
+          // partagée par toute la boutique, où n'importe qui peut le reprendre
+          // pour l'encaisser.
+          if (s && s.status === 'draft' && s.user_id !== currentUser.id && hasLines && !schoolMode) {
+            const label = `Panier ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
+            await fetch(`/api/sales/${stored}/hold`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ label }),
+            }).catch(() => undefined);
+            void refreshHeldCount();
+          }
           localStorage.removeItem(cartKey);
           return;
         }
