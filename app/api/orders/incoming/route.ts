@@ -11,6 +11,9 @@ const schema = z.object({
   external_ref: z.string().min(1).max(200),
   boutique: z.string().min(1).max(120),
   subtype: z.string().max(40).nullable().optional(),
+  // Canal d'origine de la commande côté app Fanny Fleurs : "OGF", "WEB", ou
+  // null/absent pour les autres. Sert uniquement à afficher un tag en caisse.
+  source: z.string().max(40).nullable().optional(),
   lines: z.array(z.object({
     label: z.string().min(1).max(300),
     amount_ttc: z.number(),
@@ -83,6 +86,7 @@ export async function POST(req: Request) {
       externalRef: d.external_ref,
       boutiqueLabel: d.boutique,
       subtype: d.subtype ?? null,
+      source: d.source ?? null,
       lines: d.lines,
       client: d.client ?? null,
       delivery: d.delivery ?? null,

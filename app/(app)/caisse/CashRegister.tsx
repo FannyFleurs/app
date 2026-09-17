@@ -2186,7 +2186,6 @@ export default function CashRegister({
           storeId={storeId}
           onClose={() => setShowHeld(false)}
           onPick={recallSale}
-          onCleared={() => void refreshHeldCount()}
         />
       )}
       {showFreePrice && (

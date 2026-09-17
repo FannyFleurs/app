@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { formatEUR } from '@/lib/services/money';
-import { confirmThemed } from '@/lib/ui/dialog';
 
 interface DeliveryInfo {
   source?: string;
+  /** Canal d'origine de la commande entrante : "OGF", "WEB", ou null. */
+  order_source?: string | null;
   pickup_or_delivery?: 'pickup' | 'delivery';
   recipient_name?: string | null;
   slot_label?: string | null;
@@ -16,10 +17,9 @@ interface Held {
 }
 
 export default function HoldListModal({
-  storeId, onClose, onPick, onCleared,
-}: { storeId: string; onClose: () => void; onPick: (id: string) => void; onCleared?: () => void }) {
+  storeId, onClose, onPick,
+}: { storeId: string; onClose: () => void; onPick: (id: string) => void }) {
   const [items, setItems] = useState<Held[]>([]);
-  const [clearing, setClearing] = useState(false);
 
   async function reload() {
     // Tickets en attente de la BOUTIQUE (toutes ses caisses).
@@ -30,36 +30,6 @@ export default function HoldListModal({
     }
   }
   useEffect(() => { void reload(); /* eslint-disable-next-line */ }, [storeId]);
-
-  // Paniers « vidables » : tout sauf les commandes entrantes (préservées).
-  const clearable = items.filter((it) => it.delivery_info?.source !== 'commande').length;
-
-  async function clearAll() {
-    if (clearable === 0) return;
-    const ok = await confirmThemed({
-      title: 'Vider les paniers en attente',
-      message: `Supprimer ${clearable} panier${clearable > 1 ? 's' : ''} en attente ?\n\n`
-        + 'Les commandes entrantes (Commande / Retrait) sont conservées. '
-        + 'Cette action est définitive — ces paniers n\'ont jamais été encaissés.',
-      confirmLabel: 'Vider',
-      cancelLabel: 'Annuler',
-      danger: true,
-    });
-    if (!ok) return;
-    setClearing(true);
-    try {
-      const res = await fetch('/api/sales/held/clear', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ store_id: storeId }),
-      });
-      if (res.ok) {
-        await reload();
-        onCleared?.();
-      }
-    } finally {
-      setClearing(false);
-    }
-  }
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-ink/30 backdrop-blur-sm p-4">
@@ -78,6 +48,9 @@ export default function HoldListModal({
           ) : items.map((it) => {
             const di = it.delivery_info;
             const isOrder = di?.source === 'commande';
+            const channel = String(di?.order_source ?? '').toUpperCase();
+            const isOgf = channel === 'OGF';
+            const isWeb = channel === 'WEB';
             return (
             <button
               key={it.id}
@@ -86,6 +59,16 @@ export default function HoldListModal({
             >
               <div className="flex justify-between items-center gap-2">
                 <span className="font-semibold text-base flex items-center gap-2 min-w-0">
+                  {isOgf && (
+                    <span className="shrink-0 rounded-full bg-violet-100 text-violet-700 text-[11px] font-semibold px-2 py-0.5 uppercase tracking-wide">
+                      OGF
+                    </span>
+                  )}
+                  {isWeb && (
+                    <span className="shrink-0 rounded-full bg-sky-100 text-sky-700 text-[11px] font-semibold px-2 py-0.5 uppercase tracking-wide">
+                      WEB
+                    </span>
+                  )}
                   {isOrder && (
                     <span className="shrink-0 rounded-full bg-[color:var(--primary-soft)] text-[color:var(--primary-deep)] text-[11px] font-semibold px-2 py-0.5 uppercase tracking-wide">
                       {di?.pickup_or_delivery === 'pickup' ? 'Retrait' : 'Commande'}
@@ -107,19 +90,6 @@ export default function HoldListModal({
             );
           })}
         </div>
-
-        {clearable > 0 && (
-          <div className="mt-4 pt-3 border-t border-border flex justify-end">
-            <button
-              onClick={() => void clearAll()}
-              disabled={clearing}
-              className="btn-ghost text-sm text-danger hover:bg-danger/10 disabled:opacity-50"
-              title="Supprimer tous les paniers en attente (hors commandes entrantes)"
-            >
-              {clearing ? 'Suppression…' : `🗑 Vider les paniers en attente (${clearable})`}
-            </button>
-          </div>
-        )}
       </div>
     </div>
   );
