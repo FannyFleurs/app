@@ -12,6 +12,12 @@ interface Store { id: string; name: string }
 type Mode = 'ttc' | 'ht';
 type Period = 'today' | 'week' | 'month' | 'prev_month' | 'year' | 'custom';
 
+interface ObjectiveProgress {
+  year: number; month: number;
+  days_in_month: number; days_elapsed: number; is_current_month: boolean;
+  total: { target: number; actual: number; pct: number; projection: number | null };
+}
+
 function iso(d: Date) { return d.toISOString().slice(0, 10); }
 
 /** Date seule, format court (« 18 sept. 2025 »). */
@@ -67,6 +73,21 @@ export default function DashboardClient({ stores, lockedStoreId }: { stores: Sto
   }, [range.from, range.to, storeId]);
 
   useEffect(() => { void reload(); }, [reload]);
+
+  // Objectif du mois EN COURS (indépendant de la période choisie plus haut :
+  // l'objectif est mensuel). Suit la boutique sélectionnée. TTC.
+  const [objective, setObjective] = useState<ObjectiveProgress | null>(null);
+  useEffect(() => {
+    const n = new Date();
+    const qs = new URLSearchParams({ year: String(n.getFullYear()), month: String(n.getMonth() + 1) });
+    if (storeId) qs.set('store_id', storeId);
+    let alive = true;
+    fetch(`/api/analytics/targets/progress?${qs.toString()}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (alive) setObjective(j); })
+      .catch(() => { if (alive) setObjective(null); });
+    return () => { alive = false; };
+  }, [storeId]);
 
   const cur = data?.summary.current;
   const prev = data?.summary.prev;
@@ -168,6 +189,11 @@ export default function DashboardClient({ stores, lockedStoreId }: { stores: Sto
                prev && prev.ca_ht > 0 ? (prev.marge / prev.ca_ht) * 100 : undefined,
              )} />
       </section>
+
+      {/* Objectif du mois en cours (TTC) — visible dès qu'un objectif est fixé. */}
+      {objective?.total && objective.total.target > 0 && (
+        <ObjectiveCard o={objective} />
+      )}
 
       {/* Courbes CA & ticket moyen */}
       <section className="grid grid-cols-1 xl:grid-cols-2 gap-4">
@@ -452,5 +478,44 @@ function ProductRows({ rows, ht }: { rows: ProductRow[]; ht: boolean }) {
       <thead className="text-ink-soft text-xs uppercase tracking-wider"><tr><th className="text-left py-1.5">Produit</th><th className="text-right py-1.5">CA {ht ? 'HT' : 'TTC'}</th><th className="text-right py-1.5">Quantité</th></tr></thead>
       <tbody>{rows.map((p) => <tr key={p.label} className="border-t border-border"><td className="py-2 pr-2 truncate max-w-[220px]">{p.label}</td><td className="py-2 text-right tabular-nums whitespace-nowrap">{formatEUR(ht ? p.ca_ht : p.ca_ttc)}</td><td className="py-2 text-right tabular-nums">{p.qty}</td></tr>)}</tbody>
     </table>
+  );
+}
+
+const MONTHS_FR = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+
+/** Couleur d'avancement : atteint (marque), proche (ambre), en retard (danger). */
+function objColor(pct: number): string {
+  if (pct >= 100) return 'var(--primary)';
+  if (pct >= 70) return '#B7791F';
+  return '#B42318';
+}
+
+/** Carte « Objectif du mois » du tableau de bord (TTC, mois en cours). */
+function ObjectiveCard({ o }: { o: ObjectiveProgress }) {
+  const { target, actual, pct, projection } = o.total;
+  const width = Math.max(0, Math.min(100, pct));
+  return (
+    <section className="card p-5">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="h-8 w-8 shrink-0 rounded-full grid place-items-center bg-accent-soft text-accent-deep">
+          <Icon name="star" size={16} />
+        </span>
+        <h2 className="font-semibold">Objectif du mois</h2>
+        <span className="text-xs text-ink-soft capitalize">{MONTHS_FR[o.month - 1]} {o.year}</span>
+        <span className="ml-auto text-lg font-semibold tabular-nums" style={{ color: objColor(pct) }}>{pct} %</span>
+      </div>
+      <div className="mt-2 flex flex-wrap items-baseline gap-x-2">
+        <span className="text-2xl font-semibold tabular-nums">{formatEUR(actual)}</span>
+        <span className="text-ink-soft">/ {formatEUR(target)} TTC</span>
+      </div>
+      <div className="mt-2 h-2.5 w-full rounded-full bg-muted overflow-hidden">
+        <div className="h-full rounded-full transition-all" style={{ width: `${width}%`, backgroundColor: objColor(pct) }} />
+      </div>
+      <div className="mt-1.5 flex flex-wrap gap-x-4 text-xs text-ink-soft tabular-nums">
+        <span>Reste {formatEUR(Math.max(0, target - actual))}</span>
+        {o.is_current_month && <span>Jour {o.days_elapsed}/{o.days_in_month}</span>}
+        {projection != null && <span>Projection {formatEUR(projection)}</span>}
+      </div>
+    </section>
   );
 }
