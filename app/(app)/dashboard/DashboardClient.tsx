@@ -14,6 +14,13 @@ type Period = 'today' | 'week' | 'month' | 'prev_month' | 'year' | 'custom';
 
 function iso(d: Date) { return d.toISOString().slice(0, 10); }
 
+/** Date seule, format court (« 18 sept. 2025 »). */
+function shortDate(isoStr: string): string {
+  return new Date(isoStr + 'T00:00:00Z').toLocaleDateString('fr-FR', {
+    day: 'numeric', month: 'short', year: 'numeric',
+  });
+}
+
 function periodRange(p: Period, cf: string, ct: string): { from: string; to: string } {
   const now = new Date();
   // Journée en cours : la comparaison du tableau de bord se fait d'une année
@@ -31,7 +38,7 @@ function periodRange(p: Period, cf: string, ct: string): { from: string; to: str
   return { from: cf, to: ct };
 }
 
-export default function DashboardClient({ firstName, stores, lockedStoreId }: { firstName: string; stores: Store[]; lockedStoreId?: string | null }) {
+export default function DashboardClient({ stores, lockedStoreId }: { stores: Store[]; lockedStoreId?: string | null }) {
   const [mode, setMode] = useState<Mode>('ttc');
   // Vue d'ouverture : la journée en cours. C'est la question qu'on se pose en
   // ouvrant le tableau de bord — « où en est-on aujourd'hui ? » —, pas le
@@ -63,6 +70,14 @@ export default function DashboardClient({ firstName, stores, lockedStoreId }: { 
 
   const cur = data?.summary.current;
   const prev = data?.summary.prev;
+  // Libellé « vs … » compact : une seule date si la période comparée tient sur
+  // un jour, sinon l'intervalle complet.
+  const vsLabel = data
+    ? (data.prevPeriod && data.prevPeriod.from === data.prevPeriod.to
+        ? shortDate(data.prevPeriod.from) : data.prevLabel)
+    : '';
+  const categories = data?.categories ?? [];
+  const empty = !!cur && cur.tickets === 0;
 
   const pill = (p: Period, label: string) => (
     <button
@@ -105,14 +120,17 @@ export default function DashboardClient({ firstName, stores, lockedStoreId }: { 
           {pill('custom', 'Perso')}
         </div>
         {!lockedStoreId && stores.length > 1 && (
-          <select
-            value={storeId}
-            onChange={(e) => setStoreId(e.target.value)}
-            className="input h-9 w-auto text-sm"
-          >
-            <option value="">Toutes les boutiques</option>
-            {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
+          <label className="ml-auto inline-flex items-center gap-2 rounded-full border border-border bg-white h-9 pl-3 pr-2 text-sm">
+            <Icon name="pos" size={16} className="text-ink-soft shrink-0" />
+            <select
+              value={storeId}
+              onChange={(e) => setStoreId(e.target.value)}
+              className="bg-transparent outline-none text-ink pr-1"
+            >
+              <option value="">Toutes les boutiques</option>
+              {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </label>
         )}
       </div>
       {period === 'custom' && (
@@ -123,27 +141,28 @@ export default function DashboardClient({ firstName, stores, lockedStoreId }: { 
         </div>
       )}
 
-      {/* Les six chiffres de la période, dans les tuiles de « Ma journée » :
-          pastille, libellé, chiffre, comparaison. La première est pleine —
-          c'est le chiffre qu'on vient chercher. */}
-      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        <Kpi icone="card" pleine label={`Chiffre d'affaires ${suffix}`}
-             value={cur ? formatEUR(ht ? cur.ca_ht : cur.ca_ttc) : '—'}
+      {/* Les six chiffres de la période, sur une seule ligne : pastille, libellé,
+          chiffre, comparaison à l'an dernier. */}
+      <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <Kpi icone="card" tone="green" label={`Chiffre d'affaires ${suffix}`}
+             value={cur ? formatEUR(ht ? cur.ca_ht : cur.ca_ttc) : '—'} vsLabel={vsLabel}
              delta={delta(cur && (ht ? cur.ca_ht : cur.ca_ttc), prev && (ht ? prev.ca_ht : prev.ca_ttc))} />
-        <Kpi icone="stock" label={`Ticket moyen ${suffix}`}
-             value={cur ? formatEUR(ht ? cur.avg_ht : cur.avg_ttc) : '—'}
+        <Kpi icone="cart" tone="amber" label={`Ticket moyen ${suffix}`}
+             value={cur ? formatEUR(ht ? cur.avg_ht : cur.avg_ttc) : '—'} vsLabel={vsLabel}
              delta={delta(cur && (ht ? cur.avg_ht : cur.avg_ttc), prev && (ht ? prev.avg_ht : prev.avg_ttc))} />
-        <Kpi icone="invoices" label="Nombre de tickets"
-             value={cur ? String(cur.tickets) : '—'}
+        <Kpi icone="invoices" tone="green" label="Nombre de tickets"
+             value={cur ? String(cur.tickets) : '—'} vsLabel={vsLabel}
              delta={delta(cur?.tickets, prev?.tickets)} />
-        <Kpi icone="customers" label="Nombre de clients"
-             value={cur ? String(cur.customers) : '—'}
+        <Kpi icone="customers" tone="neutral" label="Nombre de clients"
+             value={cur ? String(cur.customers) : '—'} vsLabel={vsLabel}
              delta={delta(cur?.customers, prev?.customers)} />
-        <Kpi icone="star" label="Marge"
-             value={cur ? formatEUR(cur.marge) : '—'}
+        <Kpi icone="star" tone="green" label="Marge"
+             value={cur ? formatEUR(cur.marge) : '—'} vsLabel={vsLabel}
              delta={delta(cur?.marge, prev?.marge)} />
-        <Kpi icone="star" label="Taux de marge"
+        <Kpi icone="discount" tone="amber" label="Taux de marge"
              value={cur && cur.ca_ht > 0 ? `${((cur.marge / cur.ca_ht) * 100).toFixed(1).replace('.', ',')} %` : '—'}
+             vsLabel={vsLabel}
+             unavailable={!cur || cur.ca_ht <= 0}
              delta={delta(
                cur && cur.ca_ht > 0 ? (cur.marge / cur.ca_ht) * 100 : undefined,
                prev && prev.ca_ht > 0 ? (prev.marge / prev.ca_ht) * 100 : undefined,
@@ -152,29 +171,80 @@ export default function DashboardClient({ firstName, stores, lockedStoreId }: { 
 
       {/* Courbes CA & ticket moyen */}
       <section className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        <Card title={`Chiffre d'affaires ${suffix}`} value={cur ? formatEUR(ht ? cur.ca_ht : cur.ca_ttc) : '—'}>
+        <ChartCard icone="card" title={`Chiffre d'affaires ${suffix}`}
+                   value={cur ? formatEUR(ht ? cur.ca_ht : cur.ca_ttc) : '—'} vsLabel={vsLabel}
+                   delta={delta(cur && (ht ? cur.ca_ht : cur.ca_ttc), prev && (ht ? prev.ca_ht : prev.ca_ttc))}>
           {data && <LineCompare labels={data.daily.labels}
             current={ht ? data.daily.ca_ht : data.daily.ca_ttc}
             prev={ht ? data.daily.prev_ca_ht : data.daily.prev_ca_ttc}
             currentLabel={data.periodLabel} prevLabel={data.prevLabel} />}
-        </Card>
-        <Card title={`Ticket moyen ${suffix}`} value={cur ? formatEUR(ht ? cur.avg_ht : cur.avg_ttc) : '—'}>
+        </ChartCard>
+        <ChartCard icone="cart" title={`Ticket moyen ${suffix}`}
+                   value={cur ? formatEUR(ht ? cur.avg_ht : cur.avg_ttc) : '—'} vsLabel={vsLabel}
+                   delta={delta(cur && (ht ? cur.avg_ht : cur.avg_ttc), prev && (ht ? prev.avg_ht : prev.avg_ttc))}>
           {data && <LineCompare labels={data.daily.labels}
             current={ht ? data.daily.ticket_ht : data.daily.ticket_ttc}
             prev={ht ? data.daily.prev_ticket_ht : data.daily.prev_ticket_ttc}
             currentLabel={data.periodLabel} prevLabel={data.prevLabel} />}
+        </ChartCard>
+      </section>
+
+      {/* Ventes par catégorie · Top produits · Moyens de paiement */}
+      <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <Card icone="categories" title="Ventes par catégorie">
+          {data && (categories.length > 0 ? (
+            <AnneauPaiements parts={categories.map((c, i) => ({
+              label: c.label, montant: ht ? c.ca_ht : c.ca_ttc,
+              couleur: COULEURS_PAIEMENT[i % COULEURS_PAIEMENT.length]!,
+            }))} />
+          ) : (
+            <div className="py-8"><EtatVide icone="tag" titre="Aucune donnée"
+              texte="Les ventes par catégorie s'afficheront ici." /></div>
+          ))}
+        </Card>
+
+        <Card icone="star" title="Top produits">
+          <TopProducts rows={topProducts(data, ht)} ht={ht} />
+        </Card>
+
+        <Card icone="card" title="Répartition des moyens de paiement">
+          {data && (data.payments.length > 0 ? (
+            <AnneauPaiements parts={data.payments.map((p, i) => ({
+              label: p.label, montant: p.amount,
+              couleur: COULEURS_PAIEMENT[i % COULEURS_PAIEMENT.length]!,
+            }))} />
+          ) : (
+            <div className="py-8"><EtatVide icone="graph" titre="Aucune donnée"
+              texte="La répartition des paiements s'affichera ici." /></div>
+          ))}
         </Card>
       </section>
 
-      {/* CA par heure & par jour */}
+      {/* Encouragement tant qu'aucune vente n'a été enregistrée sur la période. */}
+      {empty && (
+        <section className="card p-5 flex flex-wrap items-center gap-4 bg-accent-soft">
+          <span className="h-11 w-11 shrink-0 rounded-full grid place-items-center bg-white text-accent-deep">
+            <Icon name="sparkle" size={20} />
+          </span>
+          <div className="min-w-0">
+            <div className="font-semibold">Un bon départ !</div>
+            <div className="text-sm text-ink-soft">Vos indicateurs s'afficheront ici dès vos premières ventes.</div>
+          </div>
+          <a href="/reports" className="btn-primary ml-auto h-11 px-5 inline-flex items-center gap-1.5 whitespace-nowrap">
+            Voir mes rapports <span aria-hidden>→</span>
+          </a>
+        </section>
+      )}
+
+      {/* Détail complémentaire, conservé sous le tableau de bord principal. */}
       <section className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        <Card title={`Chiffre d'affaires par heure ${suffix}`} value={cur ? formatEUR(ht ? cur.ca_ht : cur.ca_ttc) : '—'}>
+        <Card icone="calendar" title={`Chiffre d'affaires par heure ${suffix}`}>
           {data && <Bars
             labels={data.hourly.map((h) => `${String(h.hour).padStart(2, '0')}h`)}
             values={data.hourly.map((h) => ht ? h.ca_ht : h.ca_ttc)}
             labelStep={2} currentLabel={data.periodLabel} />}
         </Card>
-        <Card title={`Chiffre d'affaires par jour ${suffix}`} value={cur ? formatEUR(ht ? cur.ca_ht : cur.ca_ttc) : '—'}>
+        <Card icone="calendar" title={`Chiffre d'affaires par jour ${suffix}`}>
           {data && <Bars
             labels={data.weekday.map((w) => w.label)}
             values={data.weekday.map((w) => ht ? w.ca_ht : w.ca_ttc)}
@@ -183,36 +253,22 @@ export default function DashboardClient({ firstName, stores, lockedStoreId }: { 
         </Card>
       </section>
 
-      {/* Moyens de paiement & TVA */}
       <section className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        <Card title="Répartition des ventes">
-          {data && (data.payments.length > 0 ? (
-            <AnneauPaiements parts={data.payments.map((p, i) => ({
-              label: p.label, montant: p.amount,
-              couleur: COULEURS_PAIEMENT[i % COULEURS_PAIEMENT.length]!,
-            }))} />
-          ) : (
-            <div className="py-8">
-              <EtatVide icone="graph" titre="Aucun encaissement"
-                        texte="Aucun règlement enregistré sur cette période." />
-            </div>
-          ))}
-        </Card>
-        {/* La TVA était calculée par l'API et jetée : la page n'en montrait que
-            le total. Le détail par taux est ce qu'on recopie sur la
-            déclaration — il a plus sa place ici qu'un camembert. */}
         <TvaCard rows={data?.tva ?? []} total={cur?.tva ?? 0} />
-      </section>
-
-      {/* Top / flop produits */}
-      <section className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        <ProductTable title="Top produits" all={sortedProducts(data, ht, 'top')} ht={ht} />
         <ProductTable title="Produits flop" all={sortedProducts(data, ht, 'flop')} ht={ht} />
       </section>
 
       {loading && <div className="text-center text-xs text-ink-soft">Actualisation…</div>}
     </div>
   );
+}
+
+/** Cinq meilleurs produits par CA. */
+function topProducts(data: DashboardData | null, ht: boolean): ProductRow[] {
+  if (!data) return [];
+  return [...data.products]
+    .sort((a, b) => (ht ? b.ca_ht : b.ca_ttc) - (ht ? a.ca_ht : a.ca_ttc))
+    .slice(0, 5);
 }
 
 /** Produits triés par CA (croissant), du flop au top, ou l'inverse. */
@@ -227,38 +283,66 @@ type Delta = { kind: 'pct'; pct: number; up: boolean } | { kind: 'sans-base' } |
 
 function delta(cur?: number, prev?: number): Delta {
   if (cur == null || prev == null) return null;
-  if (prev === 0) return { kind: 'sans-base' };
+  if (prev === 0) {
+    // 0 vs 0 : on montre « 0 % » (période vide comparée à une période vide),
+    // plutôt qu'une comparaison impossible. Une base à 0 avec un courant non nul
+    // reste incomparable en pourcentage.
+    if (cur === 0) return { kind: 'pct', pct: 0, up: false };
+    return { kind: 'sans-base' };
+  }
   const pct = ((cur - prev) / Math.abs(prev)) * 100;
   return { kind: 'pct', pct: Math.abs(pct), up: cur >= prev };
 }
 
-function Kpi({ icone, label, value, delta, pleine }: {
-  icone: IconName; label: string; value: string; delta: Delta; pleine?: boolean;
+const KPI_TONE: Record<'green' | 'amber' | 'neutral', string> = {
+  green: 'bg-accent-soft text-accent-deep',
+  amber: 'bg-warning/10 text-warning',
+  neutral: 'bg-muted text-ink-soft',
+};
+
+function Kpi({ icone, tone, label, value, delta, vsLabel, unavailable }: {
+  icone: IconName; tone: 'green' | 'amber' | 'neutral'; label: string; value: string;
+  delta: Delta; vsLabel: string; unavailable?: boolean;
 }) {
   return (
-    <div className="card p-4 flex items-center gap-3">
-      <span
-        className={`h-11 w-11 shrink-0 rounded-full grid place-items-center ${
-          pleine ? 'text-white' : 'bg-muted text-accent-deep'
-        }`}
-        style={pleine ? { backgroundColor: 'var(--primary)' } : undefined}
-      >
+    <div className="card p-4 flex items-start gap-3">
+      <span className={`h-11 w-11 shrink-0 rounded-full grid place-items-center ${KPI_TONE[tone]}`}>
         <Icon name={icone} size={20} />
       </span>
       <div className="min-w-0 flex-1">
         <div className="text-xs text-ink-soft truncate">{label}</div>
         <div className="text-xl font-semibold tracking-tight tabular-nums truncate" title={value}>{value}</div>
-        <div className="text-[11px] truncate">
-          {delta?.kind === 'pct' && (
-            <span className={`font-medium tabular-nums ${delta.up ? 'text-success' : 'text-danger'}`}>
-              {delta.up ? '↑' : '↓'} {delta.pct.toFixed(0)}% vs l&apos;an dernier
-            </span>
+        <div className="mt-0.5 text-[11px] flex items-center gap-1 truncate">
+          {unavailable ? (
+            <span className="text-ink-soft">Non disponible</span>
+          ) : (
+            <>
+              {delta?.kind === 'pct' && (
+                <span className={`font-medium tabular-nums ${delta.up ? 'text-success' : 'text-danger'}`}>
+                  {delta.up ? '↗' : '↘'} {delta.pct.toFixed(0)}%
+                </span>
+              )}
+              <span className="text-ink-soft truncate">vs {vsLabel}</span>
+            </>
           )}
-          {delta?.kind === 'sans-base' && <span className="text-ink-soft">— rien à comparer</span>}
-          {delta === null && <span className="text-ink-soft">&nbsp;</span>}
         </div>
       </div>
     </div>
+  );
+}
+
+/** Petite pastille de variation, à côté du chiffre d'une carte graphique. */
+function DeltaPill({ delta }: { delta: Delta }) {
+  if (delta?.kind !== 'pct') {
+    return <span className="rounded-full bg-muted text-ink-soft px-2 py-0.5 text-xs font-medium tabular-nums">—</span>;
+  }
+  const cls = delta.pct === 0
+    ? 'bg-muted text-ink-soft'
+    : delta.up ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger';
+  return (
+    <span className={`rounded-full px-2 py-0.5 text-xs font-medium tabular-nums ${cls}`}>
+      {delta.pct === 0 ? '' : (delta.up ? '↗ ' : '↘ ')}{delta.pct.toFixed(0)}%
+    </span>
   );
 }
 
@@ -281,11 +365,74 @@ function TvaCard({ rows, total }: { rows: DashboardData['tva']; total: number })
   );
 }
 
-function Card({ title, value, children }: { title: string; value?: string; children: React.ReactNode }) {
-  return <section className="card p-5"><h2 className="font-semibold">{title}</h2>{value && <div className="mt-0.5 text-2xl font-semibold tracking-tight tabular-nums">{value}</div>}<div className="mt-3">{children}</div></section>;
+function Card({ icone, title, value, children }: { icone?: IconName; title: string; value?: string; children: React.ReactNode }) {
+  return (
+    <section className="card p-5">
+      <div className="flex items-center gap-2">
+        {icone && (
+          <span className="h-8 w-8 shrink-0 rounded-full grid place-items-center bg-accent-soft text-accent-deep">
+            <Icon name={icone} size={16} />
+          </span>
+        )}
+        <h2 className="font-semibold">{title}</h2>
+      </div>
+      {value && <div className="mt-1 text-2xl font-semibold tracking-tight tabular-nums">{value}</div>}
+      <div className="mt-3">{children}</div>
+    </section>
+  );
+}
+
+function ChartCard({ icone, title, value, delta, vsLabel, children }: {
+  icone: IconName; title: string; value: string; delta: Delta; vsLabel: string; children: React.ReactNode;
+}) {
+  return (
+    <section className="card p-5">
+      <div className="flex items-center gap-2">
+        <span className="h-8 w-8 shrink-0 rounded-full grid place-items-center bg-accent-soft text-accent-deep">
+          <Icon name={icone} size={16} />
+        </span>
+        <h2 className="font-semibold">{title}</h2>
+      </div>
+      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span className="text-2xl font-semibold tracking-tight tabular-nums">{value}</span>
+        <DeltaPill delta={delta} />
+        <span className="text-xs text-ink-soft">vs {vsLabel}</span>
+      </div>
+      <div className="mt-3">{children}</div>
+    </section>
+  );
 }
 
 type ProductRow = { label: string; qty: number; ca_ttc: number; ca_ht: number };
+
+/** Table compacte « Top produits » : rang, libellé, quantité, CA. */
+function TopProducts({ rows, ht }: { rows: ProductRow[]; ht: boolean }) {
+  if (rows.length === 0) {
+    return <div className="py-8"><EtatVide icone="tag" titre="Aucun produit vendu" texte="Les produits les plus vendus s'afficheront ici." /></div>;
+  }
+  return (
+    <table className="w-full text-sm">
+      <thead className="text-ink-soft text-xs uppercase tracking-wider">
+        <tr>
+          <th className="text-left py-1.5 w-6">#</th>
+          <th className="text-left py-1.5">Produit</th>
+          <th className="text-right py-1.5">Qté</th>
+          <th className="text-right py-1.5">CA {ht ? 'HT' : 'TTC'}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((p, i) => (
+          <tr key={p.label} className="border-t border-border">
+            <td className="py-2 text-ink-soft tabular-nums">{i + 1}</td>
+            <td className="py-2 pr-2 truncate max-w-[160px]">{p.label}</td>
+            <td className="py-2 text-right tabular-nums">{p.qty}</td>
+            <td className="py-2 text-right tabular-nums whitespace-nowrap">{formatEUR(ht ? p.ca_ht : p.ca_ttc)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
 
 function ProductTable({ title, all, ht }: { title: string; all: ProductRow[]; ht: boolean }) {
   const [showAll, setShowAll] = useState(false);

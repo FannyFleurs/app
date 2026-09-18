@@ -5,7 +5,7 @@ import { requireSession } from '@/lib/auth/guards';
 import { jsonError } from '@/lib/validation/api';
 import {
   PAYMENT_LABELS,
-  type DashboardData, type KpiSet, type ProductRow,
+  type DashboardData, type KpiSet, type ProductRow, type CategoryRow,
 } from '@/lib/analytics/dashboard';
 
 export const dynamic = 'force-dynamic';
@@ -162,7 +162,7 @@ export async function GET(req: Request) {
     curKpi, prevKpi,
     curRev, prevRev, curMarge, prevMarge,
     curHour, prevHour, curWd, prevWd,
-    payRows, tvaRows, prodRows,
+    payRows, tvaRows, prodRows, catRows,
   ] = await Promise.all([
     kpis(argsCur), kpis(argsPrev),
     dailyRevenue(argsCur), dailyRevenue(argsPrev), dailyMarge(argsCur), dailyMarge(argsPrev),
@@ -199,6 +199,21 @@ export async function GET(req: Request) {
         WHERE s.organization_id = $1 AND s.status = 'validated'
           AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date ${storeSql}
         GROUP BY sl.label ORDER BY SUM(sl.line_ttc) DESC`,
+      argsCur,
+    ),
+    // Ventes par catégorie (courant) — via le produit rattaché à la ligne.
+    // Une ligne sans produit (prix libre) ou sans catégorie tombe dans
+    // « Sans catégorie ».
+    query<{ label: string; ttc: string; ht: string }>(
+      `SELECT COALESCE(c.name, 'Sans catégorie') AS label,
+              COALESCE(SUM(sl.line_ttc),0)::text AS ttc,
+              COALESCE(SUM(sl.line_ht),0)::text  AS ht
+         FROM sale_lines sl JOIN sales s ON s.id = sl.sale_id
+         LEFT JOIN products p ON p.id = sl.product_id
+         LEFT JOIN product_categories c ON c.id = p.category_id
+        WHERE s.organization_id = $1 AND s.status = 'validated'
+          AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date ${storeSql}
+        GROUP BY COALESCE(c.name, 'Sans catégorie') ORDER BY SUM(sl.line_ttc) DESC`,
       argsCur,
     ),
   ]);
@@ -277,6 +292,10 @@ export async function GET(req: Request) {
     label: r.label, qty: Number(r.qty), ca_ttc: Number(r.ttc), ca_ht: Number(r.ht),
   }));
 
+  const categories: CategoryRow[] = catRows.rows
+    .filter((r) => Number(r.ttc) !== 0 || Number(r.ht) !== 0)
+    .map((r) => ({ label: r.label, ca_ttc: Number(r.ttc), ca_ht: Number(r.ht) }));
+
   const data: DashboardData = {
     period: { from, to },
     prevPeriod: { from: pFrom, to: pTo },
@@ -292,6 +311,7 @@ export async function GET(req: Request) {
     payments,
     tva,
     products,
+    categories,
   };
 
   return NextResponse.json(data);

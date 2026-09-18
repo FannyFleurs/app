@@ -23,7 +23,5 @@ export default async function DashboardPage() {
   );
   const lockedStoreId = await resolveSettingsLockStoreId(user.organizationId);
 
-  const firstName = user.fullName.split(' ')[0] ?? user.fullName;
-
-  return <DashboardClient firstName={firstName} stores={stores.rows} lockedStoreId={lockedStoreId} />;
+  return <DashboardClient stores={stores.rows} lockedStoreId={lockedStoreId} />;
 }

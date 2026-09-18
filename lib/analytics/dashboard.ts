@@ -64,6 +64,12 @@ export interface ProductRow {
   ca_ht: number;
 }
 
+export interface CategoryRow {
+  label: string;
+  ca_ttc: number;
+  ca_ht: number;
+}
+
 export interface DashboardData {
   period: { from: string; to: string };
   prevPeriod: { from: string; to: string };
@@ -76,6 +82,7 @@ export interface DashboardData {
   payments: PaymentSlice[];
   tva: TvaRow[];
   products: ProductRow[];    // triés par CA TTC décroissant
+  categories: CategoryRow[]; // ventes par catégorie, triées par CA TTC décroissant
 }
 
 export const PAYMENT_LABELS: Record<string, string> = {

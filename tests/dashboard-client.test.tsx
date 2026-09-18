@@ -32,6 +32,7 @@ const KPI_VIDE = {
 function payload(prev = KPI_VIDE) {
   return {
     period: { from: '2026-01-01', to: '2026-08-12' },
+    prevPeriod: { from: '2025-01-01', to: '2025-08-12' },
     periodLabel: '1 janv. 2026 - 12 août 2026',
     prevLabel: '1 janv. 2025 - 12 août 2025',
     summary: {
@@ -52,6 +53,7 @@ function payload(prev = KPI_VIDE) {
     payments: [{ method: 'card', label: 'Carte Bancaire', amount: 387.8 }],
     tva: TVA,
     products: [{ label: 'Bouquet champêtre', qty: 2, ca_ttc: 120, ca_ht: 100 }],
+    categories: [{ label: 'Fleurs coupées', ca_ttc: 120, ca_ht: 100 }],
   };
 }
 
@@ -59,7 +61,7 @@ async function mount(corps: unknown = payload()) {
   vi.stubGlobal('fetch', vi.fn(async () => ({
     ok: true, json: async () => corps,
   } as unknown as Response)));
-  render(<DashboardClient firstName="Camille" stores={[]} />);
+  render(<DashboardClient stores={[]} />);
   await act(async () => { await Promise.resolve(); });
 }
 
@@ -113,19 +115,19 @@ describe('TVA collectée', () => {
 });
 
 describe('Évolution sur la période comparée', () => {
-  it('affiche un tiret quand l\'an dernier est vide, pas un coin vide', async () => {
+  it('n\'affiche pas de pourcentage quand l\'an dernier est vide', async () => {
     await mount(payload(KPI_VIDE));
     const tuile = tuileKpi("Chiffre d'affaires TTC");
-    expect(within(tuile).getByTitle(/Rien à comparer/)).toBeTruthy();
-    expect(within(tuile).getByText(/rien à comparer/i)).toBeTruthy();
+    // Base à zéro : aucun pourcentage calculable, on garde seulement le repère
+    // « vs … » sans variation trompeuse.
+    expect(within(tuile).getByText(/vs /)).toBeTruthy();
+    expect(tuile.textContent ?? '').not.toContain('%');
   });
 
   it('calcule le pourcentage dès qu\'il y a une base', async () => {
     await mount(payload({ ...KPI_VIDE, ca_ttc: 445.15, ca_ht: 370.96 }));
     const tuile = tuileKpi("Chiffre d'affaires TTC");
     // 890,30 contre 445,15 : le double, soit +100 %.
-    expect(within(tuile).getByText(/↑ 100%/)).toBeTruthy();
-    // Et plus de tiret « rien à comparer » sur cette tuile.
-    expect(within(tuile).queryByTitle(/Rien à comparer/)).toBeNull();
+    expect(within(tuile).getByText(/↗ 100%/)).toBeTruthy();
   });
 });
