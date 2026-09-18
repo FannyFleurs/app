@@ -35,6 +35,7 @@ export default async function ClosuresPage() {
       registers={registers.rows}
       defaultStoreId={defaultStoreId}
       initialPreview={initialPreview}
+      userName={user.fullName}
     />
   );
 }
