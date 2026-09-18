@@ -46,6 +46,21 @@ function fmtRange(from: string, to: string): string {
   return `${a} – ${b}`;
 }
 
+// La table d'historique de CA (migration 0076) peut ne pas encore exister sur
+// une base non migrée : on la sonde une fois (cache module) pour ne pas casser
+// le tableau de bord si elle manque.
+let _hasRevHist: boolean | null = null;
+async function hasRevenueHistoryTable(): Promise<boolean> {
+  if (_hasRevHist !== null) return _hasRevHist;
+  const r = await query<{ exists: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1 FROM information_schema.tables WHERE table_name = 'revenue_history'
+     ) AS exists`,
+  );
+  _hasRevHist = !!r.rows[0]?.exists;
+  return _hasRevHist;
+}
+
 export async function GET(req: Request) {
   const g = await requireSession();
   if ('response' in g) return g.response;
@@ -157,9 +172,51 @@ export async function GET(req: Request) {
     )).rows;
   }
 
+  // ---- CA journalier « mélangé » pour le N-1 -------------------------------
+  // Par boutique et par jour : on garde la VENTE RÉELLE si elle existe, sinon
+  // la valeur importée dans revenue_history. Puis on somme par jour (toutes
+  // boutiques du périmètre). Sert au comparatif N-1 même avant HelloPos, et
+  // quelle que soit la caisse (donnée au niveau organisation / boutique).
+  async function blendedDaily(args: unknown[]) {
+    const storeSales = store_id ? 'AND s.store_id = $4' : '';
+    const storeHist = store_id ? 'AND rh.store_id = $4' : '';
+    return (await query<{ d: string; ttc: string; ht: string; n: number }>(
+      `WITH r AS (
+         SELECT s.store_id AS store_id,
+                (s.validated_at AT TIME ZONE 'Europe/Paris')::date AS d,
+                SUM(s.total_ttc) AS ttc, SUM(s.total_ht) AS ht, COUNT(*) AS n
+           FROM sales s
+          WHERE s.organization_id = $1 AND s.status = 'validated'
+            AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date ${storeSales}
+          GROUP BY 1, 2
+       ),
+       h AS (
+         SELECT rh.store_id AS store_id, rh.day AS d,
+                rh.ca_ttc AS ttc, rh.ca_ht AS ht, rh.tickets AS n
+           FROM revenue_history rh
+          WHERE rh.organization_id = $1
+            AND rh.day BETWEEN $2::date AND $3::date ${storeHist}
+       ),
+       blend AS (
+         SELECT COALESCE(r.d, h.d) AS d,
+                CASE WHEN r.store_id IS NOT NULL THEN r.ttc ELSE h.ttc END AS ttc,
+                CASE WHEN r.store_id IS NOT NULL THEN r.ht  ELSE h.ht  END AS ht,
+                CASE WHEN r.store_id IS NOT NULL THEN r.n   ELSE h.n   END AS n
+           FROM r FULL OUTER JOIN h ON r.store_id = h.store_id AND r.d = h.d
+       )
+       SELECT d::text AS d,
+              COALESCE(SUM(ttc), 0)::text AS ttc,
+              COALESCE(SUM(ht), 0)::text  AS ht,
+              COALESCE(SUM(n), 0)::int    AS n
+         FROM blend
+        GROUP BY d`,
+      args,
+    )).rows;
+  }
+
   // Exécution (courant + N-1 en parallèle par bloc).
   const [
-    curKpi, prevKpi,
+    curKpi, prevKpiSales,
     curRev, prevRev, curMarge, prevMarge,
     curHour, prevHour, curWd, prevWd,
     payRows, tvaRows, prodRows, catRows,
@@ -231,6 +288,32 @@ export async function GET(req: Request) {
   const cr = revMap(curRev), pr = revMap(prevRev);
   const cm = margeMap(curMarge), pm = margeMap(prevMarge);
 
+  // N-1 enrichi par l'historique importé (si la table existe). On remplace la
+  // série journalière N-1 et les totaux CA / tickets / ticket moyen par la
+  // version « mélangée » (ventes réelles prioritaires, import pour les trous).
+  // La marge et le nombre de clients N-1 restent issus des ventes réelles :
+  // l'historique importé ne les contient pas.
+  let prevKpi = prevKpiSales;
+  let prevByDay = pr;
+  if (await hasRevenueHistoryTable()) {
+    const blended = await blendedDaily(argsPrev);
+    if (blended.length > 0) {
+      prevByDay = new Map(blended.map((b) => [b.d, { d: b.d, ttc: b.ttc, ht: b.ht, n: b.n }]));
+      const tot = blended.reduce(
+        (a, b) => ({ ttc: a.ttc + Number(b.ttc), ht: a.ht + Number(b.ht), n: a.n + Number(b.n) }),
+        { ttc: 0, ht: 0, n: 0 },
+      );
+      prevKpi = {
+        ...prevKpiSales,
+        ca_ttc: Number(tot.ttc.toFixed(2)),
+        ca_ht: Number(tot.ht.toFixed(2)),
+        tickets: tot.n,
+        avg_ttc: tot.n > 0 ? Number((tot.ttc / tot.n).toFixed(2)) : 0,
+        avg_ht: tot.n > 0 ? Number((tot.ht / tot.n).toFixed(2)) : 0,
+      };
+    }
+  }
+
   const labels: string[] = [];
   const ca_ttc: number[] = [], ca_ht: number[] = [];
   const ticket_ttc: number[] = [], ticket_ht: number[] = [];
@@ -243,7 +326,7 @@ export async function GET(req: Request) {
     const cd = curDays[i]!;
     const pd = prevDays[i] ?? '';
     labels.push(new Date(cd + 'T00:00:00Z').toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric' }));
-    const c = cr.get(cd); const p = pr.get(pd);
+    const c = cr.get(cd); const p = prevByDay.get(pd);
     const cTtc = c ? Number(c.ttc) : 0, cHt = c ? Number(c.ht) : 0, cN = c ? c.n : 0;
     const pTtc = p ? Number(p.ttc) : 0, pHt = p ? Number(p.ht) : 0, pN = p ? p.n : 0;
     ca_ttc.push(cTtc); ca_ht.push(cHt);
