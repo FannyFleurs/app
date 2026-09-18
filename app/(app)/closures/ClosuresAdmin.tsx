@@ -438,7 +438,7 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
           {/* Illustration de clôture réussie */}
 <div className="mx-auto mb-6 flex justify-center">
   <img
-    src="/images/caisse-cloturee.png"
+    src="/project/caisse-cloturee.png"
     alt="Caisse clôturée avec succès"
     className="h-auto w-44 object-contain"
   />
