@@ -57,6 +57,7 @@ export default async function SettingsLayout({ children }: { children: React.Rea
     { href: '/settings/label-printer',     label: 'Imprimante',            icon: 'print' as const,        perm: 'settings.read' as const,    boOnly: false, proOnly: false, group: 'labels' as const },
     { href: '/settings/label-stations',    label: 'PDA',                   icon: 'products' as const,     perm: 'settings.read' as const,    boOnly: true,  proOnly: false },
     { href: '/settings/transport',        label: 'Coûts de transport',    icon: 'truck' as const,        perm: 'settings.write' as const,   boOnly: false, proOnly: false },
+    { href: '/settings/revenue-history',   label: 'Historique CA (N-1)',   icon: 'dashboard' as const,    perm: 'settings.read' as const,    boOnly: true,  proOnly: false },
     { href: '/settings/permissions',      label: 'Permissions par rôle',  icon: 'users' as const,        perm: 'settings.write' as const,   boOnly: false, proOnly: false },
     { href: '/settings/users',            label: 'Gestion utilisateurs',  icon: 'users' as const,        perm: 'users.read' as const,       boOnly: false, proOnly: false },
     { href: '/settings/company',          label: 'Société & boutiques',   icon: 'settings' as const,     perm: 'settings.read' as const,    boOnly: true,  proOnly: false },
