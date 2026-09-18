@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { formatEUR } from '@/lib/services/money';
 import { PAYMENT_LABELS } from '@/components/labels';
 import Badge from '@/components/Badge';
@@ -55,12 +55,14 @@ interface PreviewData {
 interface Store { id: string; name: string }
 interface Register { id: string; store_id: string; code: string; name: string }
 
-export default function ClosuresAdmin({ stores, registers, defaultStoreId, initialPreview }: {
+export default function ClosuresAdmin({ stores, registers, defaultStoreId, initialPreview, userName }: {
   stores: Store[]; registers: Register[];
   /** Boutique du poste (rendu serveur). */
   defaultStoreId?: string;
   /** Aperçu déjà calculé côté serveur (1er rendu sans fetch). */
   initialPreview?: PreviewData | null;
+  /** Nom de l'utilisateur qui clôture (affiché sur l'écran de validation). */
+  userName?: string;
 }) {
   const [storeId, setStoreId] = useState(defaultStoreId || stores[0]?.id || '');
   const [date] = useState(new Date().toISOString().slice(0, 10));
@@ -408,6 +410,108 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
   }
 
   const alreadySealed = preview?.sealed != null;
+
+  // Écran de VALIDATION de la fermeture : dès que la journée est scellée, on
+  // remplace la page de comptage par une confirmation claire. « Imprimer le
+  // récapitulatif » imprime le Z (même action que le bouton Z). Le reste de la
+  // logique de clôture est inchangé.
+  if (preview && preview.sealed) {
+    const sealed = preview.sealed;
+    const dateStr = `${new Date(sealed.sealed_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })} à ${new Date(sealed.sealed_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
+    const storeName = stores.find((s) => s.id === storeId)?.name ?? '—';
+    const cashTotal = preview.payments.find((p) => p.method === 'cash')?.total ?? 0;
+    const cardTotal = preview.payments.find((p) => p.method === 'card')?.total ?? 0;
+    const recap: Array<{ icon: RecapIconName; label: string; value: string }> = [
+      { icon: 'calendar', label: 'Date de clôture', value: dateStr },
+      { icon: 'store', label: 'Caisse', value: storeName },
+      { icon: 'user', label: 'Utilisateur', value: userName ?? '—' },
+      { icon: 'chart', label: 'Total des ventes', value: formatEUR(preview.totals.ttc) },
+      { icon: 'cash', label: 'Montant en espèces', value: formatEUR(cashTotal) },
+      { icon: 'card', label: 'Montant par carte', value: formatEUR(cardTotal) },
+      { icon: 'receipt', label: 'Nombre de transactions', value: String(preview.totals.sales) },
+    ];
+
+    return (
+      <div className="min-h-full overflow-auto px-4 py-8 md:py-12">
+        <div className="relative mx-auto w-full max-w-2xl text-center">
+          {/* Note manuscrite décorative, coin haut droit. */}
+          <div className="pointer-events-none absolute -top-2 right-0 hidden sm:block rotate-[8deg]" style={{ color: 'var(--primary-deep)' }}>
+            <p className="italic text-sm leading-tight">Une journée<br />bien gérée !</p>
+            <svg width="80" height="8" viewBox="0 0 80 8" fill="none" className="mt-1 ml-auto text-[color:var(--primary)]">
+              <path d="M2 5 C 20 1, 40 8, 78 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
+          </div>
+
+          {/* Coche de succès avec halo et rayons. */}
+          <div className="relative mx-auto mb-6 grid h-28 w-28 place-items-center">
+            <span className="absolute inset-0 rounded-full" style={{ backgroundColor: 'color-mix(in srgb, var(--primary) 12%, var(--surface))' }} />
+            <svg className="absolute inset-0 text-[color:var(--primary)]" width="112" height="112" viewBox="0 0 112 112" fill="none" aria-hidden="true">
+              {[0, 45, 90, 135, 180, 225, 270, 315].map((a) => {
+                const rad = (a * Math.PI) / 180;
+                const x1 = 56 + Math.cos(rad) * 50, y1 = 56 + Math.sin(rad) * 50;
+                const x2 = 56 + Math.cos(rad) * 56, y2 = 56 + Math.sin(rad) * 56;
+                return <line key={a} x1={x1} y1={y1} x2={x2} y2={y2} stroke="currentColor" strokeWidth="3" strokeLinecap="round" opacity="0.4" />;
+              })}
+            </svg>
+            <span className="relative grid h-20 w-20 place-items-center rounded-full text-white shadow-sm" style={{ backgroundColor: 'var(--primary)' }}>
+              <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M5 13l4 4L19 7" />
+              </svg>
+            </span>
+          </div>
+
+          <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-ink">Caisse clôturée avec succès !</h1>
+          <p className="mt-3 text-base text-ink-soft leading-snug">
+            La clôture de caisse a bien été enregistrée.<br />
+            Toutes les opérations ont été prises en compte.
+          </p>
+
+          {/* Récapitulatif */}
+          <div className="mt-8 rounded-2xl p-5 md:p-6 text-left" style={{ backgroundColor: 'color-mix(in srgb, var(--primary) 7%, var(--surface))' }}>
+            <ul className="divide-y divide-border">
+              {recap.map((r) => (
+                <li key={r.label} className="flex items-center gap-3 py-3">
+                  <span className="text-ink-soft shrink-0"><RecapIcon name={r.icon} /></span>
+                  <span className="text-sm text-ink-soft">{r.label}</span>
+                  <span className="ml-auto text-sm font-semibold tabular-nums text-ink text-right">{r.value}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <p className="mt-6 text-sm text-ink-soft">
+            Merci pour votre travail !<br />
+            Vous pouvez désormais fermer votre session.
+          </p>
+
+          {zToast && <div className="mt-4 rounded-xl bg-success/10 px-3 py-2 text-sm text-success">{zToast}</div>}
+          {error && <div className="mt-4 rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
+
+          <div className="mt-6 flex flex-col sm:flex-row items-stretch justify-center gap-3">
+            <button
+              onClick={() => void printZ(sealed.id)}
+              className="inline-flex items-center justify-center gap-2 h-12 px-6 rounded-xl border border-border bg-white text-ink font-medium hover:bg-gray-50"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M6 9V3h12v6" /><rect x="4" y="9" width="16" height="7" rx="1.5" /><path d="M7 16h10v5H7z" />
+              </svg>
+              Imprimer le récapitulatif
+            </button>
+            <a
+              href="/caisse"
+              className="inline-flex items-center justify-center gap-2 h-12 px-6 rounded-xl text-white font-semibold hover:opacity-90"
+              style={{ backgroundColor: 'var(--primary)' }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M3 11l9-8 9 8" /><path d="M5 10v10h14V10" />
+              </svg>
+              Retour à l&apos;accueil
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 md:p-8 flex flex-col gap-3 md:h-full md:overflow-hidden">
@@ -762,5 +866,26 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
         />
       )}
     </div>
+  );
+}
+
+type RecapIconName = 'calendar' | 'store' | 'user' | 'chart' | 'cash' | 'card' | 'receipt';
+
+/** Icônes fines (contour) de l'écran de validation de fermeture. */
+function RecapIcon({ name }: { name: RecapIconName }) {
+  const paths: Record<RecapIconName, ReactNode> = {
+    calendar: <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 9h18M8 3v4M16 3v4" /></>,
+    store: <><path d="M3 9l1.5-4h15L21 9" /><path d="M4 9v11h16V9" /><path d="M9 20v-6h6v6" /></>,
+    user: <><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4 3.6-6 8-6s8 2 8 6" /></>,
+    chart: <><path d="M3 20h18" /><path d="M6 20v-6M12 20V6M18 20v-9" /></>,
+    cash: <><rect x="2" y="6" width="20" height="12" rx="2" /><circle cx="12" cy="12" r="2.5" /><path d="M6 9v6M18 9v6" /></>,
+    card: <><rect x="2" y="5" width="20" height="14" rx="2" /><path d="M2 10h20M6 15h4" /></>,
+    receipt: <><rect x="5" y="3" width="14" height="18" rx="1.5" /><path d="M9 8h6M9 12h6M9 16h4" /></>,
+  };
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {paths[name]}
+    </svg>
   );
 }
