@@ -93,6 +93,13 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
       setError('Impression du Z impossible.');
     }
   }
+
+  // Ferme la session (déconnexion) puis renvoie à l'écran de connexion PIN.
+  // Navigation « dure » : garantit la prise en compte du cookie effacé.
+  async function closeSession() {
+    try { await fetch('/api/auth/logout', { method: 'POST' }); } catch { /* ignore */ }
+    window.location.href = '/login';
+  }
   const [loadingPreview, setLoadingPreview] = useState(!initialPreview);
 
   // ---------------------------------------------------------------------------
@@ -480,16 +487,16 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
               </svg>
               Imprimer le ticket Z
             </button>
-            <a
-              href="/caisse"
+            <button
+              onClick={() => void closeSession()}
               className="inline-flex items-center justify-center gap-2 h-12 px-6 rounded-xl text-white font-semibold hover:opacity-90"
               style={{ backgroundColor: 'var(--primary)' }}
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M3 11l9-8 9 8" /><path d="M5 10v10h14V10" />
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="M16 17l5-5-5-5" /><path d="M21 12H9" />
               </svg>
-              Retour à l&apos;accueil
-            </a>
+              Fermer ma session
+            </button>
           </div>
         </div>
       </div>
