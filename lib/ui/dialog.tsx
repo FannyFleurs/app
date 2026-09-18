@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useReducer, useState } from 'react';
+import { useEffect, useReducer, useRef, useState } from 'react';
 
 /**
  * Boîtes de dialogue AU THÈME (remplacent confirm/alert/prompt natifs).
@@ -66,7 +66,22 @@ export default function DialogHost() {
 
   const d = queue[0];
   const [val, setVal] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => { setVal(d?.kind === 'prompt' ? (d.defaultValue ?? '') : ''); }, [d?.id, d?.kind, d?.defaultValue]);
+
+  // Focus + sélection FIABLES du champ de saisie (ex. comptage des espèces
+  // ouvert par un appui long sur une pièce). L'attribut autoFocus seul ne
+  // suffit pas : le « clic » qui suit le relâchement de l'appui long peut rendre
+  // le focus à la tuile. On le reprend après ce cycle, et on sélectionne la
+  // valeur en place pour pouvoir la remplacer directement au clavier.
+  useEffect(() => {
+    if (d?.kind !== 'prompt') return;
+    const t = setTimeout(() => {
+      const el = inputRef.current;
+      if (el) { el.focus(); el.select(); }
+    }, 60);
+    return () => clearTimeout(t);
+  }, [d?.id, d?.kind]);
 
   if (!d) return null;
 
@@ -94,6 +109,7 @@ export default function DialogHost() {
 
         {d.kind === 'prompt' && (
           <input
+            ref={inputRef}
             className="input h-11 w-full mt-3"
             autoFocus
             value={val}
