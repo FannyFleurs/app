@@ -434,31 +434,15 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
     return (
       <div className="min-h-full overflow-auto px-4 py-8 md:py-12">
         <div className="relative mx-auto w-full max-w-2xl text-center">
-          {/* Note manuscrite décorative, coin haut droit. */}
-          <div className="pointer-events-none absolute -top-2 right-0 hidden sm:block rotate-[8deg]" style={{ color: 'var(--primary-deep)' }}>
-            <p className="italic text-sm leading-tight">Une journée<br />bien gérée !</p>
-            <svg width="80" height="8" viewBox="0 0 80 8" fill="none" className="mt-1 ml-auto text-[color:var(--primary)]">
-              <path d="M2 5 C 20 1, 40 8, 78 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-            </svg>
-          </div>
 
-          {/* Coche de succès avec halo et rayons. */}
-          <div className="relative mx-auto mb-6 grid h-28 w-28 place-items-center">
-            <span className="absolute inset-0 rounded-full" style={{ backgroundColor: 'color-mix(in srgb, var(--primary) 12%, var(--surface))' }} />
-            <svg className="absolute inset-0 text-[color:var(--primary)]" width="112" height="112" viewBox="0 0 112 112" fill="none" aria-hidden="true">
-              {[0, 45, 90, 135, 180, 225, 270, 315].map((a) => {
-                const rad = (a * Math.PI) / 180;
-                const x1 = 56 + Math.cos(rad) * 50, y1 = 56 + Math.sin(rad) * 50;
-                const x2 = 56 + Math.cos(rad) * 56, y2 = 56 + Math.sin(rad) * 56;
-                return <line key={a} x1={x1} y1={y1} x2={x2} y2={y2} stroke="currentColor" strokeWidth="3" strokeLinecap="round" opacity="0.4" />;
-              })}
-            </svg>
-            <span className="relative grid h-20 w-20 place-items-center rounded-full text-white shadow-sm" style={{ backgroundColor: 'var(--primary)' }}>
-              <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M5 13l4 4L19 7" />
-              </svg>
-            </span>
-          </div>
+          {/* Illustration de clôture réussie */}
+<div className="mx-auto mb-6 flex justify-center">
+  <img
+    src="/images/caisse-cloturee.png"
+    alt="Caisse clôturée avec succès"
+    className="h-auto w-44 object-contain"
+  />
+</div>
 
           <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-ink">Caisse clôturée avec succès !</h1>
           <p className="mt-3 text-base text-ink-soft leading-snug">
@@ -480,7 +464,6 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
           </div>
 
           <p className="mt-6 text-sm text-ink-soft">
-            Merci pour votre travail !<br />
             Vous pouvez désormais fermer votre session.
           </p>
 
@@ -495,7 +478,7 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M6 9V3h12v6" /><rect x="4" y="9" width="16" height="7" rx="1.5" /><path d="M7 16h10v5H7z" />
               </svg>
-              Imprimer le récapitulatif
+              Imprimer le ticket Z
             </button>
             <a
               href="/caisse"
