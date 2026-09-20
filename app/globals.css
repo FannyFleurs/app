@@ -112,6 +112,21 @@ body[data-theme="teal"]       { --primary: #0E7490; --primary-deep: #0B5B70; --p
 body[data-theme="bordeaux"]   { --primary: #7B2D3A; --primary-deep: #5D2029; --primary-soft: #F3E4E7; }
 body[data-theme="lavender"]   { --primary: #6D5D9C; --primary-deep: #524879; --primary-soft: #ECE9F4; }
 
+/* Back-office : palette NEUTRE (charcoal / gris) au lieu du vert de marque.
+   Posé via l'attribut data-bo par AppShell — s'applique UNIQUEMENT au BO,
+   la caisse garde l'identité verte. On ne touche qu'aux variables d'accent
+   (surfaces pleines, boutons, éléments actifs, barre supérieure) ; les
+   couleurs de statut (succès / alerte / danger) restent inchangées.
+   Placé après les thèmes pour l'emporter à spécificité égale. */
+body[data-bo="1"] {
+  --primary: #2A2F33;
+  --primary-deep: #15191C;
+  --primary-soft: #EEF0F2;
+  --accent-text: #2A2F33;
+  --topbar-bg: #2A2F33;
+  --topbar-user-bg: #15191C;
+}
+
 /* Hauteur d'application : exactement la fenêtre VISIBLE.
    `100vh` compte la barre d'adresse repliée des navigateurs mobiles — la
    coque dépassait donc de l'écran et la page se mettait à défiler, alors

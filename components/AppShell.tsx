@@ -65,7 +65,12 @@ export default function AppShell({
   const appliedTheme = BRAND_THEME;
   useEffect(() => {
     document.body.setAttribute('data-theme', appliedTheme);
-  }, [appliedTheme]);
+    // Back-office : palette neutre (charcoal/gris) via data-bo. La caisse garde
+    // l'identité verte. Retiré au démontage / hors BO.
+    if (backOffice) document.body.setAttribute('data-bo', '1');
+    else document.body.removeAttribute('data-bo');
+    return () => { document.body.removeAttribute('data-bo'); };
+  }, [appliedTheme, backOffice]);
 
   // Échelle de l'interface, réglée par appareil (cet écran). On démarre à 1
   // (identique au rendu serveur, pas de désync d'hydratation) puis on lit la
