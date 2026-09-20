@@ -92,14 +92,13 @@ export default function LeftRail({
 
   if (backOffice) {
     return (
-      // Rail plein vert : c'est lui qui pose l'identité de l'écran. Le blanc
-      // était neutre au point de disparaître, et l'élément actif — seul aplat
-      // de couleur — se confondait avec un bouton.
+      // Rail clair : fond blanc, bord discret, texte sombre. L'élément actif
+      // est une pastille grise claire (var(--primary-soft)) à texte d'accent —
+      // le seul aplat du rail, repérable sans se confondre avec un bouton.
       <aside
-        className={`hidden md:flex flex-col shrink-0 h-full text-white/85 transition-[width] duration-150 ${
+        className={`hidden md:flex flex-col shrink-0 h-full bg-surface border-r border-border text-ink transition-[width] duration-150 ${
           collapsed ? 'w-16' : 'w-56 lg:w-60'
         }`}
-        style={{ backgroundColor: 'var(--primary)' }}
       >
         {/* Logo + titre back-office. Replié, seul le monogramme reste. */}
         <Link
@@ -114,8 +113,8 @@ export default function LeftRail({
           )}
           {!collapsed && (
             <div className="min-w-0">
-              <div className="text-[13px] font-semibold leading-tight truncate text-white">Back-office</div>
-              <div className="text-[10px] leading-tight truncate text-white/55">Gestion à distance</div>
+              <div className="text-[13px] font-semibold leading-tight truncate text-ink">Back-office</div>
+              <div className="text-[10px] leading-tight truncate text-ink-soft">Gestion à distance</div>
             </div>
           )}
         </Link>
@@ -128,7 +127,7 @@ export default function LeftRail({
           aria-label={collapsed ? 'Ouvrir le menu' : 'Fermer le menu'}
           aria-expanded={!collapsed}
           title={collapsed ? 'Ouvrir le menu' : 'Fermer le menu'}
-          className={`mx-2 mb-1 flex h-7 items-center justify-center rounded-lg text-white/60 hover:bg-white/10 hover:text-white transition-colors ${
+          className={`mx-2 mb-1 flex h-7 items-center justify-center rounded-lg text-ink-soft hover:bg-gray-100 hover:text-ink transition-colors ${
             collapsed ? 'w-12' : 'self-end w-8'
           }`}
         >
@@ -147,9 +146,9 @@ export default function LeftRail({
             return (
               <div key={g} className="px-2">
                 {collapsed ? (
-                  <div className="mx-3 mb-1 h-px bg-white/15" />
+                  <div className="mx-3 mb-1 h-px bg-border" />
                 ) : (
-                  <div className="px-3 mb-0.5 text-[9px] uppercase tracking-widest text-white/45 font-semibold">
+                  <div className="px-3 mb-0.5 text-[9px] uppercase tracking-widest text-ink-soft font-semibold">
                     {g}
                   </div>
                 )}
@@ -160,12 +159,12 @@ export default function LeftRail({
                       <Link
                         key={i.href}
                         href={i.href}
-                        // Actif = pastille jaune, texte vert : le seul endroit
-                        // clair du rail, on le trouve sans le chercher.
+                        // Actif = pastille grise claire, texte d'accent : le
+                        // seul aplat du rail, on le trouve sans le chercher.
                         title={collapsed ? i.label : undefined}
                         className={`flex items-center gap-2.5 rounded-lg text-[13px] font-medium transition-colors ${
                           collapsed ? 'justify-center px-0 py-1.5' : 'px-2.5 py-1.5'
-                        } ${active ? '' : 'text-white/75 hover:bg-white/10 hover:text-white'}`}
+                        } ${active ? '' : 'text-ink-soft hover:bg-gray-100 hover:text-ink'}`}
                         style={active
                           ? { backgroundColor: 'var(--primary-soft)', color: 'var(--primary)' }
                           : undefined}
@@ -181,10 +180,10 @@ export default function LeftRail({
           })}
         </nav>
 
-        <div className="border-t border-white/15 px-2 py-3 space-y-1.5 shrink-0">
+        <div className="border-t border-border px-2 py-3 space-y-1.5 shrink-0">
           <button
             onClick={onLogout}
-            className={`w-full flex items-center gap-2 rounded-xl py-1.5 hover:bg-white/10 text-sm text-left transition-colors ${
+            className={`w-full flex items-center gap-2 rounded-xl py-1.5 hover:bg-gray-100 text-sm text-left transition-colors ${
               collapsed ? 'justify-center px-0' : 'px-2.5'
             }`}
             title={`${user.fullName} — se déconnecter`}
@@ -197,8 +196,8 @@ export default function LeftRail({
             </span>
             {!collapsed && (
               <div className="min-w-0">
-                <div className="truncate font-medium text-[13px] text-white">{user.fullName}</div>
-                <div className="truncate text-[10px] text-white/55">Se déconnecter</div>
+                <div className="truncate font-medium text-[13px] text-ink">{user.fullName}</div>
+                <div className="truncate text-[10px] text-ink-soft">Se déconnecter</div>
               </div>
             )}
           </button>
