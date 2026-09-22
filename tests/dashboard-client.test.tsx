@@ -25,7 +25,7 @@ const TVA = [
 ];
 
 const KPI_VIDE = {
-  ca_ttc: 0, ca_ht: 0, tva: 0, tickets: 0, customers: 0, marge: 0, avg_ttc: 0, avg_ht: 0,
+  ca_ttc: 0, ca_ht: 0, ca_ht_real: 0, tva: 0, tickets: 0, customers: 0, marge: 0, avg_ttc: 0, avg_ht: 0,
 };
 
 /** Réponse fidèle à la forme de /api/analytics/dashboard. */
@@ -37,7 +37,7 @@ function payload(prev = KPI_VIDE) {
     prevLabel: '1 janv. 2025 - 12 août 2025',
     summary: {
       current: {
-        ca_ttc: 890.3, ca_ht: 741.92, tva: 148.38, tickets: 11,
+        ca_ttc: 890.3, ca_ht: 741.92, ca_ht_real: 741.92, tva: 148.38, tickets: 11,
         customers: 1, marge: 741.92, avg_ttc: 80.94, avg_ht: 67.45,
       },
       prev,

@@ -18,7 +18,12 @@ interface ObjectiveProgress {
   total: { target: number; actual: number; pct: number; projection: number | null };
 }
 
-function iso(d: Date) { return d.toISOString().slice(0, 10); }
+// Date LOCALE au format aaaa-mm-jj. `toISOString()` bascule en UTC et
+// décalait la date d'un jour pour les fuseaux à l'est de Greenwich (ex.
+// « Cette année » démarrait au 31 déc. au lieu du 1er janv.).
+function iso(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 /** Date seule, format court (« 18 sept. 2025 »). */
 function shortDate(isoStr: string): string {
@@ -181,12 +186,12 @@ export default function DashboardClient({ stores, lockedStoreId }: { stores: Sto
              value={cur ? formatEUR(cur.marge) : '—'} vsLabel={vsLabel}
              delta={delta(cur?.marge, prev?.marge)} />
         <Kpi icone="discount" tone="amber" label="Taux de marge"
-             value={cur && cur.ca_ht > 0 ? `${((cur.marge / cur.ca_ht) * 100).toFixed(1).replace('.', ',')} %` : '—'}
+             value={cur && cur.ca_ht_real > 0 ? `${((cur.marge / cur.ca_ht_real) * 100).toFixed(1).replace('.', ',')} %` : '—'}
              vsLabel={vsLabel}
-             unavailable={!cur || cur.ca_ht <= 0}
+             unavailable={!cur || cur.ca_ht_real <= 0}
              delta={delta(
-               cur && cur.ca_ht > 0 ? (cur.marge / cur.ca_ht) * 100 : undefined,
-               prev && prev.ca_ht > 0 ? (prev.marge / prev.ca_ht) * 100 : undefined,
+               cur && cur.ca_ht_real > 0 ? (cur.marge / cur.ca_ht_real) * 100 : undefined,
+               prev && prev.ca_ht_real > 0 ? (prev.marge / prev.ca_ht_real) * 100 : undefined,
              )} />
       </section>
 

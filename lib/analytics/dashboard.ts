@@ -11,6 +11,9 @@ export interface KpiSet {
   marge: number;        // marge HT (revenu HT - coût HT)
   avg_ttc: number;      // panier moyen TTC
   avg_ht: number;       // panier moyen HT
+  // CA HT des VENTES RÉELLES uniquement (hors historique importé). Base du taux
+  // de marge : l'import n'a pas de coût, il fausserait le ratio marge / CA HT.
+  ca_ht_real: number;
 }
 
 export interface DailySeries {
