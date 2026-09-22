@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { query } from '@/lib/db/client';
 import { requirePermission } from '@/lib/auth/guards';
 import { jsonError } from '@/lib/validation/api';
-import { hasTargetsTable, monthBounds } from '@/lib/analytics/targets-server';
+import { hasTargetsTable, hasRevenueHistoryTable, monthBounds } from '@/lib/analytics/targets-server';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,6 +47,22 @@ export async function GET(req: Request) {
     actualArgs,
   );
   const actualByStore = new Map(actualRes.rows.map((r) => [r.store_id, Number(r.ttc)]));
+
+  // CA importé (revenue_history) compté comme réel pour les boutiques sans
+  // vente POS sur le mois (mois antérieurs au déploiement). Réel prioritaire.
+  if (await hasRevenueHistoryTable()) {
+    const histRes = await query<{ store_id: string; ttc: string }>(
+      `SELECT store_id, COALESCE(SUM(ca_ttc), 0)::text AS ttc
+         FROM revenue_history
+        WHERE organization_id = $1 AND day BETWEEN $2::date AND $3::date
+          ${store_id ? 'AND store_id = $4' : ''}
+        GROUP BY store_id`,
+      actualArgs,
+    );
+    for (const r of histRes.rows) {
+      if (!actualByStore.get(r.store_id)) actualByStore.set(r.store_id, Number(r.ttc));
+    }
+  }
 
   // Objectifs par boutique (si la table existe).
   const targetByStore = new Map<string, number>();

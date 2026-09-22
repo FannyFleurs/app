@@ -314,6 +314,32 @@ export async function GET(req: Request) {
     }
   }
 
+  // CA COURANT enrichi de l'historique importé : pour les mois ANTÉRIEURS au
+  // déploiement (aucune vente POS), le CA importé compte comme réel. Même règle
+  // que le N-1 : ventes réelles prioritaires, import pour les jours sans vente.
+  // Seul le CA (TTC/HT/tickets/ticket moyen) est concerné ; marge, TVA,
+  // paiements, clients restent issus des ventes réelles (absents de l'import).
+  let curKpiFinal = curKpi;
+  let curByDay = cr;
+  if (await hasRevenueHistoryTable()) {
+    const blendedCur = await blendedDaily(argsCur);
+    if (blendedCur.length > 0) {
+      curByDay = new Map(blendedCur.map((b) => [b.d, { d: b.d, ttc: b.ttc, ht: b.ht, n: b.n }]));
+      const tot = blendedCur.reduce(
+        (a, b) => ({ ttc: a.ttc + Number(b.ttc), ht: a.ht + Number(b.ht), n: a.n + Number(b.n) }),
+        { ttc: 0, ht: 0, n: 0 },
+      );
+      curKpiFinal = {
+        ...curKpi,
+        ca_ttc: Number(tot.ttc.toFixed(2)),
+        ca_ht: Number(tot.ht.toFixed(2)),
+        tickets: tot.n,
+        avg_ttc: tot.n > 0 ? Number((tot.ttc / tot.n).toFixed(2)) : 0,
+        avg_ht: tot.n > 0 ? Number((tot.ht / tot.n).toFixed(2)) : 0,
+      };
+    }
+  }
+
   const labels: string[] = [];
   const ca_ttc: number[] = [], ca_ht: number[] = [];
   const ticket_ttc: number[] = [], ticket_ht: number[] = [];
@@ -326,7 +352,7 @@ export async function GET(req: Request) {
     const cd = curDays[i]!;
     const pd = prevDays[i] ?? '';
     labels.push(new Date(cd + 'T00:00:00Z').toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric' }));
-    const c = cr.get(cd); const p = prevByDay.get(pd);
+    const c = curByDay.get(cd); const p = prevByDay.get(pd);
     const cTtc = c ? Number(c.ttc) : 0, cHt = c ? Number(c.ht) : 0, cN = c ? c.n : 0;
     const pTtc = p ? Number(p.ttc) : 0, pHt = p ? Number(p.ht) : 0, pN = p ? p.n : 0;
     ca_ttc.push(cTtc); ca_ht.push(cHt);
@@ -384,7 +410,7 @@ export async function GET(req: Request) {
     prevPeriod: { from: pFrom, to: pTo },
     periodLabel: fmtRange(from, to),
     prevLabel: fmtRange(pFrom, pTo),
-    summary: { current: curKpi, prev: prevKpi },
+    summary: { current: curKpiFinal, prev: prevKpi },
     daily: {
       labels, ca_ttc, ca_ht, ticket_ttc, ticket_ht, marge,
       prev_ca_ttc, prev_ca_ht, prev_ticket_ttc, prev_ticket_ht, prev_marge,

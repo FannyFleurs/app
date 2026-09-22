@@ -17,3 +17,17 @@ export async function hasTargetsTable(): Promise<boolean> {
   return _hasTargets;
 }
 
+// Table d'historique de CA importé (migration 0076) : peut manquer sur une base
+// non migrée. Sondée une fois (cache module).
+let _hasHistory: boolean | null = null;
+export async function hasRevenueHistoryTable(): Promise<boolean> {
+  if (_hasHistory !== null) return _hasHistory;
+  const r = await query<{ exists: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1 FROM information_schema.tables WHERE table_name = 'revenue_history'
+     ) AS exists`,
+  );
+  _hasHistory = !!r.rows[0]?.exists;
+  return _hasHistory;
+}
+
