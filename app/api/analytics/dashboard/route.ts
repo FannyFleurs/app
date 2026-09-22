@@ -114,6 +114,7 @@ export async function GET(req: Request) {
       marge,
       avg_ttc: tickets > 0 ? Number((ca_ttc / tickets).toFixed(2)) : 0,
       avg_ht:  tickets > 0 ? Number((ca_ht / tickets).toFixed(2)) : 0,
+      ca_ht_real: ca_ht,
     };
   }
 
