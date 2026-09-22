@@ -5,7 +5,7 @@ import { requirePermission } from '@/lib/auth/guards';
 import { jsonError } from '@/lib/validation/api';
 import { monthBreakdown } from '@/lib/analytics/objectives';
 import { loadSchedules, scheduleFor } from '@/lib/analytics/objectives-server';
-import { hasTargetsTable, monthBounds } from '@/lib/analytics/targets-server';
+import { hasTargetsTable, hasRevenueHistoryTable, monthBounds } from '@/lib/analytics/targets-server';
 
 export const dynamic = 'force-dynamic';
 
@@ -78,6 +78,20 @@ export async function GET(req: Request) {
   const realized: Record<string, { ca: number; tickets: number }> = {};
   for (const r of dayRes.rows) realized[r.d] = { ca: Number(r.ttc), tickets: Number(r.n) };
 
+  // CA importé (revenue_history) comme réel là où il n'y a PAS de vente POS
+  // (mois antérieurs au déploiement). Les ventes réelles restent prioritaires.
+  if (await hasRevenueHistoryTable()) {
+    const hist = await query<{ d: string; ttc: string; tickets: string | null }>(
+      `SELECT day::text AS d, ca_ttc::text AS ttc, tickets::text AS tickets
+         FROM revenue_history
+        WHERE organization_id = $1 AND store_id = $2 AND day BETWEEN $3::date AND $4::date`,
+      [org, storeId, start, end],
+    );
+    for (const h of hist.rows) {
+      if (!realized[h.d]) realized[h.d] = { ca: Number(h.ttc), tickets: Number(h.tickets ?? 0) };
+    }
+  }
+
   const breakdown = monthBreakdown({ year, month, objectiveMonth, weights, todayIso: todayParis(), realized });
 
   // Série 12 mois de l'année : objectif + réalisé par mois.
@@ -99,6 +113,21 @@ export async function GET(req: Request) {
   )).rows;
   const objByMonth = new Map(yObjRows.map((r) => [Number(r.month), Number(r.target_ttc)]));
   const realByMonth = new Map(yRealRows.map((r) => [Number(r.m), Number(r.ttc)]));
+
+  // Historique importé par mois (CA réel des mois sans vente POS).
+  if (await hasRevenueHistoryTable()) {
+    const histM = await query<{ m: number; ttc: string }>(
+      `SELECT EXTRACT(MONTH FROM day)::int AS m, COALESCE(SUM(ca_ttc), 0)::text AS ttc
+         FROM revenue_history
+        WHERE organization_id = $1 AND store_id = $2 AND EXTRACT(YEAR FROM day)::int = $3
+        GROUP BY 1`,
+      [org, storeId, year],
+    );
+    for (const h of histM.rows) {
+      const m = Number(h.m);
+      if (!realByMonth.get(m)) realByMonth.set(m, Number(h.ttc)); // réel prioritaire
+    }
+  }
   const yearSeries = Array.from({ length: 12 }, (_, i) => ({
     month: i + 1,
     objective: objByMonth.get(i + 1) ?? 0,
