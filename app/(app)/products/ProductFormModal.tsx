@@ -966,7 +966,7 @@ export default function ProductFormModal({
                     onClick={() => photoInputRef.current?.click()}
                     className="btn-soft h-10 px-3 text-sm"
                   >
-                    📷 {photo || existingPhoto ? 'Changer la photo' : 'Prendre une photo'}
+                    📷 {photo || existingPhoto ? 'Changer la photo' : 'Ajouter une photo'}
                   </button>
 
                   {(photo || existingPhoto) && (
@@ -988,7 +988,6 @@ export default function ProductFormModal({
                 ref={photoInputRef}
                 type="file"
                 accept="image/*"
-                capture="environment"
                 className="hidden"
                 onChange={onPhotoFile}
               />
