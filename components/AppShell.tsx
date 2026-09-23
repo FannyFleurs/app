@@ -228,14 +228,17 @@ export default function AppShell({
             />
           </div>
 
-          {/* Le cadre blanc est posé ICI, une seule fois, et non page par
-              page : c'est ce qui garantit que tous les titres démarrent au
-              même pixel. Chaque page s'écrit donc à l'intérieur d'un cadre
-              déjà positionné, et n'a plus à gérer sa marge.
+          {/* Le cadre blanc (marge + coins arrondis + bordure) est posé ICI,
+              une seule fois, et non page par page — mais UNIQUEMENT en
+              back-office. Côté caisse, le contenu est affleurant (pas de
+              marge/cadre) ; la seule séparation avec la TopBar vient de sa
+              propre bordure basse (déjà posée dans TopBar).
               Le défilement appartient au cadre : les pages à mise en page fixe
               (caisse, liste-détail) le remplissent avec leur propre h-full. */}
-          <main className="flex-1 min-h-0 overflow-hidden bg-bg relative md:p-3">
-            <div className="h-full overflow-y-auto overflow-x-hidden bg-surface md:rounded-2xl md:border md:border-border">
+          <main className={`flex-1 min-h-0 overflow-hidden bg-bg relative ${backOffice ? 'md:p-3' : ''}`}>
+            <div className={`h-full overflow-y-auto overflow-x-hidden bg-surface ${
+              backOffice ? 'md:rounded-2xl md:border md:border-border' : ''
+            }`}>
               {children}
             </div>
           </main>
