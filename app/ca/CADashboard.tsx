@@ -4,6 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatEUR } from '@/lib/services/money';
 
 interface Store { id: string; name: string }
+interface StoreSummary {
+  store_id: string; store_name: string;
+  ca_ttc: number; tickets_count: number; avg_ticket_ttc: number; marge_ht: number;
+  growth_pct: number | null;
+}
 interface Summary {
   period: { from: string; to: string };
   ca_ttc: number; ca_ht: number; tva: number; discount: number;
@@ -53,6 +58,19 @@ function periodDates(p: Period, from: string, to: string): { from: string; to: s
   return { from, to };
 }
 
+// Période de comparaison : même durée, immédiatement avant. Pour
+// "Aujourd'hui" ça donne hier ; pour une période plus longue, le bloc
+// équivalent qui précède directement.
+function previousRange(from: string, to: string): { from: string; to: string } {
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const fromD = new Date(`${from}T00:00:00`);
+  const toD = new Date(`${to}T00:00:00`);
+  const days = Math.round((toD.getTime() - fromD.getTime()) / 86_400_000) + 1;
+  const prevTo = new Date(fromD); prevTo.setDate(prevTo.getDate() - 1);
+  const prevFrom = new Date(prevTo); prevFrom.setDate(prevFrom.getDate() - (days - 1));
+  return { from: iso(prevFrom), to: iso(prevTo) };
+}
+
 export default function CADashboard({
   stores, orgName, logoUrl, user,
 }: {
@@ -72,6 +90,7 @@ export default function CADashboard({
   );
 
   const [summary, setSummary] = useState<Summary | null>(null);
+  const [storeSummaries, setStoreSummaries] = useState<StoreSummary[]>([]);
   const [hours, setHours] = useState<HourBucket[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
@@ -91,9 +110,17 @@ export default function CADashboard({
     setLoading(true);
     const qs = new URLSearchParams({ from: range.from, to: range.to });
     if (storeId) qs.set('store_id', storeId);
+    // CA par boutique : uniquement utile sur "Toutes les boutiques" (dès
+    // qu'une boutique précise est choisie, la tuile disparaît, inutile
+    // d'appeler l'API). Comparaison vs la période équivalente précédente.
+    const prev = previousRange(range.from, range.to);
+    const qsByStore = new URLSearchParams({
+      from: range.from, to: range.to, prev_from: prev.from, prev_to: prev.to,
+    });
     try {
-      const [rS, rH, rP, rV, rT, rD, rR] = await Promise.all([
+      const [rS, rBS, rH, rP, rV, rT, rD, rR] = await Promise.all([
         fetch(`/api/ca/summary?${qs.toString()}`),
+        storeId ? null : fetch(`/api/ca/summary-by-store?${qsByStore.toString()}`),
         fetch(`/api/ca/hourly?${qs.toString()}`),
         fetch(`/api/ca/products?${qs.toString()}&sort=ca_ttc&order=desc&limit=100`),
         fetch(`/api/ca/vendors?${qs.toString()}`),
@@ -102,6 +129,8 @@ export default function CADashboard({
         fetch(`/api/ca/returns?${qs.toString()}`),
       ]);
       if (rS.ok) setSummary(await rS.json());
+      if (rBS?.ok) setStoreSummaries((await rBS.json()).stores);
+      else if (!rBS) setStoreSummaries([]);
       if (rH.ok) setHours((await rH.json()).hours);
       if (rP.ok) setProducts((await rP.json()).products);
       if (rV.ok) setVendors((await rV.json()).vendors);
@@ -186,6 +215,9 @@ export default function CADashboard({
         {tab === 'xz' && (
           <XzView
             summary={summary}
+            storeId={storeId}
+            storeSummaries={storeSummaries}
+            onSelectStore={setStoreId}
             hours={hours}
             products={products}
             vendors={vendors}
@@ -277,11 +309,14 @@ function TopBar({
 /* ------------------------------------------------------------------ */
 
 function XzView({
-  summary, hours, products, vendors, tva, discounts, returnsInfo,
+  summary, storeId, storeSummaries, onSelectStore, hours, products, vendors, tva, discounts, returnsInfo,
   period, setPeriod, customFrom, setCustomFrom, customTo, setCustomTo, today,
   showFullSales, setShowFullSales, refreshedAt,
 }: {
   summary: Summary | null;
+  storeId: string;
+  storeSummaries: StoreSummary[];
+  onSelectStore: (id: string) => void;
   hours: HourBucket[];
   products: Product[];
   vendors: Vendor[];
@@ -326,6 +361,24 @@ function XzView({
           </div>
         )}
       </div>
+
+      {/* CA par boutique — visible d'un coup d'œil, sans avoir à sélectionner
+          une boutique à la fois. Seulement sur "Toutes les boutiques" : dès
+          qu'une boutique précise est choisie, on retrouve l'affichage
+          habituel (déjà filtré sur elle). 1 boutique dans l'organisation
+          = 1 tuile pleine largeur, 2 = côte à côte, 3 et plus = 3 par ligne
+          max puis ça passe à la ligne suivante. */}
+      {!storeId && storeSummaries.length > 0 && (
+        <div className={`grid gap-3 ${
+          storeSummaries.length <= 1 ? 'grid-cols-1'
+          : storeSummaries.length === 2 ? 'grid-cols-2'
+          : 'grid-cols-3'
+        }`}>
+          {storeSummaries.map((s, i) => (
+            <StoreTile key={s.store_id} store={s} colorIndex={i} period={period} onSelect={onSelectStore} />
+          ))}
+        </div>
+      )}
 
       {/* 2 KPIs */}
       <div className="grid grid-cols-2 gap-3">
@@ -500,6 +553,47 @@ function XzView({
           : ''}
       </div>
     </div>
+  );
+}
+
+// Palette de puces couleur par boutique : reprend des teintes des thèmes de
+// marque existants, pour rester dans l'identité HelloPos plutôt que des
+// couleurs arbitraires. Cycle si plus de boutiques que de couleurs.
+const STORE_DOT_COLORS = ['#013E37', '#B7791F', '#5C6F5D', '#1F3A5F', '#B5683E', '#7A3C6E'];
+
+function StoreTile({ store, colorIndex, period, onSelect }: {
+  store: StoreSummary; colorIndex: number; period: Period; onSelect: (id: string) => void;
+}) {
+  const dot = STORE_DOT_COLORS[colorIndex % STORE_DOT_COLORS.length];
+  const growth = store.growth_pct;
+  const growthLabel = period === 'today' ? 'vs hier' : 'vs période préc.';
+  return (
+    <button
+      onClick={() => onSelect(store.store_id)}
+      className="text-left rounded-2xl bg-white border border-border p-4 hover:border-gray-300 transition-colors"
+    >
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: dot }} />
+          <span className="font-semibold truncate">{store.store_name}</span>
+        </div>
+        <span className="text-ink-soft/50 shrink-0">›</span>
+      </div>
+      <div className="text-2xl font-semibold tabular-nums leading-none">{formatEUR(store.ca_ttc)}</div>
+      <div className="mt-0.5 text-xs text-ink-soft">TTC</div>
+      <div className="mt-2 text-xs text-ink-soft space-y-0.5">
+        <div>{store.tickets_count} vente{store.tickets_count > 1 ? 's' : ''}</div>
+        <div>Panier moyen : {formatEUR(store.avg_ticket_ttc)}</div>
+        <div>Marge HT : {formatEUR(store.marge_ht)}</div>
+      </div>
+      {growth !== null && (
+        <div className={`mt-2 inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold tabular-nums ${
+          growth >= 0 ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'
+        }`}>
+          {growth >= 0 ? '↗' : '↘'} {growth >= 0 ? '+' : ''}{growth} % {growthLabel}
+        </div>
+      )}
+    </button>
   );
 }
 
