@@ -15,8 +15,8 @@ const paramsSchema = z.object({
 
 /**
  * CA par boutique, en un coup d'œil (sans avoir à sélectionner une boutique
- * à la fois). Inclut la variation vs la période précédente de même durée,
- * si prev_from/prev_to sont fournis.
+ * à la fois). Inclut la variation vs prev_from/prev_to si fournis (l'appelant
+ * décide de la période de comparaison, ex. N-1) ; sinon pas de variation.
  */
 export async function GET(req: Request) {
   const g = await requireSession();
