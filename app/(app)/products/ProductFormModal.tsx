@@ -399,10 +399,15 @@ export default function ProductFormModal({
 
   return (
     <div className={inline
-      ? 'p-4 sm:p-6'
+      ? ''
       : 'fixed inset-0 z-50 grid place-items-center bg-ink/30 backdrop-blur-sm p-2 sm:p-4 overflow-auto'}>
+      {/* Mode inline (deux colonnes dans la page, ex. Produits) : pas de
+          cadre — le panneau se pose directement sur le fond de page, la
+          seule séparation venant du trait déjà posé par la colonne liste
+          (border-r). Mode popup (inline=false) : garde .card, un fond plein
+          est nécessaire pour se distinguer du fond assombri derrière. */}
       <div className={inline
-        ? 'card w-full p-4 sm:p-6'
+        ? 'w-full bg-white p-4 sm:p-6'
         : 'card w-full max-w-7xl p-4 sm:p-6 my-4 sm:my-8'}>
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2 min-w-0">
