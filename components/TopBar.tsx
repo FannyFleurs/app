@@ -72,20 +72,21 @@ export default function TopBar({
           évite que la première tuile glisse sous le logo quand la liste est
           courte ; flex-1 + min-w-0 permet le scroll horizontal sans casser
           le layout). */}
-      <nav className="hidden md:flex items-center justify-start gap-1 px-2 overflow-x-auto no-scrollbar flex-1 min-w-0">
+      <nav className="hidden md:flex items-center justify-center gap-1 px-2 overflow-x-auto no-scrollbar flex-1 min-w-0">
         {tabs.map((t) => {
           const active = t.href === activeHref;
           return (
             <Link
               key={t.href}
               href={t.href}
-              className={`relative flex items-center h-10 px-4 rounded-xl text-sm font-medium whitespace-nowrap transition-colors ${
+              className={`relative flex items-center gap-2 h-10 px-4 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
                 active
                   ? 'text-white shadow-sm'
                   : 'text-ink-soft hover:text-ink hover:bg-gray-50'
               }`}
               style={active ? { backgroundColor: 'var(--primary)' } : undefined}
             >
+              <Icon name={t.icon} size={18} />
               {t.label}
             </Link>
           );
