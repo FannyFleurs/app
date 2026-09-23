@@ -572,7 +572,6 @@ function StoreTile({ store, colorIndex, onSelect }: {
         <div className="mt-0.5 text-xs text-ink-soft truncate">
           {store.tickets_count} vente{store.tickets_count > 1 ? 's' : ''}
           {' · '}P.M. {formatEUR(store.avg_ticket_ttc)}
-          {' · '}Marge HT {formatEUR(store.marge_ht)}
         </div>
       </div>
 
