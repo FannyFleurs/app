@@ -1632,7 +1632,7 @@ export default function CashRegister({
               <input
                 ref={searchRef}
                 autoFocus
-                className="input h-11 w-full pl-10 pr-10 text-base"
+                className="input h-11 w-full pl-10 pr-10 text-sm"
                 placeholder="Rechercher / scanner…"
                 aria-label="Rechercher un article"
                 value={search}
@@ -1670,7 +1670,7 @@ export default function CashRegister({
               onClick={() => setSearchOpen(true)}
               title="Rechercher / scanner ( / )"
               aria-label="Rechercher un article"
-              className="flex-1 md:flex-none md:w-80 md:ml-auto h-11 rounded-xl border border-border bg-white hover:bg-gray-50 flex items-center gap-2 px-3.5 text-ink-soft text-base text-left transition-colors"
+              className="flex-1 md:flex-none md:w-80 md:ml-auto h-11 rounded-xl border border-border bg-white hover:bg-gray-50 flex items-center gap-2 px-3.5 text-ink-soft text-sm text-left transition-colors"
             >
               <Icon name="search" size={20} />
               <span>Rechercher / scanner…</span>
@@ -1685,7 +1685,7 @@ export default function CashRegister({
           >
             <Icon name="camera" size={24} />
           </button>
-          <button className="btn-soft h-11 px-5 text-base inline-flex items-center gap-1.5 whitespace-nowrap" onClick={() => setShowHeld(true)} title="F4" aria-label="Paniers en attente">
+          <button className="btn-soft h-11 px-5 text-sm inline-flex items-center gap-1.5 whitespace-nowrap" onClick={() => setShowHeld(true)} title="F4" aria-label="Paniers en attente">
             <span className="hidden md:inline">Tickets en attente</span>
             <span className="md:hidden"><Icon name="pause" size={22} /></span>
             {heldCount > 0 && (
