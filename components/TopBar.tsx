@@ -29,10 +29,13 @@ interface Props {
   permissions: Set<Permission>;
   onOpenMenu: () => void;
   onLogout: () => void;
+  /** Vue back-office : autorise les onglets réservés au BO (boOnly). Hors BO
+   *  (caisse), ces pages ne doivent jamais apparaître dans la barre. */
+  backOffice?: boolean;
 }
 
 export default function TopBar({
-  user, hiddenPaths, headerTabs, subscription, permissions, onOpenMenu, onLogout,
+  user, hiddenPaths, headerTabs, subscription, permissions, onOpenMenu, onLogout, backOffice = false,
 }: Props) {
   const path = usePathname();
   const brand = useBrand();
@@ -44,6 +47,7 @@ export default function TopBar({
   const tabs = order
     .map((href) => SIDEBAR_ITEMS.find((i) => i.href === href))
     .filter((i): i is SidebarItem => !!i)
+    .filter((i) => backOffice || !i.boOnly)
     .filter((i) => !i.perm || permissions.has(i.perm))
     .filter((i) => i.required || !hiddenPaths.includes(i.href));
 

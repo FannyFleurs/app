@@ -191,28 +191,40 @@ export default function AppShell({
       <SessionKeepAlive />
       <SchoolModeBanner />
       <div className="flex-1 flex flex-row overflow-hidden min-h-0">
-        {/* Sidebar verticale (desktop / tablette) */}
-        <LeftRail
-          user={{ fullName: user.fullName, role: user.role }}
-          hiddenPaths={hiddenPaths}
-          headerTabs={headerTabs}
-          permissions={permSet}
-          onOpenMenu={() => setMenuOpen(true)}
-          onLogout={() => void logout()}
-          backOffice={backOffice}
-        />
+        {/* Sidebar verticale (desktop / tablette) — BACK-OFFICE uniquement.
+            Côté caisse (hors BO), la navigation est en barre HORIZONTALE
+            (TopBar) à toutes les tailles d'écran, y compris desktop : voir
+            plus bas, la TopBar n'est alors plus limitée au mobile. */}
+        {backOffice && (
+          <LeftRail
+            user={{ fullName: user.fullName, role: user.role }}
+            hiddenPaths={hiddenPaths}
+            headerTabs={headerTabs}
+            permissions={permSet}
+            onOpenMenu={() => setMenuOpen(true)}
+            onLogout={() => void logout()}
+            backOffice={backOffice}
+          />
+        )}
 
         <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-          {/* TopBar mobile uniquement — le rail vertical prend le relais dès md */}
-          <div className="md:hidden">
+          {/* TopBar : mobile uniquement en back-office (le rail vertical prend
+              le relais dès md) ; à TOUTES les tailles côté caisse (barre
+              horizontale, y compris desktop — c'est elle qui remplace le rail
+              vertical dans cette vue). */}
+          <div className={backOffice ? 'md:hidden' : ''}>
             <TopBar
               user={{ fullName: user.fullName, role: user.role }}
               hiddenPaths={hiddenPaths}
               headerTabs={headerTabs}
-              subscription={subscription}
+              // Pas de pastille abonnement côté caisse (comme l'ancien rail
+              // vertical) : à TOUTE taille d'écran maintenant que la TopBar
+              // s'affiche aussi en desktop hors BO, pas seulement sur mobile.
+              subscription={backOffice ? subscription : null}
               permissions={permSet}
               onOpenMenu={() => setMenuOpen(true)}
               onLogout={() => void logout()}
+              backOffice={backOffice}
             />
           </div>
 
