@@ -1617,7 +1617,11 @@ export default function CashRegister({
         onTouchEnd={(e) => onTouchEnd(e, 'open')}
       >
         <OfflineBanner />
-        <div className="pos-topbar relative flex items-center gap-2 px-3 md:px-5 h-[68px] shrink-0 border-b border-border bg-white">
+        <div className="pos-topbar relative flex items-center gap-2 px-3 md:px-5 py-2.5 shrink-0 border-b border-border bg-white">
+          {/* Hauteur des contrôles (h-11) et padding vertical (py-2.5) alignés
+              EXACTEMENT sur la ligne d'actions du ticket, pour que les deux
+              bordures basses (catalogue / ticket) se rejoignent au même
+              pixel de part et d'autre de la séparation verticale. */}
           {/* Barre de recherche VISIBLE : champ dès qu'ouverte, sinon une barre
               cliquable claire (pas une simple loupe). */}
           {searchOpen ? (
@@ -1628,7 +1632,7 @@ export default function CashRegister({
               <input
                 ref={searchRef}
                 autoFocus
-                className="input h-12 w-full pl-10 pr-10 text-base"
+                className="input h-11 w-full pl-10 pr-10 text-base"
                 placeholder="Rechercher / scanner…"
                 aria-label="Rechercher un article"
                 value={search}
@@ -1666,7 +1670,7 @@ export default function CashRegister({
               onClick={() => setSearchOpen(true)}
               title="Rechercher / scanner ( / )"
               aria-label="Rechercher un article"
-              className="flex-1 md:flex-none md:w-80 md:ml-auto min-h-[52px] h-12 rounded-xl border border-border bg-white hover:bg-gray-50 flex items-center gap-2 px-3.5 text-ink-soft text-base text-left transition-colors"
+              className="flex-1 md:flex-none md:w-80 md:ml-auto h-11 rounded-xl border border-border bg-white hover:bg-gray-50 flex items-center gap-2 px-3.5 text-ink-soft text-base text-left transition-colors"
             >
               <Icon name="search" size={20} />
               <span>Rechercher / scanner…</span>
@@ -1674,14 +1678,14 @@ export default function CashRegister({
           )}
           {/* Scanner caméra : uniquement sur mobile/tablette. */}
           <button
-            className="btn-ghost min-h-[52px] px-3.5 hidden [@media(pointer:coarse)]:inline-flex"
+            className="btn-ghost h-11 px-3.5 hidden [@media(pointer:coarse)]:inline-flex"
             onClick={() => setShowScanner(true)}
             title="Scanner code-barres / QR"
             aria-label="Scanner"
           >
             <Icon name="camera" size={24} />
           </button>
-          <button className="btn-soft min-h-[52px] px-5 text-base inline-flex items-center gap-1.5 whitespace-nowrap" onClick={() => setShowHeld(true)} title="F4" aria-label="Paniers en attente">
+          <button className="btn-soft h-11 px-5 text-base inline-flex items-center gap-1.5 whitespace-nowrap" onClick={() => setShowHeld(true)} title="F4" aria-label="Paniers en attente">
             <span className="hidden md:inline">Tickets en attente</span>
             <span className="md:hidden"><Icon name="pause" size={22} /></span>
             {heldCount > 0 && (
