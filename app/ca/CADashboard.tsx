@@ -566,7 +566,6 @@ function StoreTile({ store, colorIndex, onSelect }: {
       onClick={() => onSelect(store.store_id)}
       className="w-full flex items-center gap-3 text-left rounded-2xl bg-white border border-border p-4 hover:border-gray-300 transition-colors"
     >
-      <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: dot }} />
 
       <div className="min-w-0 flex-1">
         <div className="font-semibold truncate">{store.store_name}</div>
