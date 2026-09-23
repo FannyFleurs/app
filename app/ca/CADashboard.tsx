@@ -58,17 +58,16 @@ function periodDates(p: Period, from: string, to: string): { from: string; to: s
   return { from, to };
 }
 
-// Période de comparaison : même durée, immédiatement avant. Pour
-// "Aujourd'hui" ça donne hier ; pour une période plus longue, le bloc
-// équivalent qui précède directement.
+// Période de comparaison : même période, année N-1 (même jour/mois, un an
+// plus tôt), pas la période équivalente juste avant.
 function previousRange(from: string, to: string): { from: string; to: string } {
   const iso = (d: Date) => d.toISOString().slice(0, 10);
-  const fromD = new Date(`${from}T00:00:00`);
-  const toD = new Date(`${to}T00:00:00`);
-  const days = Math.round((toD.getTime() - fromD.getTime()) / 86_400_000) + 1;
-  const prevTo = new Date(fromD); prevTo.setDate(prevTo.getDate() - 1);
-  const prevFrom = new Date(prevTo); prevFrom.setDate(prevFrom.getDate() - (days - 1));
-  return { from: iso(prevFrom), to: iso(prevTo) };
+  const shiftYear = (s: string) => {
+    const d = new Date(`${s}T00:00:00`);
+    d.setFullYear(d.getFullYear() - 1);
+    return iso(d);
+  };
+  return { from: shiftYear(from), to: shiftYear(to) };
 }
 
 export default function CADashboard({
@@ -112,7 +111,7 @@ export default function CADashboard({
     if (storeId) qs.set('store_id', storeId);
     // CA par boutique : uniquement utile sur "Toutes les boutiques" (dès
     // qu'une boutique précise est choisie, la tuile disparaît, inutile
-    // d'appeler l'API). Comparaison vs la période équivalente précédente.
+    // d'appeler l'API). Comparaison vs N-1 (même période, un an plus tôt).
     const prev = previousRange(range.from, range.to);
     const qsByStore = new URLSearchParams({
       from: range.from, to: range.to, prev_from: prev.from, prev_to: prev.to,
@@ -371,7 +370,7 @@ function XzView({
       {!storeId && storeSummaries.length > 0 && (
         <div className="space-y-2">
           {storeSummaries.map((s, i) => (
-            <StoreTile key={s.store_id} store={s} colorIndex={i} period={period} onSelect={onSelectStore} />
+            <StoreTile key={s.store_id} store={s} colorIndex={i} onSelect={onSelectStore} />
           ))}
         </div>
       )}
@@ -557,12 +556,11 @@ function XzView({
 // couleurs arbitraires. Cycle si plus de boutiques que de couleurs.
 const STORE_DOT_COLORS = ['#013E37', '#B7791F', '#5C6F5D', '#1F3A5F', '#B5683E', '#7A3C6E'];
 
-function StoreTile({ store, colorIndex, period, onSelect }: {
-  store: StoreSummary; colorIndex: number; period: Period; onSelect: (id: string) => void;
+function StoreTile({ store, colorIndex, onSelect }: {
+  store: StoreSummary; colorIndex: number; onSelect: (id: string) => void;
 }) {
   const dot = STORE_DOT_COLORS[colorIndex % STORE_DOT_COLORS.length];
   const growth = store.growth_pct;
-  const growthLabel = period === 'today' ? 'vs hier' : 'vs période préc.';
   return (
     <button
       onClick={() => onSelect(store.store_id)}
@@ -585,7 +583,7 @@ function StoreTile({ store, colorIndex, period, onSelect }: {
           <div className={`mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${
             growth >= 0 ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'
           }`}>
-            {growth >= 0 ? '↗' : '↘'} {growth >= 0 ? '+' : ''}{growth} % {growthLabel}
+            {growth >= 0 ? '↗' : '↘'} {growth >= 0 ? '+' : ''}{growth} % vs N-1
           </div>
         )}
       </div>
