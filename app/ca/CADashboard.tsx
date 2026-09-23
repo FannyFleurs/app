@@ -367,12 +367,15 @@ function XzView({
           qu'une boutique précise est choisie, on retrouve l'affichage
           habituel (déjà filtré sur elle). 1 boutique dans l'organisation
           = 1 tuile pleine largeur, 2 = côte à côte, 3 et plus = 3 par ligne
-          max puis ça passe à la ligne suivante. */}
+          max puis ça passe à la ligne suivante — mais 3 colonnes sur un
+          écran de téléphone rendait chaque tuile trop étroite (chiffres et
+          nom de boutique tronqués/débordants) : on plafonne à 2 colonnes
+          tant que l'écran n'est pas au moins de taille tablette (sm:). */}
       {!storeId && storeSummaries.length > 0 && (
         <div className={`grid gap-3 ${
           storeSummaries.length <= 1 ? 'grid-cols-1'
           : storeSummaries.length === 2 ? 'grid-cols-2'
-          : 'grid-cols-3'
+          : 'grid-cols-2 sm:grid-cols-3'
         }`}>
           {storeSummaries.map((s, i) => (
             <StoreTile key={s.store_id} store={s} colorIndex={i} period={period} onSelect={onSelectStore} />
@@ -570,12 +573,14 @@ function StoreTile({ store, colorIndex, period, onSelect }: {
   return (
     <button
       onClick={() => onSelect(store.store_id)}
-      className="text-left rounded-2xl bg-white border border-border p-4 hover:border-gray-300 transition-colors"
+      className="h-full w-full text-left rounded-2xl bg-white border border-border p-4 hover:border-gray-300 transition-colors"
     >
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: dot }} />
-          <span className="font-semibold truncate">{store.store_name}</span>
+      {/* items-start (pas items-center) : les noms de boutique longs passent
+          sur 2 lignes au lieu d'être tronqués, sans désaligner le chevron. */}
+      <div className="flex items-start justify-between gap-1 mb-2">
+        <div className="flex items-start gap-2 min-w-0">
+          <span className="h-2.5 w-2.5 rounded-full shrink-0 mt-1" style={{ backgroundColor: dot }} />
+          <span className="font-semibold leading-tight">{store.store_name}</span>
         </div>
         <span className="text-ink-soft/50 shrink-0">›</span>
       </div>
