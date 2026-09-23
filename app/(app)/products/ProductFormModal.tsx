@@ -457,11 +457,13 @@ export default function ProductFormModal({
         ) : (
         <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.55fr)_minmax(360px,0.85fr)] gap-4">
 
-          {/* COLONNE PRINCIPALE */}
-          <div className="space-y-4">
+          {/* COLONNE PRINCIPALE — sections séparées par un simple trait
+              (divide-y), sans cadre ni fond distinct : cohérent avec le BO
+              neutre et compact. */}
+          <div className="divide-y divide-border">
 
             {/* 1. INFORMATIONS PRODUIT */}
-            <section className="rounded-2xl border border-border bg-white p-4 sm:p-5">
+            <section className="py-4 first:pt-0">
               <div className="mb-4 flex items-start gap-3">
                 <div>
                   <h3 className="font-semibold text-ink">1. Informations produit</h3>
@@ -594,7 +596,7 @@ export default function ProductFormModal({
             </section>
 
             {/* 2. PRIX ET MARGE */}
-            <section className="rounded-2xl border border-border bg-white p-4 sm:p-5">
+            <section className="py-4">
               <div className="mb-4 flex items-start gap-3">
                 <div>
                   <h3 className="font-semibold text-ink">2. Prix et marge</h3>
@@ -774,8 +776,8 @@ export default function ProductFormModal({
             </section>
 
             {/* 5. REFERENCES */}
-            <details className="group rounded-2xl border border-border bg-white">
-              <summary className="flex cursor-pointer list-none items-center justify-between p-4 sm:p-5">
+            <details className="group py-4">
+              <summary className="flex cursor-pointer list-none items-center justify-between">
                 <div className="flex items-start gap-3">
                   <div>
                     <h3 className="font-semibold text-ink">5. Références et codes-barres</h3>
@@ -787,7 +789,7 @@ export default function ProductFormModal({
                 <span className="text-xl text-ink-soft transition-transform group-open:rotate-180">⌄</span>
               </summary>
 
-              <div className="border-t border-border px-4 pb-5 pt-4 sm:px-5">
+              <div className="border-t border-border pt-4 mt-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <Field label="SKU">
                     <input
@@ -863,8 +865,8 @@ export default function ProductFormModal({
             </details>
 
             {/* OPTIONS AVANCEES */}
-            <details className="group rounded-2xl border border-border bg-white">
-              <summary className="flex cursor-pointer list-none items-center justify-between p-4 sm:p-5">
+            <details className="group py-4">
+              <summary className="flex cursor-pointer list-none items-center justify-between">
                 <div className="flex items-start gap-3">
                   <div>
                     <h3 className="font-semibold text-ink">Options avancées</h3>
@@ -876,7 +878,7 @@ export default function ProductFormModal({
                 <span className="text-xl text-ink-soft transition-transform group-open:rotate-180">⌄</span>
               </summary>
 
-              <div className="border-t border-border px-4 pb-5 pt-4 sm:px-5">
+              <div className="border-t border-border pt-4 mt-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <Check
                     label="Prix libre"
@@ -937,11 +939,11 @@ export default function ProductFormModal({
             </details>
           </div>
 
-          {/* COLONNE DROITE */}
-          <div className="space-y-4">
+          {/* COLONNE DROITE — même principe : traits de séparation, pas de cadre. */}
+          <div className="divide-y divide-border">
 
             {/* PHOTO */}
-            <section className="rounded-2xl border border-border bg-white p-4 sm:p-5">
+            <section className="py-4 first:pt-0">
               <h3 className="mb-3 font-semibold text-ink">Photo de l&apos;article</h3>
 
               <div className="flex flex-wrap items-center gap-4">
@@ -998,7 +1000,7 @@ export default function ProductFormModal({
             </section>
 
             {/* 3. STOCK */}
-            <section className="rounded-2xl border border-border bg-white p-4 sm:p-5">
+            <section className="py-4">
               <div className="mb-4 flex items-start gap-3">
                 <div>
                   <h3 className="font-semibold text-ink">3. Stock et disponibilité</h3>
@@ -1091,7 +1093,7 @@ export default function ProductFormModal({
             </section>
 
             {/* 4. AFFICHAGE CAISSE */}
-            <section className="rounded-2xl border border-border bg-white p-4 sm:p-5">
+            <section className="py-4">
               <div className="mb-4 flex items-start gap-3">
                 <div>
                   <h3 className="font-semibold text-ink">4. Affichage en caisse</h3>

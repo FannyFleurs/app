@@ -55,9 +55,9 @@ export default function LabelSettingsForm({ initial, canEdit }: {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-6">
-        <div className="space-y-5">
+        <div className="divide-y divide-border">
           {/* Format */}
-          <div className="card p-5 space-y-3">
+          <div className="py-4 first:pt-0 space-y-3">
             <h2 className="font-semibold">Format de l&apos;étiquette</h2>
             <div className="flex flex-wrap gap-2">
               {LABEL_SIZE_PRESETS.map((s) => {
@@ -89,7 +89,7 @@ export default function LabelSettingsForm({ initial, canEdit }: {
           </div>
 
           {/* Éléments */}
-          <div className="card p-5 space-y-3">
+          <div className="py-4 space-y-3">
             <h2 className="font-semibold">Éléments à imprimer</h2>
             <Check label="Nom de l'article" checked={form.show_name} disabled={!canEdit} onChange={(v) => set('show_name', v)} />
             <Check label="Référence (SKU)" checked={form.show_sku} disabled={!canEdit} onChange={(v) => set('show_sku', v)} />
@@ -101,7 +101,7 @@ export default function LabelSettingsForm({ initial, canEdit }: {
           </div>
 
           {/* Calage machine — distinct de la mise en page */}
-          <div className="card p-5 space-y-3">
+          <div className="py-4 space-y-3">
             <h2 className="font-semibold">Calage de l&apos;imprimante</h2>
             <p className="text-sm text-ink-soft">
               Si l&apos;impression tombe trop bas sur l&apos;étiquette — marge haute
@@ -127,7 +127,7 @@ export default function LabelSettingsForm({ initial, canEdit }: {
           </div>
 
           {/* Composition : ordre fixe, force relative réglable */}
-          <div className="card p-5 space-y-3">
+          <div className="py-4 space-y-3">
             <h2 className="font-semibold">Disposition</h2>
             <LabelEditor
               settings={form}
@@ -150,7 +150,7 @@ export default function LabelSettingsForm({ initial, canEdit }: {
             thermique ni au repli PDF : trois dessins pour une seule étiquette. */}
         <div className="lg:sticky lg:top-4 self-start">
           <div className="text-xs uppercase tracking-widest text-ink-soft font-semibold mb-2">Aperçu</div>
-          <div className="rounded-2xl border border-border bg-white p-4 grid place-items-center">
+          <div className="border-t border-border pt-3 grid place-items-center">
             <LabelPreview settings={form} product={SAMPLE} widthPx={220} />
           </div>
           <p className="mt-2 text-xs text-ink-soft">
