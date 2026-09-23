@@ -263,7 +263,7 @@ export default function CashRegister({
     swipeRef.current = null;
     const end = e.changedTouches[0];
     if (!start || !end) return;
-    // Un appui sur un bouton/lien du ticket (ex. « Annuler », « Vider ») peut,
+    // Un appui sur un bouton/lien du ticket (ex. « Annuler », « Remise ») peut,
     // avec le pouce, dériver de >60 px et être pris pour un swipe de fermeture :
     // le ticket glissait alors hors écran et la popup de confirmation
     // apparaissait par-dessus le catalogue. On ignore donc les gestes qui se
@@ -991,19 +991,6 @@ export default function CashRegister({
     setView({ kind: 'categories' });
     setSearch('');
     void refreshHeldCount();
-  }
-
-  // « Vider le panier » : retire les articles SANS annuler la vente. La vente
-  // brouillon reste ouverte (elle sera resynchronisée à vide par l'effet
-  // debounce) : aucun appel d'annulation, donc AUCUN ticket annulé n'est généré.
-  // On garde le client rattaché ; on annule seulement la fidélité portée au
-  // règlement (plus d'articles à couvrir).
-  function clearCart() {
-    setLines([]);
-    setCartComment('');
-    setLoyalty((cur) => ({ ...cur, used: 0, balance_euros: cur.balance_euros + cur.used }));
-    setView({ kind: 'categories' });
-    setSearch('');
   }
 
   // Ouverture manuelle du tiroir-caisse (sans vente). Le tiroir physique est
@@ -1820,64 +1807,48 @@ export default function CashRegister({
           ${mobileCartOpen ? 'translate-x-0' : 'translate-x-full md:translate-x-0'}
         `}
       >
-        {/* En-tête ticket : 2 lignes de boutons (max 3 par ligne).
-            Ligne 1 : Retour (mobile) · En attente · Annuler.
-            Ligne 2 : Remise · Commentaire (sous « En attente »). */}
-        <div className="px-3 py-2.5 shrink-0 border-b border-border space-y-2">
+        {/* En-tête ticket réduit à UNE seule ligne : Retour (mobile) ·
+            En attente (icône pause) · Remise · Commentaire · Tiroir (icônes
+            compactes) · Annuler (poussé à droite, seul à garder un libellé
+            — action destructive). */}
+        <div className="px-3 py-2.5 shrink-0 border-b border-border">
           <div className="flex items-center gap-2">
             <button
               onClick={() => setMobileCartOpen(false)}
-              className="md:hidden -ml-1 h-[56px] w-10 grid place-items-center text-ink-soft hover:text-ink text-2xl"
+              className="md:hidden -ml-1 h-11 w-10 shrink-0 grid place-items-center text-ink-soft hover:text-ink text-2xl"
               aria-label="Retour aux articles (glissez à droite)"
             >
               ←
             </button>
-            {/* « En attente » aligné à gauche ; « Annuler » poussé à droite. */}
+            {/* En attente — bouton compact icône (même famille que le tiroir). */}
             <button
               disabled={lines.length === 0 || !saleId}
               onClick={() => void holdSale()}
-              className="btn-soft text-base font-medium min-h-[56px] px-5 whitespace-nowrap mr-auto"
+              aria-label="Mettre ce ticket en attente"
               title="Mettre ce ticket en attente"
+              className="btn-soft h-11 w-11 shrink-0 grid place-items-center disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              En attente
+              <Icon name="pause" size={20} />
             </button>
-            {/* Vider : retire les articles sans annuler la vente (pas de ticket
-                annulé). Distinct de « Annuler » qui abandonne la vente. */}
-            <button
-              disabled={lines.length === 0}
-              onClick={async () => { setMobileCartOpen(true); if (await confirmThemed({ title: 'Vider le panier', message: 'Les articles seront retirés du panier.', confirmLabel: 'Vider', cancelLabel: 'Retour' })) clearCart(); }}
-              className="text-base min-h-[56px] px-5 rounded-xl font-medium whitespace-nowrap border border-border text-ink hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
-              title="Vider le panier (sans annuler la vente)"
-            >
-              Vider
-            </button>
-            {/* Action destructive : abandonne la vente en cours. */}
-            <button
-              disabled={lines.length === 0 && !saleId}
-              onClick={async () => { setMobileCartOpen(true); if (await confirmThemed({ title: 'Annuler ce ticket', message: 'La vente en cours sera définitivement abandonnée.', confirmLabel: 'Annuler le ticket', cancelLabel: 'Retour', danger: true })) void cancelTicket(); }}
-              className="text-base min-h-[56px] px-5 rounded-xl font-medium whitespace-nowrap border border-danger/40 text-danger hover:bg-danger/10 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
-              title="Annuler ce ticket"
-            >
-              <span aria-hidden className="text-lg leading-none">✕</span>
-              Annuler
-            </button>
-          </div>
-          <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
+            {/* Remise — compact icône. */}
             <button
               disabled={lines.length === 0}
               onClick={() => setCartActions('discount')}
-              className="btn-soft text-base font-medium min-h-[56px] px-5 whitespace-nowrap"
+              aria-label="Remise globale sur le ticket"
               title="Remise globale sur le ticket"
+              className="btn-soft h-11 w-11 shrink-0 grid place-items-center disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              Remise
+              <Icon name="discount" size={20} />
             </button>
+            {/* Commentaire — compact icône. */}
             <button
               disabled={lines.length === 0 && !saleId}
               onClick={() => setCartActions('comment')}
-              className="btn-soft text-base font-medium min-h-[56px] px-5 whitespace-nowrap"
+              aria-label="Ajouter un commentaire au ticket"
               title="Ajouter un commentaire au ticket"
+              className="btn-soft h-11 w-11 shrink-0 grid place-items-center disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              Commentaire
+              <Icon name="comment" size={20} />
             </button>
             {/* Ouverture tiroir — VOLONTAIREMENT DISCRÈTE : icône neutre, aucun
                 libellé texte ni infobulle explicite, pour ne pas signaler la
@@ -1887,18 +1858,29 @@ export default function CashRegister({
               onClick={() => void openDrawer()}
               disabled={drawerBusy}
               aria-label="Ouvrir le tiroir-caisse"
-              className="btn-soft min-h-[56px] px-4 inline-flex items-center justify-center text-ink-soft disabled:opacity-60"
+              className="btn-soft h-11 w-11 shrink-0 inline-flex items-center justify-center text-ink-soft disabled:opacity-60"
             >
               {drawerFlash ? (
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                   <path d="M20 6 9 17l-5-5" />
                 </svg>
               ) : (
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                   <rect x="3" y="5" width="18" height="14" rx="2" />
                   <line x1="9" y1="12" x2="15" y2="12" />
                 </svg>
               )}
+            </button>
+            {/* Action destructive : abandonne la vente en cours. Seule à garder
+                un libellé, poussée à droite. */}
+            <button
+              disabled={lines.length === 0 && !saleId}
+              onClick={async () => { setMobileCartOpen(true); if (await confirmThemed({ title: 'Annuler ce ticket', message: 'La vente en cours sera définitivement abandonnée.', confirmLabel: 'Annuler le ticket', cancelLabel: 'Retour', danger: true })) void cancelTicket(); }}
+              className="ml-auto h-11 px-4 shrink-0 rounded-xl text-sm font-medium whitespace-nowrap border border-danger/40 text-danger hover:bg-danger/10 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
+              title="Annuler ce ticket"
+            >
+              <span aria-hidden className="text-base leading-none">✕</span>
+              Annuler
             </button>
           </div>
         </div>
@@ -1925,7 +1907,6 @@ export default function CashRegister({
                   className="min-w-0 text-left hover:opacity-80 transition-opacity"
                   title="Ouvrir la fiche client (le panier est conservé)"
                 >
-                  <div className="text-[10px] uppercase tracking-wider text-ink-soft">Client · voir la fiche</div>
                   <div className="text-sm font-medium truncate underline decoration-dotted underline-offset-2">
                     {customer.display_name}
                   </div>
