@@ -1695,7 +1695,7 @@ export default function CashRegister({
             <Icon name="camera" size={24} />
           </button>
           <button className="btn-soft min-h-[52px] px-5 text-base inline-flex items-center gap-1.5 whitespace-nowrap" onClick={() => setShowHeld(true)} title="F4" aria-label="Paniers en attente">
-            <span className="hidden md:inline">En attente</span>
+            <span className="hidden md:inline">Tickets en attente</span>
             <span className="md:hidden"><Icon name="pause" size={22} /></span>
             {heldCount > 0 && (
               <span className="inline-flex items-center justify-center h-5 min-w-[1.25rem] px-1.5 rounded-full text-[11px] font-semibold accent-bar text-white">
@@ -1839,7 +1839,7 @@ export default function CashRegister({
               className="btn-soft text-base font-medium min-h-[56px] px-5 whitespace-nowrap mr-auto"
               title="Mettre ce ticket en attente"
             >
-              Mettre en attente
+              En attente
             </button>
             {/* Vider : retire les articles sans annuler la vente (pas de ticket
                 annulé). Distinct de « Annuler » qui abandonne la vente. */}
