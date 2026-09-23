@@ -365,15 +365,11 @@ function XzView({
       {/* CA par boutique — visible d'un coup d'œil, sans avoir à sélectionner
           une boutique à la fois. Seulement sur "Toutes les boutiques" : dès
           qu'une boutique précise est choisie, on retrouve l'affichage
-          habituel (déjà filtré sur elle). 1 boutique dans l'organisation
-          = 1 tuile pleine largeur, 2 = côte à côte, 3 et plus = 3 par ligne
-          max puis ça passe à la ligne suivante. */}
+          habituel (déjà filtré sur elle). Tuiles horizontales empilées,
+          toujours pleine largeur quel que soit le nombre de boutiques :
+          plus de risque de tuile trop étroite (chiffres/nom tronqués). */}
       {!storeId && storeSummaries.length > 0 && (
-        <div className={`grid gap-3 ${
-          storeSummaries.length <= 1 ? 'grid-cols-1'
-          : storeSummaries.length === 2 ? 'grid-cols-2'
-          : 'grid-cols-3'
-        }`}>
+        <div className="space-y-2">
           {storeSummaries.map((s, i) => (
             <StoreTile key={s.store_id} store={s} colorIndex={i} period={period} onSelect={onSelectStore} />
           ))}
@@ -570,29 +566,31 @@ function StoreTile({ store, colorIndex, period, onSelect }: {
   return (
     <button
       onClick={() => onSelect(store.store_id)}
-      className="text-left rounded-2xl bg-white border border-border p-4 hover:border-gray-300 transition-colors"
+      className="w-full flex items-center gap-3 text-left rounded-2xl bg-white border border-border p-4 hover:border-gray-300 transition-colors"
     >
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: dot }} />
-          <span className="font-semibold truncate">{store.store_name}</span>
+      <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: dot }} />
+
+      <div className="min-w-0 flex-1">
+        <div className="font-semibold truncate">{store.store_name}</div>
+        <div className="mt-0.5 text-xs text-ink-soft truncate">
+          {store.tickets_count} vente{store.tickets_count > 1 ? 's' : ''}
+          {' · '}Panier moyen {formatEUR(store.avg_ticket_ttc)}
+          {' · '}Marge HT {formatEUR(store.marge_ht)}
         </div>
-        <span className="text-ink-soft/50 shrink-0">›</span>
       </div>
-      <div className="text-2xl font-semibold tabular-nums leading-none">{formatEUR(store.ca_ttc)}</div>
-      <div className="mt-0.5 text-xs text-ink-soft">TTC</div>
-      <div className="mt-2 text-xs text-ink-soft space-y-0.5">
-        <div>{store.tickets_count} vente{store.tickets_count > 1 ? 's' : ''}</div>
-        <div>Panier moyen : {formatEUR(store.avg_ticket_ttc)}</div>
-        <div>Marge HT : {formatEUR(store.marge_ht)}</div>
+
+      <div className="text-right shrink-0">
+        <div className="text-lg font-semibold tabular-nums leading-none">{formatEUR(store.ca_ttc)}</div>
+        {growth !== null && (
+          <div className={`mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${
+            growth >= 0 ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'
+          }`}>
+            {growth >= 0 ? '↗' : '↘'} {growth >= 0 ? '+' : ''}{growth} % {growthLabel}
+          </div>
+        )}
       </div>
-      {growth !== null && (
-        <div className={`mt-2 inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold tabular-nums ${
-          growth >= 0 ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'
-        }`}>
-          {growth >= 0 ? '↗' : '↘'} {growth >= 0 ? '+' : ''}{growth} % {growthLabel}
-        </div>
-      )}
+
+      <span className="text-ink-soft/50 shrink-0">›</span>
     </button>
   );
 }
