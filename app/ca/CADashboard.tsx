@@ -6,7 +6,8 @@ import { formatEUR } from '@/lib/services/money';
 interface Store { id: string; name: string }
 interface StoreSummary {
   store_id: string; store_name: string;
-  ca_ttc: number; tickets_count: number; avg_ticket_ttc: number; marge_ht: number;
+  ca_ttc: number; tickets_count: number; avg_ticket_ttc: number;
+  marge_ht: number; marge_pct: number; items_sold: number;
   growth_pct: number | null;
 }
 interface Summary {
@@ -116,26 +117,31 @@ export default function CADashboard({
     const qsByStore = new URLSearchParams({
       from: range.from, to: range.to, prev_from: prev.from, prev_to: prev.to,
     });
+    // Détail (top ventes, vendeurs, TVA, remises, retours, CA par heure) :
+    // seulement utile quand une boutique précise est choisie — la vue
+    // "Toutes les boutiques" n'affiche plus que la tuile totale et les
+    // tuiles boutiques, inutile de charger le reste.
+    const detailNeeded = !!storeId;
     try {
       const [rS, rBS, rH, rP, rV, rT, rD, rR] = await Promise.all([
         fetch(`/api/ca/summary?${qs.toString()}`),
         storeId ? null : fetch(`/api/ca/summary-by-store?${qsByStore.toString()}`),
-        fetch(`/api/ca/hourly?${qs.toString()}`),
-        fetch(`/api/ca/products?${qs.toString()}&sort=ca_ttc&order=desc&limit=100`),
-        fetch(`/api/ca/vendors?${qs.toString()}`),
-        fetch(`/api/ca/tva?${qs.toString()}`),
-        fetch(`/api/ca/discounts?${qs.toString()}`),
-        fetch(`/api/ca/returns?${qs.toString()}`),
+        detailNeeded ? fetch(`/api/ca/hourly?${qs.toString()}`) : null,
+        detailNeeded ? fetch(`/api/ca/products?${qs.toString()}&sort=ca_ttc&order=desc&limit=100`) : null,
+        detailNeeded ? fetch(`/api/ca/vendors?${qs.toString()}`) : null,
+        detailNeeded ? fetch(`/api/ca/tva?${qs.toString()}`) : null,
+        detailNeeded ? fetch(`/api/ca/discounts?${qs.toString()}`) : null,
+        detailNeeded ? fetch(`/api/ca/returns?${qs.toString()}`) : null,
       ]);
       if (rS.ok) setSummary(await rS.json());
       if (rBS?.ok) setStoreSummaries((await rBS.json()).stores);
       else if (!rBS) setStoreSummaries([]);
-      if (rH.ok) setHours((await rH.json()).hours);
-      if (rP.ok) setProducts((await rP.json()).products);
-      if (rV.ok) setVendors((await rV.json()).vendors);
-      if (rT.ok) setTva((await rT.json()).tva);
-      if (rD.ok) setDiscounts(await rD.json());
-      if (rR.ok) setReturnsInfo(await rR.json());
+      if (rH?.ok) setHours((await rH.json()).hours); else if (!rH) setHours([]);
+      if (rP?.ok) setProducts((await rP.json()).products); else if (!rP) setProducts([]);
+      if (rV?.ok) setVendors((await rV.json()).vendors); else if (!rV) setVendors([]);
+      if (rT?.ok) setTva((await rT.json()).tva); else if (!rT) setTva([]);
+      if (rD?.ok) setDiscounts(await rD.json()); else if (!rD) setDiscounts(null);
+      if (rR?.ok) setReturnsInfo(await rR.json()); else if (!rR) setReturnsInfo(null);
       setRefreshedAt(new Date());
     } finally {
       setLoading(false);
@@ -369,12 +375,18 @@ function XzView({
           plus de risque de tuile trop étroite (chiffres/nom tronqués). */}
       {!storeId && storeSummaries.length > 0 && (
         <div className="space-y-2">
-          {storeSummaries.map((s, i) => (
-            <StoreTile key={s.store_id} store={s} colorIndex={i} onSelect={onSelectStore} />
+          {storeSummaries.map((s) => (
+            <StoreTile key={s.store_id} store={s} onSelect={onSelectStore} />
           ))}
         </div>
       )}
 
+      {/* Détail (KPIs globaux, top ventes, vendeurs, remises, TVA, retours,
+          CA par heure) : uniquement quand une boutique précise est
+          sélectionnée. Sur "Toutes les boutiques", seules la tuile totale et
+          les tuiles boutiques ci-dessus restent affichées. */}
+      {storeId && (
+      <>
       {/* 2 KPIs */}
       <div className="grid grid-cols-2 gap-3">
         <StatCard label="Nb de ventes"
@@ -541,6 +553,8 @@ function XzView({
           </table>
         </div>
       )}
+      </>
+      )}
 
       <div className="text-center text-xs text-ink-soft pt-2">
         {refreshedAt
@@ -551,43 +565,53 @@ function XzView({
   );
 }
 
-// Palette de puces couleur par boutique : reprend des teintes des thèmes de
-// marque existants, pour rester dans l'identité HelloPos plutôt que des
-// couleurs arbitraires. Cycle si plus de boutiques que de couleurs.
-const STORE_DOT_COLORS = ['#013E37', '#B7791F', '#5C6F5D', '#1F3A5F', '#B5683E', '#7A3C6E'];
-
-function StoreTile({ store, colorIndex, onSelect }: {
-  store: StoreSummary; colorIndex: number; onSelect: (id: string) => void;
+function StoreTile({ store, onSelect }: {
+  store: StoreSummary; onSelect: (id: string) => void;
 }) {
-  const dot = STORE_DOT_COLORS[colorIndex % STORE_DOT_COLORS.length];
   const growth = store.growth_pct;
   return (
     <button
       onClick={() => onSelect(store.store_id)}
-      className="w-full flex items-center gap-3 text-left rounded-2xl bg-white border border-border p-4 hover:border-gray-300 transition-colors"
+      className="w-full text-left rounded-2xl bg-white border border-border p-5 hover:border-gray-300 transition-colors"
     >
+      <div className="flex items-center gap-3">
+        <span className="font-semibold truncate flex-1 min-w-0">{store.store_name}</span>
 
-      <div className="min-w-0 flex-1">
-        <div className="font-semibold truncate">{store.store_name}</div>
-        <div className="mt-0.5 text-xs text-ink-soft truncate">
-          {store.tickets_count} vente{store.tickets_count > 1 ? 's' : ''}
-          {' · '}P.M. {formatEUR(store.avg_ticket_ttc)}
+        <div className="text-right shrink-0">
+          <div className="text-xl font-semibold tabular-nums leading-none">{formatEUR(store.ca_ttc)}</div>
+          <div className="mt-0.5 text-[11px] text-ink-soft">TTC</div>
         </div>
+
+        <span className="text-ink-soft/50 shrink-0">›</span>
       </div>
 
-      <div className="text-right shrink-0">
-        <div className="text-lg font-semibold tabular-nums leading-none">{formatEUR(store.ca_ttc)}</div>
-        {growth !== null && (
-          <div className={`mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${
-            growth >= 0 ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'
-          }`}>
-            {growth >= 0 ? '↗' : '↘'} {growth >= 0 ? '+' : ''}{growth} % vs N-1
-          </div>
-        )}
-      </div>
+      {growth !== null && (
+        <div className={`mt-3 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${
+          growth >= 0 ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'
+        }`}>
+          {growth >= 0 ? '↗' : '↘'} {growth >= 0 ? '+' : ''}{growth} % vs N-1
+        </div>
+      )}
 
-      <span className="text-ink-soft/50 shrink-0">›</span>
+      {/* Détail par boutique : rempli le vide laissé par les KPIs globaux et
+          l'historique retirés de la vue "Toutes les boutiques". Pas de
+          Marge HT ici (retirée volontairement de la tuile). */}
+      <div className="mt-4 pt-4 border-t border-border grid grid-cols-3 gap-3">
+        <MiniStat label="Ventes" value={String(store.tickets_count)} />
+        <MiniStat label="Panier moyen" value={formatEUR(store.avg_ticket_ttc)} />
+        <MiniStat label="Articles vendus" value={String(store.items_sold)} />
+      </div>
     </button>
+  );
+}
+
+function MiniStat({ label, value, hint }: { label: string; value: string; hint?: string }) {
+  return (
+    <div>
+      <div className="text-[11px] text-ink-soft">{label}</div>
+      <div className="text-sm font-semibold tabular-nums">{value}</div>
+      {hint && <div className="text-[11px] text-ink-soft tabular-nums">{hint}</div>}
+    </div>
   );
 }
 
