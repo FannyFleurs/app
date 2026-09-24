@@ -52,10 +52,11 @@ export async function GET(req: Request) {
     [orgId, from, to],
   );
 
-  const margin = await query<{ store_id: string; revenue_ht: string; cost_ht: string }>(
+  const margin = await query<{ store_id: string; revenue_ht: string; cost_ht: string; items_sold: string }>(
     `SELECT s.store_id::text AS store_id,
             COALESCE(SUM(sl.line_ht), 0)::text AS revenue_ht,
-            COALESCE(SUM(COALESCE(p.purchase_price_ht, 0) * sl.quantity), 0)::text AS cost_ht
+            COALESCE(SUM(COALESCE(p.purchase_price_ht, 0) * sl.quantity), 0)::text AS cost_ht,
+            COALESCE(SUM(sl.quantity), 0)::text AS items_sold
        FROM sale_lines sl
        JOIN sales s ON s.id = sl.sale_id
        LEFT JOIN products p ON p.id = sl.product_id
@@ -91,6 +92,8 @@ export async function GET(req: Request) {
     const revenue_ht = m ? Number(m.revenue_ht) : 0;
     const cost_ht = m ? Number(m.cost_ht) : 0;
     const marge_ht = Number((revenue_ht - cost_ht).toFixed(2));
+    const marge_pct = revenue_ht > 0 ? Number(((marge_ht / revenue_ht) * 100).toFixed(1)) : 0;
+    const items_sold = m ? Number(m.items_sold) : 0;
     const avg_ticket_ttc = tickets_count > 0 ? Number((ca_ttc / tickets_count).toFixed(2)) : 0;
     const prevCa = prevCaByStore.get(st.id) ?? null;
     const growth_pct = prevCa !== null && prevCa > 0
@@ -103,6 +106,8 @@ export async function GET(req: Request) {
       tickets_count,
       avg_ticket_ttc,
       marge_ht,
+      marge_pct,
+      items_sold,
       growth_pct,
     };
   });
