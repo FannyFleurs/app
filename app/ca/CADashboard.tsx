@@ -269,11 +269,20 @@ function TopBar({
       style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 0.75rem)' }}
     >
       {/* Logo, sans fond (transparent sur blanc) — hauteur fixe, largeur
-          automatique pour rester lisible (logo « wordmark »). */}
+          automatique pour rester lisible (logo « wordmark »). Cliquable :
+          revient sur "Toutes les boutiques" (raccourci pour sortir du
+          filtre boutique sans passer par le sélecteur). */}
       {/* Pas de monogramme « H » : uniquement le logo configuré. */}
       {logoUrl && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={logoUrl} alt={orgName} className="h-11 w-auto max-w-[150px] object-contain shrink-0" />
+        <button
+          type="button"
+          onClick={() => onStoreChange('')}
+          aria-label="Toutes les boutiques"
+          className="shrink-0"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={logoUrl} alt={orgName} className="h-11 w-auto max-w-[150px] object-contain" />
+        </button>
       )}
 
       <div className="flex-1 min-w-0">
