@@ -375,8 +375,8 @@ function XzView({
           plus de risque de tuile trop étroite (chiffres/nom tronqués). */}
       {!storeId && storeSummaries.length > 0 && (
         <div className="space-y-2">
-          {storeSummaries.map((s) => (
-            <StoreTile key={s.store_id} store={s} onSelect={onSelectStore} />
+          {storeSummaries.map((s, i) => (
+            <StoreTile key={s.store_id} store={s} colorIndex={i} onSelect={onSelectStore} />
           ))}
         </div>
       )}
@@ -565,9 +565,15 @@ function XzView({
   );
 }
 
-function StoreTile({ store, onSelect }: {
-  store: StoreSummary; onSelect: (id: string) => void;
+// Palette de puces couleur par boutique : reprend des teintes des thèmes de
+// marque existants, pour rester dans l'identité HelloPos plutôt que des
+// couleurs arbitraires. Cycle si plus de boutiques que de couleurs.
+const STORE_DOT_COLORS = ['#013E37', '#B7791F', '#5C6F5D', '#1F3A5F', '#B5683E', '#7A3C6E'];
+
+function StoreTile({ store, colorIndex, onSelect }: {
+  store: StoreSummary; colorIndex: number; onSelect: (id: string) => void;
 }) {
+  const dot = STORE_DOT_COLORS[colorIndex % STORE_DOT_COLORS.length];
   const growth = store.growth_pct;
   return (
     <button
@@ -575,11 +581,11 @@ function StoreTile({ store, onSelect }: {
       className="w-full text-left rounded-2xl bg-white border border-border p-5 hover:border-gray-300 transition-colors"
     >
       <div className="flex items-center gap-3">
+        <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: dot }} />
         <span className="font-semibold truncate flex-1 min-w-0">{store.store_name}</span>
 
         <div className="text-right shrink-0">
           <div className="text-xl font-semibold tabular-nums leading-none">{formatEUR(store.ca_ttc)}</div>
-          <div className="mt-0.5 text-[11px] text-ink-soft">TTC</div>
         </div>
 
         <span className="text-ink-soft/50 shrink-0">›</span>
