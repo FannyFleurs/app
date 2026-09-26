@@ -53,7 +53,15 @@ function isStaticOrApi(pathname: string): boolean {
     pathname === '/favicon.ico' ||
     pathname === '/robots.txt' ||
     pathname === '/sitemap.xml' ||
-    pathname.startsWith('/manifest') // /manifest.json ET /manifest-ca.json
+    pathname.startsWith('/manifest') || // /manifest.json ET /manifest-ca.json
+    // Widget public de vente de cartes cadeaux (étape 6, public/gift-cards/
+    // widget/…) : fichier STATIQUE qu'un site tiers charge par <script src>
+    // depuis N'IMPORTE quel domaine/sous-domaine HelloPos. Sans ce
+    // pass-through, sur un vrai domaine, l'apex redirigerait tout chemin non
+    // reconnu vers app.<domaine> (voir plus bas) — un aller-retour inutile
+    // pour un simple chargement de script, identique au traitement déjà
+    // réservé à /icons, /manifest, etc.
+    pathname.startsWith('/gift-cards/widget')
   );
 }
 

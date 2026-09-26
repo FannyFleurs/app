@@ -1,7 +1,12 @@
 # API publique — Cartes cadeaux en ligne
 
-> Statut : étape 5/N. Cycle complet désormais opérationnel, distribution
-> par email incluse :
+> Pour le widget public d'intégration (étape 6, `<hellopos-gift-card>`,
+> `public/gift-cards/widget/v1/embed.js`) qui consomme ce contrat, voir
+> `docs/gift-card-widget.md`. Ce document-ci reste le contrat API seul, sans
+> détail d'intégration front-end.
+
+> Statut : étape 6/N. Cycle complet désormais opérationnel, distribution
+> par email incluse, widget public d'intégration disponible :
 >
 > ```
 > POST /checkout  →  online_gift_card_order (pending, delivery_mode figé)
