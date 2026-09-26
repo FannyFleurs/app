@@ -1711,6 +1711,7 @@ export default function CashRegister({
                   <button
                     onClick={() => setView({ kind: 'categories' })}
                     className={`card ${metrics.padding} hover:shadow-md hover:border-gray-300 transition-all active:scale-[0.98] aspect-[5/3] grid place-items-center text-center`}
+                    style={{ backgroundColor: 'var(--primary-soft)' }}
                     aria-label="Retour aux catégories"
                   >
                     <div className="flex flex-col items-center justify-center gap-1.5">

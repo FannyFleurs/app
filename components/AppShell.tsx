@@ -14,7 +14,7 @@ import type { Role, Permission } from '@/lib/auth/rbac';
 import { BRAND_THEME, type AutoLogoutMode } from '@/lib/settings/pos-ui';
 import { readUiScale, UI_SCALE_KEY, UI_SCALE_EVENT, UI_SCALE_DEFAULT } from '@/lib/ui/ui-scale';
 
-interface User { id: string; fullName: string; role: Role; email: string }
+interface User { id: string; fullName: string; role: Role; email: string; color?: string | null }
 
 export interface SubscriptionInfo {
   plan: string;
@@ -214,7 +214,7 @@ export default function AppShell({
               vertical dans cette vue). */}
           <div className={backOffice ? 'md:hidden' : ''}>
             <TopBar
-              user={{ fullName: user.fullName, role: user.role }}
+              user={{ fullName: user.fullName, role: user.role, color: user.color }}
               hiddenPaths={hiddenPaths}
               headerTabs={headerTabs}
               // Pas de pastille abonnement côté caisse (comme l'ancien rail

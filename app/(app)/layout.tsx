@@ -30,6 +30,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const user = await readSessionFromCookie();
   if (!user) redirect(backOffice ? '/bo/login' : '/login');
 
+  // Couleur de l'avatar (users.color) : même monogramme que la page de
+  // connexion PIN. Silencieux si migration 0022 absente.
+  let userColor: string | null = null;
+  try {
+    const colorRes = await query<{ color: string | null }>(
+      `SELECT color FROM users WHERE id = $1`,
+      [user.id],
+    );
+    userColor = colorRes.rows[0]?.color ?? null;
+  } catch { /* migration 0022 absente : pas de couleur */ }
+
   // Gate d'accès facturation : une org "incomplete" (paiement non
   // finalisé) ou dont l'abonnement est résilié/expiré n'accède pas à
   // l'app. Silencieux si migration 0030 absente. super_admin exempté.
@@ -117,7 +128,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           jamais sur une caisse de vente — important en multi-boutique. */}
       {backOffice && <SupportConsentGate role={user.role} />}
       <AppShell
-        user={{ id: user.id, fullName: user.fullName, role: user.role, email: user.email }}
+        user={{ id: user.id, fullName: user.fullName, role: user.role, email: user.email, color: userColor }}
         hiddenPaths={hiddenPaths}
         autoLogoutMode={ui.auto_logout_mode}
         autoLogoutMinutes={ui.auto_logout_minutes}
