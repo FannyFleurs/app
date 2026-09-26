@@ -1,15 +1,29 @@
 # API publique — Cartes cadeaux en ligne
 
-> Statut : étape 3/N. `GET /config` (étape 2) ne fait que lire la
-> configuration. `POST /checkout` (étape 3, ci-dessous) crée une session de
-> paiement Stripe — **mais aucune carte cadeau n'est créée par cette route,
-> à aucun moment.** Ni la création de la session, ni le navigateur atteignant
-> la page de succès, ni rien d'observable côté client ne fait foi : seul un
-> futur webhook Stripe signé (étape 4), après confirmation serveur-à-serveur
-> du paiement, aura le droit de faire émettre une carte (via
-> `GiftCardService`, non modifié par cette étape). Voir
+> Statut : étape 4/N. Cycle complet désormais opérationnel :
+>
+> ```
+> POST /checkout  →  online_gift_card_order (pending)  →  Stripe Checkout
+>       →  paiement  →  webhook Stripe  →  validation serveur
+>       →  online_gift_card_order (issued)  →  gift_card HelloPos émise
+>       →  carte disponible dans TOUTES les boutiques de l'organisation
+> ```
+>
+> **La redirection `success_url` ne constitue JAMAIS une preuve de paiement
+> et n'émet JAMAIS la carte cadeau.** Ni la création de la session, ni le
+> navigateur atteignant la page de succès, ni rien d'observable côté client
+> ne fait foi : seul le webhook Stripe signé (§ « Webhook et émission »
+> ci-dessous), après confirmation serveur-à-serveur du paiement, a le droit
+> de faire émettre une carte — via `GiftCardService`, le système de cartes
+> cadeaux HelloPos **existant** (non dupliqué, non remplacé). Voir
 > `lib/settings/online-gift-cards.ts` pour la configuration côté admin
 > (Paramètres → Cartes cadeaux en ligne).
+>
+> **Acheteur ≠ bénéficiaire** : `buyer` est la personne qui achète et paie
+> (confirmation d'achat, étape ultérieure) ; `recipient` est la personne qui
+> reçoit et utilise la carte. La `gift_card` émise appartient à
+> l'`organization_id` de la commande et son titulaire est **`recipient.name`**
+> — jamais `buyer.name`.
 
 ## `GET /api/public/gift-cards/config?key=hp_gc_...`
 
@@ -294,3 +308,153 @@ if (res.ok) {
   window.location.href = checkout_url; // redirige vers Stripe Checkout
 }
 ```
+
+## Webhook et émission (étape 4)
+
+`POST /api/webhooks/stripe` — webhook Stripe **existant** de HelloPos
+(orders/sales), étendu pour reconnaître aussi les paiements de cartes
+cadeaux en ligne. Pas de nouvelle route : même signature, même
+multi-tenant (le `webhook_secret` vérifié est celui de l'organisation
+désignée par `metadata.organization_id`), mêmes principes.
+
+### Reconnaissance de l'événement
+
+Le webhook ne traite comme carte cadeau en ligne que les événements portant
+**explicitement** :
+
+```
+metadata.hello_pos_type === "online_gift_card"
+metadata.gift_card_order_id
+metadata.organization_id
+```
+
+Tout événement sans ce tag (`orders`/`sales` existants, ou tout événement
+Stripe non lié à HelloPos) suit exactement le traitement **inchangé**
+d'avant cette étape.
+
+Événements écoutés pour les cartes cadeaux :
+- `checkout.session.completed` → tente l'émission (voir ci-dessous).
+- `checkout.session.expired` → marque la commande `expired` (aucune carte).
+
+`payment_intent.payment_failed` n'est **pas** traité pour les cartes
+cadeaux : la Checkout Session n'est créée qu'avec `payment_method_types:
+['card']` (voir étape 3), un mode de paiement synchrone — un refus de carte
+laisse simplement l'acheteur sur la page Stripe pour réessayer ; en cas
+d'abandon, la session expire normalement (`checkout.session.expired`). Si
+un futur moyen de paiement asynchrone était ajouté, cet événement devrait
+être réévalué.
+
+### Validations avant émission
+
+Aucune confiance dans le navigateur, ni dans les seules metadata Stripe :
+avant d'émettre quoi que ce soit, le webhook (via
+`lib/services/online-gift-card-fulfillment.ts::fulfillOnlineGiftCardCheckout`)
+recoupe **tout** avec la commande `online_gift_card_orders` persistée à
+l'étape 3 :
+
+| Vérification | Contre |
+|---|---|
+| Signature Stripe (HMAC) | `webhook_secret` de l'organisation — inchangé, existant |
+| `organization_id` (metadata) | `organization_id` de la commande |
+| `id` de la session Stripe | `stripe_checkout_session_id` de la commande |
+| `amount_total` (centimes) | `amount_cents` de la commande |
+| `currency` | `currency` de la commande |
+| `payment_status` | doit valoir exactement `"paid"` — `checkout.session.completed` seul ne suffit jamais |
+| statut de la commande | doit être `pending` (sinon : idempotence, voir plus bas) |
+
+La moindre incohérence ⇒ **aucune carte émise**, erreur journalisée
+serveur (jamais de secret ni détail Stripe exposé), le webhook répond
+quand même `200` à Stripe (rien à retenter, l'anomalie ne se résoudra pas
+en réessayant).
+
+### Idempotence — 1 paiement = 1 carte, garanti
+
+Stripe peut renvoyer le même événement plusieurs fois (webhook dupliqué,
+retry après un timeout applicatif, deux workers serverless recevant
+l'événement en parallèle). Une simple vérification `if (!order.gift_card_id)`
+puis un `INSERT` ne suffit **pas** en concurrence — l'émission est donc
+garantie par verrouillage de ligne, pas par une relecture non protégée :
+
+1. `SELECT * FROM online_gift_card_orders WHERE id = $1 FOR UPDATE` — dans
+   une transaction. Un second traitement **concurrent** de la même commande
+   attend ici la fin du premier avant de continuer.
+2. Si `status ≠ 'pending'` (déjà `issued`, ou tout autre statut terminal) :
+   on s'arrête, aucune carte créée — que ce traitement soit un rejeu,
+   un retry Stripe, ou le second d'une paire concurrente.
+3. Sinon : `GiftCardService.create(...)` (DANS la même transaction, même
+   client) puis `UPDATE online_gift_card_orders SET status='issued',
+   gift_card_id=..., paid_at=now(), stripe_payment_intent_id=...` — un
+   échec de l'une annule l'autre (COMMIT/ROLLBACK atomique) : jamais de
+   carte orpheline si le processus s'arrête entre les deux.
+
+En complément, une contrainte **UNIQUE** en base
+(`online_gift_card_orders.gift_card_id`, migration 0081) empêche, au
+niveau du SGBD lui-même, qu'une carte soit un jour rattachée à deux
+commandes — une garantie qui ne dépend pas de la bonne exécution du code
+applicatif.
+
+### Émission — réutilisation du système existant
+
+Aucun second moteur de cartes cadeaux : l'émission passe par
+`GiftCardService.create` (`lib/services/gift-card-service.ts`), **le même
+service qu'une vente en caisse** — mêmes tables (`gift_cards`,
+`gift_card_movements`), même génération de code (EAN-13, préfixe interne
+`29`, scannable), mêmes écrans de gestion, même recherche/encaissement.
+Deux évolutions minimes du service, rétrocompatibles :
+- `userId` accepte désormais `null` (émission automatique, sans
+  utilisateur HelloPos humain à l'origine — la colonne `user_id` de
+  `gift_card_movements` était déjà nullable) ;
+- un `client` de transaction déjà ouvert peut être injecté, pour que
+  l'émission participe à la MÊME transaction atomique que le verrouillage/
+  la mise à jour de la commande ci-dessus (sinon, `GiftCardService.create`
+  ouvre sa propre transaction comme avant — comportement inchangé pour
+  tous les appels existants, en caisse comme ailleurs).
+
+**Mapping buyer/recipient → carte.** `gift_cards` n'a pas de colonne
+« recipient » dédiée : ses seuls champs de nom/contact libres s'appellent
+`buyer_name`/`buyer_email` (hérités du flux caisse, où qui achète EST le
+titulaire de la carte). Pour une carte vendue en ligne, ce sont
+**`recipient.name`/`recipient.email`** de la commande qui sont placés dans
+ces champs — jamais `buyer.name`/`buyer.email` (qui restent uniquement sur
+`online_gift_card_orders`, pour la traçabilité de l'achat). Concrètement :
+
+```
+online_gift_card_orders.recipient_name   →  gift_cards.buyer_name   (titulaire affiché)
+online_gift_card_orders.recipient_email  →  gift_cards.buyer_email
+online_gift_card_orders.amount_cents/100 →  gift_cards.initial_amount / balance
+online_gift_card_orders.organization_id  →  gift_cards.organization_id
+                            (aucun store_id : la carte appartient à
+                             l'organisation, utilisable dans toutes ses
+                             boutiques — exactement comme une carte vendue
+                             en caisse)
+```
+
+La carte est créée **`active`**, immédiatement utilisable en caisse dans
+n'importe laquelle des boutiques de l'organisation (le modèle `gift_cards`
+n'a jamais eu de notion de boutique — ni pour les cartes vendues en
+caisse, ni pour celles vendues en ligne : rien n'a changé de ce côté).
+
+### `online_gift_card_orders` après émission
+
+| Colonne | Valeur après émission réussie |
+|---|---|
+| `status` | `'issued'` |
+| `gift_card_id` | id de la carte créée |
+| `paid_at` | horodatage de la confirmation Stripe |
+| `stripe_payment_intent_id` | PaymentIntent Stripe (si fourni par la session) |
+
+`buyer_name`/`buyer_email`, `recipient_name`/`recipient_email`, `message`,
+`amount_cents`, `public_reference`, `stripe_checkout_session_id` restent
+inchangés et disponibles pour la traçabilité — rien n'est écrasé ni
+supprimé par l'émission.
+
+### Migration 0081
+
+```sql
+ALTER TABLE online_gift_card_orders
+  ADD CONSTRAINT online_gift_card_orders_gift_card_id_key UNIQUE (gift_card_id);
+```
+
+Défense en profondeur (voir « Idempotence » ci-dessus) — n'affecte aucune
+carte cadeau existante, aucune commande existante (contrainte ajoutée sur
+une colonne déjà nullable, `NULL` restant autorisé plusieurs fois).

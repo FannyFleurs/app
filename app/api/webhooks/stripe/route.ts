@@ -2,13 +2,16 @@ import { NextResponse } from 'next/server';
 import crypto from 'node:crypto';
 import { query } from '@/lib/db/client';
 import { STRIPE_KEY, mergeStripeDefaults, type StripeSettings } from '@/lib/settings/stripe';
+import { fulfillOnlineGiftCardCheckout, markOnlineGiftCardOrderExpired } from '@/lib/services/online-gift-card-fulfillment';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 /**
  * Webhook Stripe : reçoit les notifications d'événements (paiement réussi,
- * échec, expiration de session…) et met à jour orders.payment_status.
+ * échec, expiration de session…) et met à jour orders.payment_status /
+ * sales.payment_status / online_gift_card_orders (émission de carte cadeau,
+ * étape 4 — voir docs/api-public-gift-cards.md).
  *
  * URL à configurer dans Stripe Dashboard → Webhooks :
  *   POST https://VOTRE-DOMAINE/api/webhooks/stripe
@@ -30,17 +33,29 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'INVALID_JSON' }, { status: 400 });
   }
 
-  // Récupère l'organisation et la cible (order OU sale) depuis metadata
+  // Récupère l'organisation et la cible (order, sale, OU commande carte
+  // cadeau en ligne) depuis metadata.
   const sessionObj = event.data?.object as {
     id?: string;
-    metadata?: { organization_id?: string; order_id?: string; sale_id?: string };
+    metadata?: {
+      organization_id?: string; order_id?: string; sale_id?: string;
+      hello_pos_type?: string; gift_card_order_id?: string;
+    };
     payment_status?: string;
+    amount_total?: number;
+    currency?: string;
+    payment_intent?: string;
   };
   const orgId = sessionObj?.metadata?.organization_id;
   const orderId = sessionObj?.metadata?.order_id;
   const saleId = sessionObj?.metadata?.sale_id;
-  if (!orgId || (!orderId && !saleId)) {
-    // Pas d'orga / cible dans la metadata : on ignore poliment
+  // Tag explicite requis (pas seulement la présence de l'id) : ce webhook ne
+  // doit reconnaître QUE les événements HelloPos de cartes cadeaux en ligne.
+  const giftCardOrderId = sessionObj?.metadata?.hello_pos_type === 'online_gift_card'
+    ? sessionObj?.metadata?.gift_card_order_id
+    : undefined;
+  if (!orgId || (!orderId && !saleId && !giftCardOrderId)) {
+    // Pas d'orga / cible reconnue dans la metadata : on ignore poliment
     return NextResponse.json({ ok: true, ignored: true });
   }
 
@@ -54,10 +69,39 @@ export async function POST(req: Request) {
   // Validation de la signature Stripe (HMAC SHA256) — OBLIGATOIRE.
   // Sans secret configuré ou sans en-tête de signature, on refuse : sinon un
   // acteur malveillant pourrait POSTer un faux événement « paid » sans
-  // signature et marquer une vente/commande comme payée gratuitement.
+  // signature et marquer une vente/commande comme payée gratuitement (ou,
+  // ici, faire émettre une carte cadeau gratuitement).
   if (!cfg.webhook_secret || !sigHeader
       || !verifyStripeSignature(raw, sigHeader, cfg.webhook_secret)) {
     return NextResponse.json({ error: 'INVALID_SIGNATURE' }, { status: 400 });
+  }
+
+  // --- Carte cadeau en ligne (étape 4) : chemin dédié, isolé de la logique
+  //     orders/sales ci-dessous (inchangée). La signature étant déjà
+  //     vérifiée ci-dessus, ce bloc est le seul endroit du projet autorisé à
+  //     émettre une carte suite à un paiement en ligne. ---
+  if (giftCardOrderId && sessionObj.id) {
+    if (event.type === 'checkout.session.completed') {
+      const outcome = await fulfillOnlineGiftCardCheckout({
+        organizationId: orgId,
+        giftCardOrderId,
+        stripeSessionId: sessionObj.id,
+        paymentStatus: sessionObj.payment_status,
+        amountTotalCents: sessionObj.amount_total,
+        currency: sessionObj.currency,
+        paymentIntentId: sessionObj.payment_intent ?? null,
+      });
+      if (outcome !== 'issued' && outcome !== 'already_issued' && outcome !== 'not_paid') {
+        // Anomalie réelle (incohérence organisation/session/montant/devise,
+        // commande introuvable) : ne doit normalement jamais arriver avec un
+        // événement Stripe légitime — journalisé, jamais exposé publiquement.
+        // eslint-disable-next-line no-console
+        console.error('[gift-cards.webhook]', giftCardOrderId, outcome);
+      }
+    } else if (event.type === 'checkout.session.expired') {
+      await markOnlineGiftCardOrderExpired(orgId, giftCardOrderId);
+    }
+    return NextResponse.json({ ok: true });
   }
 
   let newStatus: 'paid' | 'failed' | null = null;

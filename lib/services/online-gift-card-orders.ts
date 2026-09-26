@@ -8,8 +8,8 @@ import { query } from '@/lib/db/client';
  * d'appeler Stripe — l'état serveur persisté que l'étape 4 (webhook) mettra
  * à jour, plutôt que de ne compter que sur des metadata Stripe non
  * persistées. AUCUNE fonction de ce fichier ne crée de carte cadeau : ça
- * reste le rôle exclusif du futur webhook (étape 4), via GiftCardService
- * (non modifié ici).
+ * reste le rôle exclusif du webhook Stripe (étape 4,
+ * lib/services/online-gift-card-fulfillment.ts), via GiftCardService.
  */
 
 export type OnlineGiftCardOrderStatus = 'pending' | 'paid' | 'issued' | 'failed' | 'expired' | 'refunded';
@@ -33,7 +33,10 @@ export interface OnlineGiftCardOrder {
   requestFingerprint: string | null;
 }
 
-interface OrderRow {
+/** Exportés pour lib/services/online-gift-card-fulfillment.ts (webhook,
+ *  étape 4), qui lit/mappe des lignes de la même table via un client de
+ *  transaction propre (verrouillage de ligne) plutôt que via ce module. */
+export interface OrderRow {
   id: string; organization_id: string; public_reference: string;
   amount_cents: number; currency: string;
   buyer_name: string; buyer_email: string;
@@ -47,7 +50,7 @@ interface OrderRow {
   request_fingerprint: string | null;
 }
 
-function mapRow(r: OrderRow): OnlineGiftCardOrder {
+export function mapRow(r: OrderRow): OnlineGiftCardOrder {
   return {
     id: r.id,
     organizationId: r.organization_id,

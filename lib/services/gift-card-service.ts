@@ -1,3 +1,4 @@
+import type { PoolClient } from 'pg';
 import { withTransaction, query } from '@/lib/db/client';
 import { generateEan13 } from './ean';
 
@@ -9,7 +10,9 @@ import { generateEan13 } from './ean';
 export class GiftCardService {
   static async create(args: {
     organizationId: string;
-    userId: string;
+    /** null : émission automatique (ex. webhook de paiement en ligne), sans
+     *  utilisateur HelloPos humain à l'origine — colonne déjà nullable. */
+    userId: string | null;
     amount: number;
     expiresAt?: string | null;
     buyer?: { id?: string | null; name?: string; phone?: string; email?: string };
@@ -21,6 +24,14 @@ export class GiftCardService {
      * l'ancien logiciel). Si absent, un EAN-13 interne est généré.
      */
     code?: string | null;
+    /**
+     * Client de transaction déjà ouvert, à réutiliser au lieu d'en ouvrir un
+     * nouveau — pour qu'un appelant (ex. webhook d'émission de carte cadeau
+     * en ligne) puisse verrouiller/mettre à jour une AUTRE ligne dans LA
+     * MÊME transaction atomique que la création de la carte. Sans client
+     * fourni : comportement inchangé (ouvre sa propre transaction).
+     */
+    client?: PoolClient;
   }): Promise<{ id: string; code: string }> {
     if (args.amount <= 0) throw new Error('AMOUNT_REQUIRED');
     const kind = args.kind === 'voucher' ? 'voucher' : 'gift_card';
@@ -29,7 +40,7 @@ export class GiftCardService {
     // règle).
     const expiresAt = args.expiresAt
       ?? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
-    return withTransaction(async (client) => {
+    const run = async (client: PoolClient) => {
       // Code : soit celui fourni (reprise d'un existant, doit être unique),
       // soit un EAN-13 généré avec le préfixe interne 29.
       let code = '';
@@ -117,7 +128,9 @@ export class GiftCardService {
       );
 
       return { id: gcId, code };
-    });
+    };
+    if (args.client) return run(args.client);
+    return withTransaction(run);
   }
 
   /** Recherche un code (équivalent au scan). */
