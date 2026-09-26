@@ -4,7 +4,7 @@ import { query } from '@/lib/db/client';
 import { parseJson } from '@/lib/validation/api';
 import { audit } from '@/lib/audit/log';
 import {
-  isGiftCardAmountAllowed, validateReturnPath, DEFAULT_SUCCESS_PATH, DEFAULT_CANCEL_PATH,
+  isGiftCardAmountAllowed, validateReturnPath, DEFAULT_SUCCESS_PATH, DEFAULT_CANCEL_PATH, isOriginAllowed,
 } from '@/lib/settings/online-gift-cards';
 import { resolveActiveOnlineGiftCards } from '@/lib/settings/online-gift-cards-server';
 import { eurosToCents } from '@/lib/services/money';
@@ -185,7 +185,12 @@ export async function POST(req: Request) {
   //    besoin d'une origine autorisée pour construire des URLs de retour
   //    sûres — voir docs/api-public-gift-cards.md.
   const origin = req.headers.get('origin');
-  if (!origin || !settings.allowed_origins.includes(origin)) {
+  // Comparaison NORMALISÉE (isOriginAllowed) — jamais une égalité de chaîne
+  // brute : voir le commentaire de isOriginAllowed pour le bug silencieux
+  // que ça évite (une valeur enregistrée avec un slash final, par exemple,
+  // ne doit jamais faire échouer silencieusement une origine par ailleurs
+  // correctement autorisée).
+  if (!origin || !isOriginAllowed(origin, settings.allowed_origins)) {
     return NextResponse.json({ error: 'ORIGIN_NOT_ALLOWED' }, { status: 403 });
   }
   // À partir d'ici l'origine est confirmée légitime POUR CETTE organisation :

@@ -17,6 +17,7 @@ import {
   validateReturnPath,
   DEFAULT_SUCCESS_PATH,
   DEFAULT_CANCEL_PATH,
+  isOriginAllowed,
 } from '@/lib/settings/online-gift-cards';
 
 /**
@@ -176,6 +177,41 @@ describe('Validation des domaines autorisés', () => {
   it('refuse plus de domaines que la limite', () => {
     const many = Array.from({ length: MAX_ALLOWED_ORIGINS + 1 }, (_, i) => `https://site-${i}.com`);
     expect(() => normalizeOrigins(many)).toThrow();
+  });
+});
+
+describe('isOriginAllowed — comparaison normalisée (jamais une égalité de chaîne brute)', () => {
+  it('origine strictement identique à une valeur autorisée => true', () => {
+    expect(isOriginAllowed('http://localhost:8788', ['http://localhost:8788'])).toBe(true);
+  });
+
+  it("valeur enregistrée avec un slash final => toujours reconnue (bug reproduit puis corrigé)", () => {
+    expect(isOriginAllowed('http://localhost:8788', ['http://localhost:8788/'])).toBe(true);
+  });
+
+  it("en-tête Origin reçu avec un slash final => toujours reconnu", () => {
+    expect(isOriginAllowed('http://localhost:8788/', ['http://localhost:8788'])).toBe(true);
+  });
+
+  it('port différent => refusé (aucune tolérance sur la sécurité réelle)', () => {
+    expect(isOriginAllowed('http://localhost:9999', ['http://localhost:8788'])).toBe(false);
+  });
+
+  it('schéma différent (http vs https) => refusé', () => {
+    expect(isOriginAllowed('https://localhost:8788', ['http://localhost:8788'])).toBe(false);
+  });
+
+  it('hôte différent => refusé', () => {
+    expect(isOriginAllowed('http://evil.example', ['http://localhost:8788'])).toBe(false);
+  });
+
+  it('origine vide ou malformée => toujours refusé', () => {
+    expect(isOriginAllowed('', ['http://localhost:8788'])).toBe(false);
+    expect(isOriginAllowed('not-an-origin', ['http://localhost:8788'])).toBe(false);
+  });
+
+  it('liste vide => toujours refusé', () => {
+    expect(isOriginAllowed('http://localhost:8788', [])).toBe(false);
   });
 });
 

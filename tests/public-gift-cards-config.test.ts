@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 /**
  * API publique GET /api/public/gift-cards/config — voir docs/api-public-gift-cards.md.
@@ -176,6 +176,63 @@ describe('CORS', () => {
 
   it('OPTIONS avec clé invalide ne renvoie aucun en-tête CORS', async () => {
     const res = await OPTIONS(req(`${BASE_URL}?key=invalide`, 'https://plante-verte.fr'));
+    expect(res.status).toBe(204);
+    expect(res.headers.get('access-control-allow-origin')).toBeNull();
+  });
+});
+
+describe('Localhost avec port (bug rapporté en intégration réelle — comparaison normalisée)', () => {
+  // Reproduit exactement le scénario signalé : une organisation autorise
+  // http://localhost:8788 (site Plante Verte en local), et une requête
+  // portant cet Origin doit recevoir l'en-tête CORS — jamais silencieusement
+  // rien, même si la valeur enregistrée n'est pas BYTE-À-BYTE identique
+  // (ex. slash final) à l'en-tête Origin envoyé par le navigateur.
+  const LOCAL_KEY = 'hp_gc_CCCCCCCCCCCCCCCCCCCC';
+
+  function withLocalOrigins(allowed: string[]) {
+    configs.push({
+      organization_id: 'org-c-uuid', public_key: LOCAL_KEY, enabled: true,
+      allowed_origins: allowed, preset_amounts: [25, 50], allow_custom_amount: true, min_amount: 10, max_amount: 500,
+    });
+    orgs.push({ id: 'org-c-uuid', name: 'Site local', is_active: true });
+  }
+
+  afterEach(() => {
+    configs.length = 2; // ne garde que les deux organisations de base (A et B)
+    orgs.length = 2;
+  });
+
+  it('origine autorisée http://localhost:8788 => Access-Control-Allow-Origin exact', async () => {
+    withLocalOrigins(['http://localhost:8788']);
+    const res = await GET(req(`${BASE_URL}?key=${LOCAL_KEY}`, 'http://localhost:8788'));
+    expect(res.status).toBe(200);
+    expect(res.headers.get('access-control-allow-origin')).toBe('http://localhost:8788');
+    expect(res.headers.get('vary')).toBe('Origin');
+  });
+
+  it('origine NON autorisée http://localhost:9999 => aucun en-tête CORS (les données restent servies)', async () => {
+    withLocalOrigins(['http://localhost:8788']);
+    const res = await GET(req(`${BASE_URL}?key=${LOCAL_KEY}`, 'http://localhost:9999'));
+    expect(res.status).toBe(200);
+    expect(res.headers.get('access-control-allow-origin')).toBeNull();
+  });
+
+  it("valeur enregistrée avec un slash final (config manuelle/héritée) reconnaît quand même l'origine", async () => {
+    withLocalOrigins(['http://localhost:8788/']); // <- slash final, exactement le cas qui cassait la comparaison brute
+    const res = await GET(req(`${BASE_URL}?key=${LOCAL_KEY}`, 'http://localhost:8788'));
+    expect(res.headers.get('access-control-allow-origin')).toBe('http://localhost:8788');
+  });
+
+  it('OPTIONS avec origine locale autorisée renvoie les en-têtes CORS attendus', async () => {
+    withLocalOrigins(['http://localhost:8788']);
+    const res = await OPTIONS(req(`${BASE_URL}?key=${LOCAL_KEY}`, 'http://localhost:8788'));
+    expect(res.status).toBe(204);
+    expect(res.headers.get('access-control-allow-origin')).toBe('http://localhost:8788');
+  });
+
+  it('OPTIONS avec origine locale NON autorisée ne renvoie aucun en-tête CORS', async () => {
+    withLocalOrigins(['http://localhost:8788']);
+    const res = await OPTIONS(req(`${BASE_URL}?key=${LOCAL_KEY}`, 'http://localhost:9999'));
     expect(res.status).toBe(204);
     expect(res.headers.get('access-control-allow-origin')).toBeNull();
   });

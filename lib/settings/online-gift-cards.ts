@@ -106,6 +106,33 @@ export function isValidOrigin(raw: string): boolean {
 }
 
 /**
+ * L'origine `origin` (en-tête `Origin` du navigateur) figure-t-elle dans
+ * `allowedOrigins` ? Compare les DEUX côtés après normalisation
+ * (`normalizeOrigin`) — jamais une égalité de chaîne brute.
+ *
+ * Pourquoi : `allowed_origins` est censé être déjà normalisé au moment de
+ * l'enregistrement (voir `normalizeOrigins`, utilisé par
+ * `PATCH /api/settings/online-gift-cards`), mais une valeur enregistrée par
+ * un autre chemin (migration, correction manuelle en base, ancienne version
+ * du réglage) peut porter un slash final ou une casse de schéma différente
+ * sans que ce soit visible à l'œil dans l'interface. Une comparaison en
+ * chaîne brute (`allowedOrigins.includes(origin)`) échoue alors
+ * SILENCIEUSEMENT : la clé reste valide, la configuration se charge
+ * normalement (rien à voir avec l'origine), mais l'en-tête
+ * `Access-Control-Allow-Origin` n'est jamais posé — un site pourtant
+ * correctement listé se retrouve bloqué côté navigateur sans aucune erreur
+ * explicite. Normaliser les deux côtés élimine cette classe de bug sans
+ * rien assouplir : http et https restent des origines strictement
+ * distinctes, un port différent reste refusé, seule une différence de
+ * FORME insignifiante (slash final, casse du schéma/hôte) est tolérée.
+ */
+export function isOriginAllowed(origin: string, allowedOrigins: string[]): boolean {
+  const normalized = normalizeOrigin(origin);
+  if (!normalized) return false;
+  return allowedOrigins.some((a) => normalizeOrigin(a) === normalized);
+}
+
+/**
  * Normalise et déduplique une liste d'origines. Lève si l'une d'elles est
  * invalide (avec la valeur fautive, pour un message d'erreur explicite côté
  * API) plutôt que de la retirer silencieusement.

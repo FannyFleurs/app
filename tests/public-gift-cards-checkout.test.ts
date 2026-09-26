@@ -43,6 +43,7 @@ interface FakeOrderRow {
 const orgs = [
   { id: 'org-a-uuid', name: 'Plante Verte', is_active: true },
   { id: 'org-b-uuid', name: 'Fanny Fleurs', is_active: true },
+  { id: 'org-c-uuid', name: 'Site local', is_active: true },
 ];
 
 const giftCardConfigs: FakeGiftCardConfig[] = [
@@ -57,11 +58,19 @@ const giftCardConfigs: FakeGiftCardConfig[] = [
     allowed_origins: ['https://fanny-fleurs.com'],
     preset_amounts: [30], allow_custom_amount: false, min_amount: 20, max_amount: 200,
   },
+  {
+    // Reproduit le scénario signalé en intégration réelle : origine locale
+    // avec port (Plante Verte servi en local sur :8788).
+    organization_id: 'org-c-uuid', public_key: 'hp_gc_CCCCCCCCCCCCCCCCCCCC', enabled: true,
+    allowed_origins: ['http://localhost:8788'],
+    preset_amounts: [25, 50], allow_custom_amount: true, min_amount: 10, max_amount: 500,
+  },
 ];
 
 const stripeConfigs: Record<string, FakeStripeConfig> = {
   'org-a-uuid': { enabled: true, publishable_key: 'pk_test_a', secret_key: 'sk_test_a', webhook_secret: 'whsec_a', return_url: '' },
   // org-b-uuid : volontairement absent -> PAYMENT_UNAVAILABLE
+  'org-c-uuid': { enabled: true, publishable_key: 'pk_test_c', secret_key: 'sk_test_c', webhook_secret: 'whsec_c', return_url: '' },
 };
 
 let orderRows: FakeOrderRow[] = [];
@@ -492,6 +501,55 @@ describe('Origin', () => {
     const res = await OPTIONS(new Request(URL_, { method: 'OPTIONS', headers: { origin: ORG_A_ORIGIN } }));
     expect(res.status).toBe(204);
     expect(res.headers.get('access-control-allow-methods')).toMatch(/POST/);
+  });
+});
+
+describe('Origin — localhost avec port (bug rapporté en intégration réelle)', () => {
+  const LOCAL_KEY = 'hp_gc_CCCCCCCCCCCCCCCCCCCC';
+  const LOCAL_ORIGIN = 'http://localhost:8788';
+
+  function localPayload(overrides: Record<string, unknown> = {}) {
+    return {
+      key: LOCAL_KEY, amount: 25,
+      buyer: { name: 'Jean Dupont', email: 'jean@example.fr' },
+      recipient: { name: 'Marie Dupont', email: 'marie@example.fr' },
+      delivery_mode: 'buyer',
+      ...overrides,
+    };
+  }
+
+  it('origine autorisée http://localhost:8788 => 200 + en-tête CORS exact', async () => {
+    const res = await post(localPayload(), LOCAL_ORIGIN);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('access-control-allow-origin')).toBe(LOCAL_ORIGIN);
+  });
+
+  it('origine NON autorisée http://localhost:9999 => 403 ORIGIN_NOT_ALLOWED, aucun en-tête CORS', async () => {
+    const res = await post(localPayload(), 'http://localhost:9999');
+    expect(res.status).toBe(403);
+    expect((await res.json()).error).toBe('ORIGIN_NOT_ALLOWED');
+    expect(res.headers.get('access-control-allow-origin')).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("valeur enregistrée avec un slash final n'empêche pas le checkout (comparaison normalisée)", async () => {
+    const original = giftCardConfigs.find((c) => c.public_key === LOCAL_KEY)!.allowed_origins;
+    giftCardConfigs.find((c) => c.public_key === LOCAL_KEY)!.allowed_origins = ['http://localhost:8788/'];
+    try {
+      const res = await post(localPayload(), LOCAL_ORIGIN);
+      expect(res.status).toBe(200);
+      expect(res.headers.get('access-control-allow-origin')).toBe(LOCAL_ORIGIN);
+    } finally {
+      giftCardConfigs.find((c) => c.public_key === LOCAL_KEY)!.allowed_origins = original;
+    }
+  });
+
+  it('OPTIONS avec origine locale autorisée renvoie les en-têtes CORS attendus', async () => {
+    const res = await OPTIONS(new Request(URL_, { method: 'OPTIONS', headers: { origin: LOCAL_ORIGIN } }));
+    expect(res.status).toBe(204);
+    // Le préflight reste volontairement permissif (voir commentaire de la
+    // route) : seul le POST réel applique la vérification stricte.
+    expect(res.headers.get('access-control-allow-origin')).toBe(LOCAL_ORIGIN);
   });
 });
 

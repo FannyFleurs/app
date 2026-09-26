@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db/client';
 import { resolveActiveOnlineGiftCards } from '@/lib/settings/online-gift-cards-server';
+import { isOriginAllowed } from '@/lib/settings/online-gift-cards';
 
 export const dynamic = 'force-dynamic';
 
@@ -62,7 +63,10 @@ async function resolve(req: Request): Promise<{ organizationName: string; giftCa
  */
 function corsHeaders(req: Request, allowedOrigins: string[]): HeadersInit {
   const origin = req.headers.get('origin');
-  if (!origin || !allowedOrigins.includes(origin)) return {};
+  // Comparaison NORMALISÉE (voir isOriginAllowed) — jamais une égalité de
+  // chaîne brute, pour ne pas dépendre d'une forme byte-à-byte identique
+  // (slash final, casse…) entre l'en-tête Origin et la valeur enregistrée.
+  if (!origin || !isOriginAllowed(origin, allowedOrigins)) return {};
   return { 'Access-Control-Allow-Origin': origin, Vary: 'Origin' };
 }
 
