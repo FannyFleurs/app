@@ -534,7 +534,8 @@ immédiatement la carte au bénéficiaire :
 **Emails identiques** (`buyer.email` et `recipient.email` identiques après
 normalisation — `trim()` + minuscules) : **un seul** email est envoyé, quel
 que soit `delivery_mode` — jamais deux emails vers la même adresse. Cet
-email unique contient la confirmation ET la carte (code réel inclus).
+email unique contient la confirmation ET la carte PDF en pièce jointe
+(voir « Carte cadeau PDF » ci-dessous).
 
 **Pas d'envoi programmé à ce stade** : aucune date d'envoi différé (Noël,
 anniversaire), aucun cron/scheduler — uniquement `"buyer"` ou `"recipient"`,
@@ -546,14 +547,17 @@ envoi immédiat après confirmation du paiement. Une troisième option
 Un email contenant une carte cadeau ne peut être envoyé qu'après, dans cet
 ordre strict : (1) Stripe a confirmé le paiement, (2) le webhook a validé
 la session (§ « Validations avant émission »), (3) la vraie `gift_card`
-HelloPos a été créée, (4) son code réel existe en base. La distribution est
-donc déclenchée par
+HelloPos a été créée, (4) son code réel existe en base, (5) le PDF de la
+carte a été généré à partir de ce code réel (jamais un code provisoire).
+La distribution est donc déclenchée par
 `lib/services/online-gift-card-fulfillment.ts::fulfillOnlineGiftCardCheckout`
 **après le COMMIT** de la transaction d'émission (jamais dans la
-transaction elle-même — un appel réseau à un fournisseur d'email ne doit
-jamais retenir une connexion/verrou Postgres). Le code envoyé est **toujours**
-`gift_cards.code`, jamais une référence de commande, un id de session Stripe
-ou un UUID de commande.
+transaction elle-même — ni un appel réseau à un fournisseur d'email, ni la
+génération PDF, ne doivent retenir une connexion/verrou Postgres). Le code
+figurant dans le PDF (et, en mode `recipient` avec emails distincts, absent
+du HTML de la confirmation buyer) est **toujours** `gift_cards.code`,
+jamais une référence de commande, un id de session Stripe ou un UUID de
+commande.
 
 ### Échec d'envoi email
 
@@ -614,15 +618,54 @@ en ligne n'ont pas de notion de boutique, la config email utilisée est donc
 celle au niveau **organisation**, comme prévu par le mécanisme de repli déjà
 existant de `loadEmailSettings`). Aucun nouveau provider, aucune nouvelle
 clé API, aucun nouveau mécanisme de retry : les identifiants Brevo restent
-côté serveur, jamais exposés.
+côté serveur, jamais exposés. La pièce jointe PDF passe par le même champ
+`attachments` déjà utilisé pour les factures/tickets (`EmailAttachment {
+name, content: Buffer }`) — Brevo détermine le type MIME depuis l'extension
+du nom de fichier (`.pdf` → `application/pdf`), comme pour les PDF déjà
+joints ailleurs dans HelloPos ; aucune capacité nouvelle du provider n'a été
+nécessaire.
 
-Le rendu HTML de la carte (`lib/email/gift-card-template.ts::
-renderGiftCardCardHtml`) est un **unique** bloc réutilisable — utilisé par
-tous les emails de cette étape, et conçu pour être repris plus tard par une
-page web (« Imprimer ma carte ») ou un export PDF, sans dupliquer le
-balisage. Aucun PDF n'est généré à cette étape (pas d'infrastructure PDF
-dédiée existante pour ce cas d'usage) ; le bloc HTML est volontairement
-sobre pour rester imprimable directement depuis l'email.
+### Carte cadeau PDF (représentation de référence)
+
+Depuis la refonte de cette section, l'email ne recrée plus la carte en
+HTML : il reste un simple accompagnement (organisation, « Votre carte
+cadeau est prête », bénéficiaire, montant, pointeur vers la pièce jointe,
+message personnel éventuel, signature). La carte cadeau **PDF**, générée
+par `lib/services/gift-card-certificate-pdf.ts::renderGiftCardCertificatePdf`
+(PDFKit — bibliothèque déjà utilisée par toutes les autres pièces jointes
+HelloPos, factures/tickets compris ; aucune dépendance ajoutée), devient la
+représentation de référence : une seule page A4, jointe à l'email de qui
+reçoit effectivement la carte (jamais à la confirmation buyer sans code, en
+mode `recipient` avec emails distincts).
+
+Contenu du PDF : nom de l'organisation (jamais une enseigne codée en dur),
+« Carte cadeau », montant mis en valeur, nom du bénéficiaire
+(`recipient.name` — jamais `buyer.name`), message personnel s'il existe,
+code réel (toujours lisible en texte, y compris quand un code-barres
+EAN-13 l'accompagne — même moteur `bwip-js` que le ticket boutique 80mm
+existant, `lib/services/gift-card-pdf.ts`, dupliqué à l'identique plutôt
+que factorisé pour ne pas toucher au module `lib/services/barcode.ts`
+existant, sans rapport, qui sert au rendu SVG des étiquettes), date
+d'émission, date d'expiration **uniquement si `gift_cards.expires_at` est
+renseigné** (jamais inventée) et rappel générique d'utilisation en
+boutique. N'expose jamais `organization_id`, l'id de session Stripe, le
+`payment_intent`, la clé publique d'intégration ni aucune donnée technique.
+
+**Jamais stocké** : le PDF est régénéré à la volée à chaque tentative de
+distribution depuis les données déjà persistées (`gift_cards` +
+`online_gift_card_orders`) — entièrement reconstructible à l'identique,
+donc aucune raison de le conserver en base ou en storage.
+
+**Échec de génération** : traité exactement comme un échec d'envoi email
+(même bloc `try/catch` dans `deliverOnlineGiftCardOrder`, mêmes
+`delivery_status`/`delivery_error`) — la carte et le paiement restent
+valides, aucun email n'est envoyé sans sa pièce jointe, l'échec reste
+retentable au prochain rejeu du webhook.
+
+Nom de fichier : `carte-cadeau-<organisation-translittérée>-<code>.pdf`
+(accents retirés, caractères non alphanumériques réduits à des tirets,
+jamais vide grâce à un repli `organisation`) — voir
+`attachmentFileName` dans `lib/services/online-gift-card-delivery.ts`.
 
 ### Migration 0082
 

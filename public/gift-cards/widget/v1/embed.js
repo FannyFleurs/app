@@ -139,7 +139,8 @@
     // entre déclarations de LA MÊME propriété compterait) — display:block et
     // les variables --hp-* ci-dessous coexistent déjà avec all:initial
     // exactement de cette façon.
-    + ':host{all:initial;display:block;width:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;'
+    + ':host{all:initial;display:block;width:100%;container-type:inline-size;container-name:hpgc;'
+    + 'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;'
     + '--hp-primary:' + DEFAULT_PRIMARY + ';--hp-text:' + DEFAULT_TEXT + ';--hp-radius:' + DEFAULT_RADIUS + ';}'
     + '*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}'
     // .hp-root est le conteneur racine RÉEL du contenu visible (premier —
@@ -147,32 +148,47 @@
     // voir TEMPLATE ci-dessous ; le <div> qui l'englobe directement,
     // injecté par innerHTML lors du montage, n'est qu'un porteur anonyme
     // sans classe ni style, donc sans effet sur la mise en page).
-    // max-width:480px (largeur confortable pour un formulaire à une
-    // colonne, cohérente avec les champs/labels existants — inchangée
-    // depuis l'étape 6) plafonnait déjà correctement la largeur sur
-    // desktop, mais margin:0 auto manquait : un bloc plus étroit que son
-    // conteneur s'aligne par défaut à GAUCHE, jamais centré, sans cette
-    // marge. C'est la cause exacte du décalage rapporté — le custom
-    // element (:host) peut être large et centré sur la page hôte, mais
-    // .hp-root, lui, restait collé au bord gauche À L'INTÉRIEUR de cette
-    // largeur.
-    + '.hp-root{color:var(--hp-text);font-size:16px;line-height:1.45;max-width:480px;width:100%;margin-left:auto;margin-right:auto;}'
+    // max-width:960px (au lieu de 480px) : le formulaire exploite désormais
+    // la largeur disponible sur desktop/tablette (montants sur une ligne,
+    // champs en deux colonnes — voir les règles @container ci-dessous),
+    // tout en restant confortable à lire (repère habituel de largeur de
+    // contenu, ~2 colonnes de 460px + fossé). margin:auto centre toujours
+    // le conteneur dans :host, quelle que soit la largeur qu'on lui laisse.
+    + '.hp-root{color:var(--hp-text);font-size:16px;line-height:1.45;max-width:960px;width:100%;margin-left:auto;margin-right:auto;}'
     + '.hp-panel{background:#fff;border:1px solid #E7E3D8;border-radius:var(--hp-radius);padding:20px;}'
     + '@media (max-width:400px){.hp-panel{padding:16px;border-radius:calc(var(--hp-radius) - 4px);}}'
-    + '.hp-section{margin-top:20px;}'
+    // @container (et non @media) : le widget réagit à L'ESPACE QUI LUI EST
+    // RÉELLEMENT LAISSÉ par le site intégrateur (largeur de :host, mesurée
+    // via container-type ci-dessus), pas à la largeur de la fenêtre — un
+    // widget posé dans une colonne étroite d'un site par ailleurs très
+    // large reste compact, comme demandé. Repli gracieux sur un navigateur
+    // sans support des container queries : tout reste simplement empilé
+    // (comportement mobile, jamais de rendu cassé ni de scroll horizontal).
+    + '@container hpgc (min-width:640px){.hp-panel{padding:28px 32px;}}'
+    + '.hp-section{margin-top:16px;}'
     + '.hp-section:first-child{margin-top:0;}'
-    + '.hp-h{font-size:15px;font-weight:700;margin-bottom:8px;color:var(--hp-text);}'
+    + '.hp-h{font-size:14px;font-weight:700;margin-bottom:6px;color:var(--hp-text);}'
     + '.hp-sub{font-size:13px;color:#5A625E;margin-top:-4px;margin-bottom:10px;}'
     + '.hp-org{font-size:13px;font-weight:600;letter-spacing:.02em;text-transform:uppercase;color:var(--hp-primary);margin-bottom:4px;}'
     + '.hp-title{font-size:19px;font-weight:700;margin-bottom:16px;}'
-    + '.hp-presets{display:flex;flex-wrap:wrap;gap:8px;}'
-    + '.hp-preset{flex:1 1 calc(50% - 8px);min-width:88px;padding:12px 10px;border:1.5px solid #E7E3D8;border-radius:calc(var(--hp-radius) - 4px);'
+    // Grille 2x2 par défaut (mobile ET tablette étroite) ; 4 colonnes sur
+    // une seule ligne dès que le widget dispose d'assez d'espace (voir la
+    // règle @container plus bas) — jamais un empilement 1 par ligne, la
+    // grille garantit largeur/hauteur identiques et un alignement parfait
+    // sans avoir à deviner une largeur de bouton en flex-basis.
+    + '.hp-presets{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;}'
+    + '.hp-preset{width:100%;padding:12px 10px;border:1.5px solid #E7E3D8;border-radius:calc(var(--hp-radius) - 4px);'
     + 'background:#fff;font-size:16px;font-weight:600;color:var(--hp-text);cursor:pointer;min-height:44px;text-align:center;}'
     + '.hp-preset:hover{border-color:var(--hp-primary);}'
     + '.hp-preset:focus-visible{outline:2px solid var(--hp-primary);outline-offset:1px;}'
     + '.hp-preset[aria-pressed="true"]{border-color:var(--hp-primary);background:color-mix(in srgb, var(--hp-primary) 10%, white);}'
-    + '.hp-field{margin-top:12px;}'
+    + '.hp-field{margin-top:10px;}'
     + '.hp-field:first-child{margin-top:0;}'
+    // .hp-grid-2 : empilé par défaut (les .hp-field internes se comportent
+    // exactement comme avant, marge du haut comprise) — devient une grille
+    // à deux colonnes de même largeur dès que l'espace le permet, voir la
+    // règle @container plus bas. Utilisé pour "bénéficiaire" et "vos
+    // informations" (nom + email côte à côte sur desktop/tablette).
     + 'label{display:block;font-size:13px;font-weight:600;margin-bottom:5px;}'
     + '.hp-optional{font-weight:400;color:#5A625E;}'
     + 'input[type="text"],input[type="email"],input[type="number"],textarea{'
@@ -184,15 +200,51 @@
     + '.hp-count{font-size:12px;color:#5A625E;text-align:right;margin-top:3px;}'
     + '.hp-err{font-size:13px;color:#B42318;margin-top:5px;display:none;}'
     + '.hp-err.hp-show{display:block;}'
+    // Empilés par défaut ; côte à côte, même largeur (flex:1 1 0) ET même
+    // hauteur (comportement par défaut d'un flex-row, align-items:stretch)
+    // dès que l'espace le permet (règle @container plus bas). Chaque
+    // <label> couvre déjà toute la carte (voir TEMPLATE) : l'intégralité
+    // de la zone reste cliquable dans les deux dispositions.
     + '.hp-modes{display:flex;flex-direction:column;gap:8px;}'
     + '.hp-mode{display:flex;gap:10px;align-items:flex-start;border:1.5px solid #E7E3D8;border-radius:calc(var(--hp-radius) - 4px);padding:12px;cursor:pointer;}'
     + '.hp-mode:has(input:checked){border-color:var(--hp-primary);background:color-mix(in srgb, var(--hp-primary) 8%, white);}'
     + '.hp-mode input{margin-top:3px;width:18px;height:18px;accent-color:var(--hp-primary);flex:none;}'
     + '.hp-mode-title{font-weight:600;font-size:15px;}'
     + '.hp-mode-desc{font-size:13px;color:#5A625E;margin-top:2px;}'
-    + '.hp-recap{background:color-mix(in srgb, var(--hp-primary) 6%, white);border-radius:calc(var(--hp-radius) - 4px);padding:14px;font-size:14px;}'
-    + '.hp-recap-row{display:flex;justify-content:space-between;gap:12px;padding:3px 0;}'
-    + '.hp-recap-row b{font-weight:700;}'
+    // Récapitulatif compact : chaque ligne devient une mini-fiche
+    // "libellé au-dessus / valeur en dessous" (plus lisible qu'un simple
+    // libellé-à-gauche/valeur-à-droite une fois les lignes mises côte à
+    // côte sur desktop — voir @container). Empilées par défaut ; la ligne
+    // "Message" (facultative, activée par JS) garde toujours sa propre
+    // ligne pleine largeur même en disposition horizontale.
+    + '.hp-recap{background:color-mix(in srgb, var(--hp-primary) 6%, white);border-radius:calc(var(--hp-radius) - 4px);'
+    + 'padding:14px;font-size:14px;display:flex;flex-direction:column;gap:10px;}'
+    + '.hp-recap-row{display:flex;flex-direction:column;gap:2px;}'
+    + '.hp-recap-row span{font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:#5A625E;}'
+    + '.hp-recap-row b{font-size:15px;font-weight:700;color:var(--hp-text);}'
+    // ---------------------------------------------------------------
+    // Disposition horizontale desktop/tablette — deux seuils seulement,
+    // basés sur la largeur RÉELLEMENT disponible pour le widget (voir
+    // container-type sur :host), jamais sur la largeur de la fenêtre :
+    //   >= 560px : bénéficiaire/acheteur en 2 colonnes, modes de réception
+    //              côte à côte, récapitulatif en ligne (montants restent
+    //              en 2x2 — pas encore assez large pour 4 colonnes).
+    //   >= 760px : les 4 montants passent sur une seule ligne.
+    // Une "tablette intermédiaire" (entre les deux seuils) obtient donc
+    // naturellement : champs/modes déjà en 2 colonnes, montants encore en
+    // 2x2 — exactement le comportement intermédiaire demandé, sans règle
+    // dédiée supplémentaire.
+    // ---------------------------------------------------------------
+    + '@container hpgc (min-width:560px){'
+    + '.hp-grid-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:20px;}'
+    + '.hp-grid-2 .hp-field{margin-top:0;}'
+    + '.hp-modes{flex-direction:row;}'
+    + '.hp-mode{flex:1 1 0;}'
+    + '.hp-recap{flex-direction:row;flex-wrap:wrap;gap:20px;}'
+    + '.hp-recap-row{flex:1 1 0;min-width:0;}'
+    + '#hp-recap-message-row{flex:1 0 100%;}'
+    + '}'
+    + '@container hpgc (min-width:760px){.hp-presets{grid-template-columns:repeat(4,1fr);}}'
     + '.hp-submit{width:100%;margin-top:16px;padding:14px;border:none;border-radius:calc(var(--hp-radius) - 4px);'
     + 'background:var(--hp-primary);color:#fff;font-size:16px;font-weight:700;cursor:pointer;min-height:48px;}'
     + '.hp-submit:disabled{opacity:.6;cursor:not-allowed;}'
@@ -247,6 +299,7 @@
 
     + '    <div class="hp-section">'
     + '      <div class="hp-h">2. Pour qui est la carte ?</div>'
+    + '      <div class="hp-grid-2">'
     + '      <div class="hp-field">'
     + '        <label for="hp-recipient-name">Nom du bénéficiaire *</label>'
     + '        <input type="text" id="hp-recipient-name" autocomplete="off" maxlength="160" required aria-describedby="hp-recipient-name-err">'
@@ -257,10 +310,12 @@
     + '        <input type="email" id="hp-recipient-email" autocomplete="off" maxlength="200" aria-describedby="hp-recipient-email-err">'
     + '        <p id="hp-recipient-email-err" class="hp-err" role="alert"></p>'
     + '      </div>'
+    + '      </div>'
     + '    </div>'
 
     + '    <div class="hp-section">'
     + '      <div class="hp-h">3. Vos informations</div>'
+    + '      <div class="hp-grid-2">'
     + '      <div class="hp-field">'
     + '        <label for="hp-buyer-name">Nom *</label>'
     + '        <input type="text" id="hp-buyer-name" autocomplete="name" maxlength="160" required aria-describedby="hp-buyer-name-err">'
@@ -270,6 +325,7 @@
     + '        <label for="hp-buyer-email">Email *</label>'
     + '        <input type="email" id="hp-buyer-email" autocomplete="email" maxlength="200" required aria-describedby="hp-buyer-email-err">'
     + '        <p id="hp-buyer-email-err" class="hp-err" role="alert"></p>'
+    + '      </div>'
     + '      </div>'
     + '    </div>'
 
@@ -570,6 +626,12 @@
     this._el('hp-recap-message').textContent = msg;
     var count = this._el('hp-message-count');
     count.textContent = this._el('hp-message').value.length + ' / ' + MAX_MESSAGE_LEN;
+    // Libellé du bouton avec le montant une fois connu ("Payer 25,00 €") —
+    // jamais pendant l'envoi en cours (submitBtn.textContent vaut alors
+    // "Traitement…", restauré par _submit() lui-même à la fin de l'appel).
+    if (!this._state.submitting) {
+      this._el('hp-submit').textContent = amount ? ('Payer ' + formatEUR(amount)) : 'Payer';
+    }
   };
 
   proto._applyDraft = function (d) {

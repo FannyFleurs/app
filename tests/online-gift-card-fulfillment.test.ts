@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { extractPdfTextCompact } from './helpers/extract-pdf-text';
 
 /**
  * Émission de carte cadeau suite à un paiement Stripe confirmé (étape 4).
@@ -51,7 +52,7 @@ let movements: Array<{ organization_id: string; gift_card_id: string; movement_t
 let nextGiftCardId = 1;
 
 /** Emails effectivement "envoyés" via sendOrgEmail (mocké) — voir sendOrgEmailMock. */
-let sentEmails: Array<{ organizationId: string; to: string; subject: string; html: string }> = [];
+let sentEmails: Array<{ organizationId: string; to: string; subject: string; html: string; attachments?: Array<{ name: string; content: Buffer }> }> = [];
 let sendShouldFail = false;
 
 function resetFakeDb() {
@@ -175,7 +176,10 @@ const queryMock = vi.fn(async (text: string, params: unknown[] = []) => {
     const gc = giftCards.find((g) => g.id === giftCardId);
     const org = gc ? organizations.find((o) => o.id === gc.organization_id) : undefined;
     if (!gc || !org) return { rows: [], rowCount: 0 };
-    return { rows: [{ code: gc.code, organization_name: org.name }], rowCount: 1 };
+    return {
+      rows: [{ code: gc.code, organization_name: org.name, issued_at: new Date().toISOString(), expires_at: null }],
+      rowCount: 1,
+    };
   }
   if (text.includes("SET delivery_status = 'sent'")) {
     const [orderId] = params as [string];
@@ -198,7 +202,7 @@ vi.mock('@/lib/db/client', () => ({
 }));
 
 /** sendOrgEmail mocké : capture les emails "envoyés", simule un fournisseur en panne si sendShouldFail. */
-const sendOrgEmailMock = vi.fn(async (args: { organizationId: string; to: string; subject: string; html: string }) => {
+const sendOrgEmailMock = vi.fn(async (args: { organizationId: string; to: string; subject: string; html: string; attachments?: Array<{ name: string; content: Buffer }> }) => {
   if (sendShouldFail) return { ok: false, error: 'PROVIDER_ERROR' };
   sentEmails.push(args);
   return { ok: true };
@@ -448,7 +452,8 @@ describe('Distribution (étape 5) — déclenchée après émission', () => {
     expect(outcome).toBe('issued');
     expect(sendOrgEmailMock).toHaveBeenCalledTimes(1);
     expect(sentEmails[0]!.to).toBe('jonathan@example.com'); // buyer, mode 'buyer'
-    expect(sentEmails[0]!.html).toContain(giftCards[0]!.code);
+    expect(sentEmails[0]!.attachments).toHaveLength(1); // le code réel est désormais dans le PDF joint, plus dans le HTML
+    expect(extractPdfTextCompact(sentEmails[0]!.attachments![0]!.content)).toContain(giftCards[0]!.code);
     expect(orders[0]!.delivery_status).toBe('sent');
   });
 

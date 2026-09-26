@@ -1,15 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { extractPdfText, extractPdfTextCompact } from './helpers/extract-pdf-text';
 
 /**
- * Distribution par email de la carte cadeau (étape 5) —
- * lib/services/online-gift-card-delivery.ts, testé directement (le chemin
- * webhook -> fulfillment -> delivery est couvert par
+ * Distribution par email de la carte cadeau (étape 5, PDF joint depuis la
+ * refonte) — lib/services/online-gift-card-delivery.ts, testé directement
+ * (le chemin webhook -> fulfillment -> delivery est couvert par
  * tests/online-gift-card-fulfillment.test.ts, section « Distribution »).
  *
  * `query` (lib/db/client) et `sendOrgEmail` (lib/email/send) sont mockés :
  * base de commandes/cartes/organisations en mémoire, capture des emails
- * "envoyés" pour vérifier destinataire/contenu (code réel, montant, nom du
- * bénéficiaire, message) sans dépendre d'un vrai fournisseur email.
+ * "envoyés" (dont leurs pièces jointes RÉELLEMENT générées par
+ * lib/services/gift-card-certificate-pdf.ts, non mocké) pour vérifier
+ * destinataire/contenu (montant, nom du bénéficiaire, message dans le
+ * HTML ; code réel dans le PDF joint) sans dépendre d'un vrai fournisseur
+ * email.
  */
 
 interface FakeOrderRow {
@@ -27,11 +31,19 @@ interface FakeOrderRow {
   delivery_error: string | null;
 }
 
+interface FakeEmail {
+  organizationId: string; storeId: string | null; to: string; toName?: string;
+  subject: string; html: string; attachments?: Array<{ name: string; content: Buffer }>;
+}
+
 const organizations = [{ id: 'org-a-uuid', name: 'Plante Verte' }, { id: 'org-b-uuid', name: 'Fanny Fleurs' }];
-const giftCards = [{ id: 'gift-card-1', organization_id: 'org-a-uuid', code: '2900000000015' }];
+const giftCards = [{
+  id: 'gift-card-1', organization_id: 'org-a-uuid', code: '2900000000015',
+  issued_at: '2026-01-10T00:00:00.000Z', expires_at: '2027-01-10T00:00:00.000Z',
+}];
 
 let orders: FakeOrderRow[] = [];
-let sentEmails: Array<{ organizationId: string; storeId: string | null; to: string; toName?: string; subject: string; html: string }> = [];
+let sentEmails: FakeEmail[] = [];
 let sendShouldFail = false;
 
 function resetFakeDb() {
@@ -71,7 +83,7 @@ const queryMock = vi.fn(async (text: string, params: unknown[] = []) => {
     const gc = giftCards.find((g) => g.id === giftCardId);
     const org = gc ? organizations.find((o) => o.id === gc.organization_id) : undefined;
     if (!gc || !org) return { rows: [], rowCount: 0 };
-    return { rows: [{ code: gc.code, organization_name: org.name }], rowCount: 1 };
+    return { rows: [{ code: gc.code, organization_name: org.name, issued_at: gc.issued_at, expires_at: gc.expires_at }], rowCount: 1 };
   }
   if (text.includes("SET delivery_status = 'sent'")) {
     const [orderId] = params as [string];
@@ -90,31 +102,58 @@ const queryMock = vi.fn(async (text: string, params: unknown[] = []) => {
 
 vi.mock('@/lib/db/client', () => ({ query: queryMock }));
 
-const sendOrgEmailMock = vi.fn(async (args: { organizationId: string; storeId: string | null; to: string; toName?: string; subject: string; html: string }) => {
+const sendOrgEmailMock = vi.fn(async (args: FakeEmail) => {
   if (sendShouldFail) return { ok: false, error: 'PROVIDER_ERROR', detail: 'connexion refusée par Brevo (détail technique, jamais persisté)' };
   sentEmails.push(args);
   return { ok: true };
 });
 vi.mock('@/lib/email/send', () => ({ sendOrgEmail: sendOrgEmailMock }));
 
+// PDF réel par défaut (module non mocké dans les autres tests) ; bascule
+// possible vers un échec pour tester la résilience (voir « échec de
+// génération PDF » ci-dessous) sans jamais mocker la génération elle-même
+// ailleurs dans ce fichier.
+let pdfShouldFail = false;
+const actualPdf = await vi.importActual<typeof import('@/lib/services/gift-card-certificate-pdf')>('@/lib/services/gift-card-certificate-pdf');
+vi.mock('@/lib/services/gift-card-certificate-pdf', () => ({
+  renderGiftCardCertificatePdf: vi.fn(async (...args: unknown[]) => {
+    if (pdfShouldFail) throw new Error('PDF_RENDER_FAILURE');
+    return actualPdf.renderGiftCardCertificatePdf(...(args as Parameters<typeof actualPdf.renderGiftCardCertificatePdf>));
+  }),
+}));
+
 const { deliverOnlineGiftCardOrder } = await import('@/lib/services/online-gift-card-delivery');
 
 beforeEach(() => {
   resetFakeDb();
+  pdfShouldFail = false;
   queryMock.mockClear();
   sendOrgEmailMock.mockClear();
 });
 
 describe('delivery_mode = buyer', () => {
-  it('un seul email, envoyé à buyer.email, avec le code réel, le montant et le nom du bénéficiaire', async () => {
+  it('un seul email, envoyé à buyer.email, avec le montant et le nom du bénéficiaire dans le HTML, le PDF joint contenant le code réel', async () => {
     await deliverOnlineGiftCardOrder('order-1');
     expect(sentEmails).toHaveLength(1);
     const mail = sentEmails[0]!;
     expect(mail.to).toBe('jonathan@example.com');
-    expect(mail.html).toContain('2900000000015');
     expect(mail.html).toContain('50,00'); // formatEUR(50)
     expect(mail.html).toContain('Guillaume Dupont');
-    expect(mail.html).toContain('Joyeux Noël');
+    expect(mail.html).not.toContain('2900000000015'); // le code n'est plus dans le HTML — voir le PDF joint
+    expect(mail.attachments).toHaveLength(1);
+    const pdfText = extractPdfText(mail.attachments![0]!.content);
+    expect(extractPdfTextCompact(mail.attachments![0]!.content)).toContain('2900000000015');
+    expect(pdfText).toContain('50,00');
+    expect(pdfText).toContain('Guillaume Dupont');
+    expect(pdfText).toContain('Joyeux Noël');
+  });
+
+  it('la pièce jointe est un PDF nommé de façon lisible et sanitizée', async () => {
+    await deliverOnlineGiftCardOrder('order-1');
+    const attachment = sentEmails[0]!.attachments![0]!;
+    expect(attachment.name).toBe('carte-cadeau-plante-verte-2900000000015.pdf');
+    expect(Buffer.isBuffer(attachment.content)).toBe(true);
+    expect(attachment.content.subarray(0, 5).toString('latin1')).toBe('%PDF-');
   });
 
   it('le bénéficiaire ne reçoit AUCUN email, même si recipient.email est renseigné', async () => {
@@ -140,33 +179,39 @@ describe('delivery_mode = buyer', () => {
 describe('delivery_mode = recipient', () => {
   beforeEach(() => { order().delivery_mode = 'recipient'; });
 
-  it('deux emails distincts : confirmation au buyer (sans code), carte au recipient (avec code)', async () => {
+  it('deux emails distincts : confirmation au buyer (sans pièce jointe), carte au recipient (PDF joint avec le code)', async () => {
     await deliverOnlineGiftCardOrder('order-1');
     expect(sentEmails).toHaveLength(2);
     const toBuyer = sentEmails.find((m) => m.to === 'jonathan@example.com')!;
     const toRecipient = sentEmails.find((m) => m.to === 'guillaume@example.com')!;
     expect(toBuyer).toBeTruthy();
     expect(toRecipient).toBeTruthy();
-    expect(toBuyer.html).not.toContain('2900000000015'); // pas de code complet dans la confirmation
-    expect(toRecipient.html).toContain('2900000000015');
+    expect(toBuyer.attachments).toBeUndefined(); // aucune pièce jointe, aucun code dans la confirmation
+    expect(toBuyer.html).not.toContain('2900000000015');
+    expect(toRecipient.attachments).toHaveLength(1);
+    expect(extractPdfTextCompact(toRecipient.attachments![0]!.content)).toContain('2900000000015');
   });
 
-  it("l'email recipient contient montant, code réel et message personnel", async () => {
+  it("l'email recipient contient le montant et le message dans le HTML, le code réel dans le PDF joint", async () => {
     await deliverOnlineGiftCardOrder('order-1');
     const toRecipient = sentEmails.find((m) => m.to === 'guillaume@example.com')!;
     expect(toRecipient.html).toContain('50,00');
-    expect(toRecipient.html).toContain('2900000000015');
-    expect(toRecipient.html).toContain('Joyeux Noël');
+    expect(toRecipient.html).not.toContain('2900000000015');
+    const pdfText = extractPdfText(toRecipient.attachments![0]!.content);
+    expect(pdfText).toContain('50,00');
+    expect(extractPdfTextCompact(toRecipient.attachments![0]!.content)).toContain('2900000000015');
+    expect(pdfText).toContain('Joyeux Noël');
   });
 });
 
 describe('emails identiques (buyer.email === recipient.email, après normalisation)', () => {
-  it("un seul email combiné (confirmation + carte) en mode 'recipient'", async () => {
+  it("un seul email combiné (confirmation + PDF joint) en mode 'recipient'", async () => {
     order().delivery_mode = 'recipient';
     order().recipient_email = ' Jonathan@Example.com '; // même adresse, casse/espaces différents
     await deliverOnlineGiftCardOrder('order-1');
     expect(sentEmails).toHaveLength(1);
-    expect(sentEmails[0]!.html).toContain('2900000000015');
+    expect(sentEmails[0]!.attachments).toHaveLength(1);
+    expect(extractPdfTextCompact(sentEmails[0]!.attachments![0]!.content)).toContain('2900000000015');
   });
 
   it("un seul email en mode 'buyer' (déjà le cas par nature, vérifié explicitement)", async () => {
@@ -239,6 +284,30 @@ describe("échec d'envoi email", () => {
     });
     await deliverOnlineGiftCardOrder('order-1');
     expect(order().delivery_status).toBe('failed');
+  });
+});
+
+describe('échec de génération PDF', () => {
+  it("la carte et le paiement restent valides ; aucun email n'est envoyé sans le PDF ; l'échec est journalisé et retentable", async () => {
+    pdfShouldFail = true;
+    await deliverOnlineGiftCardOrder('order-1');
+    expect(order().status).toBe('issued'); // jamais annulé par un échec de PDF
+    expect(order().gift_card_id).toBe('gift-card-1');
+    expect(sendOrgEmailMock).not.toHaveBeenCalled(); // jamais d'email sans le PDF
+    expect(order().delivery_status).toBe('failed');
+    expect(order().delivery_error).toBeTruthy();
+    expect(order().delivery_error).not.toContain('PDF_RENDER_FAILURE'); // détail technique jamais persisté
+  });
+
+  it('un rejeu ultérieur du webhook réessaie la génération PDF sans recréer de carte', async () => {
+    pdfShouldFail = true;
+    await deliverOnlineGiftCardOrder('order-1');
+    expect(order().delivery_status).toBe('failed');
+    pdfShouldFail = false;
+    await deliverOnlineGiftCardOrder('order-1');
+    expect(order().delivery_status).toBe('sent');
+    expect(order().gift_card_id).toBe('gift-card-1'); // toujours la même carte
+    expect(sendOrgEmailMock).toHaveBeenCalledTimes(1); // un seul envoi au total (le premier a échoué avant l'email)
   });
 });
 

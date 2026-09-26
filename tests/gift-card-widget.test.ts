@@ -532,7 +532,7 @@ describe('Mise en page — largeur et centrage (correctif décalage à gauche)',
     const el = await mountReady();
     const root = cssRuleDeclarations(el, '.hp-root');
     expect(root.width).toBe('100%'); // responsive : jamais plus large que son conteneur
-    expect(root['max-width']).toBe('480px'); // largeur desktop confortable pour un formulaire à une colonne
+    expect(root['max-width']).toBe('960px'); // largeur desktop confortable pour un formulaire horizontal (montants/champs sur 2 à 4 colonnes)
   });
 
   it('.hp-root est centré horizontalement (marges automatiques gauche/droite)', async () => {
@@ -561,6 +561,114 @@ describe('Mise en page — largeur et centrage (correctif décalage à gauche)',
     await flush();
     const body = JSON.parse(String(fetchCalls.find((c) => c.url.includes('/checkout'))!.init!.body));
     expect(body).toMatchObject({ key: 'hp_gc_AAAA', amount: 25, delivery_mode: 'buyer' });
+  });
+});
+
+/** Retrouve les déclarations d'une règle imbriquée dans un bloc
+ *  `@container hpgc (min-width:Npx){ ... }` — même principe que
+ *  cssRuleDeclarations, mais en restreignant d'abord la recherche au texte
+ *  À L'INTÉRIEUR du bloc @container demandé (jsdom ne fournissant pas la
+ *  CSSOM pour un <style> de Shadow Root, voir cssRuleDeclarations). */
+function cssRuleInContainer(el: HTMLElement, minWidthPx: number, selectorText: string): Record<string, string> {
+  const css = q<HTMLStyleElement>(el, 'style').textContent || '';
+  const openTag = `@container hpgc (min-width:${minWidthPx}px){`;
+  const start = css.indexOf(openTag);
+  if (start === -1) throw new Error(`Bloc @container (min-width:${minWidthPx}px) introuvable`);
+  // La feuille contient plusieurs règles imbriquées dans ce bloc (ex. le
+  // bloc 560px : .hp-grid-2{...} .hp-modes{...} ...) : un simple `.toContain
+  // '}}'` couperait avant la DERNIÈRE règle. On compte la profondeur des
+  // accolades pour retrouver la fermeture exacte du bloc @container, quel
+  // que soit le nombre de règles qu'il contient.
+  let depth = 1;
+  let i = start + openTag.length;
+  while (i < css.length && depth > 0) {
+    if (css[i] === '{') depth++;
+    else if (css[i] === '}') depth--;
+    i++;
+  }
+  const containerBody = css.slice(start + openTag.length, i - 1);
+  const escapedSelector = selectorText.replace(/[.*+?^${}()|[\]\\:#]/g, '\\$&');
+  const ruleMatch = new RegExp(escapedSelector + '\\{([^}]*)\\}').exec(containerBody);
+  if (!ruleMatch) throw new Error(`Règle ${selectorText} introuvable dans le bloc @container (min-width:${minWidthPx}px)`);
+  const decls: Record<string, string> = {};
+  ruleMatch[1]!.split(';').forEach((decl) => {
+    const idx = decl.indexOf(':');
+    if (idx === -1) return;
+    decls[decl.slice(0, idx).trim()] = decl.slice(idx + 1).trim();
+  });
+  return decls;
+}
+
+describe('Disposition horizontale desktop/tablette (refonte largeur)', () => {
+  it("le widget réagit à l'espace RÉELLEMENT disponible (container query sur :host), pas à la largeur de la fenêtre", async () => {
+    const el = await mountReady();
+    const host = cssRuleDeclarations(el, ':host');
+    expect(host['container-type']).toBe('inline-size');
+    expect(host['container-name']).toBe('hpgc');
+  });
+
+  it('4 montants prédéfinis sur une grille (jamais un simple empilement), 2x2 par défaut', async () => {
+    const el = await mountReady();
+    const presets = cssRuleDeclarations(el, '.hp-presets');
+    expect(presets.display).toBe('grid');
+    expect(presets['grid-template-columns']).toBe('repeat(2,1fr)');
+  });
+
+  it('les 4 montants passent sur une seule ligne dès que le widget a assez de largeur (>= 760px)', async () => {
+    const el = await mountReady();
+    const wide = cssRuleInContainer(el, 760, '.hp-presets');
+    expect(wide['grid-template-columns']).toBe('repeat(4,1fr)');
+  });
+
+  it('bénéficiaire ET informations acheteur sont chacun regroupés dans un conteneur .hp-grid-2 (2 colonnes dès 560px)', async () => {
+    const el = await mountReady();
+    const grids = shadow(el).querySelectorAll('.hp-grid-2');
+    expect(grids.length).toBe(2); // bénéficiaire + acheteur
+    // Chaque conteneur contient bien les deux champs attendus, dans l'ordre.
+    expect(grids[0]!.querySelector('#hp-recipient-name')).not.toBeNull();
+    expect(grids[0]!.querySelector('#hp-recipient-email')).not.toBeNull();
+    expect(grids[1]!.querySelector('#hp-buyer-name')).not.toBeNull();
+    expect(grids[1]!.querySelector('#hp-buyer-email')).not.toBeNull();
+
+    const wide = cssRuleInContainer(el, 560, '.hp-grid-2');
+    expect(wide.display).toBe('grid');
+    expect(wide['grid-template-columns']).toBe('repeat(2,minmax(0,1fr))');
+  });
+
+  it('les deux modes de réception passent côte à côte, même largeur, dès 560px', async () => {
+    const el = await mountReady();
+    const base = cssRuleDeclarations(el, '.hp-modes');
+    expect(base['flex-direction']).toBe('column'); // empilés par défaut (mobile)
+    const wide = cssRuleInContainer(el, 560, '.hp-modes');
+    expect(wide['flex-direction']).toBe('row');
+    const wideMode = cssRuleInContainer(el, 560, '.hp-mode');
+    expect(wideMode.flex).toBe('1 1 0'); // même largeur pour les deux cartes
+  });
+
+  it('le récapitulatif passe en ligne compacte dès 560px, la ligne message gardant toujours toute la largeur', async () => {
+    const el = await mountReady();
+    const wideRecap = cssRuleInContainer(el, 560, '.hp-recap');
+    expect(wideRecap['flex-direction']).toBe('row');
+    const wideMessageRow = cssRuleInContainer(el, 560, '#hp-recap-message-row');
+    expect(wideMessageRow.flex).toBe('1 0 100%');
+  });
+
+  it('le bouton de paiement inclut le montant une fois connu, sans changer le payload envoyé', async () => {
+    const el = await mountReady();
+    expect(q(el, '#hp-submit').textContent).toBe('Payer'); // aucun montant choisi encore
+    (q(el, '.hp-preset') as HTMLButtonElement).click(); // 25 €
+    // Espace insécable avant "€" (Intl.NumberFormat('fr-FR', ...)) : pas un
+    // espace normal — d'où l'échappement explicite plutôt qu'un littéral.
+    expect(q(el, '#hp-submit').textContent).toBe('Payer 25,00 €');
+  });
+
+  it("n'introduit aucun scroll horizontal : aucune règle ne fixe une largeur supérieure à 100% du conteneur", async () => {
+    const el = await mountReady();
+    const css = q<HTMLStyleElement>(el, 'style').textContent || '';
+    // Aucune largeur en dur supérieure à la largeur desktop retenue (960px) :
+    // tout le reste est en %, auto, ou des tailles de contenu (icônes, spinner…).
+    const pxWidths = Array.from(css.matchAll(/(?:^|[^-])width:\s*(\d+)px/g)).map((m) => Number(m[1]));
+    expect(pxWidths.every((w) => w <= 260)).toBe(true); // plus grande largeur en dur : le champ code-barres/spinner, jamais le conteneur
   });
 });
 

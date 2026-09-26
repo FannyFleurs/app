@@ -101,9 +101,40 @@ Le widget n'utilise **aucune iframe** : il s'insère directement dans le
 flux du document (à l'intérieur d'un Shadow DOM), donc il occupe
 naturellement la largeur de son conteneur et grandit avec son contenu —
 aucun calcul de hauteur, aucun `postMessage` de redimensionnement n'est
-nécessaire (contrairement à une iframe). Le formulaire est conçu mobile
-d'abord (boutons ≥ 44 px de hauteur tactile, aucune largeur fixe, pas de
-défilement horizontal) et reste utilisable de 320 px à un écran de bureau.
+nécessaire (contrairement à une iframe). Le formulaire reste utilisable de
+320 px à un écran de bureau, sans jamais provoquer de défilement
+horizontal.
+
+Sur desktop/tablette, le formulaire devient **horizontal et compact**
+plutôt que de tout empiler verticalement : `.hp-root` peut atteindre
+960 px de large (largeur confortable pour un formulaire à colonnes,
+`width:100%` en dessous). La bascule entre disposition empilée et
+disposition en colonnes utilise des **container queries CSS**
+(`container-type` posé sur `:host`, requêtes `@container` dans la feuille
+de style du Shadow DOM) plutôt que des `@media` classiques : le widget
+réagit ainsi à l'espace **réellement disponible** dans son propre
+conteneur (utile si le site intégrateur le pose dans une colonne étroite
+sur un grand écran), pas à la largeur de la fenêtre du navigateur. Sur un
+navigateur qui ne supporterait pas les container queries, le repli est
+simplement la disposition empilée (mobile) — jamais de rendu cassé.
+
+Deux seuils (mesurés sur la largeur du widget lui-même, pas de la
+fenêtre) :
+- **≥ 560 px** : bénéficiaire et informations acheteur passent chacun en
+  deux colonnes (nom + email côte à côte), les deux modes de réception
+  passent côte à côte (même largeur, même hauteur), le récapitulatif passe
+  en ligne compacte (la ligne « message », facultative, garde toujours
+  toute la largeur).
+- **≥ 760 px** : les 4 montants proposés passent sur une seule ligne
+  (`grid-template-columns: repeat(4,1fr)`) — en dessous de ce seuil, ils
+  restent en grille 2×2 (jamais un simple empilement 1 par ligne, même sur
+  mobile).
+
+Un site qui pose le widget dans un espace intermédiaire (ex. ~700 px)
+obtient donc naturellement le comportement « tablette » attendu : champs
+et modes de réception déjà en 2 colonnes, montants encore en 2×2 — sans
+règle dédiée supplémentaire, simplement parce que le premier seuil est
+franchi avant le second.
 
 ## 7. Erreurs possibles côté intégrateur
 

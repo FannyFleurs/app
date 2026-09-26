@@ -1,94 +1,121 @@
 import { escapeHtml } from './platform';
 
 /**
- * Rendu HTML de la carte cadeau — partagé par tous les emails de
- * distribution (étape 5) et réutilisable plus tard par une page web
- * (« Imprimer ma carte ») ou un export PDF éventuel. Toute évolution
- * visuelle du bloc carte doit passer par cette seule fonction : ne PAS
- * dupliquer ce balisage ailleurs.
- *
- * Suffisamment sobre pour être imprimé (fond blanc, contraste correct en
- * niveaux de gris) : le mode `delivery_mode = "buyer"` compte explicitement
- * sur l'impression/le transfert de cet email par l'acheteur.
+ * Emails de distribution de carte cadeau (étape 5, revus pour la carte
+ * PDF — voir docs/api-public-gift-cards.md). La carte cadeau PDF (voir
+ * lib/services/gift-card-certificate-pdf.ts) est désormais la
+ * représentation DE RÉFÉRENCE : ces emails restent volontairement légers,
+ * un simple accompagnement de la pièce jointe — ils ne recréent plus la
+ * carte en HTML.
  */
-export interface GiftCardBlockArgs {
+
+export interface GiftCardNotificationEmailArgs {
   organizationName: string;
-  /** Déjà formaté (ex. "50,00 €") — voir lib/services/money.ts::formatEUR. */
-  amountLabel: string;
+  /** Personne à qui s'adresse cet email (buyer OU recipient selon le cas). */
+  greetingName: string;
   /** Titulaire de la carte : toujours recipient.name, jamais buyer.name. */
   holderName: string;
-  /** Code RÉEL de la gift_card émise — jamais une référence de commande/session. */
-  code: string;
+  /** Déjà formaté (ex. "50,00 €") — voir lib/services/money.ts::formatEUR. */
+  amountLabel: string;
   message?: string | null;
 }
 
-export function renderGiftCardCardHtml(args: GiftCardBlockArgs): string {
-  const { organizationName, amountLabel, holderName, code, message } = args;
-  const messageBlock = message
-    ? `<div style="margin-top:12px;font-size:14px;color:#333333;font-style:italic;">« ${escapeHtml(message)} »</div>`
-    : '';
-  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" `
-    + `style="max-width:480px;margin:24px 0;border:2px solid #2f6f4f;border-radius:12px;`
-    + `overflow:hidden;font-family:Arial,Helvetica,sans-serif;">`
-    + `<tr><td style="background:#2f6f4f;color:#ffffff;padding:16px 24px;">`
-    + `<div style="font-size:13px;letter-spacing:1px;text-transform:uppercase;opacity:0.85;">`
-    + `${escapeHtml(organizationName)}</div>`
-    + `<div style="font-size:20px;font-weight:bold;margin-top:4px;">Carte cadeau</div>`
-    + `</td></tr>`
-    + `<tr><td style="padding:24px;background:#ffffff;">`
-    + `<div style="font-size:32px;font-weight:bold;color:#2f6f4f;">${escapeHtml(amountLabel)}</div>`
-    + `<div style="margin-top:12px;font-size:14px;color:#333333;">Au nom de `
-    + `<strong>${escapeHtml(holderName)}</strong></div>`
-    + messageBlock
-    + `<div style="margin-top:20px;padding:12px 16px;background:#f3f7f4;border-radius:8px;text-align:center;">`
-    + `<div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#666666;">Code de la carte</div>`
-    + `<div style="font-size:22px;font-weight:bold;letter-spacing:2px;margin-top:4px;">${escapeHtml(code)}</div>`
-    + `</div>`
-    + `<div style="margin-top:16px;font-size:12px;color:#666666;">`
-    + `Cette carte cadeau est utilisable dans les boutiques ${escapeHtml(organizationName)}. `
-    + `Présentez ce code en caisse (imprimé ou depuis votre téléphone).`
-    + `</div>`
-    + `</td></tr></table>`;
-}
-
-export interface GiftCardEmailArgs extends GiftCardBlockArgs {
-  /** Personne à qui s'adresse cet email (peut être le buyer OU le recipient). */
-  greetingName: string;
-}
-
 /**
- * Email contenant la carte (code réel inclus) — utilisé pour :
- * - `delivery_mode = "buyer"` (destinataire : buyer) ;
- * - `delivery_mode = "recipient"` (destinataire : recipient) ;
- * - emails buyer/recipient identiques (un seul envoi combiné).
+ * Email principal : accompagne le PDF joint (code réel, montant, mise en
+ * page complète — tout est dans la pièce jointe). Utilisé pour
+ * `delivery_mode = "buyer"` (destinataire : buyer), `delivery_mode =
+ * "recipient"` (destinataire : recipient), et le cas emails identiques (un
+ * seul envoi combiné) — dans tous les cas le PDF est joint par l'appelant.
  */
-export function buildGiftCardEmailHtml(args: GiftCardEmailArgs): string {
-  const { greetingName, organizationName } = args;
-  return `<p>Bonjour ${escapeHtml(greetingName)},</p>`
-    + `<p>Merci pour cet achat ! Voici votre carte cadeau ${escapeHtml(organizationName)}.</p>`
-    + renderGiftCardCardHtml(args)
-    + `<p>Vous pouvez imprimer cet email ou le transférer : la carte est valable dès maintenant.</p>`;
+export function buildGiftCardNotificationEmailHtml(args: GiftCardNotificationEmailArgs): string {
+  const { organizationName, greetingName, holderName, amountLabel, message } = args;
+  const messageBlock = message
+    ? `<tr><td style="padding:0 32px 8px;">`
+      + `<p style="margin:0;font-size:14px;line-height:1.6;color:#333333;font-style:italic;">« ${escapeHtml(message)} »</p>`
+      + `</td></tr>`
+    : '';
+  return renderEmailShell(organizationName, `
+    <tr><td style="padding:32px 32px 4px;">
+      <h1 style="margin:0;font-size:20px;color:#14211D;">Votre carte cadeau est prête</h1>
+    </td></tr>
+    <tr><td style="padding:8px 32px 20px;">
+      <p style="margin:0;font-size:14px;line-height:1.6;color:#333333;">
+        Bonjour ${escapeHtml(greetingName)}, merci pour cet achat ! Votre carte cadeau ${escapeHtml(organizationName)}
+        est disponible en pièce jointe, au format PDF.
+      </p>
+    </td></tr>
+    <tr><td style="padding:0 32px 20px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F3F7F4;border-radius:10px;">
+        <tr>
+          <td style="padding:16px 20px;">
+            <p style="margin:0 0 4px;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#5A625E;">Bénéficiaire</p>
+            <p style="margin:0;font-size:15px;font-weight:bold;color:#14211D;">${escapeHtml(holderName)}</p>
+          </td>
+          <td style="padding:16px 20px;text-align:right;">
+            <p style="margin:0 0 4px;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#5A625E;">Montant</p>
+            <p style="margin:0;font-size:15px;font-weight:bold;color:#2F6F4F;">${escapeHtml(amountLabel)}</p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+    ${messageBlock}
+    <tr><td style="padding:0 32px 24px;">
+      <p style="margin:0;font-size:13px;line-height:1.6;color:#5A625E;">
+        Vous pouvez conserver cette pièce jointe, la transférer ou l'imprimer — elle contient le code
+        de la carte et toutes les informations utiles pour l'utiliser.
+      </p>
+    </td></tr>
+  `);
 }
 
 export interface BuyerConfirmationArgs {
   organizationName: string;
   amountLabel: string;
-  /** Titulaire de la carte (recipient), affiché sans jamais montrer le code. */
+  /** Titulaire de la carte (recipient) — jamais le code, affiché sans détail sensible. */
   holderName: string;
   reference: string;
   buyerName: string;
 }
 
 /**
- * Confirmation d'achat SANS le code — envoyée au buyer en `delivery_mode =
- * "recipient"` lorsque buyer.email ≠ recipient.email (sinon un seul email
- * combiné est envoyé via `buildGiftCardEmailHtml`, jamais celle-ci).
+ * Confirmation d'achat SANS pièce jointe ni code — envoyée au buyer en
+ * `delivery_mode = "recipient"` lorsque buyer.email ≠ recipient.email
+ * (sinon un seul email combiné est envoyé via
+ * `buildGiftCardNotificationEmailHtml`, jamais celle-ci).
  */
 export function buildBuyerConfirmationOnlyEmailHtml(args: BuyerConfirmationArgs): string {
   const { organizationName, amountLabel, holderName, reference, buyerName } = args;
-  return `<p>Bonjour ${escapeHtml(buyerName)},</p>`
-    + `<p>Merci pour votre achat ! Votre carte cadeau ${escapeHtml(organizationName)} d'un montant de `
-    + `<strong>${escapeHtml(amountLabel)}</strong> (référence ${escapeHtml(reference)}) a bien été envoyée `
-    + `par email à <strong>${escapeHtml(holderName)}</strong>.</p>`
-    + `<p>Merci pour votre confiance.</p>`;
+  return renderEmailShell(organizationName, `
+    <tr><td style="padding:32px 32px 4px;">
+      <h1 style="margin:0;font-size:20px;color:#14211D;">Votre achat est confirmé</h1>
+    </td></tr>
+    <tr><td style="padding:8px 32px 20px;">
+      <p style="margin:0;font-size:14px;line-height:1.6;color:#333333;">
+        Bonjour ${escapeHtml(buyerName)}, merci pour votre achat ! Votre carte cadeau ${escapeHtml(organizationName)}
+        d'un montant de <strong>${escapeHtml(amountLabel)}</strong> (référence ${escapeHtml(reference)})
+        a bien été envoyée par email à <strong>${escapeHtml(holderName)}</strong>.
+      </p>
+    </td></tr>
+    <tr><td style="padding:0 32px 24px;">
+      <p style="margin:0;font-size:13px;line-height:1.6;color:#5A625E;">Merci pour votre confiance.</p>
+    </td></tr>
+  `);
+}
+
+/** Structure commune (en-tête organisation + pied de page) — sobre, responsive,
+ *  compatible avec les principaux clients mail (tables, styles inline). */
+function renderEmailShell(organizationName: string, bodyRows: string): string {
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F8F6F0;padding:24px 0;">`
+    + `<tr><td align="center">`
+    + `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#FFFFFF;border-radius:14px;overflow:hidden;font-family:Arial,Helvetica,sans-serif;">`
+    + `<tr><td style="padding:24px 32px 0;">`
+    + `<p style="margin:0;font-size:12px;font-weight:bold;letter-spacing:.06em;text-transform:uppercase;color:#2F6F4F;">${escapeHtml(organizationName)}</p>`
+    + `</td></tr>`
+    + bodyRows
+    + `<tr><td style="padding:20px 32px 28px;border-top:1px solid #E7E3D8;">`
+    + `<p style="margin:0;font-size:12px;color:#5A625E;">L'équipe ${escapeHtml(organizationName)}</p>`
+    + `</td></tr>`
+    + `</table>`
+    + `</td></tr>`
+    + `</table>`;
 }
