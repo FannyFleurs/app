@@ -1874,9 +1874,15 @@ export default function CashRegister({
                   <path d="M20 6 9 17l-5-5" />
                 </svg>
               ) : (
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                  <rect x="1" y="3" width="22" height="18" rx="2" />
-                  <line x1="6" y1="12" x2="18" y2="12" />
+                // Contour épais + remplissage translucide : à taille de
+                // grille égale, un simple contour fin pèse toujours moins
+                // visuellement qu'une forme pleine — ce qui restait "petit"
+                // malgré les ajustements précédents, à côté d'icônes au
+                // tracé plus épais. Le remplissage suit currentColor (pas de
+                // couleur de fond à deviner selon l'état du bouton).
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <rect x="1.5" y="3.5" width="21" height="17" rx="2" fill="currentColor" fillOpacity="0.15" />
+                  <line x1="7" y1="12" x2="17" y2="12" />
                 </svg>
               )}
             </button>
