@@ -40,6 +40,13 @@ export type OnlineGiftCardDeliveryStatus = 'pending' | 'sending' | 'sent' | 'fai
 export interface OnlineGiftCardOrder {
   id: string;
   organizationId: string;
+  /** Boutique résolue SERVEUR à partir de la clé publique au moment de
+   *  l'achat (jamais fournie par le navigateur) — `null` uniquement pour une
+   *  commande créée avant le multi-boutique (configuration encore au niveau
+   *  organisation). Détermine le compte Stripe attendu (webhook) et la
+   *  session de caisse à laquelle rattacher l'encaissement — voir
+   *  lib/services/pending-store-operations.ts. */
+  storeId: string | null;
   publicReference: string;
   amountCents: number;
   currency: string;
@@ -66,7 +73,7 @@ export interface OnlineGiftCardOrder {
  *  étape 4), qui lit/mappe des lignes de la même table via un client de
  *  transaction propre (verrouillage de ligne) plutôt que via ce module. */
 export interface OrderRow {
-  id: string; organization_id: string; public_reference: string;
+  id: string; organization_id: string; store_id: string | null; public_reference: string;
   amount_cents: number; currency: string;
   buyer_name: string; buyer_email: string;
   recipient_name: string; recipient_email: string | null;
@@ -88,6 +95,7 @@ export function mapRow(r: OrderRow): OnlineGiftCardOrder {
   return {
     id: r.id,
     organizationId: r.organization_id,
+    storeId: r.store_id,
     publicReference: r.public_reference,
     amountCents: r.amount_cents,
     currency: r.currency,
@@ -149,6 +157,10 @@ export class IdempotencyRaceError extends Error {
 
 export interface CreatePendingOrderArgs {
   organizationId: string;
+  /** Boutique résolue SERVEUR (voir resolveActiveOnlineGiftCards) — jamais
+   *  fournie par le client. `null` pour une configuration encore au niveau
+   *  organisation (historique, non encore migrée). */
+  storeId: string | null;
   amountCents: number;
   buyerName: string;
   buyerEmail: string;
@@ -174,13 +186,13 @@ export async function createPendingOrder(args: CreatePendingOrderArgs): Promise<
     try {
       const { rows } = await query<OrderRow>(
         `INSERT INTO online_gift_card_orders
-           (organization_id, public_reference, amount_cents, currency,
+           (organization_id, store_id, public_reference, amount_cents, currency,
             buyer_name, buyer_email, recipient_name, recipient_email, message,
             delivery_mode, status, idempotency_key, request_fingerprint, client_ip)
-         VALUES ($1,$2,$3,'eur',$4,$5,$6,$7,$8,$9,'pending',$10,$11,$12)
+         VALUES ($1,$2,$3,$4,'eur',$5,$6,$7,$8,$9,$10,'pending',$11,$12,$13)
          RETURNING *`,
         [
-          args.organizationId, reference, args.amountCents,
+          args.organizationId, args.storeId, reference, args.amountCents,
           args.buyerName, args.buyerEmail, args.recipientName, args.recipientEmail, args.message,
           args.deliveryMode, args.idempotencyKey, args.requestFingerprint, args.clientIp,
         ],

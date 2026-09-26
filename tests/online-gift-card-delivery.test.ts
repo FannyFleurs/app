@@ -17,7 +17,7 @@ import { extractPdfText, extractPdfTextCompact } from './helpers/extract-pdf-tex
  */
 
 interface FakeOrderRow {
-  id: string; organization_id: string; public_reference: string;
+  id: string; organization_id: string; store_id: string | null; public_reference: string;
   amount_cents: number;
   buyer_name: string; buyer_email: string;
   recipient_name: string; recipient_email: string | null;
@@ -36,7 +36,8 @@ interface FakeEmail {
   subject: string; html: string; attachments?: Array<{ name: string; content: Buffer }>;
 }
 
-const organizations = [{ id: 'org-a-uuid', name: 'Plante Verte' }, { id: 'org-b-uuid', name: 'Fanny Fleurs' }];
+const organizations = [{ id: 'org-a-uuid', name: 'Atelier Sauge' }, { id: 'org-b-uuid', name: 'Fanny Fleurs' }];
+const stores = [{ id: 'store-pv-uuid', organization_id: 'org-a-uuid', name: 'Plante Verte' }];
 const giftCards = [{
   id: 'gift-card-1', organization_id: 'org-a-uuid', code: '2900000000015',
   issued_at: '2026-01-10T00:00:00.000Z', expires_at: '2027-01-10T00:00:00.000Z',
@@ -48,7 +49,7 @@ let sendShouldFail = false;
 
 function resetFakeDb() {
   orders = [{
-    id: 'order-1', organization_id: 'org-a-uuid', public_reference: 'GC-AAAAAAAA',
+    id: 'order-1', organization_id: 'org-a-uuid', store_id: null, public_reference: 'GC-AAAAAAAA',
     amount_cents: 5000,
     buyer_name: 'Jonathan Frissong', buyer_email: 'jonathan@example.com',
     recipient_name: 'Guillaume Dupont', recipient_email: 'guillaume@example.com',
@@ -84,6 +85,11 @@ const queryMock = vi.fn(async (text: string, params: unknown[] = []) => {
     const org = gc ? organizations.find((o) => o.id === gc.organization_id) : undefined;
     if (!gc || !org) return { rows: [], rowCount: 0 };
     return { rows: [{ code: gc.code, organization_name: org.name, issued_at: gc.issued_at, expires_at: gc.expires_at }], rowCount: 1 };
+  }
+  if (text.includes('SELECT name FROM stores WHERE id = $1')) {
+    const storeId = params[0] as string;
+    const store = stores.find((s) => s.id === storeId);
+    return { rows: store ? [{ name: store.name }] : [], rowCount: store ? 1 : 0 };
   }
   if (text.includes("SET delivery_status = 'sent'")) {
     const [orderId] = params as [string];
@@ -151,7 +157,7 @@ describe('delivery_mode = buyer', () => {
   it('la pièce jointe est un PDF nommé de façon lisible et sanitizée', async () => {
     await deliverOnlineGiftCardOrder('order-1');
     const attachment = sentEmails[0]!.attachments![0]!;
-    expect(attachment.name).toBe('carte-cadeau-plante-verte-2900000000015.pdf');
+    expect(attachment.name).toBe('carte-cadeau-atelier-sauge-2900000000015.pdf');
     expect(Buffer.isBuffer(attachment.content)).toBe(true);
     expect(attachment.content.subarray(0, 5).toString('latin1')).toBe('%PDF-');
   });
@@ -340,7 +346,21 @@ describe('multi-tenant', () => {
 
   it("le nom d'organisation dans l'email est celui résolu via gift_cards -> organizations, jamais codé en dur", async () => {
     await deliverOnlineGiftCardOrder('order-1');
-    expect(sentEmails[0]!.html).toContain('Plante Verte');
+    expect(sentEmails[0]!.html).toContain('Atelier Sauge');
     expect(sentEmails[0]!.html).not.toContain('Fanny Fleurs');
+  });
+
+  it("commande rattachée à une BOUTIQUE : l'email/PDF affichent le nom de la BOUTIQUE (Plante Verte), pas celui de l'organisation", async () => {
+    order().store_id = 'store-pv-uuid';
+    await deliverOnlineGiftCardOrder('order-1');
+    expect(sendOrgEmailMock).toHaveBeenCalledWith(expect.objectContaining({
+      organizationId: 'org-a-uuid', storeId: 'store-pv-uuid',
+      subject: 'Votre carte cadeau Plante Verte',
+    }));
+    expect(sentEmails[0]!.html).toContain('Plante Verte');
+    expect(sentEmails[0]!.html).not.toContain('Atelier Sauge');
+    const pdfText = extractPdfTextCompact(sentEmails[0]!.attachments![0]!.content);
+    expect(pdfText).toContain('PLANTEVERTE');
+    expect(sentEmails[0]!.attachments![0]!.name).toContain('plante-verte');
   });
 });

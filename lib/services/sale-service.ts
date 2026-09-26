@@ -435,6 +435,7 @@ export class SaleService {
       let giftKindColChecked = false;
       let hasKindCol = false;
       for (const row of linesRes.rows as Array<{
+        line_index: number;
         unit_price_ttc: string | number;
         quantity: string | number;
         metadata: Record<string, unknown> | null;
@@ -543,9 +544,33 @@ export class SaleService {
           [args.organizationId, gcId, face, sale.id, args.userId],
         );
 
+        // CORRECTION COMPTABLE : l'émission d'une carte cadeau (ou d'un bon
+        // d'achat) est un ENCAISSEMENT, pas du chiffre d'affaires — le CA
+        // sera reconnu plus tard, quand la carte sera RÉELLEMENT utilisée
+        // pour régler un achat de produits/services (cette vente-là suit
+        // déjà le circuit normal, inchangé). Avant cette correction, le CA
+        // comptait deux fois le même argent (à l'émission, puis à
+        // l'utilisation) — voir docs/architecture-multi-store-stripe.md.
+        //
+        // `gift_card_ca_deferred: true` marque cette ligne pour exclusion du
+        // CA dans les agrégations (ClosingService.sealDaily, day-report.ts,
+        // /api/ca/summary) — SANS jamais toucher `sales.total_ht/tva/ttc`
+        // (déjà figés plus haut, AVANT ce bloc) ni les paiements réellement
+        // encaissés : la caisse continue de réconcilier le VRAI argent
+        // reçu, seule la classification "CA" change. Écrit explicitement en
+        // base (pas seulement en mémoire) : une vente historique, déjà
+        // validée AVANT cette correction, ne porte jamais ce marqueur et
+        // continue donc d'être comptée en CA exactement comme avant —
+        // aucune vente historique n'est recalculée ni modifiée.
+        const persistedMetadata = { ...meta, gift_card_ca_deferred: true };
+        await client.query(
+          `UPDATE sale_lines SET metadata = $1 WHERE sale_id = $2 AND line_index = $3`,
+          [JSON.stringify(persistedMetadata), sale.id, row.line_index],
+        );
+
         // Le code doit voyager dans le snapshot/ticket : on mute la metadata de
         // la ligne AVANT la construction du snapshot ci-dessous.
-        row.metadata = { ...meta, gift_card_code: code };
+        row.metadata = { ...persistedMetadata, gift_card_code: code };
         giftCardsIssued.push({ id: gcId, code, amount: face, kind });
       }
 

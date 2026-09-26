@@ -3,6 +3,7 @@ import { withTransaction, query } from '@/lib/db/client';
 import { GiftCardService } from './gift-card-service';
 import { mapRow, type OrderRow, type OnlineGiftCardOrder } from './online-gift-card-orders';
 import { deliverOnlineGiftCardOrder } from './online-gift-card-delivery';
+import { createPendingStoreOperation } from './pending-store-operations';
 
 /**
  * Émission de la carte cadeau HelloPos suite à un paiement Stripe confirmé
@@ -40,6 +41,13 @@ export interface FulfillCheckoutArgs {
   amountTotalCents: number | null | undefined;
   currency: string | null | undefined;
   paymentIntentId: string | null | undefined;
+  /** Instant RÉEL du paiement (event.created Stripe, jamais now() serveur) —
+   *  devient `paid_at` de la commande ET `occurred_at` de l'encaissement en
+   *  attente (voir pending-store-operations.ts) : ne doit JAMAIS dériver au
+   *  jour/heure de traitement du webhook. Facultatif (repli sur l'instant de
+   *  traitement) uniquement pour ne pas casser un appelant qui ne le fournit
+   *  pas encore — le webhook, lui, le calcule toujours depuis l'événement. */
+  eventCreatedAt?: string;
 }
 
 /**
@@ -73,13 +81,14 @@ export interface FulfillCheckoutArgs {
  * (le statut de la commande, lui, ne change plus une fois 'issued').
  */
 export async function fulfillOnlineGiftCardCheckout(args: FulfillCheckoutArgs): Promise<FulfillOutcome> {
+  const eventCreatedAt = args.eventCreatedAt ?? new Date().toISOString();
   const result = await withTransaction(async (client) => {
     const orderRes = await client.query<OrderRow>(
       `SELECT * FROM online_gift_card_orders WHERE id = $1 FOR UPDATE`,
       [args.giftCardOrderId],
     );
     const row = orderRes.rows[0];
-    if (!row) return { outcome: 'order_not_found' as const, retryDelivery: false };
+    if (!row) return { outcome: 'order_not_found' as const, retryDelivery: false, storeId: null, amountCents: 0 };
     const order: OnlineGiftCardOrder = mapRow(row);
 
     // Idempotence : commande déjà avancée (par cet appel dans une exécution
@@ -90,15 +99,15 @@ export async function fulfillOnlineGiftCardCheckout(args: FulfillCheckoutArgs): 
     if (order.status !== 'pending') {
       const retryDelivery = order.organizationId === args.organizationId
         && order.stripeCheckoutSessionId === args.stripeSessionId;
-      return { outcome: 'already_issued' as const, retryDelivery };
+      return { outcome: 'already_issued' as const, retryDelivery, storeId: order.storeId, amountCents: order.amountCents };
     }
 
     // --- Cohérence : jamais confiance aux seules metadata Stripe. ---
-    if (order.organizationId !== args.organizationId) return { outcome: 'organization_mismatch' as const, retryDelivery: false };
-    if (order.stripeCheckoutSessionId !== args.stripeSessionId) return { outcome: 'session_mismatch' as const, retryDelivery: false };
-    if ((args.currency ?? '').toLowerCase() !== order.currency.toLowerCase()) return { outcome: 'currency_mismatch' as const, retryDelivery: false };
-    if (args.amountTotalCents !== order.amountCents) return { outcome: 'amount_mismatch' as const, retryDelivery: false };
-    if (args.paymentStatus !== 'paid') return { outcome: 'not_paid' as const, retryDelivery: false };
+    if (order.organizationId !== args.organizationId) return { outcome: 'organization_mismatch' as const, retryDelivery: false, storeId: null, amountCents: 0 };
+    if (order.stripeCheckoutSessionId !== args.stripeSessionId) return { outcome: 'session_mismatch' as const, retryDelivery: false, storeId: null, amountCents: 0 };
+    if ((args.currency ?? '').toLowerCase() !== order.currency.toLowerCase()) return { outcome: 'currency_mismatch' as const, retryDelivery: false, storeId: null, amountCents: 0 };
+    if (args.amountTotalCents !== order.amountCents) return { outcome: 'amount_mismatch' as const, retryDelivery: false, storeId: null, amountCents: 0 };
+    if (args.paymentStatus !== 'paid') return { outcome: 'not_paid' as const, retryDelivery: false, storeId: null, amountCents: 0 };
 
     // --- Émission : système gift_cards EXISTANT, dans CETTE transaction. ---
     // RÈGLE MÉTIER IMPÉRATIVE : le titulaire de la carte est le
@@ -120,17 +129,37 @@ export async function fulfillOnlineGiftCardCheckout(args: FulfillCheckoutArgs): 
 
     await client.query(
       `UPDATE online_gift_card_orders
-          SET status = 'issued', gift_card_id = $2, paid_at = now(),
+          SET status = 'issued', gift_card_id = $2, paid_at = $4,
               stripe_payment_intent_id = $3, updated_at = now()
         WHERE id = $1`,
-      [order.id, giftCardId, args.paymentIntentId ?? null],
+      [order.id, giftCardId, args.paymentIntentId ?? null, eventCreatedAt],
     );
 
-    return { outcome: 'issued' as const, retryDelivery: false };
+    return { outcome: 'issued' as const, retryDelivery: false, storeId: order.storeId, amountCents: order.amountCents };
   });
 
   if (result.outcome === 'issued' || (result.outcome === 'already_issued' && result.retryDelivery)) {
     await deliverOnlineGiftCardOrder(args.giftCardOrderId);
+  }
+
+  // Encaissement « hors CA » rattaché à la file d'attente caisse (8.4) —
+  // UNIQUEMENT à l'émission fraîche ('issued') : idempotent par nature
+  // (UNIQUE(source_type, source_id)), donc un rejeu ('already_issued') n'a
+  // rien à créer de plus. Pas de boutique connue (commande antérieure au
+  // multi-boutique) => rien à mettre en file, cohérent avec la non-
+  // rétroactivité documentée en migration 0085.
+  if (result.outcome === 'issued' && result.storeId) {
+    await createPendingStoreOperation({
+      organizationId: args.organizationId,
+      storeId: result.storeId,
+      kind: 'online_gift_card',
+      amountCents: result.amountCents,
+      currency: 'eur',
+      paymentLabel: 'Carte cadeau en ligne / Stripe',
+      occurredAt: eventCreatedAt,
+      sourceType: 'online_gift_card_order',
+      sourceId: args.giftCardOrderId,
+    });
   }
 
   return result.outcome;

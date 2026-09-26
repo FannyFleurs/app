@@ -46,7 +46,17 @@ export class ClosingService {
       const periodStart: string | null = lastClose.rows[0]?.sealed_at ?? null;
       const seq = (lastClose.rows[0]?.seq ?? 0) + 1;
 
-      // 1. Cumuls de la période (ventes validées de la boutique). Le filtre
+      // 1. Cumuls de la période (ventes validées de la boutique).
+      //    CORRECTION COMPTABLE : sourcé sur sale_lines (et non plus
+      //    sales.total_*) pour EXCLURE du CHIFFRE D'AFFAIRES les lignes
+      //    d'ÉMISSION de carte cadeau/bon d'achat
+      //    (metadata.gift_card_ca_deferred = true, posé uniquement par les
+      //    NOUVELLES émissions — voir SaleService.validate). Leur montant
+      //    est un ENCAISSEMENT (vente de carte cadeau), pas du CA : le CA
+      //    ne sera reconnu qu'à l'utilisation réelle de la carte pour payer
+      //    un achat. `sales.total_ht/tva/ttc` restent, eux, INCHANGÉS
+      //    ailleurs (réconciliation caisse/paiements, encaissement réel) —
+      //    seule cette agrégation de CA change. Le filtre
       //    `$3 IS NULL OR validated_at > $3` borne la période après réouverture.
       const totalsRes = await client.query<{
         total_sales: string;
@@ -54,17 +64,20 @@ export class ClosingService {
         total_tva: string;
         total_ttc: string;
         total_discount: string;
+        gift_card_issuance_ttc: string;
       }>(
-        `SELECT COUNT(*)::text AS total_sales,
-                COALESCE(SUM(total_ht),0)::text  AS total_ht,
-                COALESCE(SUM(total_tva),0)::text AS total_tva,
-                COALESCE(SUM(total_ttc),0)::text AS total_ttc,
-                COALESCE(SUM(total_discount),0)::text AS total_discount
-           FROM sales
-          WHERE store_id = $1
-            AND status = 'validated'
-            AND validated_at::date = $2::date
-            AND ($3::timestamptz IS NULL OR validated_at > $3)`,
+        `SELECT COUNT(DISTINCT s.id)::text AS total_sales,
+                COALESCE(SUM(sl.line_ht)  FILTER (WHERE COALESCE(sl.metadata->>'gift_card_ca_deferred','') <> 'true'), 0)::text AS total_ht,
+                COALESCE(SUM(sl.line_tva) FILTER (WHERE COALESCE(sl.metadata->>'gift_card_ca_deferred','') <> 'true'), 0)::text AS total_tva,
+                COALESCE(SUM(sl.line_ttc) FILTER (WHERE COALESCE(sl.metadata->>'gift_card_ca_deferred','') <> 'true'), 0)::text AS total_ttc,
+                COALESCE(SUM(sl.discount_amount) FILTER (WHERE COALESCE(sl.metadata->>'gift_card_ca_deferred','') <> 'true'), 0)::text AS total_discount,
+                COALESCE(SUM(sl.line_ttc) FILTER (WHERE COALESCE(sl.metadata->>'gift_card_ca_deferred','') = 'true'), 0)::text AS gift_card_issuance_ttc
+           FROM sale_lines sl
+           JOIN sales s ON s.id = sl.sale_id
+          WHERE s.store_id = $1
+            AND s.status = 'validated'
+            AND s.validated_at::date = $2::date
+            AND ($3::timestamptz IS NULL OR s.validated_at > $3)`,
         [args.storeId, args.businessDate, periodStart],
       );
       const totals = totalsRes.rows[0]!;
@@ -74,7 +87,10 @@ export class ClosingService {
       // une journée sans activité) : cela permet de refermer la journée et la
       // session caisse, et documente honnêtement la période rouverte.
 
-      // 2. Répartition TVA agrégée (parcours des sale_lines)
+      // 2. Répartition TVA agrégée (parcours des sale_lines) — même
+      //    exclusion CA que ci-dessus : une carte cadeau émise à 0% (code
+      //    'CADEAU') n'est pas une tranche de TVA réelle, cohérent avec son
+      //    exclusion du CA total.
       const tvaRes = await client.query<{
         tax_rate: string;
         base_ht: string;
@@ -91,6 +107,7 @@ export class ClosingService {
             AND s.status = 'validated'
             AND s.validated_at::date = $2::date
             AND ($3::timestamptz IS NULL OR s.validated_at > $3)
+            AND COALESCE(sl.metadata->>'gift_card_ca_deferred','') <> 'true'
           GROUP BY sl.tax_rate
           ORDER BY sl.tax_rate DESC`,
         [args.storeId, args.businessDate, periodStart],
@@ -154,6 +171,27 @@ export class ClosingService {
       const cashIns = Number(floatsRes.rows[0]?.ins ?? 0);
       const cashOuts = Number(floatsRes.rows[0]?.outs ?? 0);
 
+      // Encaissements « hors CA » de la période — vente de cartes cadeaux en
+      // caisse (calculée ci-dessus) et cartes cadeaux en ligne/Stripe
+      // (pending_store_operations rattachées à une session ouverte ce
+      // jour-là pour cette boutique, y compris celles affectées après un
+      // paiement reçu boutique fermée — voir pending-store-operations.ts).
+      // Purement informatif ici : n'entre dans aucun total CA ni dans
+      // cash_expected (déjà exact, basé sur payments réels).
+      const onlineGiftCardRes = await client.query<{ total_cents: string }>(
+        `SELECT COALESCE(SUM(pso.amount_cents), 0)::text AS total_cents
+           FROM pending_store_operations pso
+          WHERE pso.kind = 'online_gift_card'
+            AND pso.cash_session_id IN (
+              SELECT id FROM cash_sessions
+               WHERE store_id = $1 AND opened_at::date = $2::date
+                 AND ($3::timestamptz IS NULL OR opened_at > $3)
+            )`,
+        [args.storeId, args.businessDate, periodStart],
+      );
+      const onlineGiftCardEncaissementTtc =
+        Number(onlineGiftCardRes.rows[0]?.total_cents ?? 0) / 100;
+
       const cashExpected = Number(
         (openingFloats + cashSales + cashIns - cashOuts).toFixed(2),
       );
@@ -198,6 +236,14 @@ export class ClosingService {
           total_tva: Number(totals.total_tva),
           total_ttc: Number(totals.total_ttc),
           total_discount: Number(totals.total_discount),
+        },
+        // Distinction explicite CHIFFRE D'AFFAIRES (totals ci-dessus) vs
+        // ENCAISSEMENTS hors CA : vente de cartes cadeaux (caisse + en
+        // ligne/Stripe). Le paiement PAR carte cadeau (à l'usage) reste
+        // visible séparément dans payments_breakdown (method='gift_card').
+        encaissements_hors_ca: {
+          gift_card_sales_ttc: Number(totals.gift_card_issuance_ttc),
+          online_gift_card_ttc: onlineGiftCardEncaissementTtc,
         },
         tva_breakdown: tvaBreakdown,
         payments_breakdown: enrichedPayments,

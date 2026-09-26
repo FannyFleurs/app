@@ -9,10 +9,11 @@ export const dynamic = 'force-dynamic';
  * Contrat public de l'intégration « Cartes cadeaux en ligne » — documenté
  * dans docs/api-public-gift-cards.md.
  *
- * AUCUNE session HelloPos requise. L'organisation est déterminée
- * EXCLUSIVEMENT par la clé publique `key` (hp_gc_...) — jamais par un
- * organization_id fourni par l'appelant, qui n'existe nulle part dans ce
- * fichier ni dans le contrat de réponse.
+ * AUCUNE session HelloPos requise. L'organisation (et, depuis l'évolution
+ * multi-boutiques, la BOUTIQUE) sont déterminées EXCLUSIVEMENT par la clé
+ * publique `key` (hp_gc_...) — jamais par un organization_id/store_id
+ * fourni par l'appelant, qui n'existe nulle part dans ce fichier ni dans le
+ * contrat de réponse.
  *
  * Cette étape ne fait QUE lire la configuration : aucun paiement, aucune
  * carte cadeau créée ici.
@@ -21,14 +22,22 @@ export const dynamic = 'force-dynamic';
 const NOT_AVAILABLE = { error: 'GIFT_CARDS_NOT_AVAILABLE' } as const;
 
 /**
- * Résout la clé en organisation + réglage, uniquement si TOUT est valide :
- * clé bien formée, clé connue, intégration active, organisation active.
- * Renvoie `null` pour CHAQUE cas d'échec, sans distinction — voir le
- * commentaire sur `GET` pour pourquoi c'est important.
+ * Résout la clé en organisation + boutique + réglage, uniquement si TOUT
+ * est valide : clé bien formée, clé connue, intégration active,
+ * organisation active, ET (si la configuration est rattachée à une
+ * boutique) boutique active. Renvoie `null` pour CHAQUE cas d'échec, sans
+ * distinction — voir le commentaire sur `GET` pour pourquoi c'est important.
  */
-async function resolve(req: Request): Promise<{ organizationName: string; giftCards: {
-  preset_amounts: number[]; allow_custom_amount: boolean; min_amount: number; max_amount: number;
-}; allowedOrigins: string[] } | null> {
+async function resolve(req: Request): Promise<{
+  organizationName: string;
+  /** `null` seulement pour une configuration historique non rattachée à
+   *  une boutique précise (voir lib/settings/online-gift-cards-server.ts). */
+  storeName: string | null;
+  giftCards: {
+    preset_amounts: number[]; allow_custom_amount: boolean; min_amount: number; max_amount: number;
+  };
+  allowedOrigins: string[];
+} | null> {
   const key = new URL(req.url).searchParams.get('key') ?? '';
   const resolved = await resolveActiveOnlineGiftCards(key);
   if (!resolved) return null;
@@ -40,9 +49,24 @@ async function resolve(req: Request): Promise<{ organizationName: string; giftCa
   const name = org.rows[0]?.name;
   if (!name) return null;
 
+  let storeName: string | null = null;
+  if (resolved.storeId) {
+    const store = await query<{ name: string }>(
+      `SELECT name FROM stores WHERE id = $1 AND organization_id = $2 AND is_active = TRUE`,
+      [resolved.storeId, resolved.organizationId],
+    );
+    // Boutique introuvable/désactivée pour une configuration qui lui est
+    // pourtant rattachée : traité comme "indisponible", même réponse neutre
+    // que tout autre cas d'échec (jamais un widget affiché sans identité
+    // valide, jamais une supposition sur une autre boutique).
+    if (!store.rows[0]) return null;
+    storeName = store.rows[0].name;
+  }
+
   const s = resolved.settings;
   return {
     organizationName: name,
+    storeName,
     giftCards: {
       preset_amounts: s.preset_amounts,
       allow_custom_amount: s.allow_custom_amount,
@@ -73,11 +97,12 @@ function corsHeaders(req: Request, allowedOrigins: string[]): HeadersInit {
 export async function GET(req: Request) {
   const resolved = await resolve(req);
   // Réponse volontairement IDENTIQUE (statut + corps) pour : clé inconnue,
-  // clé malformée, intégration désactivée, organisation introuvable/inactive.
-  // Distinguer ces cas publiquement permettrait d'énumérer les organisations
-  // ou de deviner qu'une clé existe. Par la même logique, aucun en-tête CORS
-  // n'est ajouté ici : on ne connaît pas encore les origines autorisées d'une
-  // organisation qu'on ne révèle pas avoir trouvée.
+  // clé malformée, intégration désactivée, organisation/boutique
+  // introuvable/inactive. Distinguer ces cas publiquement permettrait
+  // d'énumérer les organisations ou de deviner qu'une clé existe. Par la
+  // même logique, aucun en-tête CORS n'est ajouté ici : on ne connaît pas
+  // encore les origines autorisées d'une organisation qu'on ne révèle pas
+  // avoir trouvée.
   if (!resolved) {
     return NextResponse.json(NOT_AVAILABLE, { status: 404 });
   }
@@ -86,6 +111,11 @@ export async function GET(req: Request) {
     {
       enabled: true,
       organization: { name: resolved.organizationName },
+      // Présent UNIQUEMENT si la configuration est rattachée à une boutique
+      // précise — le widget l'utilise en priorité pour son identité
+      // affichée (voir docs/gift-card-widget.md), avec repli sur
+      // `organization.name` pour les intégrations non encore migrées.
+      ...(resolved.storeName ? { store: { name: resolved.storeName } } : {}),
       gift_cards: resolved.giftCards,
     },
     { headers: corsHeaders(req, resolved.allowedOrigins) },

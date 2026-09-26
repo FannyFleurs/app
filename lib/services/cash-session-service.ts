@@ -1,6 +1,7 @@
 import type { PoolClient } from 'pg';
 import { withTransaction, query } from '@/lib/db/client';
 import { FiscalCore } from '@/lib/fiscal/core';
+import { assignPendingStoreOperations } from './pending-store-operations';
 
 export class CashSessionService {
   /**
@@ -106,7 +107,14 @@ export class CashSessionService {
           [args.storeId],
         );
         const joined = shared.rows[0];
-        if (joined) return { id: joined.id, joined: true };
+        if (joined) {
+          // La session existait déjà : les opérations en attente de cette
+          // boutique ont normalement déjà été affectées à SON ouverture —
+          // ce ré-appel est un simple filet de sécurité idempotent (une
+          // ligne déjà affectée ne matche plus `cash_session_id IS NULL`).
+          await assignPendingStoreOperations(client, args.storeId, joined.id);
+          return { id: joined.id, joined: true };
+        }
       }
 
       const existing = await client.query(
@@ -146,6 +154,11 @@ export class CashSessionService {
         entityId: ins.rows[0]!.id,
         payload: { opening_float: args.openingFloat },
       });
+
+      // Rattache automatiquement toute opération en attente (ex. carte
+      // cadeau en ligne payée un jour de fermeture) à la session qui vient
+      // de s'ouvrir — DANS la même transaction que l'ouverture elle-même.
+      await assignPendingStoreOperations(client, args.storeId, ins.rows[0]!.id);
 
       return { id: ins.rows[0]!.id };
     });

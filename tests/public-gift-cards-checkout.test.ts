@@ -19,7 +19,7 @@ interface FakeStripeConfig {
   webhook_secret: string; return_url: string;
 }
 interface FakeOrderRow {
-  id: string; organization_id: string; public_reference: string;
+  id: string; organization_id: string; store_id: string | null; public_reference: string;
   amount_cents: number; currency: string;
   buyer_name: string; buyer_email: string;
   recipient_name: string; recipient_email: string | null;
@@ -82,13 +82,19 @@ function resetFakeDb() {
 }
 
 const queryMock = vi.fn(async (text: string, params: unknown[] = []) => {
-  // Résolution clé publique -> organisation (config cartes cadeaux)
+  // Résolution clé publique -> organisation (config cartes cadeaux). La
+  // requête réelle (lib/settings/online-gift-cards-server.ts) cherche
+  // désormais la clé « online_gift_cards » ET ses variantes par boutique
+  // (« online_gift_cards:<storeId> ») : params[0]=clé de base,
+  // params[1]=motif LIKE, params[2]=clé publique recherchée. Ces fixtures
+  // ne modélisent que des configurations au niveau organisation (pas de
+  // boutique), donc `key` renvoyé est toujours la clé de base.
   if (text.includes("value->>'public_key'")) {
-    const key = params[1] as string;
+    const key = params[2] as string;
     const row = giftCardConfigs.find((c) => c.public_key === key);
     if (!row) return { rows: [], rowCount: 0 };
     const { organization_id, ...value } = row;
-    return { rows: [{ organization_id, value }], rowCount: 1 };
+    return { rows: [{ organization_id, key: params[0] as string, value }], rowCount: 1 };
   }
   // Organisation (nom + is_active)
   if (text.includes('FROM organizations')) {
@@ -96,11 +102,13 @@ const queryMock = vi.fn(async (text: string, params: unknown[] = []) => {
     const org = orgs.find((o) => o.id === id && o.is_active);
     return { rows: org ? [{ name: org.name }] : [], rowCount: org ? 1 : 0 };
   }
-  // Config Stripe de l'organisation
-  if (text.includes('FROM settings') && params[1] === 'stripe') {
+  // Config Stripe de la boutique (loadStripeSettings — key = ANY([storeKey, 'stripe'])).
+  // Ces fixtures ne modélisent que des comptes au niveau organisation (pas
+  // de boutique), donc storeKey === 'stripe' ici : suffit de résoudre par orgId.
+  if (text.includes('FROM settings') && text.includes('key = ANY')) {
     const orgId = params[0] as string;
     const cfg = stripeConfigs[orgId];
-    return { rows: cfg ? [{ value: cfg }] : [], rowCount: cfg ? 1 : 0 };
+    return { rows: cfg ? [{ value: cfg, key: 'stripe' }] : [], rowCount: cfg ? 1 : 0 };
   }
   // Anti-abus : comptage par organisation
   if (text.includes('COUNT(*)') && text.includes('organization_id = $1 AND created_at')) {
@@ -120,8 +128,8 @@ const queryMock = vi.fn(async (text: string, params: unknown[] = []) => {
   }
   // Création (INSERT ... RETURNING *)
   if (text.includes('INSERT INTO online_gift_card_orders')) {
-    const [organizationId, publicReference, amountCents, buyerName, buyerEmail, recipientName, recipientEmail, message, deliveryMode, idempotencyKey, requestFingerprint, clientIp] = params as [
-      string, string, number, string, string, string, string | null, string | null, string, string | null, string | null, string | null,
+    const [organizationId, storeId, publicReference, amountCents, buyerName, buyerEmail, recipientName, recipientEmail, message, deliveryMode, idempotencyKey, requestFingerprint, clientIp] = params as [
+      string, string | null, string, number, string, string, string, string | null, string | null, string, string | null, string | null, string | null,
     ];
     if (idempotencyKey && orderRows.some((r) => r.organization_id === organizationId && r.idempotency_key === idempotencyKey)) {
       const e = new Error('duplicate key value violates unique constraint') as Error & { code?: string; constraint?: string };
@@ -132,6 +140,7 @@ const queryMock = vi.fn(async (text: string, params: unknown[] = []) => {
     const row: FakeOrderRow = {
       id: `order-${nextOrderId++}`,
       organization_id: organizationId,
+      store_id: storeId,
       public_reference: publicReference,
       amount_cents: amountCents,
       currency: 'eur',
@@ -624,7 +633,7 @@ describe('Anti-abus (rate limiting)', () => {
     // Pré-remplit 5 tentatives récentes pour la même IP (limite atteinte).
     for (let i = 0; i < 5; i++) {
       orderRows.push({
-        id: `seed-${i}`, organization_id: 'org-a-uuid', public_reference: `GC-SEED${i}`,
+        id: `seed-${i}`, organization_id: 'org-a-uuid', store_id: null, public_reference: `GC-SEED${i}`,
         amount_cents: 2500, currency: 'eur', buyer_name: 'X', buyer_email: 'x@example.fr',
         recipient_name: 'Y', recipient_email: 'y@example.fr', message: null, delivery_mode: 'buyer', status: 'pending',
         stripe_checkout_session_id: null, stripe_payment_intent_id: null, gift_card_id: null,

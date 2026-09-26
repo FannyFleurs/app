@@ -51,12 +51,14 @@ const configs: FakeConfig[] = [
 ];
 
 const queryMock = vi.fn(async (text: string, params: unknown[] = []) => {
+  // Requête réelle (online-gift-cards-server.ts) : params[0]=clé de base,
+  // params[1]=motif LIKE boutique, params[2]=clé publique recherchée.
   if (text.includes("value->>'public_key'")) {
-    const key = params[1] as string;
+    const key = params[2] as string;
     const row = configs.find((c) => c.public_key === key);
     if (!row) return { rows: [], rowCount: 0 };
     const { organization_id, ...value } = row;
-    return { rows: [{ organization_id, value }], rowCount: 1 };
+    return { rows: [{ organization_id, key: params[0] as string, value }], rowCount: 1 };
   }
   if (text.includes('FROM organizations')) {
     const id = params[0] as string;

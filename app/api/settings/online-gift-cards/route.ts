@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requirePermission } from '@/lib/auth/guards';
+import { storeInOrg } from '@/lib/auth/stores-server';
 import { parseJson, jsonError } from '@/lib/validation/api';
 import { audit } from '@/lib/audit/log';
 import {
@@ -12,6 +13,7 @@ import { loadOnlineGiftCards, saveOnlineGiftCards } from '@/lib/settings/online-
 export const dynamic = 'force-dynamic';
 
 const patchSchema = z.object({
+  store_id: z.string().uuid().optional(),
   enabled: z.boolean().optional(),
   allowed_origins: z.array(z.string().max(300)).max(50).optional(),
   preset_amounts: z.array(z.number()).max(20).optional(),
@@ -20,15 +22,29 @@ const patchSchema = z.object({
   max_amount: z.number().optional(),
 });
 
+async function resolveStoreId(organizationId: string, rawStoreId: string | null): Promise<{ storeId: string | null } | { error: NextResponse }> {
+  if (!rawStoreId) return { storeId: null };
+  if (!(await storeInOrg(rawStoreId, organizationId))) {
+    return { error: jsonError('STORE_NOT_FOUND', 404) };
+  }
+  return { storeId: rawStoreId };
+}
+
 /**
- * Configuration « Cartes cadeaux en ligne » de l'organisation COURANTE
- * (celle de l'utilisateur connecté — jamais choisie par le frontend).
- * `organization_id` est toujours pris de la session, jamais du payload.
+ * Configuration « Cartes cadeaux en ligne » d'UNE BOUTIQUE de l'organisation
+ * courante (`store_id` en query param / champ PATCH — jamais fait confiance
+ * sans vérifier qu'elle appartient bien à l'organisation de l'appelant, voir
+ * `storeInOrg`). Sans `store_id` : configuration historique au niveau
+ * organisation (repli, avant cette évolution — voir
+ * lib/settings/online-gift-cards-server.ts).
  */
-export async function GET() {
+export async function GET(req: Request) {
   const g = await requirePermission('settings.read');
   if ('response' in g) return g.response;
-  const settings = await loadOnlineGiftCards(g.user.organizationId);
+  const rawStoreId = new URL(req.url).searchParams.get('store_id');
+  const resolved = await resolveStoreId(g.user.organizationId, rawStoreId);
+  if ('error' in resolved) return resolved.error;
+  const settings = await loadOnlineGiftCards(g.user.organizationId, resolved.storeId);
   return NextResponse.json({ settings });
 }
 
@@ -39,7 +55,11 @@ export async function PATCH(req: Request) {
   if ('response' in parsed) return parsed.response;
   const d = parsed.data;
 
-  const current = await loadOnlineGiftCards(g.user.organizationId);
+  const resolved = await resolveStoreId(g.user.organizationId, d.store_id ?? null);
+  if ('error' in resolved) return resolved.error;
+  const { storeId } = resolved;
+
+  const current = await loadOnlineGiftCards(g.user.organizationId, storeId);
 
   let allowed_origins = current.allowed_origins;
   if (d.allowed_origins !== undefined) {
@@ -87,12 +107,13 @@ export async function PATCH(req: Request) {
     min_amount,
     max_amount,
   };
-  await saveOnlineGiftCards(g.user.organizationId, next, g.user.id);
+  await saveOnlineGiftCards(g.user.organizationId, storeId, next, g.user.id);
 
   await audit({
     organizationId: g.user.organizationId, userId: g.user.id,
-    action: 'online_gift_cards.update', entityType: 'settings', entityId: null,
+    action: 'online_gift_cards.update', entityType: 'settings', entityId: storeId,
     payload: {
+      store_id: storeId,
       enabled: next.enabled, allowed_origins_count: next.allowed_origins.length,
       preset_amounts: next.preset_amounts, allow_custom_amount: next.allow_custom_amount,
       min_amount: next.min_amount, max_amount: next.max_amount,

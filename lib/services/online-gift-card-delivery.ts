@@ -35,6 +35,7 @@ import {
 interface DeliveryOrderRow {
   id: string;
   organization_id: string;
+  store_id: string | null;
   public_reference: string;
   amount_cents: number;
   buyer_name: string;
@@ -87,7 +88,7 @@ export async function deliverOnlineGiftCardOrder(orderId: string): Promise<void>
     `UPDATE online_gift_card_orders
         SET delivery_status = 'sending', delivery_attempted_at = now(), updated_at = now()
       WHERE id = $1 AND status = 'issued' AND delivery_status IN ('pending', 'failed')
-      RETURNING id, organization_id, public_reference, amount_cents,
+      RETURNING id, organization_id, store_id, public_reference, amount_cents,
                 buyer_name, buyer_email, recipient_name, recipient_email,
                 message, delivery_mode, gift_card_id`,
     [orderId],
@@ -106,6 +107,18 @@ export async function deliverOnlineGiftCardOrder(orderId: string): Promise<void>
     const gc = info.rows[0];
     if (!gc) throw new Error('GIFT_CARD_NOT_FOUND');
 
+    // Nom affiché (email + PDF) : celui de la BOUTIQUE ayant vendu la carte
+    // (Plante Verte, Fanny Fleurs…) si connue, sinon repli organisation —
+    // jamais l'inverse. Une commande antérieure au multi-boutique
+    // (store_id NULL) garde le nom organisation, comme avant.
+    let displayName = gc.organization_name;
+    if (order.store_id) {
+      const storeRes = await query<{ name: string }>(
+        `SELECT name FROM stores WHERE id = $1`, [order.store_id],
+      );
+      if (storeRes.rows[0]) displayName = storeRes.rows[0].name;
+    }
+
     const amountLabel = formatEUR(order.amount_cents / 100);
     const buyerEmail = normalizeEmail(order.buyer_email);
     const recipientEmail = order.recipient_email ? normalizeEmail(order.recipient_email) : null;
@@ -119,7 +132,7 @@ export async function deliverOnlineGiftCardOrder(orderId: string): Promise<void>
     // paiement restent valides, seule la distribution est marquée en échec
     // (retentable au prochain rejeu du webhook).
     const pdfBuffer = await renderGiftCardCertificatePdf({
-      organizationName: gc.organization_name,
+      organizationName: displayName,
       amountCents: order.amount_cents,
       holderName: order.recipient_name,
       code: gc.code,
@@ -127,7 +140,7 @@ export async function deliverOnlineGiftCardOrder(orderId: string): Promise<void>
       issuedAt: gc.issued_at,
       expiresAt: gc.expires_at,
     });
-    const pdfAttachment: EmailAttachment = { name: attachmentFileName(gc.organization_name, gc.code), content: pdfBuffer };
+    const pdfAttachment: EmailAttachment = { name: attachmentFileName(displayName, gc.code), content: pdfBuffer };
 
     const sends: Promise<{ ok: boolean; error?: string }>[] = [];
 
@@ -138,12 +151,12 @@ export async function deliverOnlineGiftCardOrder(orderId: string): Promise<void>
       // un seul envoi combiné plutôt que deux emails vers la même adresse.
       sends.push(sendOrgEmail({
         organizationId: order.organization_id,
-        storeId: null, // pas de notion de boutique pour une carte en ligne
+        storeId: order.store_id,
         to: order.buyer_email,
         toName: order.buyer_name,
-        subject: `Votre carte cadeau ${gc.organization_name}`,
+        subject: `Votre carte cadeau ${displayName}`,
         html: buildGiftCardNotificationEmailHtml({
-          organizationName: gc.organization_name,
+          organizationName: displayName,
           amountLabel,
           holderName: order.recipient_name,
           message: order.message,
@@ -156,12 +169,12 @@ export async function deliverOnlineGiftCardOrder(orderId: string): Promise<void>
       // au buyer, carte réelle (PDF joint) au recipient.
       sends.push(sendOrgEmail({
         organizationId: order.organization_id,
-        storeId: null,
+        storeId: order.store_id,
         to: order.buyer_email,
         toName: order.buyer_name,
-        subject: `Confirmation d'achat — carte cadeau ${gc.organization_name}`,
+        subject: `Confirmation d'achat — carte cadeau ${displayName}`,
         html: buildBuyerConfirmationOnlyEmailHtml({
-          organizationName: gc.organization_name,
+          organizationName: displayName,
           amountLabel,
           holderName: order.recipient_name,
           reference: order.public_reference,
@@ -170,12 +183,12 @@ export async function deliverOnlineGiftCardOrder(orderId: string): Promise<void>
       }));
       sends.push(sendOrgEmail({
         organizationId: order.organization_id,
-        storeId: null,
+        storeId: order.store_id,
         to: order.recipient_email!,
         toName: order.recipient_name,
-        subject: `${gc.organization_name} vous offre une carte cadeau !`,
+        subject: `${displayName} vous offre une carte cadeau !`,
         html: buildGiftCardNotificationEmailHtml({
-          organizationName: gc.organization_name,
+          organizationName: displayName,
           amountLabel,
           holderName: order.recipient_name,
           message: order.message,

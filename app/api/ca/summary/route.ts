@@ -34,17 +34,18 @@ export async function GET(req: Request) {
   const args: unknown[] = [g.user.organizationId, from, to];
   if (store_id) args.push(store_id);
 
-  // Aggreg sur sales validees dans la periode
+  // Aggreg sur sales validees dans la periode. Le CA (ca_ttc/ht/tva) est
+  // calcule plus bas depuis sale_lines (requete `margin`) pour EXCLURE les
+  // lignes d'emission de carte cadeau/bon d'achat (encaissement, pas du
+  // CA) — voir SaleService.validate. Ici : uniquement les agregats au
+  // niveau TICKET (nombre, clients, panier max/min), qui restent bases sur
+  // `sales` sans changement (un ticket contenant une carte cadeau reste un
+  // ticket, meme si sa contribution au CA peut etre nulle).
   const sales = await query<{
-    ca_ttc: string; ca_ht: string; tva: string; discount: string;
     tickets_count: number; customers_count: number;
     max_ticket: string; min_ticket: string;
   }>(
-    `SELECT COALESCE(SUM(total_ttc), 0)::text AS ca_ttc,
-            COALESCE(SUM(total_ht), 0)::text  AS ca_ht,
-            COALESCE(SUM(total_tva), 0)::text AS tva,
-            COALESCE(SUM(total_discount), 0)::text AS discount,
-            COUNT(*)::int AS tickets_count,
+    `SELECT COUNT(*)::int AS tickets_count,
             COUNT(DISTINCT customer_id)::int AS customers_count,
             COALESCE(MAX(total_ttc), 0)::text AS max_ticket,
             COALESCE(MIN(total_ttc), 0)::text AS min_ticket
@@ -58,18 +59,24 @@ export async function GET(req: Request) {
   const rowS = sales.rows[0]!;
 
   // Marge HT (basee sur purchase_price_ht courant du produit, quantite vendue)
+  // + CA reel (ca_ttc/ca_ht/tva), qui exclut les lignes d'emission de carte
+  // cadeau (metadata.gift_card_ca_deferred = true).
   const margin = await query<{
     items_sold: string; unique_products: number;
     revenue_ht: string; cost_ht: string; real_discount: string;
+    ca_ttc: string; ca_ht: string; ca_tva: string;
   }>(
     // real_discount = remises sur les lignes SAUF cartes cadeaux / bons d'achat
     // (metadata.gift_card) : ceux-ci ne comptent pas comme des remises.
     `SELECT COALESCE(SUM(sl.quantity), 0)::text AS items_sold,
             COUNT(DISTINCT sl.product_id)::int AS unique_products,
-            COALESCE(SUM(sl.line_ht), 0)::text AS revenue_ht,
-            COALESCE(SUM(COALESCE(p.purchase_price_ht, 0) * sl.quantity), 0)::text AS cost_ht,
+            COALESCE(SUM(sl.line_ht) FILTER (WHERE COALESCE(sl.metadata->>'gift_card_ca_deferred','') <> 'true'), 0)::text AS revenue_ht,
+            COALESCE(SUM(COALESCE(p.purchase_price_ht, 0) * sl.quantity) FILTER (WHERE COALESCE(sl.metadata->>'gift_card_ca_deferred','') <> 'true'), 0)::text AS cost_ht,
             COALESCE(SUM(sl.discount_amount)
-              FILTER (WHERE COALESCE(sl.metadata->>'gift_card', '') <> 'true'), 0)::text AS real_discount
+              FILTER (WHERE COALESCE(sl.metadata->>'gift_card', '') <> 'true'), 0)::text AS real_discount,
+            COALESCE(SUM(sl.line_ttc) FILTER (WHERE COALESCE(sl.metadata->>'gift_card_ca_deferred','') <> 'true'), 0)::text AS ca_ttc,
+            COALESCE(SUM(sl.line_ht)  FILTER (WHERE COALESCE(sl.metadata->>'gift_card_ca_deferred','') <> 'true'), 0)::text AS ca_ht,
+            COALESCE(SUM(sl.line_tva) FILTER (WHERE COALESCE(sl.metadata->>'gift_card_ca_deferred','') <> 'true'), 0)::text AS ca_tva
        FROM sale_lines sl
        JOIN sales s ON s.id = sl.sale_id
        LEFT JOIN products p ON p.id = sl.product_id
@@ -81,7 +88,7 @@ export async function GET(req: Request) {
   );
   const rowM = margin.rows[0]!;
 
-  const ca_ttc = Number(rowS.ca_ttc);
+  const ca_ttc = Number(rowM.ca_ttc);
   const revenue_ht = Number(rowM.revenue_ht);
   const cost_ht = Number(rowM.cost_ht);
   const marge_ht = Number((revenue_ht - cost_ht).toFixed(2));
@@ -92,8 +99,8 @@ export async function GET(req: Request) {
   return NextResponse.json({
     period: { from, to },
     ca_ttc,
-    ca_ht: Number(rowS.ca_ht),
-    tva: Number(rowS.tva),
+    ca_ht: Number(rowM.ca_ht),
+    tva: Number(rowM.ca_tva),
     discount: Number(rowM.real_discount),
     marge_ht,
     marge_pct,

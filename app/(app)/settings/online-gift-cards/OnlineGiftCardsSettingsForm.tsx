@@ -2,6 +2,7 @@
 import { confirmThemed } from '@/lib/ui/dialog';
 
 import { useEffect, useState } from 'react';
+import PageHeader from '@/components/PageHeader';
 
 interface Data {
   enabled: boolean;
@@ -19,7 +20,10 @@ function parseAmount(s: string): number {
   return Number.isFinite(n) ? n : NaN;
 }
 
-export default function OnlineGiftCardsSettingsForm({ canEdit }: { canEdit: boolean }) {
+export default function OnlineGiftCardsSettingsForm(
+  { canEdit, stores }: { canEdit: boolean; stores: { id: string; name: string }[] },
+) {
+  const [storeId, setStoreId] = useState<string>(stores[0]?.id ?? '');
   const [data, setData] = useState<Data | null>(null);
   const [enabled, setEnabled] = useState(false);
   const [origins, setOrigins] = useState<string[]>([]);
@@ -50,7 +54,9 @@ export default function OnlineGiftCardsSettingsForm({ canEdit }: { canEdit: bool
   }
 
   async function load() {
-    const r = await fetch('/api/settings/online-gift-cards');
+    setData(null); setError(null); setSaved(false);
+    const qs = storeId ? `?store_id=${encodeURIComponent(storeId)}` : '';
+    const r = await fetch(`/api/settings/online-gift-cards${qs}`);
     if (r.ok) {
       const j = (await r.json()).settings as Data;
       setData(j);
@@ -59,7 +65,7 @@ export default function OnlineGiftCardsSettingsForm({ canEdit }: { canEdit: bool
       applyCommerceFromServer(j);
     }
   }
-  useEffect(() => { void load(); }, []);
+  useEffect(() => { void load(); }, [storeId]);
 
   async function save(patch: Partial<{
     enabled: boolean; allowed_origins: string[];
@@ -68,7 +74,7 @@ export default function OnlineGiftCardsSettingsForm({ canEdit }: { canEdit: bool
     setSaving(true); setError(null); setSaved(false);
     const r = await fetch('/api/settings/online-gift-cards', {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(patch),
+      body: JSON.stringify({ ...patch, store_id: storeId || undefined }),
     });
     setSaving(false);
     if (!r.ok) {
@@ -118,7 +124,8 @@ export default function OnlineGiftCardsSettingsForm({ canEdit }: { canEdit: bool
       danger: true,
     }))) return;
     setRegenerating(true); setError(null);
-    const r = await fetch('/api/settings/online-gift-cards/regenerate', { method: 'POST' });
+    const qs = storeId ? `?store_id=${encodeURIComponent(storeId)}` : '';
+    const r = await fetch(`/api/settings/online-gift-cards/regenerate${qs}`, { method: 'POST' });
     setRegenerating(false);
     if (!r.ok) {
       const j = await r.json().catch(() => ({}));
@@ -166,15 +173,41 @@ export default function OnlineGiftCardsSettingsForm({ canEdit }: { canEdit: bool
     setTimeout(() => setCommerceSaved(false), 2500);
   }
 
+  const currentStoreName = stores.find((s) => s.id === storeId)?.name ?? null;
+
   return (
     <div className="p-6 md:p-8 max-w-2xl space-y-5">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Cartes cadeaux en ligne</h1>
-        <p className="mt-1 text-sm text-ink-soft">
-          Permet de proposer l&apos;achat de cartes cadeaux HelloPos depuis votre site
-          internet. Les cartes émises sont valables dans toutes les boutiques de
-          votre organisation.
-        </p>
+      <PageHeader
+        title="Cartes cadeaux en ligne"
+        subtitle="Permet de proposer l'achat de cartes cadeaux HelloPos depuis votre site internet — configuration propre à chaque boutique (clé publique, domaines, montants). Les cartes émises restent valables dans toutes les boutiques de votre organisation."
+        actions={null}
+      />
+
+      {stores.length === 0 && (
+        <div className="card p-4 text-sm text-ink-soft">
+          Aucune boutique accessible : la configuration s’applique au niveau de l’organisation.
+        </div>
+      )}
+
+      {stores.length > 0 && (
+        <label className="block">
+          <span className="block text-xs font-medium text-ink-soft mb-1">Boutique</span>
+          <select
+            className="input h-10 w-full sm:w-72"
+            value={storeId}
+            onChange={(e) => setStoreId(e.target.value)}
+          >
+            {stores.map((st) => <option key={st.id} value={st.id}>{st.name}</option>)}
+          </select>
+        </label>
+      )}
+
+      {!data ? (
+        <div className="card p-8 text-sm text-ink-soft">Chargement…</div>
+      ) : (
+      <>
+      <div className="card p-4 text-sm">
+        Boutique : <strong>{currentStoreName ?? 'Organisation'}</strong>
       </div>
 
       <div className="card p-5 space-y-4">
@@ -348,6 +381,8 @@ export default function OnlineGiftCardsSettingsForm({ canEdit }: { canEdit: bool
           </button>
         )}
       </div>
+      </>
+      )}
     </div>
   );
 }

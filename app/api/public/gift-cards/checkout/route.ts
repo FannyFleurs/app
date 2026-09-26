@@ -8,7 +8,7 @@ import {
 } from '@/lib/settings/online-gift-cards';
 import { resolveActiveOnlineGiftCards } from '@/lib/settings/online-gift-cards-server';
 import { eurosToCents } from '@/lib/services/money';
-import { STRIPE_KEY, mergeStripeDefaults, type StripeSettings } from '@/lib/settings/stripe';
+import { loadStripeSettings } from '@/lib/settings/stripe-server';
 import { createGiftCardCheckoutSession, retrieveCheckoutSession } from '@/lib/services/stripe-checkout';
 import {
   createPendingOrder, findOrderByIdempotencyKey, markOrderSessionCreated, markOrderFailed,
@@ -130,7 +130,7 @@ async function resolveIdempotentReplay(
 }
 
 async function resolveOrder(
-  d: CheckoutInput, organizationId: string, amountCents: number,
+  d: CheckoutInput, organizationId: string, storeId: string | null, amountCents: number,
   fingerprint: string, clientIp: string | null, stripeSecretKey: string, corsHeaders: HeadersInit,
 ): Promise<Outcome> {
   if (d.idempotency_key) {
@@ -139,7 +139,7 @@ async function resolveOrder(
   }
   try {
     const order = await createPendingOrder({
-      organizationId, amountCents,
+      organizationId, storeId, amountCents,
       buyerName: d.buyer.name, buyerEmail: d.buyer.email,
       recipientName: d.recipient.name, recipientEmail: d.recipient.email ?? null,
       message: d.message || null,
@@ -170,7 +170,7 @@ export async function POST(req: Request) {
   //    publiquement (clé inconnue / malformée / désactivée).
   const resolved = await resolveActiveOnlineGiftCards(d.key);
   if (!resolved) return NextResponse.json(NOT_AVAILABLE, { status: 404 });
-  const { organizationId, settings } = resolved;
+  const { organizationId, storeId, settings } = resolved;
 
   // Organisation active + nom (pour le libellé Stripe) — même vérification
   // que /config, pliée dans la MÊME réponse neutre en cas d'échec.
@@ -225,14 +225,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'RATE_LIMITED' }, { status: 429, headers: corsHeaders });
   }
 
-  // 6. Stripe de CETTE organisation — jamais un Stripe global aux cartes
-  //    cadeaux, jamais choisi par le payload.
-  const stripeCfgRes = await query<{ value: Partial<StripeSettings> }>(
-    `SELECT value FROM settings WHERE organization_id = $1 AND key = $2`,
-    [organizationId, STRIPE_KEY],
-  );
-  const stripeCfg = mergeStripeDefaults(stripeCfgRes.rows[0]?.value ?? null);
-  if (!stripeCfg.enabled || !stripeCfg.secret_key) {
+  // 6. Stripe de CETTE BOUTIQUE (résolue serveur depuis la clé publique,
+  //    jamais depuis le payload) — repli organisation si la configuration
+  //    n'a pas encore été migrée vers une boutique précise. Une boutique
+  //    sans compte Stripe propre ne reçoit JAMAIS arbitrairement les
+  //    credentials d'une autre boutique : loadStripeSettings ne retombe que
+  //    sur la clé ORGANISATION (`stripe`), jamais sur celle d'une autre
+  //    boutique — voir lib/settings/stripe-server.ts et
+  //    docs/architecture-multi-store-stripe.md.
+  const { settings: stripeCfg, decryptionFailed } = await loadStripeSettings(organizationId, storeId);
+  if (!stripeCfg.enabled || !stripeCfg.secret_key || decryptionFailed) {
     return NextResponse.json({ error: 'PAYMENT_UNAVAILABLE' }, { status: 503, headers: corsHeaders });
   }
 
@@ -245,7 +247,7 @@ export async function POST(req: Request) {
 
   // 7. Tentative interne : créée AVANT Stripe (ou réutilisée si rejeu
   //    idempotent) — jamais uniquement des metadata Stripe non persistées.
-  const orderOutcome = await resolveOrder(d, organizationId, amountCents, fingerprint, clientIp, stripeCfg.secret_key, corsHeaders);
+  const orderOutcome = await resolveOrder(d, organizationId, storeId, amountCents, fingerprint, clientIp, stripeCfg.secret_key, corsHeaders);
   if (orderOutcome.kind === 'response') return orderOutcome.response;
   const order = orderOutcome.order;
 
@@ -270,6 +272,11 @@ export async function POST(req: Request) {
         hello_pos_type: 'online_gift_card',
         gift_card_order_id: order.id,
         organization_id: organizationId,
+        // Indicatif seulement : le webhook ne fait JAMAIS confiance à ce
+        // champ pour décider quel compte Stripe doit vérifier l'événement —
+        // il relit le store_id RÉELLEMENT persisté sur la commande. Present
+        // ici uniquement pour le confort du dashboard Stripe (recherche/tri).
+        ...(storeId ? { store_id: storeId } : {}),
       },
     });
     await markOrderSessionCreated(order.id, session.id);

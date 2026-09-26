@@ -507,7 +507,11 @@
     this._fetchConfig().then(function (cfg) {
       if (!cfg) return; // _fetchConfig a déjà affiché l'état indisponible
       self._state.config = cfg;
-      self._el('hp-org-name').textContent = cfg.organization.name; // textContent -> jamais de HTML injecté
+      // Identité affichée : la BOUTIQUE si la configuration en connaît une
+      // (cfg.store, ajouté par la résolution multi-boutiques), sinon repli
+      // sur l'organisation (intégrations non encore rattachées à une
+      // boutique précise) — jamais l'inverse. textContent -> jamais de HTML injecté.
+      self._el('hp-org-name').textContent = (cfg.store && cfg.store.name) || cfg.organization.name;
       self._renderPresets(cfg.gift_cards);
       self._el('hp-custom-wrap').classList.toggle('hp-hidden', !cfg.gift_cards.allow_custom_amount);
 

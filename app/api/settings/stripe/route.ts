@@ -1,28 +1,45 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { query } from '@/lib/db/client';
 import { requirePermission } from '@/lib/auth/guards';
-import { parseJson } from '@/lib/validation/api';
+import { storeInOrg } from '@/lib/auth/stores-server';
+import { parseJson, jsonError } from '@/lib/validation/api';
 import { audit } from '@/lib/audit/log';
-import { STRIPE_KEY, mergeStripeDefaults, maskKey, type StripeSettings } from '@/lib/settings/stripe';
+import { maskKey, type StripeSettings } from '@/lib/settings/stripe';
+import { loadStripeSettings, saveStripeSettings } from '@/lib/settings/stripe-server';
+import { isEncryptionConfigured } from '@/lib/security/secret-crypto';
 
-const schema = z.object({
-  enabled: z.boolean().optional(),
-  publishable_key: z.string().max(200).optional(),
-  secret_key: z.string().max(200).optional(),
-  webhook_secret: z.string().max(200).optional(),
-  return_url: z.string().max(500).optional(),
-});
+/**
+ * Configuration Stripe PAR BOUTIQUE (repli organisation) — voir
+ * lib/settings/stripe-server.ts. `store_id` (query param en GET, champ en
+ * PATCH) sélectionne la boutique concernée ; absent = configuration au
+ * niveau organisation (comportement historique, avant cette évolution).
+ *
+ * `store_id` est TOUJOURS vérifié contre l'organisation de l'appelant
+ * (`storeInOrg`) avant tout accès — jamais fait confiance tel quel, même
+ * venant d'un utilisateur authentifié de CETTE organisation (une boutique
+ * d'une AUTRE organisation ne doit jamais pouvoir être ciblée).
+ */
 
-export async function GET() {
+async function resolveStoreId(req: Request, organizationId: string, rawStoreId: string | null): Promise<{ storeId: string | null } | { error: NextResponse }> {
+  if (!rawStoreId) return { storeId: null };
+  if (!(await storeInOrg(rawStoreId, organizationId))) {
+    return { error: jsonError('STORE_NOT_FOUND', 404) };
+  }
+  return { storeId: rawStoreId };
+}
+
+export async function GET(req: Request) {
   const g = await requirePermission('settings.read');
   if ('response' in g) return g.response;
-  const { rows } = await query<{ value: Partial<StripeSettings> }>(
-    `SELECT value FROM settings WHERE organization_id = $1 AND key = $2`,
-    [g.user.organizationId, STRIPE_KEY],
-  );
-  const s = mergeStripeDefaults(rows[0]?.value ?? null);
+  const rawStoreId = new URL(req.url).searchParams.get('store_id');
+  const resolved = await resolveStoreId(req, g.user.organizationId, rawStoreId);
+  if ('error' in resolved) return resolved.error;
+
+  const { settings: s, ownStore, decryptionFailed } = await loadStripeSettings(g.user.organizationId, resolved.storeId);
   return NextResponse.json({
+    inherited: !!resolved.storeId && !ownStore, // config affichée = héritée de l'organisation
+    encryption_configured: isEncryptionConfigured(),
+    decryption_failed: decryptionFailed,
     settings: {
       enabled: s.enabled,
       publishable_key: s.publishable_key,
@@ -35,43 +52,46 @@ export async function GET() {
   });
 }
 
+const schema = z.object({
+  store_id: z.string().uuid().optional(),
+  enabled: z.boolean().optional(),
+  publishable_key: z.string().max(200).optional(),
+  secret_key: z.string().max(200).optional(),
+  webhook_secret: z.string().max(200).optional(),
+  return_url: z.string().max(500).optional(),
+});
+
 export async function PATCH(req: Request) {
   const g = await requirePermission('settings.write');
   if ('response' in g) return g.response;
   const parsed = await parseJson(req, schema);
   if ('response' in parsed) return parsed.response;
+  const d = parsed.data;
 
-  const current = await query<{ value: Partial<StripeSettings> }>(
-    `SELECT value FROM settings WHERE organization_id = $1 AND key = $2`,
-    [g.user.organizationId, STRIPE_KEY],
-  );
-  const existing = current.rows[0]?.value ?? {};
-  // Si secret_key/webhook_secret sont envoyés vides, on garde la valeur existante.
-  // (Permet à l'UI de ne pas tout réenvoyer à chaque PATCH.)
-  const merged = mergeStripeDefaults({
-    ...existing,
-    ...parsed.data,
-    secret_key: parsed.data.secret_key?.trim()
-      ? parsed.data.secret_key.trim()
-      : existing.secret_key,
-    webhook_secret: parsed.data.webhook_secret?.trim()
-      ? parsed.data.webhook_secret.trim()
-      : existing.webhook_secret,
-  });
+  const resolved = await resolveStoreId(req, g.user.organizationId, d.store_id ?? null);
+  if ('error' in resolved) return resolved.error;
+  const { storeId } = resolved;
 
-  await query(
-    `INSERT INTO settings (organization_id, key, value, updated_by)
-     VALUES ($1, $2, $3, $4)
-     ON CONFLICT (organization_id, key)
-     DO UPDATE SET value = EXCLUDED.value, updated_at = now(), updated_by = EXCLUDED.updated_by`,
-    [g.user.organizationId, STRIPE_KEY, JSON.stringify(merged), g.user.id],
-  );
+  const { settings: existing } = await loadStripeSettings(g.user.organizationId, storeId);
+  // Si secret_key/webhook_secret sont envoyés vides, on garde la valeur
+  // existante (permet à l'UI de ne pas tout renvoyer à chaque PATCH — elle
+  // ne reçoit d'ailleurs jamais le secret en clair, voir GET ci-dessus).
+  const merged: StripeSettings = {
+    enabled: d.enabled ?? existing.enabled,
+    publishable_key: d.publishable_key ?? existing.publishable_key,
+    return_url: d.return_url ?? existing.return_url,
+    secret_key: d.secret_key?.trim() ? d.secret_key.trim() : existing.secret_key,
+    webhook_secret: d.webhook_secret?.trim() ? d.webhook_secret.trim() : existing.webhook_secret,
+  };
+
+  await saveStripeSettings(g.user.organizationId, storeId, merged, g.user.id);
 
   await audit({
     organizationId: g.user.organizationId, userId: g.user.id,
     action: 'settings.stripe.update',
     entityType: 'settings',
-    payload: { keys: Object.keys(parsed.data) },
+    entityId: storeId,
+    payload: { keys: Object.keys(parsed.data), store_id: storeId },
   });
 
   return NextResponse.json({ ok: true });

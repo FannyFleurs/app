@@ -62,6 +62,13 @@ export interface DayReport {
   by_category: { name: string; ca_ttc: number }[];
   by_mode: { mode: string; ca_ttc: number }[];
   tickets: { normal_count: number; normal_total: number };
+  /**
+   * ENCAISSEMENTS hors CA : vente de cartes cadeaux/bons d'achat (caisse et
+   * en ligne/Stripe). Distinct du CA (ci-dessus, qui les exclut désormais)
+   * et du paiement PAR carte cadeau à l'usage (visible dans `payments`,
+   * method='gift_card').
+   */
+  encaissements_hors_ca: { gift_card_sales_ttc: number; online_gift_card_ttc: number };
 }
 
 const MODE_LABELS: Record<string, string> = {
@@ -88,23 +95,32 @@ export async function computeDayReport(opts: {
   const { organizationId: org, storeId: store, businessDate: date } = opts;
   const P = [org, store, date] as const;
 
-  const [ident, totalsR, tvaR, payR, vendorR, catR, modeR, marginR, floatsR, sessR, jnR, settleR] =
+  const [ident, totalsR, tvaR, payR, vendorR, catR, modeR, marginR, floatsR, sessR, jnR, settleR, onlineGcR] =
     await Promise.all([
       query<{ name: string; legal_name: string | null; siret: string | null; siren: string | null; vat_number: string | null; address: Record<string, string> | null; contact: Record<string, string> | null; store_name: string }>(
         `SELECT o.name, o.legal_name, o.siret, o.siren, o.vat_number, o.address, o.contact,
                 s.name AS store_name
            FROM organizations o JOIN stores s ON s.id = $2
           WHERE o.id = $1`, [org, store]),
-      query<{ cnt: string; ht: string; tva: string; ttc: string; disc: string }>(
-        `SELECT COUNT(*)::text cnt, COALESCE(SUM(total_ht),0)::text ht,
-                COALESCE(SUM(total_tva),0)::text tva, COALESCE(SUM(total_ttc),0)::text ttc,
-                COALESCE(SUM(total_discount),0)::text disc
-           FROM sales WHERE store_id=$2 AND organization_id=$1
-             AND status='validated' AND validated_at::date=$3::date`, [...P]),
+      // CORRECTION COMPTABLE : sourcé sur sale_lines (pas sales.total_*) pour
+      // EXCLURE du CA les lignes d'émission de carte cadeau/bon d'achat
+      // (metadata.gift_card_ca_deferred = true) — voir SaleService.validate
+      // et ClosingService.sealDaily pour le détail du raisonnement.
+      query<{ cnt: string; ht: string; tva: string; ttc: string; disc: string; gift_card_issuance_ttc: string }>(
+        `SELECT COUNT(DISTINCT s.id)::text cnt,
+                COALESCE(SUM(sl.line_ht)  FILTER (WHERE COALESCE(sl.metadata->>'gift_card_ca_deferred','') <> 'true'),0)::text ht,
+                COALESCE(SUM(sl.line_tva) FILTER (WHERE COALESCE(sl.metadata->>'gift_card_ca_deferred','') <> 'true'),0)::text tva,
+                COALESCE(SUM(sl.line_ttc) FILTER (WHERE COALESCE(sl.metadata->>'gift_card_ca_deferred','') <> 'true'),0)::text ttc,
+                COALESCE(SUM(sl.discount_amount) FILTER (WHERE COALESCE(sl.metadata->>'gift_card_ca_deferred','') <> 'true'),0)::text disc,
+                COALESCE(SUM(sl.line_ttc) FILTER (WHERE COALESCE(sl.metadata->>'gift_card_ca_deferred','') = 'true'),0)::text gift_card_issuance_ttc
+           FROM sale_lines sl JOIN sales s ON s.id=sl.sale_id
+          WHERE s.store_id=$2 AND s.organization_id=$1
+            AND s.status='validated' AND s.validated_at::date=$3::date`, [...P]),
       query<{ tax_rate: string; ht: string; tva: string; ttc: string }>(
         `SELECT sl.tax_rate::text, SUM(sl.line_ht)::text ht, SUM(sl.line_tva)::text tva, SUM(sl.line_ttc)::text ttc
            FROM sale_lines sl JOIN sales s ON s.id=sl.sale_id
           WHERE s.store_id=$2 AND s.organization_id=$1 AND s.status='validated' AND s.validated_at::date=$3::date
+            AND COALESCE(sl.metadata->>'gift_card_ca_deferred','') <> 'true'
           GROUP BY sl.tax_rate ORDER BY sl.tax_rate`, [...P]),
       query<{ method: string; cnt: string; total: string }>(
         `SELECT p.method, COUNT(*)::text cnt, SUM(p.amount)::text total
@@ -122,6 +138,7 @@ export async function computeDayReport(opts: {
            LEFT JOIN products p ON p.id=sl.product_id
            LEFT JOIN product_categories c ON c.id=p.category_id
           WHERE s.store_id=$2 AND s.organization_id=$1 AND s.status='validated' AND s.validated_at::date=$3::date
+            AND COALESCE(sl.metadata->>'gift_card_ca_deferred','') <> 'true'
           GROUP BY COALESCE(c.name,'Sans catégorie') ORDER BY name`, [...P]),
       query<{ mode: string | null; ttc: string }>(
         `SELECT s.delivery_info->>'pickup_or_delivery' mode, SUM(s.total_ttc)::text ttc
@@ -156,6 +173,17 @@ export async function computeDayReport(opts: {
           WHERE store_id=$2 AND organization_id=$1 AND created_at::date=$3::date
           GROUP BY method ORDER BY SUM(amount) DESC`, [...P],
       ).catch(() => ({ rows: [] as { method: string; cnt: string; total: string }[] })),
+      // Carte cadeau/bon d'achat achetée en ligne (Stripe), encaissement
+      // rattaché à une session de caisse de cette boutique — voir
+      // pending-store-operations.ts. Purement informatif, hors CA.
+      query<{ total_cents: string }>(
+        `SELECT COALESCE(SUM(pso.amount_cents),0)::text total_cents
+           FROM pending_store_operations pso
+          WHERE pso.organization_id=$1 AND pso.store_id=$2 AND pso.kind='online_gift_card'
+            AND pso.cash_session_id IN (
+              SELECT id FROM cash_sessions WHERE store_id=$2 AND opened_at::date=$3::date
+            )`, [...P],
+      ).catch(() => ({ rows: [] as { total_cents: string }[] })),
     ]);
 
   const idRow = ident.rows[0];
@@ -247,5 +275,9 @@ export async function computeDayReport(opts: {
       .map(([mode, ttc]) => ({ mode: MODE_LABELS[mode] ?? 'Sur place', ca_ttc: ttc }))
       .sort((a, b) => b.ca_ttc - a.ca_ttc),
     tickets: { normal_count: ticketCount, normal_total: caTtc },
+    encaissements_hors_ca: {
+      gift_card_sales_ttc: Number(t.gift_card_issuance_ttc),
+      online_gift_card_ttc: Number(onlineGcR.rows[0]?.total_cents ?? 0) / 100,
+    },
   };
 }

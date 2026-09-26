@@ -15,7 +15,40 @@ const STRIPE_CFG = {
   webhook_secret: WEBHOOK_SECRET, return_url: '',
 };
 
+// Deuxième boutique de la MÊME organisation, avec son PROPRE compte Stripe
+// (secret de signature différent) — pour les tests d'isolation multi-comptes.
+const STORE_B_ID = 'store-b-uuid';
+const STORE_B_WEBHOOK_SECRET = 'whsec_store_b_secret';
+const STRIPE_CFG_STORE_B = {
+  enabled: true, publishable_key: 'pk_test_b', secret_key: 'sk_test_b',
+  webhook_secret: STORE_B_WEBHOOK_SECRET, return_url: '',
+};
+
+// Commandes carte cadeau en ligne PERSISTÉES (source de vérité que le
+// webhook relit par id — jamais la metadata reçue) : org-a-uuid/order-1 sans
+// boutique (config historique, repli organisation), et order-store-b
+// rattachée à STORE_B_ID (son propre compte Stripe).
+const orderStores: Record<string, { organization_id: string; store_id: string | null }> = {
+  'order-1': { organization_id: 'org-a-uuid', store_id: null },
+  'order-store-b': { organization_id: 'org-a-uuid', store_id: STORE_B_ID },
+};
+
 const queryMock = vi.fn(async (text: string, params: unknown[] = []) => {
+  if (text.includes('SELECT organization_id, store_id FROM online_gift_card_orders')) {
+    const [orderId] = params as [string];
+    const row = orderStores[orderId];
+    return { rows: row ? [row] : [], rowCount: row ? 1 : 0 };
+  }
+  // loadStripeSettings (key = ANY([storeKey, 'stripe'])) : la boutique B a
+  // son PROPRE secret, distinct du secret organisation utilisé par tout le
+  // reste (commande sans boutique, ou flux orders/sales legacy).
+  if (text.includes('FROM settings') && text.includes('key = ANY')) {
+    const storeKeys = params[1] as string[];
+    if (storeKeys?.includes(`stripe:${STORE_B_ID}`)) {
+      return { rows: [{ value: STRIPE_CFG_STORE_B, key: `stripe:${STORE_B_ID}` }], rowCount: 1 };
+    }
+    return { rows: [{ value: STRIPE_CFG, key: 'stripe' }], rowCount: 1 };
+  }
   if (text.includes('FROM settings') && params[1] === 'stripe') {
     return { rows: [{ value: STRIPE_CFG }], rowCount: 1 };
   }
@@ -154,5 +187,73 @@ describe('Webhook Stripe — routage par metadata', () => {
     expect(res.status).toBe(200);
     expect(fulfillMock).not.toHaveBeenCalled();
     expect(queryMock.mock.calls.some((c) => String(c[0]).includes('UPDATE sales'))).toBe(true);
+  });
+});
+
+describe('Webhook Stripe — isolation multi-comptes (une boutique = un compte Stripe)', () => {
+  it("la commande d'une boutique est validée par le secret DE CETTE boutique, jamais celui de l'organisation", async () => {
+    const body = {
+      type: 'checkout.session.completed',
+      data: { object: {
+        id: 'cs_test_store_b', payment_status: 'paid', amount_total: 3000, currency: 'eur',
+        payment_intent: 'pi_test_store_b',
+        metadata: { organization_id: 'org-a-uuid', hello_pos_type: 'online_gift_card', gift_card_order_id: 'order-store-b' },
+      } },
+    };
+    const t = Math.floor(Date.now() / 1000);
+    const payload = JSON.stringify(body);
+    const v1 = createHmac('sha256', STORE_B_WEBHOOK_SECRET).update(`${t}.${payload}`).digest('hex');
+    const res = await post(body, `t=${t},v1=${v1}`);
+    expect(res.status).toBe(200);
+    expect(fulfillMock).toHaveBeenCalledWith(expect.objectContaining({
+      organizationId: 'org-a-uuid', giftCardOrderId: 'order-store-b', stripeSessionId: 'cs_test_store_b',
+    }));
+  });
+
+  it("un événement signé avec le secret de l'ORGANISATION ne peut jamais valider la commande d'une boutique qui a son PROPRE compte", async () => {
+    const body = {
+      type: 'checkout.session.completed',
+      data: { object: {
+        id: 'cs_test_store_b_2', payment_status: 'paid', amount_total: 3000, currency: 'eur',
+        metadata: { organization_id: 'org-a-uuid', hello_pos_type: 'online_gift_card', gift_card_order_id: 'order-store-b' },
+      } },
+    };
+    // Signé avec le secret ORGANISATION (WEBHOOK_SECRET), pas celui de la
+    // boutique B (STORE_B_WEBHOOK_SECRET) qui est le seul attendu pour
+    // order-store-b — la vérification doit échouer.
+    const res = await post(body, sign(JSON.stringify(body)));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('INVALID_SIGNATURE');
+    expect(fulfillMock).not.toHaveBeenCalled();
+  });
+
+  it("un id de commande inconnu (introuvable en base) est ignoré SANS jamais tenter de vérifier une signature", async () => {
+    const body = {
+      type: 'checkout.session.completed',
+      data: { object: {
+        id: 'cs_test_unknown', payment_status: 'paid',
+        metadata: { organization_id: 'org-a-uuid', hello_pos_type: 'online_gift_card', gift_card_order_id: 'order-does-not-exist' },
+      } },
+    };
+    const res = await post(body, sign(JSON.stringify(body)));
+    expect(res.status).toBe(200);
+    expect((await res.json()).ignored).toBe(true);
+    expect(fulfillMock).not.toHaveBeenCalled();
+  });
+
+  it("organization_id de la metadata incohérent avec la commande persistée => ignoré avant toute vérification de signature", async () => {
+    const body = {
+      type: 'checkout.session.completed',
+      data: { object: {
+        id: 'cs_test_mismatch', payment_status: 'paid',
+        // order-1 appartient réellement à org-a-uuid (voir orderStores) —
+        // la metadata prétend ici org-b-uuid : incohérence, jamais fiable.
+        metadata: { organization_id: 'org-b-uuid', hello_pos_type: 'online_gift_card', gift_card_order_id: 'order-1' },
+      } },
+    };
+    const res = await post(body, sign(JSON.stringify(body)));
+    expect(res.status).toBe(200);
+    expect((await res.json()).ignored).toBe(true);
+    expect(fulfillMock).not.toHaveBeenCalled();
   });
 });

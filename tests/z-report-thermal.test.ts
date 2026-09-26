@@ -33,6 +33,7 @@ const report: DayReport = {
   by_category: [{ name: 'Bouquets', ca_ttc: 900 }, { name: 'Plantes', ca_ttc: 334.5 }],
   by_mode: [{ mode: 'Comptoir', ca_ttc: 1234.5 }],
   tickets: { normal_count: 37, normal_total: 1234.5 },
+  encaissements_hors_ca: { gift_card_sales_ttc: 0, online_gift_card_ttc: 0 },
 };
 
 /** Largeur de la MediaBox depuis les octets PDF (…/MediaBox [0 0 W H]). */
