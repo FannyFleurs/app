@@ -2,6 +2,7 @@ import 'server-only';
 import { withTransaction, query } from '@/lib/db/client';
 import { GiftCardService } from './gift-card-service';
 import { mapRow, type OrderRow, type OnlineGiftCardOrder } from './online-gift-card-orders';
+import { deliverOnlineGiftCardOrder } from './online-gift-card-delivery';
 
 /**
  * Émission de la carte cadeau HelloPos suite à un paiement Stripe confirmé
@@ -61,28 +62,43 @@ export interface FulfillCheckoutArgs {
  * Ne fait JAMAIS confiance aux seules metadata Stripe : organization_id,
  * l'id de session, le montant et la devise sont recoupés avec la commande
  * persistée avant toute émission.
+ *
+ * Après COMMIT (jamais dans la transaction — voir
+ * lib/services/online-gift-card-delivery.ts), déclenche la DISTRIBUTION par
+ * email de la carte (étape 5) : à l'émission fraîche ('issued'), ou en
+ * rejeu d'une commande déjà émise dont la distribution n'a pas encore
+ * réussi ('already_issued' + organisation/session Stripe toujours
+ * cohérentes avec la commande) — ce qui permet à un rejeu webhook Stripe de
+ * réessayer un envoi précédemment en échec, SANS jamais recréer de carte
+ * (le statut de la commande, lui, ne change plus une fois 'issued').
  */
 export async function fulfillOnlineGiftCardCheckout(args: FulfillCheckoutArgs): Promise<FulfillOutcome> {
-  return withTransaction(async (client) => {
+  const result = await withTransaction(async (client) => {
     const orderRes = await client.query<OrderRow>(
       `SELECT * FROM online_gift_card_orders WHERE id = $1 FOR UPDATE`,
       [args.giftCardOrderId],
     );
     const row = orderRes.rows[0];
-    if (!row) return 'order_not_found';
+    if (!row) return { outcome: 'order_not_found' as const, retryDelivery: false };
     const order: OnlineGiftCardOrder = mapRow(row);
 
     // Idempotence : commande déjà avancée (par cet appel dans une exécution
     // antérieure, ou par un appel concurrent maintenant commité) — ne
-    // JAMAIS émettre de seconde carte pour la même commande.
-    if (order.status !== 'pending') return 'already_issued';
+    // JAMAIS émettre de seconde carte pour la même commande. On recoupe
+    // quand même organisation + session Stripe (jamais les seules metadata)
+    // avant d'autoriser un éventuel réessai de DISTRIBUTION ci-dessous.
+    if (order.status !== 'pending') {
+      const retryDelivery = order.organizationId === args.organizationId
+        && order.stripeCheckoutSessionId === args.stripeSessionId;
+      return { outcome: 'already_issued' as const, retryDelivery };
+    }
 
     // --- Cohérence : jamais confiance aux seules metadata Stripe. ---
-    if (order.organizationId !== args.organizationId) return 'organization_mismatch';
-    if (order.stripeCheckoutSessionId !== args.stripeSessionId) return 'session_mismatch';
-    if ((args.currency ?? '').toLowerCase() !== order.currency.toLowerCase()) return 'currency_mismatch';
-    if (args.amountTotalCents !== order.amountCents) return 'amount_mismatch';
-    if (args.paymentStatus !== 'paid') return 'not_paid';
+    if (order.organizationId !== args.organizationId) return { outcome: 'organization_mismatch' as const, retryDelivery: false };
+    if (order.stripeCheckoutSessionId !== args.stripeSessionId) return { outcome: 'session_mismatch' as const, retryDelivery: false };
+    if ((args.currency ?? '').toLowerCase() !== order.currency.toLowerCase()) return { outcome: 'currency_mismatch' as const, retryDelivery: false };
+    if (args.amountTotalCents !== order.amountCents) return { outcome: 'amount_mismatch' as const, retryDelivery: false };
+    if (args.paymentStatus !== 'paid') return { outcome: 'not_paid' as const, retryDelivery: false };
 
     // --- Émission : système gift_cards EXISTANT, dans CETTE transaction. ---
     // RÈGLE MÉTIER IMPÉRATIVE : le titulaire de la carte est le
@@ -91,12 +107,14 @@ export async function fulfillOnlineGiftCardCheckout(args: FulfillCheckoutArgs): 
     // seuls champs de nom/contact libres s'appellent `buyer_name`/
     // `buyer_email` (hérités du flux caisse, où qui achète EST le
     // titulaire) ; pour une carte vendue en ligne, c'est recipient.*
-    // qu'on y place, PAS le buyer de online_gift_card_orders.
+    // qu'on y place, PAS le buyer de online_gift_card_orders. Ce choix ne
+    // dépend JAMAIS de delivery_mode (étape 5) : le titulaire reste le
+    // recipient que la carte lui soit envoyée directement ou non.
     const { id: giftCardId } = await GiftCardService.create({
       organizationId: order.organizationId,
       userId: null, // émission automatique, aucun utilisateur HelloPos humain
       amount: order.amountCents / 100,
-      buyer: { name: order.recipientName, email: order.recipientEmail },
+      buyer: { name: order.recipientName, email: order.recipientEmail ?? undefined },
       client,
     });
 
@@ -108,8 +126,14 @@ export async function fulfillOnlineGiftCardCheckout(args: FulfillCheckoutArgs): 
       [order.id, giftCardId, args.paymentIntentId ?? null],
     );
 
-    return 'issued';
+    return { outcome: 'issued' as const, retryDelivery: false };
   });
+
+  if (result.outcome === 'issued' || (result.outcome === 'already_issued' && result.retryDelivery)) {
+    await deliverOnlineGiftCardOrder(args.giftCardOrderId);
+  }
+
+  return result.outcome;
 }
 
 /**

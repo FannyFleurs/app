@@ -1,29 +1,35 @@
 # API publique — Cartes cadeaux en ligne
 
-> Statut : étape 4/N. Cycle complet désormais opérationnel :
+> Statut : étape 5/N. Cycle complet désormais opérationnel, distribution
+> par email incluse :
 >
 > ```
-> POST /checkout  →  online_gift_card_order (pending)  →  Stripe Checkout
->       →  paiement  →  webhook Stripe  →  validation serveur
->       →  online_gift_card_order (issued)  →  gift_card HelloPos émise
+> POST /checkout  →  online_gift_card_order (pending, delivery_mode figé)
+>       →  Stripe Checkout  →  paiement  →  webhook Stripe
+>       →  validation serveur  →  online_gift_card_order (issued)
+>       →  gift_card HelloPos émise  →  distribution par email
 >       →  carte disponible dans TOUTES les boutiques de l'organisation
 > ```
 >
 > **La redirection `success_url` ne constitue JAMAIS une preuve de paiement
-> et n'émet JAMAIS la carte cadeau.** Ni la création de la session, ni le
-> navigateur atteignant la page de succès, ni rien d'observable côté client
-> ne fait foi : seul le webhook Stripe signé (§ « Webhook et émission »
-> ci-dessous), après confirmation serveur-à-serveur du paiement, a le droit
-> de faire émettre une carte — via `GiftCardService`, le système de cartes
-> cadeaux HelloPos **existant** (non dupliqué, non remplacé). Voir
-> `lib/settings/online-gift-cards.ts` pour la configuration côté admin
-> (Paramètres → Cartes cadeaux en ligne).
+> et n'émet JAMAIS la carte cadeau — ni n'envoie jamais d'email.** Ni la
+> création de la session, ni le navigateur atteignant la page de succès, ni
+> rien d'observable côté client ne fait foi : seul le webhook Stripe signé
+> (§ « Webhook et émission » ci-dessous), après confirmation
+> serveur-à-serveur du paiement, a le droit de faire émettre une carte — via
+> `GiftCardService`, le système de cartes cadeaux HelloPos **existant** (non
+> dupliqué, non remplacé) — puis de déclencher sa distribution par email
+> (§ « Distribution » ci-dessous), via le système email HelloPos **existant**
+> (`lib/email/send.ts`, Brevo). Voir `lib/settings/online-gift-cards.ts` pour
+> la configuration côté admin (Paramètres → Cartes cadeaux en ligne).
 >
-> **Acheteur ≠ bénéficiaire** : `buyer` est la personne qui achète et paie
-> (confirmation d'achat, étape ultérieure) ; `recipient` est la personne qui
-> reçoit et utilise la carte. La `gift_card` émise appartient à
-> l'`organization_id` de la commande et son titulaire est **`recipient.name`**
-> — jamais `buyer.name`.
+> **Acheteur ≠ bénéficiaire ≠ destinataire de l'email.** `buyer` est la
+> personne qui achète et paie ; `recipient` est la personne qui reçoit et
+> utilise la carte (son **titulaire**) ; le destinataire de l'email dépend de
+> `delivery_mode` (§ « Distribution »), et n'est pas forcément le
+> `recipient`. La `gift_card` émise appartient à l'`organization_id` de la
+> commande et son titulaire est **`recipient.name`** — jamais `buyer.name`,
+> quel que soit `delivery_mode`.
 
 ## `GET /api/public/gift-cards/config?key=hp_gc_...`
 
@@ -168,12 +174,26 @@ sûre pour les construire.
 {
   "key": "hp_gc_xxxxxxxxx",
   "amount": 50,
-  "buyer": { "name": "Jean Dupont", "email": "jean@example.fr" },
-  "recipient": { "name": "Marie Dupont", "email": "marie@example.fr" },
-  "message": "Joyeux anniversaire !",
+  "buyer": { "name": "Jonathan", "email": "jonathan@example.com" },
+  "recipient": { "name": "Guillaume", "email": "guillaume@example.com" },
+  "delivery_mode": "buyer",
+  "message": "Joyeux Noël !",
   "success_path": "/carte-cadeau/succes",
   "cancel_path": "/carte-cadeau",
   "idempotency_key": "client-généré-opaque"
+}
+```
+
+Autre exemple, parfaitement valide (carte imprimée/remise en main propre,
+`recipient.email` absent) :
+
+```json
+{
+  "key": "hp_gc_xxxxxxxxx",
+  "amount": 50,
+  "buyer": { "name": "Jonathan", "email": "jonathan@example.com" },
+  "recipient": { "name": "Guillaume" },
+  "delivery_mode": "buyer"
 }
 ```
 
@@ -181,11 +201,17 @@ sûre pour les construire.
 |---|---|---|
 | `key` | oui | `hp_gc_...` |
 | `amount` | oui | Nombre fini, en EUROS (`50`, `25.5`) — voir validation ci-dessous |
-| `buyer.name` / `buyer.email` | oui | Chaîne, email plausible ; `buyer.email` sert d'email de paiement Stripe |
-| `recipient.name` / `recipient.email` | oui | Chaîne, email plausible ; peut être identique à `buyer` (achat pour soi-même) |
+| `buyer.name` / `buyer.email` | oui | Chaîne, email plausible — **toujours** obligatoire, y compris en `delivery_mode: "recipient"` ; `buyer.email` sert aussi d'email de paiement Stripe |
+| `recipient.name` | oui | Chaîne — titulaire de la carte, dans tous les cas |
+| `recipient.email` | **conditionnel** | Obligatoire si `delivery_mode === "recipient"` ; facultatif si `delivery_mode === "buyer"` (carte imprimable/remise en main propre) |
+| `delivery_mode` | oui | `"buyer"` ou `"recipient"` — voir § « Distribution » |
 | `message` | non | ≤ 500 caractères |
 | `success_path` / `cancel_path` | non | Chemin relatif (`/...`) — voir « URLs de retour » ; défaut `/carte-cadeau/succes` et `/carte-cadeau` |
 | `idempotency_key` | non | `[A-Za-z0-9_-]{8,100}` — voir « Idempotence » |
+
+`recipient.email` manquant alors que `delivery_mode: "recipient"` ⇒ `422
+VALIDATION_ERROR` (message explicite sur le champ `recipient.email`) —
+requête rejetée proprement, aucune commande créée.
 
 Le schéma est **strict** : tout champ non listé ici (`organization_id`,
 `store_id`, `price_id`, `product_id`, `stripe_account`, `metadata`, un
@@ -458,3 +484,177 @@ ALTER TABLE online_gift_card_orders
 Défense en profondeur (voir « Idempotence » ci-dessus) — n'affecte aucune
 carte cadeau existante, aucune commande existante (contrainte ajoutée sur
 une colonne déjà nullable, `NULL` restant autorisé plusieurs fois).
+
+## Distribution par email (étape 5)
+
+Après émission de la carte (§ « Webhook et émission » ci-dessus), la carte
+est envoyée par email — jamais avant, jamais depuis `success_url` ou une
+route publique quelconque. Trois rôles, à ne jamais confondre :
+
+| Rôle | Champ | Peut changer selon `delivery_mode` ? |
+|---|---|---|
+| Achète et paie | `buyer` | non |
+| Titulaire de la carte | `recipient` | **non, jamais** |
+| Destinataire de l'email contenant la carte | dépend de `delivery_mode` | oui |
+
+### `delivery_mode`
+
+Choisi par le site appelant à l'achat (`POST /checkout`), **persisté** sur
+`online_gift_card_orders.delivery_mode` et **immuable** ensuite. Le webhook
+Stripe ne lit et ne décide **jamais** du mode de distribution depuis les
+metadata Stripe — uniquement depuis cette colonne, la base HelloPos restant
+l'unique source de vérité.
+
+**`delivery_mode = "buyer"`** — cas typique : Jonathan achète une carte
+pour Guillaume à Noël, mais veut l'offrir lui-même plus tard.
+- La carte est créée au nom de **Guillaume** (`recipient`, inchangé).
+- Un seul email, contenant la carte (code réel inclus), est envoyé à
+  **`buyer.email`** (Jonathan) — jamais au bénéficiaire, **même si
+  `recipient.email` est fourni**. Jonathan peut ensuite imprimer, transférer
+  ou remettre la carte en main propre, quand il le souhaite.
+- `recipient.email` est donc **facultatif** dans ce mode (voir contrat
+  ci-dessus).
+
+**`delivery_mode = "recipient"`** — le buyer choisit d'envoyer
+immédiatement la carte au bénéficiaire :
+- La carte est créée au nom du `recipient` (inchangé).
+- **Deux** emails distincts (sauf emails identiques, voir ci-dessous) :
+  - à `buyer.email` : confirmation d'achat (organisation, montant, nom du
+    bénéficiaire, référence de commande, confirmation que la carte a été
+    envoyée) — **sans le code complet** de la carte ;
+  - à `recipient.email` (obligatoire dans ce mode) : la carte elle-même
+    (organisation, montant, nom du bénéficiaire, code réel, message
+    personnel éventuel, informations d'utilisation).
+
+**Emails identiques** (`buyer.email` et `recipient.email` identiques après
+normalisation — `trim()` + minuscules) : **un seul** email est envoyé, quel
+que soit `delivery_mode` — jamais deux emails vers la même adresse. Cet
+email unique contient la confirmation ET la carte (code réel inclus).
+
+**Pas d'envoi programmé à ce stade** : aucune date d'envoi différé (Noël,
+anniversaire), aucun cron/scheduler — uniquement `"buyer"` ou `"recipient"`,
+envoi immédiat après confirmation du paiement. Une troisième option
+(programmation) pourra être ajoutée ultérieurement sans changer ce contrat.
+
+### Moment exact de l'envoi
+
+Un email contenant une carte cadeau ne peut être envoyé qu'après, dans cet
+ordre strict : (1) Stripe a confirmé le paiement, (2) le webhook a validé
+la session (§ « Validations avant émission »), (3) la vraie `gift_card`
+HelloPos a été créée, (4) son code réel existe en base. La distribution est
+donc déclenchée par
+`lib/services/online-gift-card-fulfillment.ts::fulfillOnlineGiftCardCheckout`
+**après le COMMIT** de la transaction d'émission (jamais dans la
+transaction elle-même — un appel réseau à un fournisseur d'email ne doit
+jamais retenir une connexion/verrou Postgres). Le code envoyé est **toujours**
+`gift_cards.code`, jamais une référence de commande, un id de session Stripe
+ou un UUID de commande.
+
+### Échec d'envoi email
+
+Un échec d'envoi (fournisseur email indisponible, non configuré…) **ne
+remet jamais en cause** le paiement Stripe, la création de la `gift_card`,
+ni le statut `issued` de la commande — la carte payée reste valide et
+utilisable en caisse même si sa distribution échoue. L'échec est enregistré
+sur la commande (migration 0082) :
+
+| Colonne | Rôle |
+|---|---|
+| `delivery_status` | `'pending'` (pas encore tenté) · `'sending'` (verrou d'unicité, transitoire) · `'sent'` · `'failed'` |
+| `delivery_attempted_at` | horodatage de la dernière tentative |
+| `delivery_sent_at` | horodatage du dernier envoi réussi |
+| `delivery_error` | code d'erreur COURT (ex. `PROVIDER_ERROR`, `NOT_CONFIGURED`) — **jamais** de détail technique/sensible ; le détail reste dans les logs serveur (`console.error('[gift-cards.delivery]', ...)`) |
+
+Aucune interface « Renvoyer la carte cadeau » n'est construite à cette
+étape — mais le modèle le permet : une commande `delivery_status = 'failed'`
+reste réclamable par un futur essai (voir ci-dessous), sans jamais recréer
+de carte (le statut `status = 'issued'` de la commande, lui, ne change
+plus).
+
+### Idempotence des emails
+
+Le webhook Stripe peut être appelé plusieurs fois pour la même commande
+(rejeu, retry, deux workers en parallèle) — cela ne doit **jamais**
+provoquer un second envoi. Garanti par un **CLAIM atomique** :
+
+```sql
+UPDATE online_gift_card_orders
+   SET delivery_status = 'sending', delivery_attempted_at = now(), updated_at = now()
+ WHERE id = $1 AND status = 'issued' AND delivery_status IN ('pending', 'failed')
+ RETURNING ...
+```
+
+Seul l'appel qui obtient `rowCount = 1` envoie l'email ; tout autre appel
+concurrent ou postérieur voit `rowCount = 0` (ligne déjà `'sending'` ou
+`'sent'`) et s'arrête sans rien envoyer. Contrairement à l'émission de la
+carte (§ « Idempotence — 1 paiement = 1 carte »), ce n'est **pas** un
+verrou `FOR UPDATE` tenu pendant tout l'appel réseau — juste un `UPDATE`
+conditionnel, suffisant ici puisqu'une ligne `'sent'` n'est plus jamais
+réclamable. Voir `lib/services/online-gift-card-delivery.ts`.
+
+Consequence directe : **carte créée ≠ email envoyé** sont bien deux états
+distincts (`online_gift_card_orders.status` vs `.delivery_status`) — un
+webhook rejoué après un envoi réussi ne renvoie rien ; un webhook rejoué
+après un échec d'envoi (`delivery_status = 'failed'`) retente l'envoi, sans
+jamais recréer de carte (`fulfillOnlineGiftCardCheckout` ne retente la
+distribution que si `organization_id` et l'id de session Stripe du rejeu
+correspondent toujours à ceux, déjà persistés, de la commande).
+
+### Réutilisation du système email existant
+
+Aucun second système email : la distribution appelle
+`sendOrgEmail` (`lib/email/send.ts`), **le même service** que les emails de
+facture/ticket existants (Brevo, `storeId: null` ici — les cartes cadeaux
+en ligne n'ont pas de notion de boutique, la config email utilisée est donc
+celle au niveau **organisation**, comme prévu par le mécanisme de repli déjà
+existant de `loadEmailSettings`). Aucun nouveau provider, aucune nouvelle
+clé API, aucun nouveau mécanisme de retry : les identifiants Brevo restent
+côté serveur, jamais exposés.
+
+Le rendu HTML de la carte (`lib/email/gift-card-template.ts::
+renderGiftCardCardHtml`) est un **unique** bloc réutilisable — utilisé par
+tous les emails de cette étape, et conçu pour être repris plus tard par une
+page web (« Imprimer ma carte ») ou un export PDF, sans dupliquer le
+balisage. Aucun PDF n'est généré à cette étape (pas d'infrastructure PDF
+dédiée existante pour ce cas d'usage) ; le bloc HTML est volontairement
+sobre pour rester imprimable directement depuis l'email.
+
+### Migration 0082
+
+```sql
+ALTER TABLE online_gift_card_orders ALTER COLUMN recipient_email DROP NOT NULL;
+
+ALTER TABLE online_gift_card_orders
+  ADD COLUMN delivery_mode TEXT NOT NULL DEFAULT 'buyer' CHECK (delivery_mode IN ('buyer', 'recipient'));
+
+ALTER TABLE online_gift_card_orders
+  ADD CONSTRAINT online_gift_card_orders_recipient_email_required_ck
+    CHECK (delivery_mode <> 'recipient' OR recipient_email IS NOT NULL);
+
+ALTER TABLE online_gift_card_orders
+  ADD COLUMN delivery_status TEXT NOT NULL DEFAULT 'pending' CHECK (delivery_status IN ('pending', 'sending', 'sent', 'failed')),
+  ADD COLUMN delivery_attempted_at TIMESTAMPTZ,
+  ADD COLUMN delivery_sent_at TIMESTAMPTZ,
+  ADD COLUMN delivery_error TEXT;
+
+UPDATE online_gift_card_orders SET delivery_status = 'sent' WHERE status = 'issued';
+```
+
+`recipient_email` devient nullable (jamais de valeur vide/fictive pour
+contourner l'ancienne contrainte `NOT NULL`) — une contrainte `CHECK`
+dédiée impose qu'elle reste renseignée en `delivery_mode = "recipient"`. Le
+`UPDATE` final évite qu'un rejeu tardif d'un webhook Stripe (« renvoyer
+l'événement » depuis le dashboard, des mois plus tard) ne déclenche
+rétroactivement un email pour une commande émise **avant** cette étape,
+qui n'a jamais eu de distribution à faire.
+
+### Multi-boutiques et multi-tenant (inchangé)
+
+La distribution n'introduit **aucun** `store_id` : elle lit `organization_id`
+depuis la commande (déjà vérifié à l'émission), résout la configuration
+email de **cette** organisation, et n'accède jamais à une donnée d'une autre
+organisation. La formulation « utilisable dans les boutiques
+{Organisation} » dans l'email reste générique — aucune liste de boutiques
+n'est construite à cette étape (non nécessaire, la carte reste utilisable
+de façon identique dans toutes les boutiques de l'organisation, comme
+depuis l'étape 4).

@@ -34,18 +34,33 @@ export const dynamic = 'force-dynamic';
 
 const NOT_AVAILABLE = { error: 'GIFT_CARDS_NOT_AVAILABLE' } as const;
 
-const personSchema = z.object({
+const buyerSchema = z.object({
   name: z.string().trim().min(1).max(160),
+  // L'email de l'acheteur sert aussi de customer_email Stripe : toujours obligatoire.
   email: z.string().trim().min(3).max(200).email(),
+}).strict();
+
+// recipient.email est FACULTATIF ici — la validation exacte (obligatoire si
+// delivery_mode === 'recipient', facultative si 'buyer') est faite par le
+// .superRefine ci-dessous, avec un message d'erreur explicite par champ.
+const recipientSchema = z.object({
+  name: z.string().trim().min(1).max(160),
+  email: z.string().trim().min(3).max(200).email().optional(),
 }).strict();
 
 const checkoutSchema = z.object({
   key: z.string().min(1).max(120),
   amount: z.number().finite(),
-  buyer: personSchema,
+  buyer: buyerSchema,
   // L'acheteur peut s'offrir la carte à lui-même : recipient peut être
   // identique à buyer, rien de spécial à faire — deux champs indépendants.
-  recipient: personSchema,
+  recipient: recipientSchema,
+  // 'buyer' : SEUL l'acheteur reçoit la carte par email (il l'imprime/la
+  // remet lui-même) — le bénéficiaire ne reçoit jamais rien automatiquement,
+  // même si recipient.email est fourni. 'recipient' : l'acheteur reçoit une
+  // confirmation, le bénéficiaire reçoit directement la carte. Voir
+  // docs/api-public-gift-cards.md.
+  delivery_mode: z.enum(['buyer', 'recipient']),
   message: z.string().trim().max(500).optional(),
   // Chemins relatifs STRICTEMENT validés (voir validateReturnPath) — jamais
   // une URL absolue : le navigateur ne choisit jamais l'origine de retour,
@@ -53,7 +68,16 @@ const checkoutSchema = z.object({
   success_path: z.string().max(200).optional(),
   cancel_path: z.string().max(200).optional(),
   idempotency_key: z.string().regex(/^[A-Za-z0-9_-]{8,100}$/).optional(),
-}).strict(); // rejette toute clé non documentée (organization_id, price_id, metadata, …)
+}).strict() // rejette toute clé non documentée (organization_id, price_id, metadata, …)
+  .superRefine((d, ctx) => {
+    if (d.delivery_mode === 'recipient' && !d.recipient.email) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['recipient', 'email'],
+        message: "recipient.email est obligatoire lorsque delivery_mode = 'recipient'.",
+      });
+    }
+  });
 
 type CheckoutInput = z.infer<typeof checkoutSchema>;
 
@@ -117,8 +141,9 @@ async function resolveOrder(
     const order = await createPendingOrder({
       organizationId, amountCents,
       buyerName: d.buyer.name, buyerEmail: d.buyer.email,
-      recipientName: d.recipient.name, recipientEmail: d.recipient.email,
+      recipientName: d.recipient.name, recipientEmail: d.recipient.email ?? null,
       message: d.message || null,
+      deliveryMode: d.delivery_mode,
       idempotencyKey: d.idempotency_key ?? null,
       requestFingerprint: fingerprint,
       clientIp,
@@ -208,8 +233,9 @@ export async function POST(req: Request) {
 
   const fingerprint = computeRequestFingerprint({
     amountCents, buyerName: d.buyer.name, buyerEmail: d.buyer.email,
-    recipientName: d.recipient.name, recipientEmail: d.recipient.email,
+    recipientName: d.recipient.name, recipientEmail: d.recipient.email ?? null,
     message: d.message || null,
+    deliveryMode: d.delivery_mode,
   });
 
   // 7. Tentative interne : créée AVANT Stripe (ou réutilisée si rejeu

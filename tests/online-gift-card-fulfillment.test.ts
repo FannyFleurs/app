@@ -21,7 +21,7 @@ interface FakeOrderRow {
   id: string; organization_id: string; public_reference: string;
   amount_cents: number; currency: string;
   buyer_name: string; buyer_email: string;
-  recipient_name: string; recipient_email: string;
+  recipient_name: string; recipient_email: string | null;
   message: string | null;
   status: string;
   stripe_checkout_session_id: string | null;
@@ -29,6 +29,11 @@ interface FakeOrderRow {
   gift_card_id: string | null;
   idempotency_key: string | null;
   request_fingerprint: string | null;
+  delivery_mode: string;
+  delivery_status: string;
+  delivery_attempted_at: string | null;
+  delivery_sent_at: string | null;
+  delivery_error: string | null;
 }
 
 interface FakeGiftCardRow {
@@ -38,16 +43,24 @@ interface FakeGiftCardRow {
   status: string;
 }
 
+const organizations = [{ id: 'org-a-uuid', name: 'Plante Verte' }, { id: 'org-b-uuid', name: 'Fanny Fleurs' }];
+
 let orders: FakeOrderRow[] = [];
 let giftCards: FakeGiftCardRow[] = [];
 let movements: Array<{ organization_id: string; gift_card_id: string; movement_type: string; amount_delta: number; user_id: string | null }> = [];
 let nextGiftCardId = 1;
+
+/** Emails effectivement "envoyés" via sendOrgEmail (mocké) — voir sendOrgEmailMock. */
+let sentEmails: Array<{ organizationId: string; to: string; subject: string; html: string }> = [];
+let sendShouldFail = false;
 
 function resetFakeDb() {
   orders = [];
   giftCards = [];
   movements = [];
   nextGiftCardId = 1;
+  sentEmails = [];
+  sendShouldFail = false;
 }
 
 function seedOrder(overrides: Partial<FakeOrderRow> = {}): FakeOrderRow {
@@ -63,6 +76,11 @@ function seedOrder(overrides: Partial<FakeOrderRow> = {}): FakeOrderRow {
     gift_card_id: null,
     idempotency_key: null,
     request_fingerprint: null,
+    delivery_mode: 'buyer',
+    delivery_status: 'pending',
+    delivery_attempted_at: null,
+    delivery_sent_at: null,
+    delivery_error: null,
     ...overrides,
   };
   orders.push(row);
@@ -143,6 +161,34 @@ const queryMock = vi.fn(async (text: string, params: unknown[] = []) => {
     if (row) row.status = 'expired';
     return { rows: [], rowCount: row ? 1 : 0 };
   }
+  // --- Distribution par email (étape 5, lib/services/online-gift-card-delivery.ts) ---
+  if (text.includes("SET delivery_status = 'sending'")) {
+    const [orderId] = params as [string];
+    const row = orders.find((o) => o.id === orderId && o.status === 'issued' && ['pending', 'failed'].includes(o.delivery_status));
+    if (!row) return { rows: [], rowCount: 0 };
+    row.delivery_status = 'sending';
+    row.delivery_attempted_at = new Date().toISOString();
+    return { rows: [{ ...row }], rowCount: 1 };
+  }
+  if (text.includes('FROM gift_cards g') && text.includes('JOIN organizations o')) {
+    const giftCardId = params[0] as string;
+    const gc = giftCards.find((g) => g.id === giftCardId);
+    const org = gc ? organizations.find((o) => o.id === gc.organization_id) : undefined;
+    if (!gc || !org) return { rows: [], rowCount: 0 };
+    return { rows: [{ code: gc.code, organization_name: org.name }], rowCount: 1 };
+  }
+  if (text.includes("SET delivery_status = 'sent'")) {
+    const [orderId] = params as [string];
+    const row = orders.find((o) => o.id === orderId);
+    if (row) { row.delivery_status = 'sent'; row.delivery_sent_at = new Date().toISOString(); row.delivery_error = null; }
+    return { rows: [], rowCount: row ? 1 : 0 };
+  }
+  if (text.includes("SET delivery_status = 'failed'")) {
+    const [orderId, error] = params as [string, string];
+    const row = orders.find((o) => o.id === orderId);
+    if (row) { row.delivery_status = 'failed'; row.delivery_error = error; }
+    return { rows: [], rowCount: row ? 1 : 0 };
+  }
   throw new Error(`Requête (query) non simulée : ${text}`);
 });
 
@@ -150,6 +196,14 @@ vi.mock('@/lib/db/client', () => ({
   query: queryMock,
   withTransaction: async (fn: (client: ReturnType<typeof makeFakeClient>) => Promise<unknown>) => fn(makeFakeClient()),
 }));
+
+/** sendOrgEmail mocké : capture les emails "envoyés", simule un fournisseur en panne si sendShouldFail. */
+const sendOrgEmailMock = vi.fn(async (args: { organizationId: string; to: string; subject: string; html: string }) => {
+  if (sendShouldFail) return { ok: false, error: 'PROVIDER_ERROR' };
+  sentEmails.push(args);
+  return { ok: true };
+});
+vi.mock('@/lib/email/send', () => ({ sendOrgEmail: sendOrgEmailMock }));
 
 const { fulfillOnlineGiftCardCheckout, markOnlineGiftCardOrderExpired } = await import('@/lib/services/online-gift-card-fulfillment');
 
@@ -169,6 +223,7 @@ function validArgs(overrides: Partial<Parameters<typeof fulfillOnlineGiftCardChe
 beforeEach(() => {
   resetFakeDb();
   queryMock.mockClear();
+  sendOrgEmailMock.mockClear();
 });
 
 describe('Émission — cas nominal', () => {
@@ -383,5 +438,59 @@ describe("success_url ne prouve jamais un paiement", () => {
     const outcome = await fulfillOnlineGiftCardCheckout(validArgs({ paymentStatus: undefined }));
     expect(outcome).toBe('not_paid');
     expect(giftCards).toHaveLength(0);
+  });
+});
+
+describe('Distribution (étape 5) — déclenchée après émission', () => {
+  it('émission réussie => un email est envoyé, APRÈS la création de la carte, avec le code réel', async () => {
+    seedOrder({ delivery_mode: 'buyer' });
+    const outcome = await fulfillOnlineGiftCardCheckout(validArgs());
+    expect(outcome).toBe('issued');
+    expect(sendOrgEmailMock).toHaveBeenCalledTimes(1);
+    expect(sentEmails[0]!.to).toBe('jonathan@example.com'); // buyer, mode 'buyer'
+    expect(sentEmails[0]!.html).toContain(giftCards[0]!.code);
+    expect(orders[0]!.delivery_status).toBe('sent');
+  });
+
+  it("échec d'envoi email => la carte reste créée, la commande reste 'issued', l'échec est enregistré (aucun rollback)", async () => {
+    seedOrder({ delivery_mode: 'buyer' });
+    sendShouldFail = true;
+    const outcome = await fulfillOnlineGiftCardCheckout(validArgs());
+    expect(outcome).toBe('issued'); // le statut d'émission n'est jamais affecté par l'email
+    expect(giftCards).toHaveLength(1);
+    expect(orders[0]!.status).toBe('issued');
+    expect(orders[0]!.gift_card_id).toBe(giftCards[0]!.id);
+    expect(orders[0]!.delivery_status).toBe('failed');
+    expect(orders[0]!.delivery_error).toBeTruthy();
+  });
+
+  it("webhook rejoué après un échec d'envoi => réessaie la distribution SANS recréer de carte", async () => {
+    seedOrder({ delivery_mode: 'buyer' });
+    sendShouldFail = true;
+    await fulfillOnlineGiftCardCheckout(validArgs());
+    expect(orders[0]!.delivery_status).toBe('failed');
+    sendShouldFail = false;
+    const outcome = await fulfillOnlineGiftCardCheckout(validArgs());
+    expect(outcome).toBe('already_issued'); // aucune seconde carte
+    expect(giftCards).toHaveLength(1);
+    expect(orders[0]!.delivery_status).toBe('sent'); // mais la distribution a bien fini par réussir
+  });
+
+  it("webhook rejoué après un envoi réussi => aucun nouvel email", async () => {
+    seedOrder({ delivery_mode: 'buyer' });
+    await fulfillOnlineGiftCardCheckout(validArgs());
+    expect(sendOrgEmailMock).toHaveBeenCalledTimes(1);
+    const outcome = await fulfillOnlineGiftCardCheckout(validArgs());
+    expect(outcome).toBe('already_issued');
+    expect(sendOrgEmailMock).toHaveBeenCalledTimes(1); // toujours un seul envoi
+  });
+
+  it("session_mismatch sur un rejeu (commande déjà émise, session différente) => aucune tentative de renvoi", async () => {
+    seedOrder({ delivery_mode: 'buyer' });
+    await fulfillOnlineGiftCardCheckout(validArgs());
+    sendOrgEmailMock.mockClear();
+    const outcome = await fulfillOnlineGiftCardCheckout(validArgs({ stripeSessionId: 'cs_test_OTHER' }));
+    expect(outcome).toBe('already_issued');
+    expect(sendOrgEmailMock).not.toHaveBeenCalled();
   });
 });

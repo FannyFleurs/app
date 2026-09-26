@@ -14,6 +14,29 @@ import { query } from '@/lib/db/client';
 
 export type OnlineGiftCardOrderStatus = 'pending' | 'paid' | 'issued' | 'failed' | 'expired' | 'refunded';
 
+/**
+ * Qui reçoit l'email contenant la carte (étape 5) — distinct du titulaire
+ * de la carte (toujours `recipient`, inchangé depuis l'étape 4) :
+ * - 'buyer'     : SEUL l'acheteur reçoit la carte par email (il l'imprime/
+ *                 la transmet lui-même) — le bénéficiaire ne reçoit rien,
+ *                 même si `recipientEmail` est fourni.
+ * - 'recipient' : l'acheteur reçoit une confirmation, le bénéficiaire
+ *                 reçoit directement la carte.
+ */
+export type OnlineGiftCardDeliveryMode = 'buyer' | 'recipient';
+
+/**
+ * Suivi de la DISTRIBUTION (email), distinct du statut de la commande :
+ * une commande peut être `issued` (carte créée) alors que sa distribution
+ * est encore `pending`/`sending`, ou a échoué (`failed`) — un échec d'envoi
+ * ne remet jamais en cause le paiement ni la carte. `sending` est un état
+ * transitoire servant de verrou d'unicité (voir
+ * lib/services/online-gift-card-delivery.ts) ; `sent` n'est plus jamais
+ * réclamable (pas de double envoi) ; `failed` reste réclamable par un futur
+ * essai (rejeu webhook, ou plus tard un bouton « Renvoyer »).
+ */
+export type OnlineGiftCardDeliveryStatus = 'pending' | 'sending' | 'sent' | 'failed';
+
 export interface OnlineGiftCardOrder {
   id: string;
   organizationId: string;
@@ -23,7 +46,8 @@ export interface OnlineGiftCardOrder {
   buyerName: string;
   buyerEmail: string;
   recipientName: string;
-  recipientEmail: string;
+  /** Facultatif si `deliveryMode === 'buyer'` (carte imprimée/remise en main propre). */
+  recipientEmail: string | null;
   message: string | null;
   status: OnlineGiftCardOrderStatus;
   stripeCheckoutSessionId: string | null;
@@ -31,6 +55,11 @@ export interface OnlineGiftCardOrder {
   giftCardId: string | null;
   idempotencyKey: string | null;
   requestFingerprint: string | null;
+  deliveryMode: OnlineGiftCardDeliveryMode;
+  deliveryStatus: OnlineGiftCardDeliveryStatus;
+  deliveryAttemptedAt: string | null;
+  deliverySentAt: string | null;
+  deliveryError: string | null;
 }
 
 /** Exportés pour lib/services/online-gift-card-fulfillment.ts (webhook,
@@ -40,7 +69,7 @@ export interface OrderRow {
   id: string; organization_id: string; public_reference: string;
   amount_cents: number; currency: string;
   buyer_name: string; buyer_email: string;
-  recipient_name: string; recipient_email: string;
+  recipient_name: string; recipient_email: string | null;
   message: string | null;
   status: OnlineGiftCardOrderStatus;
   stripe_checkout_session_id: string | null;
@@ -48,6 +77,11 @@ export interface OrderRow {
   gift_card_id: string | null;
   idempotency_key: string | null;
   request_fingerprint: string | null;
+  delivery_mode: OnlineGiftCardDeliveryMode;
+  delivery_status: OnlineGiftCardDeliveryStatus;
+  delivery_attempted_at: string | null;
+  delivery_sent_at: string | null;
+  delivery_error: string | null;
 }
 
 export function mapRow(r: OrderRow): OnlineGiftCardOrder {
@@ -68,6 +102,11 @@ export function mapRow(r: OrderRow): OnlineGiftCardOrder {
     giftCardId: r.gift_card_id,
     idempotencyKey: r.idempotency_key,
     requestFingerprint: r.request_fingerprint,
+    deliveryMode: r.delivery_mode,
+    deliveryStatus: r.delivery_status,
+    deliveryAttemptedAt: r.delivery_attempted_at,
+    deliverySentAt: r.delivery_sent_at,
+    deliveryError: r.delivery_error,
   };
 }
 
@@ -84,15 +123,17 @@ function generatePublicReference(): string {
  */
 export function computeRequestFingerprint(input: {
   amountCents: number; buyerName: string; buyerEmail: string;
-  recipientName: string; recipientEmail: string; message: string | null;
+  recipientName: string; recipientEmail: string | null; message: string | null;
+  deliveryMode: OnlineGiftCardDeliveryMode;
 }): string {
   const normalized = JSON.stringify([
     input.amountCents,
     input.buyerName.trim().toLowerCase(),
     input.buyerEmail.trim().toLowerCase(),
     input.recipientName.trim().toLowerCase(),
-    input.recipientEmail.trim().toLowerCase(),
+    (input.recipientEmail ?? '').trim().toLowerCase(),
     (input.message ?? '').trim(),
+    input.deliveryMode,
   ]);
   return createHash('sha256').update(normalized).digest('hex');
 }
@@ -112,8 +153,10 @@ export interface CreatePendingOrderArgs {
   buyerName: string;
   buyerEmail: string;
   recipientName: string;
-  recipientEmail: string;
+  /** Obligatoire seulement si `deliveryMode === 'recipient'` (validé en amont par la route). */
+  recipientEmail: string | null;
   message: string | null;
+  deliveryMode: OnlineGiftCardDeliveryMode;
   idempotencyKey: string | null;
   requestFingerprint: string | null;
   clientIp: string | null;
@@ -133,13 +176,13 @@ export async function createPendingOrder(args: CreatePendingOrderArgs): Promise<
         `INSERT INTO online_gift_card_orders
            (organization_id, public_reference, amount_cents, currency,
             buyer_name, buyer_email, recipient_name, recipient_email, message,
-            status, idempotency_key, request_fingerprint, client_ip)
-         VALUES ($1,$2,$3,'eur',$4,$5,$6,$7,$8,'pending',$9,$10,$11)
+            delivery_mode, status, idempotency_key, request_fingerprint, client_ip)
+         VALUES ($1,$2,$3,'eur',$4,$5,$6,$7,$8,$9,'pending',$10,$11,$12)
          RETURNING *`,
         [
           args.organizationId, reference, args.amountCents,
           args.buyerName, args.buyerEmail, args.recipientName, args.recipientEmail, args.message,
-          args.idempotencyKey, args.requestFingerprint, args.clientIp,
+          args.deliveryMode, args.idempotencyKey, args.requestFingerprint, args.clientIp,
         ],
       );
       return mapRow(rows[0]!);

@@ -22,8 +22,9 @@ interface FakeOrderRow {
   id: string; organization_id: string; public_reference: string;
   amount_cents: number; currency: string;
   buyer_name: string; buyer_email: string;
-  recipient_name: string; recipient_email: string;
+  recipient_name: string; recipient_email: string | null;
   message: string | null;
+  delivery_mode: string;
   status: string;
   stripe_checkout_session_id: string | null;
   stripe_payment_intent_id: string | null;
@@ -33,6 +34,10 @@ interface FakeOrderRow {
   client_ip: string | null;
   created_at: string;
   updated_at: string;
+  delivery_status: string;
+  delivery_attempted_at: string | null;
+  delivery_sent_at: string | null;
+  delivery_error: string | null;
 }
 
 const orgs = [
@@ -106,8 +111,8 @@ const queryMock = vi.fn(async (text: string, params: unknown[] = []) => {
   }
   // Création (INSERT ... RETURNING *)
   if (text.includes('INSERT INTO online_gift_card_orders')) {
-    const [organizationId, publicReference, amountCents, buyerName, buyerEmail, recipientName, recipientEmail, message, idempotencyKey, requestFingerprint, clientIp] = params as [
-      string, string, number, string, string, string, string, string | null, string | null, string | null, string | null,
+    const [organizationId, publicReference, amountCents, buyerName, buyerEmail, recipientName, recipientEmail, message, deliveryMode, idempotencyKey, requestFingerprint, clientIp] = params as [
+      string, string, number, string, string, string, string | null, string | null, string, string | null, string | null, string | null,
     ];
     if (idempotencyKey && orderRows.some((r) => r.organization_id === organizationId && r.idempotency_key === idempotencyKey)) {
       const e = new Error('duplicate key value violates unique constraint') as Error & { code?: string; constraint?: string };
@@ -124,6 +129,7 @@ const queryMock = vi.fn(async (text: string, params: unknown[] = []) => {
       buyer_name: buyerName, buyer_email: buyerEmail,
       recipient_name: recipientName, recipient_email: recipientEmail,
       message: message ?? null,
+      delivery_mode: deliveryMode,
       status: 'pending',
       stripe_checkout_session_id: null,
       stripe_payment_intent_id: null,
@@ -133,6 +139,10 @@ const queryMock = vi.fn(async (text: string, params: unknown[] = []) => {
       client_ip: clientIp ?? null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
+      delivery_status: 'pending',
+      delivery_attempted_at: null,
+      delivery_sent_at: null,
+      delivery_error: null,
     };
     orderRows.push(row);
     return { rows: [row], rowCount: 1 };
@@ -207,6 +217,7 @@ function validPayload(overrides: Record<string, unknown> = {}) {
     amount: 25,
     buyer: { name: 'Jean Dupont', email: 'jean@example.fr' },
     recipient: { name: 'Marie Dupont', email: 'marie@example.fr' },
+    delivery_mode: 'buyer',
     message: 'Joyeux anniversaire !',
     ...overrides,
   };
@@ -339,7 +350,7 @@ describe('Montants', () => {
   it('montant libre interdit pour une organisation qui ne l\'autorise pas => 422', async () => {
     const res = await post({
       key: 'hp_gc_BBBBBBBBBBBBBBBBBBBB', amount: 99,
-      buyer: { name: 'A', email: 'a@example.fr' }, recipient: { name: 'B', email: 'b@example.fr' },
+      buyer: { name: 'A', email: 'a@example.fr' }, recipient: { name: 'B', email: 'b@example.fr' }, delivery_mode: 'buyer',
     }, 'https://fanny-fleurs.com');
     const body = await res.json();
     expect(res.status).toBe(422);
@@ -394,6 +405,56 @@ describe('Données client', () => {
   });
 });
 
+describe('delivery_mode', () => {
+  it("delivery_mode='buyer' : recipient.email facultatif => 200, commande créée avec delivery_mode persisté", async () => {
+    const res = await post({
+      ...validPayload(),
+      recipient: { name: 'Marie Dupont' }, // pas d'email : carte imprimable/remise en main propre
+      delivery_mode: 'buyer',
+    }, ORG_A_ORIGIN);
+    expect(res.status).toBe(200);
+    expect(orderRows[0]!.recipient_email).toBeNull();
+    expect(orderRows[0]!.delivery_mode).toBe('buyer');
+  });
+
+  it("delivery_mode='recipient' avec recipient.email => 200", async () => {
+    const res = await post(validPayload({ delivery_mode: 'recipient' }), ORG_A_ORIGIN);
+    expect(res.status).toBe(200);
+    expect(orderRows[0]!.delivery_mode).toBe('recipient');
+    expect(orderRows[0]!.recipient_email).toBe('marie@example.fr');
+  });
+
+  it("delivery_mode='recipient' SANS recipient.email => 422, requête rejetée proprement", async () => {
+    const res = await post({
+      ...validPayload(),
+      recipient: { name: 'Marie Dupont' },
+      delivery_mode: 'recipient',
+    }, ORG_A_ORIGIN);
+    expect(res.status).toBe(422);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('buyer.email reste obligatoire dans tous les cas (y compris delivery_mode=buyer)', async () => {
+    const payload = validPayload({ delivery_mode: 'buyer' }) as Record<string, unknown>;
+    const buyer = payload.buyer as Record<string, unknown>;
+    delete buyer.email;
+    const res = await post(payload, ORG_A_ORIGIN);
+    expect(res.status).toBe(422);
+  });
+
+  it('delivery_mode manquant => 422 (champ obligatoire)', async () => {
+    const payload = validPayload() as Record<string, unknown>;
+    delete payload.delivery_mode;
+    const res = await post(payload, ORG_A_ORIGIN);
+    expect(res.status).toBe(422);
+  });
+
+  it('delivery_mode invalide (valeur arbitraire) => 422', async () => {
+    const res = await post(validPayload({ delivery_mode: 'scheduled' }), ORG_A_ORIGIN);
+    expect(res.status).toBe(422);
+  });
+});
+
 describe('Origin', () => {
   it('origine autorisée => 200 + en-tête CORS exact', async () => {
     const res = await post(validPayload(), ORG_A_ORIGIN);
@@ -438,7 +499,7 @@ describe('Erreurs', () => {
   it("Stripe non configuré pour l'organisation => 503 PAYMENT_UNAVAILABLE, aucun appel Stripe", async () => {
     const res = await post({
       key: 'hp_gc_BBBBBBBBBBBBBBBBBBBB', amount: 30,
-      buyer: { name: 'A', email: 'a@example.fr' }, recipient: { name: 'B', email: 'b@example.fr' },
+      buyer: { name: 'A', email: 'a@example.fr' }, recipient: { name: 'B', email: 'b@example.fr' }, delivery_mode: 'buyer',
     }, 'https://fanny-fleurs.com');
     expect(res.status).toBe(503);
     expect((await res.json()).error).toBe('PAYMENT_UNAVAILABLE');
@@ -461,7 +522,7 @@ describe('Erreurs', () => {
     try {
       const res = await post({
         key: 'hp_gc_BBBBBBBBBBBBBBBBBBBB', amount: 30,
-        buyer: { name: 'A', email: 'a@example.fr' }, recipient: { name: 'B', email: 'b@example.fr' },
+        buyer: { name: 'A', email: 'a@example.fr' }, recipient: { name: 'B', email: 'b@example.fr' }, delivery_mode: 'buyer',
       }, 'https://fanny-fleurs.com');
       expect(res.status).toBe(404);
       expect((await res.json()).error).toBe('GIFT_CARDS_NOT_AVAILABLE');
@@ -507,10 +568,11 @@ describe('Anti-abus (rate limiting)', () => {
       orderRows.push({
         id: `seed-${i}`, organization_id: 'org-a-uuid', public_reference: `GC-SEED${i}`,
         amount_cents: 2500, currency: 'eur', buyer_name: 'X', buyer_email: 'x@example.fr',
-        recipient_name: 'Y', recipient_email: 'y@example.fr', message: null, status: 'pending',
+        recipient_name: 'Y', recipient_email: 'y@example.fr', message: null, delivery_mode: 'buyer', status: 'pending',
         stripe_checkout_session_id: null, stripe_payment_intent_id: null, gift_card_id: null,
         idempotency_key: null, request_fingerprint: null, client_ip: '203.0.113.1',
         created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+        delivery_status: 'pending', delivery_attempted_at: null, delivery_sent_at: null, delivery_error: null,
       });
     }
     const res = await POST(new Request(URL_, {
