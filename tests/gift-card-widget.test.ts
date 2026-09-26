@@ -494,6 +494,76 @@ describe('Isolation CSS (Shadow DOM)', () => {
   });
 });
 
+/**
+ * Retrouve, par sélecteur exact, les déclarations d'une règle CSS de la
+ * feuille de style du widget. jsdom n'expose pas `<style>.sheet` pour un
+ * élément posé dans un Shadow Root (vérifié empiriquement — sheet vaut
+ * `null` bien que le nœud soit connecté) : on ne peut donc pas utiliser la
+ * CSSOM ici comme on le ferait pour un `<style>` dans le document
+ * principal. On extrait donc le bloc de déclarations par le sélecteur
+ * EXACT (jusqu'à la première accolade fermante) depuis le texte source,
+ * puis on le découpe en paires propriété/valeur — plus précis qu'un simple
+ * `.toContain` sur toute la feuille.
+ */
+function cssRuleDeclarations(el: HTMLElement, selectorText: string): Record<string, string> {
+  const css = q<HTMLStyleElement>(el, 'style').textContent || '';
+  const escapedSelector = selectorText.replace(/[.*+?^${}()|[\]\\:]/g, '\\$&');
+  const match = new RegExp(escapedSelector + '\\{([^}]*)\\}').exec(css);
+  if (!match) throw new Error(`Règle CSS introuvable pour le sélecteur : ${selectorText}`);
+  const decls: Record<string, string> = {};
+  match[1]!.split(';').forEach((decl) => {
+    const i = decl.indexOf(':');
+    if (i === -1) return;
+    decls[decl.slice(0, i).trim()] = decl.slice(i + 1).trim();
+  });
+  return decls;
+}
+
+describe('Mise en page — largeur et centrage (correctif décalage à gauche)', () => {
+  it(':host reste isolé (all:initial) et devient un bloc capable de prendre 100% de la largeur disponible', async () => {
+    const el = await mountReady();
+    const host = cssRuleDeclarations(el, ':host');
+    expect(host.all).toBe('initial');
+    expect(host.display).toBe('block');
+    expect(host.width).toBe('100%');
+  });
+
+  it('le conteneur racine réel (.hp-root) a une largeur responsive plafonnée à une largeur desktop confortable', async () => {
+    const el = await mountReady();
+    const root = cssRuleDeclarations(el, '.hp-root');
+    expect(root.width).toBe('100%'); // responsive : jamais plus large que son conteneur
+    expect(root['max-width']).toBe('480px'); // largeur desktop confortable pour un formulaire à une colonne
+  });
+
+  it('.hp-root est centré horizontalement (marges automatiques gauche/droite)', async () => {
+    const el = await mountReady();
+    const root = cssRuleDeclarations(el, '.hp-root');
+    expect(root['margin-left']).toBe('auto');
+    expect(root['margin-right']).toBe('auto');
+  });
+
+  it("le conteneur anonyme injecté par innerHTML (parent direct de .hp-root) ne porte aucun style propre pouvant fausser le centrage", async () => {
+    const el = await mountReady();
+    // .hp-root est le premier (et unique) enfant du <div> anonyme posé par
+    // connectedCallback — ce porteur n'a ni classe ni attribut style, donc
+    // aucune règle ne peut le cibler spécifiquement.
+    const hpRoot = q(el, '.hp-root');
+    const wrapper = hpRoot.parentElement!;
+    expect(wrapper.className).toBe('');
+    expect(wrapper.getAttribute('style')).toBeNull();
+  });
+
+  it('aucun changement fonctionnel : le parcours complet (config -> formulaire -> checkout) reste inchangé', async () => {
+    const el = await mountReady();
+    expect(q(el, '#hp-org-name').textContent).toBe('Organisation A');
+    await fillValidForm(el);
+    q(el, '#hp-form').dispatchEvent(new Event('submit', { cancelable: true }));
+    await flush();
+    const body = JSON.parse(String(fetchCalls.find((c) => c.url.includes('/checkout'))!.init!.body));
+    expect(body).toMatchObject({ key: 'hp_gc_AAAA', amount: 25, delivery_mode: 'buyer' });
+  });
+});
+
 describe('Retour Stripe — succès', () => {
   it("session_id dans l'URL => écran de succès, sans appel à /config ni /checkout", async () => {
     window.history.pushState({}, '', '/carte-cadeau/succes?session_id=cs_test_1');

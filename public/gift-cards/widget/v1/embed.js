@@ -130,10 +130,33 @@
   // règles/sélecteurs, traverse normalement la frontière du Shadow DOM.
   // ---------------------------------------------------------------------
   var STYLE = ''
-    + ':host{all:initial;display:block;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;'
+    // width:100% (en plus de display:block) : le composant occupe toute la
+    // largeur que le site intégrateur lui laisse, quel que soit le contexte
+    // de mise en page (bloc normal, cellule flex/grid…) — un bloc width:auto
+    // ne s'étire pas forcément à 100% dans tous ces contextes. Cette
+    // propriété est déclarée dans la MÊME règle qu'all:initial : au sein
+    // d'une seule règle, l'ordre des propriétés ne compte pas (seul l'ordre
+    // entre déclarations de LA MÊME propriété compterait) — display:block et
+    // les variables --hp-* ci-dessous coexistent déjà avec all:initial
+    // exactement de cette façon.
+    + ':host{all:initial;display:block;width:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;'
     + '--hp-primary:' + DEFAULT_PRIMARY + ';--hp-text:' + DEFAULT_TEXT + ';--hp-radius:' + DEFAULT_RADIUS + ';}'
     + '*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}'
-    + '.hp-root{color:var(--hp-text);font-size:16px;line-height:1.45;max-width:480px;width:100%;}'
+    // .hp-root est le conteneur racine RÉEL du contenu visible (premier —
+    // et unique — élément du gabarit statique posé dans le Shadow DOM,
+    // voir TEMPLATE ci-dessous ; le <div> qui l'englobe directement,
+    // injecté par innerHTML lors du montage, n'est qu'un porteur anonyme
+    // sans classe ni style, donc sans effet sur la mise en page).
+    // max-width:480px (largeur confortable pour un formulaire à une
+    // colonne, cohérente avec les champs/labels existants — inchangée
+    // depuis l'étape 6) plafonnait déjà correctement la largeur sur
+    // desktop, mais margin:0 auto manquait : un bloc plus étroit que son
+    // conteneur s'aligne par défaut à GAUCHE, jamais centré, sans cette
+    // marge. C'est la cause exacte du décalage rapporté — le custom
+    // element (:host) peut être large et centré sur la page hôte, mais
+    // .hp-root, lui, restait collé au bord gauche À L'INTÉRIEUR de cette
+    // largeur.
+    + '.hp-root{color:var(--hp-text);font-size:16px;line-height:1.45;max-width:480px;width:100%;margin-left:auto;margin-right:auto;}'
     + '.hp-panel{background:#fff;border:1px solid #E7E3D8;border-radius:var(--hp-radius);padding:20px;}'
     + '@media (max-width:400px){.hp-panel{padding:16px;border-radius:calc(var(--hp-radius) - 4px);}}'
     + '.hp-section{margin-top:20px;}'
