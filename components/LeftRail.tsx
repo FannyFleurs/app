@@ -282,7 +282,7 @@ export default function LeftRail({
             title="Assistance"
             aria-label="Assistance"
           >
-            <Icon name="comment" size={22} />
+            <Icon name="helpline" size={22} />
             <span className="text-[10px] leading-tight text-center max-w-full truncate">Assistance</span>
           </Link>
         ) : null}

@@ -19,7 +19,10 @@ interface Category {
   visible_in_pos: boolean;
   store_ids: string[];
   loyalty_eligible: boolean;
+  default_tax_rate_id: string | null;
 }
+
+interface TaxRate { id: string; rate: number; label: string }
 
 const COLOR_PRESETS = ['#FFFFFF', '#F5F5F5', '#E8EFE2', '#EFE6D6', '#D8E8D8', '#F0E4D7', '#F3E8E0', '#E6E2D8'];
 
@@ -31,6 +34,13 @@ export default function CategoriesAdmin({ canEdit, backOffice = false, stores = 
   const [items, setItems] = useState<Category[]>([]);
   const [editing, setEditing] = useState<Category | null | undefined>(undefined);
   const [loading, setLoading] = useState(true);
+  const [taxRates, setTaxRates] = useState<TaxRate[]>([]);
+  useEffect(() => {
+    void (async () => {
+      const r = await fetch('/api/tax-rates');
+      if (r.ok) setTaxRates((await r.json()).tax_rates);
+    })();
+  }, []);
   // Hors BO : boutique du poste (liaison appareil). '' = inconnu, null =
   // résolu sans boutique, string = boutique. On attend sa résolution avant de
   // charger, pour ne pas afficher brièvement les catégories des autres.
@@ -74,7 +84,10 @@ export default function CategoriesAdmin({ canEdit, backOffice = false, stores = 
     const r = await fetch(`/api/categories${qs}`);
     if (r.ok) {
       const cats = (await r.json()).categories as Category[];
-      setItems(cats.map((c) => ({ ...c, store_ids: c.store_ids ?? [], loyalty_eligible: c.loyalty_eligible ?? true })));
+      setItems(cats.map((c) => ({
+        ...c, store_ids: c.store_ids ?? [], loyalty_eligible: c.loyalty_eligible ?? true,
+        default_tax_rate_id: c.default_tax_rate_id ?? null,
+      })));
     }
     setLoading(false);
   }
@@ -175,6 +188,7 @@ export default function CategoriesAdmin({ canEdit, backOffice = false, stores = 
           category={editing}
           backOffice={backOffice}
           stores={stores}
+          taxRates={taxRates}
           posteStoreId={typeof posteStoreId === 'string' && posteStoreId ? posteStoreId : null}
           deleteStoreId={deleteStoreId}
           deleteStoreName={deleteStoreName}
@@ -186,10 +200,11 @@ export default function CategoriesAdmin({ canEdit, backOffice = false, stores = 
   );
 }
 
-function CategoryFormModal({ category, backOffice, stores, posteStoreId, deleteStoreId, deleteStoreName, onClose, onSaved }: {
+function CategoryFormModal({ category, backOffice, stores, taxRates, posteStoreId, deleteStoreId, deleteStoreName, onClose, onSaved }: {
   category: Category | null;
   backOffice: boolean;
   stores: { id: string; name: string }[];
+  taxRates: TaxRate[];
   posteStoreId?: string | null;
   deleteStoreId?: string | null;
   deleteStoreName?: string | null;
@@ -204,6 +219,7 @@ function CategoryFormModal({ category, backOffice, stores, posteStoreId, deleteS
     visible_in_pos: category?.visible_in_pos ?? true,
     loyalty_eligible: category?.loyalty_eligible ?? true,
     store_ids: category?.store_ids ?? [],
+    default_tax_rate_id: category?.default_tax_rate_id ?? '',
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -239,6 +255,7 @@ function CategoryFormModal({ category, backOffice, stores, posteStoreId, deleteS
       image_url: form.image_url.trim() || null,
       visible_in_pos: form.visible_in_pos,
       loyalty_eligible: form.loyalty_eligible,
+      default_tax_rate_id: form.default_tax_rate_id || null,
     };
     // Boutiques (même logique que les articles) :
     //  - back-office : sélection explicite. « Toutes » (aucune cochée) est
@@ -350,6 +367,20 @@ function CategoryFormModal({ category, backOffice, stores, posteStoreId, deleteS
                    onChange={(e) => setForm({ ...form, visible_in_pos: e.target.checked })} />
             Visible sur la grille caisse
           </label>
+
+          <div>
+            <label className="text-sm font-medium text-ink-soft">Taux de TVA par défaut</label>
+            <select className="input mt-1" value={form.default_tax_rate_id}
+                    onChange={(e) => setForm({ ...form, default_tax_rate_id: e.target.value })}>
+              <option value="">Aucun (à saisir manuellement)</option>
+              {taxRates.map((t) => (
+                <option key={t.id} value={t.id}>{t.rate}% — {t.label}</option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-ink-soft">
+              Pré-remplit le taux de TVA d&apos;un article à la création dès que cette catégorie est choisie.
+            </p>
+          </div>
 
           <div className="rounded-xl border border-border p-3">
             <label className="flex items-center justify-between gap-3 cursor-pointer">

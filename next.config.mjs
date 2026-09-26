@@ -44,6 +44,18 @@ const nextConfig = {
           { key: 'Permissions-Policy', value: 'camera=(self), microphone=(), geolocation=()' },
         ],
       },
+      {
+        // Widget public de cartes cadeaux (étape 6) : fichier statique
+        // versionné (v1) chargé par des sites tiers via <script src>. Un
+        // court cache (au lieu du défaut « sans cache » de Next pour
+        // public/) permet de corriger ce fichier sans que chaque site
+        // intégrateur ait besoin de modifier son propre code — voir
+        // docs/gift-card-widget.md § « Versionnage ».
+        source: '/gift-cards/widget/:version/:file',
+        headers: [
+          { key: 'Cache-Control', value: 'public, max-age=300, must-revalidate' },
+        ],
+      },
     ];
   },
 };

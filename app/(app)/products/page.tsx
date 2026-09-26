@@ -24,12 +24,12 @@ export default async function ProductsPage() {
   // utilisateur rattaché à des boutiques précises ne voit que les catégories
   // partagées ou attribuées à ses boutiques. Owner/super_admin voient tout.
   // Try/catch : repli org-wide tant que la colonne store_ids n'existe pas.
-  let cats: { rows: { id: string; name: string }[] };
+  let cats: { rows: { id: string; name: string; default_tax_rate_id: string | null }[] };
   const privileged = ['super_admin', 'owner'].includes(user.role);
   try {
     if (privileged) throw new Error('all');
-    cats = await query<{ id: string; name: string }>(
-      `SELECT c.id, c.name FROM product_categories c
+    cats = await query<{ id: string; name: string; default_tax_rate_id: string | null }>(
+      `SELECT c.id, c.name, c.default_tax_rate_id FROM product_categories c
         WHERE c.organization_id = $1 AND c.is_active = TRUE
           AND (
             NOT EXISTS (SELECT 1 FROM user_store_access WHERE user_id = $2)
@@ -42,8 +42,8 @@ export default async function ProductsPage() {
       [user.organizationId, user.id],
     );
   } catch {
-    cats = await query<{ id: string; name: string }>(
-      `SELECT id, name FROM product_categories
+    cats = await query<{ id: string; name: string; default_tax_rate_id: string | null }>(
+      `SELECT id, name, default_tax_rate_id FROM product_categories
          WHERE organization_id = $1 AND is_active = TRUE
          ORDER BY position, name`,
       [user.organizationId],

@@ -16,6 +16,7 @@ const patchSchema = z.object({
   transport_cost_ht: z.number().min(0).nullable().optional(),
   transport_cost_pct: z.number().min(0).max(1000).nullable().optional(),
   loyalty_eligible: z.boolean().optional(),
+  default_tax_rate_id: z.string().uuid().nullable().optional(),
 });
 
 // Introspection : une colonne de product_categories existe-t-elle ? (mise en
@@ -123,11 +124,20 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   const parsed = await parseJson(req, patchSchema);
   if ('response' in parsed) return parsed.response;
   const patch = { ...parsed.data };
+  // Sanity : le taux de TVA par défaut appartient bien à l'org.
+  if (patch.default_tax_rate_id) {
+    const tax = await query(
+      `SELECT 1 FROM tax_rates WHERE id = $1 AND organization_id = $2`,
+      [patch.default_tax_rate_id, g.user.organizationId],
+    );
+    if (tax.rowCount === 0) return jsonError('TAX_RATE_NOT_FOUND', 404);
+  }
   // Ignore silencieusement les colonnes dont la migration n'est pas déployée.
   if (patch.store_ids !== undefined && !(await hasColumn('store_ids'))) delete patch.store_ids;
   if (patch.transport_cost_ht !== undefined && !(await hasColumn('transport_cost_ht'))) delete patch.transport_cost_ht;
   if (patch.transport_cost_pct !== undefined && !(await hasColumn('transport_cost_pct'))) delete patch.transport_cost_pct;
   if (patch.loyalty_eligible !== undefined && !(await hasColumn('loyalty_eligible'))) delete patch.loyalty_eligible;
+  if (patch.default_tax_rate_id !== undefined && !(await hasColumn('default_tax_rate_id'))) delete patch.default_tax_rate_id;
 
   const fields = Object.keys(patch);
   if (fields.length === 0) return NextResponse.json({ ok: true });

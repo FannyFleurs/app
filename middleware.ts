@@ -23,6 +23,12 @@ import { isMarketingPath } from '@/lib/site/routes';
  *   - /site      affiche la vitrine
  */
 const BO_COOKIE = 'webpos_bo';
+// Doit rester synchronisé avec SESSION_COOKIE dans lib/auth/session.ts —
+// juste une présence de cookie, pas de validation (l'edge n'a pas accès à la
+// base). Sert à distinguer /support connecté (formulaire d'assistance de
+// l'app) de /support anonyme (page vitrine « contact ») sur *.vercel.app,
+// où il n'y a pas de sous-domaine pour trancher (cf plus bas).
+const SESSION_COOKIE = 'webpos_session';
 const KNOWN_SUBS = ['app.', 'bo.', 'ca.', 'admin.', 'pda.', 'ecran.', 'www.'];
 
 function isVercelPreview(host: string): boolean {
@@ -47,7 +53,15 @@ function isStaticOrApi(pathname: string): boolean {
     pathname === '/favicon.ico' ||
     pathname === '/robots.txt' ||
     pathname === '/sitemap.xml' ||
-    pathname.startsWith('/manifest') // /manifest.json ET /manifest-ca.json
+    pathname.startsWith('/manifest') || // /manifest.json ET /manifest-ca.json
+    // Widget public de vente de cartes cadeaux (étape 6, public/gift-cards/
+    // widget/…) : fichier STATIQUE qu'un site tiers charge par <script src>
+    // depuis N'IMPORTE quel domaine/sous-domaine HelloPos. Sans ce
+    // pass-through, sur un vrai domaine, l'apex redirigerait tout chemin non
+    // reconnu vers app.<domaine> (voir plus bas) — un aller-retour inutile
+    // pour un simple chargement de script, identique au traitement déjà
+    // réservé à /icons, /manifest, etc.
+    pathname.startsWith('/gift-cards/widget')
   );
 }
 
@@ -220,7 +234,14 @@ export function middleware(req: NextRequest) {
 
   // Site vitrine : URLs propres → /site/* (comme sur l'apex réel), pour que
   // la navigation du site fonctionne aussi en local / preview.
-  if (isMarketingPath(pathname)) {
+  //
+  // /support existe des DEUX côtés (page vitrine « contact », et formulaire
+  // d'assistance de l'app connectée) — sans sous-domaine pour les distinguer
+  // ici, un utilisateur connecté cliquant sur « Assistance » se retrouvait
+  // renvoyé vers la page vitrine générique au lieu du vrai formulaire. Une
+  // session présente fait pencher vers la page de l'app.
+  const loggedIn = !!req.cookies.get(SESSION_COOKIE)?.value;
+  if (isMarketingPath(pathname) && !(loggedIn && pathname === '/support')) {
     url.pathname = '/site' + pathname;
     return NextResponse.rewrite(url, { request: { headers: withPath(req, pathname) } });
   }

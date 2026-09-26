@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeLine, computeTotals, round2 } from '../lib/services/money';
+import { computeLine, computeTotals, round2, eurosToCents, InvalidAmountCentsError } from '../lib/services/money';
 
 describe('computeLine', () => {
   it('calcule HT/TVA/TTC à partir du TTC pour TVA 10%', () => {
@@ -35,5 +35,38 @@ describe('computeTotals', () => {
       { rate: 20, base_ht: 10, tva: 2, ttc: 12 },
       { rate: 10, base_ht: 20, tva: 2, ttc: 22 },
     ]);
+  });
+});
+
+describe('eurosToCents', () => {
+  it('convertit un montant rond en centimes entiers', () => {
+    expect(eurosToCents(50)).toBe(5000);
+    expect(eurosToCents(25.5)).toBe(2550);
+    expect(eurosToCents(10)).toBe(1000);
+  });
+
+  it('gère les résidus flottants classiques sans introduire d\'erreur', () => {
+    // 30.1 + 0.2 vaut 30.299999999999997 en flottant natif.
+    expect(eurosToCents(30.1 + 0.2)).toBe(3030);
+  });
+
+  it('rejette un montant négatif ou nul', () => {
+    expect(() => eurosToCents(0)).toThrow(InvalidAmountCentsError);
+    expect(() => eurosToCents(-10)).toThrow(InvalidAmountCentsError);
+  });
+
+  it('rejette NaN et Infinity', () => {
+    expect(() => eurosToCents(NaN)).toThrow(InvalidAmountCentsError);
+    expect(() => eurosToCents(Infinity)).toThrow(InvalidAmountCentsError);
+    expect(() => eurosToCents(-Infinity)).toThrow(InvalidAmountCentsError);
+  });
+
+  it('rejette plus de 2 décimales (pas un montant en euros valide)', () => {
+    expect(() => eurosToCents(12.345)).toThrow(InvalidAmountCentsError);
+  });
+
+  it('ne renvoie jamais un flottant', () => {
+    const cents = eurosToCents(25.5);
+    expect(Number.isInteger(cents)).toBe(true);
   });
 });

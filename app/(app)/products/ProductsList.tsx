@@ -54,7 +54,7 @@ export default function ProductsList({
 }: {
   canEdit: boolean;
   taxRates: { id: string; code: string; rate: number; label: string; is_default: boolean }[];
-  categories: { id: string; name: string }[];
+  categories: { id: string; name: string; default_tax_rate_id?: string | null }[];
   backOffice?: boolean;
 }) {
   const [products, setProducts] = useState<Product[]>([]);

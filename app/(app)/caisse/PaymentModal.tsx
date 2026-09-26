@@ -450,7 +450,7 @@ export default function PaymentModal({ saleId, totalTtc, lines = [], storeId, ha
             <div className="text-[10px] lg:text-xs uppercase tracking-wider text-ink-soft mb-1">
               Mode de règlement
             </div>
-            <div className="grid grid-cols-2 lg:grid-cols-1 gap-1.5 lg:gap-2.5">
+            <div className="grid grid-cols-2 gap-1.5 lg:gap-2.5">
               {methods.map((m) => {
                 // « En compte » désactivé sans client (vente anonyme).
                 const blockedDeferred = m.kind === 'deferred' && !hasCustomer;
