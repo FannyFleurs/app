@@ -1595,11 +1595,6 @@ export default function CashRegister({
   }
 
   const showingProducts = searchQ.length > 0 || view.kind === 'products';
-  const currentCategoryName = view.kind === 'products'
-    ? (view.categoryId === 'uncategorized'
-        ? 'Sans catégorie'
-        : categories.find((c) => c.id === view.categoryId)?.name ?? '')
-    : '';
 
   return (
     <div
@@ -1699,22 +1694,31 @@ export default function CashRegister({
         <div ref={catalogScrollRef} className="pos-catalog relative flex-1 overflow-auto p-3 md:p-5 pb-24 md:pb-5">
           {showingProducts ? (
             <>
-              {/* Bouton retour en haut à gauche + libellé contextuel */}
-              <div className="flex items-center gap-3 mb-3">
+              {/* Résultats de recherche : garde le libellé (pas de bouton
+                  retour ici, la recherche n'a pas de "grille catégories" à
+                  laquelle revenir). Vue catégorie : ni bouton ni libellé
+                  au-dessus — le retour est la première tuile de la grille,
+                  les produits prennent exactement la place des tuiles
+                  catégories. */}
+              {searchQ && (
+                <div className="text-sm font-semibold text-ink mb-3">
+                  Résultats pour « {searchQ} »
+                </div>
+              )}
+
+              <div className={`grid ${metrics.grid} ${metrics.gap}`}>
                 {!searchQ && (
                   <button
                     onClick={() => setView({ kind: 'categories' })}
-                    className="btn-soft inline-flex items-center gap-1.5 text-sm"
+                    className={`card ${metrics.padding} hover:shadow-md hover:border-gray-300 transition-all active:scale-[0.98] aspect-[5/3] grid place-items-center text-center`}
+                    aria-label="Retour aux catégories"
                   >
-                    <Icon name="chevron-left" size={14} /> Retour
+                    <div className="flex flex-col items-center justify-center gap-1.5">
+                      <Icon name="chevron-left" size={20} />
+                      <span className={`${metrics.titleFontSize} font-semibold text-ink`}>Retour</span>
+                    </div>
                   </button>
                 )}
-                <div className="text-sm font-semibold text-ink">
-                  {searchQ ? `Résultats pour « ${searchQ} »` : currentCategoryName}
-                </div>
-              </div>
-
-              <div className={`grid ${metrics.grid} ${metrics.gap}`}>
                 {visibleProducts.length === 0 ? (
                   <div className="col-span-full text-center text-ink-soft mt-8">
                     {searchQ ? 'Aucun produit trouvé pour cette recherche.' : 'Aucun produit dans cette catégorie.'}
