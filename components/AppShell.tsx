@@ -14,7 +14,7 @@ import type { Role, Permission } from '@/lib/auth/rbac';
 import { BRAND_THEME, type AutoLogoutMode } from '@/lib/settings/pos-ui';
 import { readUiScale, UI_SCALE_KEY, UI_SCALE_EVENT, UI_SCALE_DEFAULT } from '@/lib/ui/ui-scale';
 
-interface User { id: string; fullName: string; role: Role; email: string }
+interface User { id: string; fullName: string; role: Role; email: string; color?: string | null }
 
 export interface SubscriptionInfo {
   plan: string;
@@ -191,39 +191,54 @@ export default function AppShell({
       <SessionKeepAlive />
       <SchoolModeBanner />
       <div className="flex-1 flex flex-row overflow-hidden min-h-0">
-        {/* Sidebar verticale (desktop / tablette) */}
-        <LeftRail
-          user={{ fullName: user.fullName, role: user.role }}
-          hiddenPaths={hiddenPaths}
-          headerTabs={headerTabs}
-          permissions={permSet}
-          onOpenMenu={() => setMenuOpen(true)}
-          onLogout={() => void logout()}
-          backOffice={backOffice}
-        />
+        {/* Sidebar verticale (desktop / tablette) — BACK-OFFICE uniquement.
+            Côté caisse (hors BO), la navigation est en barre HORIZONTALE
+            (TopBar) à toutes les tailles d'écran, y compris desktop : voir
+            plus bas, la TopBar n'est alors plus limitée au mobile. */}
+        {backOffice && (
+          <LeftRail
+            user={{ fullName: user.fullName, role: user.role }}
+            hiddenPaths={hiddenPaths}
+            headerTabs={headerTabs}
+            permissions={permSet}
+            onOpenMenu={() => setMenuOpen(true)}
+            onLogout={() => void logout()}
+            backOffice={backOffice}
+          />
+        )}
 
         <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-          {/* TopBar mobile uniquement — le rail vertical prend le relais dès md */}
-          <div className="md:hidden">
+          {/* TopBar : mobile uniquement en back-office (le rail vertical prend
+              le relais dès md) ; à TOUTES les tailles côté caisse (barre
+              horizontale, y compris desktop — c'est elle qui remplace le rail
+              vertical dans cette vue). */}
+          <div className={backOffice ? 'md:hidden' : ''}>
             <TopBar
-              user={{ fullName: user.fullName, role: user.role }}
+              user={{ fullName: user.fullName, role: user.role, color: user.color }}
               hiddenPaths={hiddenPaths}
               headerTabs={headerTabs}
-              subscription={subscription}
+              // Pas de pastille abonnement côté caisse (comme l'ancien rail
+              // vertical) : à TOUTE taille d'écran maintenant que la TopBar
+              // s'affiche aussi en desktop hors BO, pas seulement sur mobile.
+              subscription={backOffice ? subscription : null}
               permissions={permSet}
               onOpenMenu={() => setMenuOpen(true)}
               onLogout={() => void logout()}
+              backOffice={backOffice}
             />
           </div>
 
-          {/* Le cadre blanc est posé ICI, une seule fois, et non page par
-              page : c'est ce qui garantit que tous les titres démarrent au
-              même pixel. Chaque page s'écrit donc à l'intérieur d'un cadre
-              déjà positionné, et n'a plus à gérer sa marge.
+          {/* Le cadre blanc (marge + coins arrondis + bordure) est posé ICI,
+              une seule fois, et non page par page — mais UNIQUEMENT en
+              back-office. Côté caisse, le contenu est affleurant (pas de
+              marge/cadre) ; la seule séparation avec la TopBar vient de sa
+              propre bordure basse (déjà posée dans TopBar).
               Le défilement appartient au cadre : les pages à mise en page fixe
               (caisse, liste-détail) le remplissent avec leur propre h-full. */}
-          <main className="flex-1 min-h-0 overflow-hidden bg-bg relative md:p-3">
-            <div className="h-full overflow-y-auto overflow-x-hidden bg-surface md:rounded-2xl md:border md:border-border">
+          <main className={`flex-1 min-h-0 overflow-hidden bg-bg relative ${backOffice ? 'md:p-3' : ''}`}>
+            <div className={`h-full overflow-y-auto overflow-x-hidden bg-surface ${
+              backOffice ? 'md:rounded-2xl md:border md:border-border' : ''
+            }`}>
               {children}
             </div>
           </main>

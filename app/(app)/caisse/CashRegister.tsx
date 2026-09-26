@@ -263,7 +263,7 @@ export default function CashRegister({
     swipeRef.current = null;
     const end = e.changedTouches[0];
     if (!start || !end) return;
-    // Un appui sur un bouton/lien du ticket (ex. « Annuler », « Vider ») peut,
+    // Un appui sur un bouton/lien du ticket (ex. « Annuler », « Remise ») peut,
     // avec le pouce, dériver de >60 px et être pris pour un swipe de fermeture :
     // le ticket glissait alors hors écran et la popup de confirmation
     // apparaissait par-dessus le catalogue. On ignore donc les gestes qui se
@@ -993,19 +993,6 @@ export default function CashRegister({
     void refreshHeldCount();
   }
 
-  // « Vider le panier » : retire les articles SANS annuler la vente. La vente
-  // brouillon reste ouverte (elle sera resynchronisée à vide par l'effet
-  // debounce) : aucun appel d'annulation, donc AUCUN ticket annulé n'est généré.
-  // On garde le client rattaché ; on annule seulement la fidélité portée au
-  // règlement (plus d'articles à couvrir).
-  function clearCart() {
-    setLines([]);
-    setCartComment('');
-    setLoyalty((cur) => ({ ...cur, used: 0, balance_euros: cur.balance_euros + cur.used }));
-    setView({ kind: 'categories' });
-    setSearch('');
-  }
-
   // Ouverture manuelle du tiroir-caisse (sans vente). Le tiroir physique est
   // piloté par l'imprimante ticket (drawer kick) ; on trace l'ouverture côté
   // serveur (audit / Z). Bouton volontairement discret (voir en-tête ticket).
@@ -1608,11 +1595,6 @@ export default function CashRegister({
   }
 
   const showingProducts = searchQ.length > 0 || view.kind === 'products';
-  const currentCategoryName = view.kind === 'products'
-    ? (view.categoryId === 'uncategorized'
-        ? 'Sans catégorie'
-        : categories.find((c) => c.id === view.categoryId)?.name ?? '')
-    : '';
 
   return (
     <div
@@ -1630,7 +1612,11 @@ export default function CashRegister({
         onTouchEnd={(e) => onTouchEnd(e, 'open')}
       >
         <OfflineBanner />
-        <div className="pos-topbar relative flex items-center gap-2 px-3 md:px-5 h-[68px] shrink-0 border-b border-border bg-white">
+        <div className="pos-topbar relative flex items-center gap-2 px-3 md:px-5 py-2.5 shrink-0 border-b border-border bg-white">
+          {/* Hauteur des contrôles (h-11) et padding vertical (py-2.5) alignés
+              EXACTEMENT sur la ligne d'actions du ticket, pour que les deux
+              bordures basses (catalogue / ticket) se rejoignent au même
+              pixel de part et d'autre de la séparation verticale. */}
           {/* Barre de recherche VISIBLE : champ dès qu'ouverte, sinon une barre
               cliquable claire (pas une simple loupe). */}
           {searchOpen ? (
@@ -1641,7 +1627,7 @@ export default function CashRegister({
               <input
                 ref={searchRef}
                 autoFocus
-                className="input h-12 w-full pl-10 pr-10 text-base"
+                className="input h-11 w-full pl-10 pr-10 text-sm"
                 placeholder="Rechercher / scanner…"
                 aria-label="Rechercher un article"
                 value={search}
@@ -1679,7 +1665,7 @@ export default function CashRegister({
               onClick={() => setSearchOpen(true)}
               title="Rechercher / scanner ( / )"
               aria-label="Rechercher un article"
-              className="flex-1 md:flex-none md:w-80 md:ml-auto min-h-[52px] h-12 rounded-xl border border-border bg-white hover:bg-gray-50 flex items-center gap-2 px-3.5 text-ink-soft text-base text-left transition-colors"
+              className="flex-1 md:flex-none md:w-80 md:ml-auto h-11 rounded-xl border border-border bg-white hover:bg-gray-50 flex items-center gap-2 px-3.5 text-ink-soft text-sm text-left transition-colors"
             >
               <Icon name="search" size={20} />
               <span>Rechercher / scanner…</span>
@@ -1687,15 +1673,15 @@ export default function CashRegister({
           )}
           {/* Scanner caméra : uniquement sur mobile/tablette. */}
           <button
-            className="btn-ghost min-h-[52px] px-3.5 hidden [@media(pointer:coarse)]:inline-flex"
+            className="btn-ghost h-11 px-3.5 hidden [@media(pointer:coarse)]:inline-flex"
             onClick={() => setShowScanner(true)}
             title="Scanner code-barres / QR"
             aria-label="Scanner"
           >
             <Icon name="camera" size={24} />
           </button>
-          <button className="btn-soft min-h-[52px] px-5 text-base inline-flex items-center gap-1.5 whitespace-nowrap" onClick={() => setShowHeld(true)} title="F4" aria-label="Paniers en attente">
-            <span className="hidden md:inline">En attente</span>
+          <button className="btn-soft h-11 px-5 text-sm inline-flex items-center gap-1.5 whitespace-nowrap" onClick={() => setShowHeld(true)} title="F4" aria-label="Paniers en attente">
+            <span className="hidden md:inline">Tickets en attente</span>
             <span className="md:hidden"><Icon name="pause" size={22} /></span>
             {heldCount > 0 && (
               <span className="inline-flex items-center justify-center h-5 min-w-[1.25rem] px-1.5 rounded-full text-[11px] font-semibold accent-bar text-white">
@@ -1708,22 +1694,32 @@ export default function CashRegister({
         <div ref={catalogScrollRef} className="pos-catalog relative flex-1 overflow-auto p-3 md:p-5 pb-24 md:pb-5">
           {showingProducts ? (
             <>
-              {/* Bouton retour en haut à gauche + libellé contextuel */}
-              <div className="flex items-center gap-3 mb-3">
+              {/* Résultats de recherche : garde le libellé (pas de bouton
+                  retour ici, la recherche n'a pas de "grille catégories" à
+                  laquelle revenir). Vue catégorie : ni bouton ni libellé
+                  au-dessus — le retour est la première tuile de la grille,
+                  les produits prennent exactement la place des tuiles
+                  catégories. */}
+              {searchQ && (
+                <div className="text-sm font-semibold text-ink mb-3">
+                  Résultats pour « {searchQ} »
+                </div>
+              )}
+
+              <div className={`grid ${metrics.grid} ${metrics.gap}`}>
                 {!searchQ && (
                   <button
                     onClick={() => setView({ kind: 'categories' })}
-                    className="btn-soft inline-flex items-center gap-1.5 text-sm"
+                    className={`card ${metrics.padding} hover:shadow-md hover:border-gray-300 transition-all active:scale-[0.98] aspect-[5/3] grid place-items-center text-center`}
+                    style={{ backgroundColor: 'var(--primary-soft)' }}
+                    aria-label="Retour aux catégories"
                   >
-                    <Icon name="chevron-left" size={14} /> Retour
+                    <div className="flex flex-col items-center justify-center gap-1.5">
+                      <Icon name="chevron-left" size={20} />
+                      <span className={`${metrics.titleFontSize} font-semibold text-ink`}>Retour</span>
+                    </div>
                   </button>
                 )}
-                <div className="text-sm font-semibold text-ink">
-                  {searchQ ? `Résultats pour « ${searchQ} »` : currentCategoryName}
-                </div>
-              </div>
-
-              <div className={`grid ${metrics.grid} ${metrics.gap}`}>
                 {visibleProducts.length === 0 ? (
                   <div className="col-span-full text-center text-ink-soft mt-8">
                     {searchQ ? 'Aucun produit trouvé pour cette recherche.' : 'Aucun produit dans cette catégorie.'}
@@ -1820,64 +1816,48 @@ export default function CashRegister({
           ${mobileCartOpen ? 'translate-x-0' : 'translate-x-full md:translate-x-0'}
         `}
       >
-        {/* En-tête ticket : 2 lignes de boutons (max 3 par ligne).
-            Ligne 1 : Retour (mobile) · En attente · Annuler.
-            Ligne 2 : Remise · Commentaire (sous « En attente »). */}
-        <div className="px-3 py-2.5 shrink-0 border-b border-border space-y-2">
+        {/* En-tête ticket réduit à UNE seule ligne : Retour (mobile) ·
+            En attente (icône pause) · Remise · Commentaire · Tiroir (icônes
+            compactes) · Annuler (poussé à droite, seul à garder un libellé
+            — action destructive). */}
+        <div className="px-3 py-2.5 shrink-0 border-b border-border">
           <div className="flex items-center gap-2">
             <button
               onClick={() => setMobileCartOpen(false)}
-              className="md:hidden -ml-1 h-[56px] w-10 grid place-items-center text-ink-soft hover:text-ink text-2xl"
+              className="md:hidden -ml-1 h-11 w-10 shrink-0 grid place-items-center text-ink-soft hover:text-ink text-2xl"
               aria-label="Retour aux articles (glissez à droite)"
             >
               ←
             </button>
-            {/* « En attente » aligné à gauche ; « Annuler » poussé à droite. */}
+            {/* En attente — bouton compact icône (même famille que le tiroir). */}
             <button
               disabled={lines.length === 0 || !saleId}
               onClick={() => void holdSale()}
-              className="btn-soft text-base font-medium min-h-[56px] px-5 whitespace-nowrap mr-auto"
+              aria-label="Mettre ce ticket en attente"
               title="Mettre ce ticket en attente"
+              className="btn-soft h-11 w-11 shrink-0 grid place-items-center disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              Mettre en attente
+              <Icon name="pause" size={20} />
             </button>
-            {/* Vider : retire les articles sans annuler la vente (pas de ticket
-                annulé). Distinct de « Annuler » qui abandonne la vente. */}
-            <button
-              disabled={lines.length === 0}
-              onClick={async () => { setMobileCartOpen(true); if (await confirmThemed({ title: 'Vider le panier', message: 'Les articles seront retirés du panier.', confirmLabel: 'Vider', cancelLabel: 'Retour' })) clearCart(); }}
-              className="text-base min-h-[56px] px-5 rounded-xl font-medium whitespace-nowrap border border-border text-ink hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
-              title="Vider le panier (sans annuler la vente)"
-            >
-              Vider
-            </button>
-            {/* Action destructive : abandonne la vente en cours. */}
-            <button
-              disabled={lines.length === 0 && !saleId}
-              onClick={async () => { setMobileCartOpen(true); if (await confirmThemed({ title: 'Annuler ce ticket', message: 'La vente en cours sera définitivement abandonnée.', confirmLabel: 'Annuler le ticket', cancelLabel: 'Retour', danger: true })) void cancelTicket(); }}
-              className="text-base min-h-[56px] px-5 rounded-xl font-medium whitespace-nowrap border border-danger/40 text-danger hover:bg-danger/10 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
-              title="Annuler ce ticket"
-            >
-              <span aria-hidden className="text-lg leading-none">✕</span>
-              Annuler
-            </button>
-          </div>
-          <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
+            {/* Remise — compact icône. */}
             <button
               disabled={lines.length === 0}
               onClick={() => setCartActions('discount')}
-              className="btn-soft text-base font-medium min-h-[56px] px-5 whitespace-nowrap"
+              aria-label="Remise globale sur le ticket"
               title="Remise globale sur le ticket"
+              className="btn-soft h-11 w-11 shrink-0 grid place-items-center disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              Remise
+              <Icon name="discount" size={20} />
             </button>
+            {/* Commentaire — compact icône. */}
             <button
               disabled={lines.length === 0 && !saleId}
               onClick={() => setCartActions('comment')}
-              className="btn-soft text-base font-medium min-h-[56px] px-5 whitespace-nowrap"
+              aria-label="Ajouter un commentaire au ticket"
               title="Ajouter un commentaire au ticket"
+              className="btn-soft h-11 w-11 shrink-0 grid place-items-center disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              Commentaire
+              <Icon name="comment" size={20} />
             </button>
             {/* Ouverture tiroir — VOLONTAIREMENT DISCRÈTE : icône neutre, aucun
                 libellé texte ni infobulle explicite, pour ne pas signaler la
@@ -1887,18 +1867,29 @@ export default function CashRegister({
               onClick={() => void openDrawer()}
               disabled={drawerBusy}
               aria-label="Ouvrir le tiroir-caisse"
-              className="btn-soft min-h-[56px] px-4 inline-flex items-center justify-center text-ink-soft disabled:opacity-60"
+              className="btn-soft h-11 w-11 shrink-0 inline-flex items-center justify-center text-ink-soft disabled:opacity-60"
             >
               {drawerFlash ? (
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                   <path d="M20 6 9 17l-5-5" />
                 </svg>
               ) : (
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                   <rect x="3" y="5" width="18" height="14" rx="2" />
                   <line x1="9" y1="12" x2="15" y2="12" />
                 </svg>
               )}
+            </button>
+            {/* Action destructive : abandonne la vente en cours. Seule à garder
+                un libellé, poussée à droite. */}
+            <button
+              disabled={lines.length === 0 && !saleId}
+              onClick={async () => { setMobileCartOpen(true); if (await confirmThemed({ title: 'Annuler ce ticket', message: 'La vente en cours sera définitivement abandonnée.', confirmLabel: 'Annuler le ticket', cancelLabel: 'Retour', danger: true })) void cancelTicket(); }}
+              className="ml-auto h-11 px-4 shrink-0 rounded-xl text-sm font-medium whitespace-nowrap border border-danger/40 text-danger hover:bg-danger/10 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
+              title="Annuler ce ticket"
+            >
+              <span aria-hidden className="text-base leading-none">✕</span>
+              Annuler
             </button>
           </div>
         </div>
@@ -1925,7 +1916,6 @@ export default function CashRegister({
                   className="min-w-0 text-left hover:opacity-80 transition-opacity"
                   title="Ouvrir la fiche client (le panier est conservé)"
                 >
-                  <div className="text-[10px] uppercase tracking-wider text-ink-soft">Client · voir la fiche</div>
                   <div className="text-sm font-medium truncate underline decoration-dotted underline-offset-2">
                     {customer.display_name}
                   </div>

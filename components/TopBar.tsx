@@ -12,6 +12,17 @@ import { activeNavHref } from '@/lib/nav/active';
 export interface TopBarUser {
   fullName: string;
   role: Role;
+  color?: string | null;
+}
+
+// Couleur d'avatar : même logique que la page de connexion PIN (users.color
+// sinon un repli stable dérivé du nom), pour garder le même monogramme
+// partout où un utilisateur est représenté.
+const USER_COLORS = ['#F4A09B', '#7AD09A', '#F0C25A', '#8FD5DA', '#C58EC2', '#9DB4F0', '#F39A6A'];
+function userColor(name: string): string {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  return USER_COLORS[h % USER_COLORS.length] ?? USER_COLORS[0]!;
 }
 
 export interface TopBarSubscription {
@@ -29,10 +40,13 @@ interface Props {
   permissions: Set<Permission>;
   onOpenMenu: () => void;
   onLogout: () => void;
+  /** Vue back-office : autorise les onglets réservés au BO (boOnly). Hors BO
+   *  (caisse), ces pages ne doivent jamais apparaître dans la barre. */
+  backOffice?: boolean;
 }
 
 export default function TopBar({
-  user, hiddenPaths, headerTabs, subscription, permissions, onOpenMenu, onLogout,
+  user, hiddenPaths, headerTabs, subscription, permissions, onOpenMenu, onLogout, backOffice = false,
 }: Props) {
   const path = usePathname();
   const brand = useBrand();
@@ -44,6 +58,7 @@ export default function TopBar({
   const tabs = order
     .map((href) => SIDEBAR_ITEMS.find((i) => i.href === href))
     .filter((i): i is SidebarItem => !!i)
+    .filter((i) => backOffice || !i.boOnly)
     .filter((i) => !i.perm || permissions.has(i.perm))
     .filter((i) => i.required || !hiddenPaths.includes(i.href));
 
@@ -68,21 +83,28 @@ export default function TopBar({
           évite que la première tuile glisse sous le logo quand la liste est
           courte ; flex-1 + min-w-0 permet le scroll horizontal sans casser
           le layout). */}
-      <nav className="hidden md:flex items-center justify-start gap-1 px-2 overflow-x-auto no-scrollbar flex-1 min-w-0">
+      <nav className="hidden md:flex items-center justify-center gap-1 px-2 overflow-x-auto no-scrollbar flex-1 min-w-0">
         {tabs.map((t) => {
           const active = t.href === activeHref;
           return (
             <Link
               key={t.href}
               href={t.href}
-              className={`relative flex items-center h-10 px-4 rounded-xl text-sm font-medium whitespace-nowrap transition-colors ${
+              className={`relative flex items-center gap-2 h-10 px-4 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
                 active
-                  ? 'text-white shadow-sm'
+                  ? 'text-ink'
                   : 'text-ink-soft hover:text-ink hover:bg-gray-50'
               }`}
-              style={active ? { backgroundColor: 'var(--primary)' } : undefined}
             >
+              <Icon name={t.icon} size={18} />
               {t.label}
+              {/* Page active : soulignée, pas de fond coloré. */}
+              {active && (
+                <span
+                  className="absolute left-3 right-3 bottom-0 h-0.5 rounded-full"
+                  style={{ backgroundColor: 'var(--primary)' }}
+                />
+              )}
             </Link>
           );
         })}
@@ -138,8 +160,14 @@ export default function TopBar({
           className="absolute left-0 top-2 bottom-2 w-1 rounded-r-full"
           style={{ backgroundColor: 'var(--primary)' }}
         />
-        <span className="text-accent-deep">
-          <Icon name="users" size={20} />
+        {/* Monogramme : même avatar que la page de connexion PIN (couleur du
+            compte, sinon repli dérivé du nom), devant le prénom. */}
+        <span
+          className="grid h-9 w-9 place-items-center rounded-full text-white font-semibold text-sm shrink-0"
+          style={{ backgroundColor: user.color || userColor(user.fullName) }}
+          aria-hidden="true"
+        >
+          {(user.fullName?.[0] ?? '?').toUpperCase()}
         </span>
         <span className="hidden sm:inline text-sm font-medium text-ink">{firstName}</span>
       </button>
