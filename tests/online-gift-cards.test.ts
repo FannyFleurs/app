@@ -12,6 +12,11 @@ import {
   generatePublicKey,
   validateGiftCardCommerceConfig,
   InvalidAmountError,
+  looksLikePublicKey,
+  isGiftCardAmountAllowed,
+  validateReturnPath,
+  DEFAULT_SUCCESS_PATH,
+  DEFAULT_CANCEL_PATH,
 } from '@/lib/settings/online-gift-cards';
 
 /**
@@ -191,5 +196,84 @@ describe('Isolation multi-tenant', () => {
     expect(settingsRoute).toMatch(/requirePermission\('settings\.read'\)/);
     expect(settingsRoute).toMatch(/requirePermission\('settings\.write'\)/);
     expect(regenerateRoute).toMatch(/requirePermission\('settings\.write'\)/);
+  });
+});
+
+describe('looksLikePublicKey', () => {
+  it('accepte une clé bien formée', () => {
+    expect(looksLikePublicKey('hp_gc_AAAAAAAAAAAAAAAAAAAA')).toBe(true);
+  });
+  it('refuse un préfixe différent, une clé trop courte, ou une valeur vide', () => {
+    expect(looksLikePublicKey('sk_live_AAAAAAAAAAAAAAAAAAAA')).toBe(false);
+    expect(looksLikePublicKey('hp_gc_short')).toBe(false);
+    expect(looksLikePublicKey('')).toBe(false);
+  });
+});
+
+describe('isGiftCardAmountAllowed', () => {
+  const cfg = { preset_amounts: [25, 50, 75, 100], allow_custom_amount: true, min_amount: 10, max_amount: 500 };
+
+  it('accepte un montant proposé (preset)', () => {
+    expect(isGiftCardAmountAllowed(50, cfg)).toBe(true);
+  });
+
+  it('accepte un montant libre dans les bornes si autorisé', () => {
+    expect(isGiftCardAmountAllowed(42, cfg)).toBe(true);
+    expect(isGiftCardAmountAllowed(10, cfg)).toBe(true);
+    expect(isGiftCardAmountAllowed(500, cfg)).toBe(true);
+  });
+
+  it('refuse un montant libre hors bornes', () => {
+    expect(isGiftCardAmountAllowed(5, cfg)).toBe(false);
+    expect(isGiftCardAmountAllowed(600, cfg)).toBe(false);
+  });
+
+  it('refuse tout montant hors preset si le montant libre est interdit', () => {
+    const strict = { ...cfg, allow_custom_amount: false };
+    expect(isGiftCardAmountAllowed(50, strict)).toBe(true); // preset, toujours valide
+    expect(isGiftCardAmountAllowed(42, strict)).toBe(false); // hors preset, libre interdit
+  });
+
+  it('accepte les décimales cohérentes (ex. 25,50 €)', () => {
+    expect(isGiftCardAmountAllowed(25.5, cfg)).toBe(true);
+  });
+
+  it('refuse une valeur non numérique ou invalide', () => {
+    expect(isGiftCardAmountAllowed(NaN, cfg)).toBe(false);
+    expect(isGiftCardAmountAllowed(Infinity, cfg)).toBe(false);
+  });
+});
+
+describe('validateReturnPath', () => {
+  it('renvoie le fallback quand le champ est absent', () => {
+    expect(validateReturnPath(undefined, DEFAULT_SUCCESS_PATH)).toBe(DEFAULT_SUCCESS_PATH);
+    expect(validateReturnPath(undefined, DEFAULT_CANCEL_PATH)).toBe(DEFAULT_CANCEL_PATH);
+  });
+
+  it('accepte un chemin relatif simple', () => {
+    expect(validateReturnPath('/carte-cadeau/succes', DEFAULT_SUCCESS_PATH)).toBe('/carte-cadeau/succes');
+  });
+
+  it('refuse une URL absolue (tentative de rediriger ailleurs)', () => {
+    expect(validateReturnPath('https://site-malicious.com/', DEFAULT_SUCCESS_PATH)).toBeNull();
+    expect(validateReturnPath('http://evil.com', DEFAULT_SUCCESS_PATH)).toBeNull();
+  });
+
+  it('refuse un chemin protocole-relatif (//evil.com)', () => {
+    expect(validateReturnPath('//evil.com', DEFAULT_SUCCESS_PATH)).toBeNull();
+  });
+
+  it('refuse un chemin qui ne commence pas par /', () => {
+    expect(validateReturnPath('carte-cadeau/succes', DEFAULT_SUCCESS_PATH)).toBeNull();
+  });
+
+  it('refuse une requête ou un fragment dans le chemin', () => {
+    expect(validateReturnPath('/succes?x=1', DEFAULT_SUCCESS_PATH)).toBeNull();
+    expect(validateReturnPath('/succes#top', DEFAULT_SUCCESS_PATH)).toBeNull();
+  });
+
+  it('refuse un chemin trop long ou vide', () => {
+    expect(validateReturnPath('', DEFAULT_SUCCESS_PATH)).toBeNull();
+    expect(validateReturnPath('/' + 'a'.repeat(250), DEFAULT_SUCCESS_PATH)).toBeNull();
   });
 });

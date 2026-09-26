@@ -87,6 +87,40 @@ export function computeTotals(lines: LineComputed[]): CartTotals {
   return { total_ht: totalHt, total_tva: totalTva, total_ttc: totalTtc, total_discount: totalDiscount, tva_breakdown };
 }
 
+export class InvalidAmountCentsError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'InvalidAmountCentsError';
+  }
+}
+
+/**
+ * Convertit un montant en euros (nombre, ex. 25.5) en centimes ENTIERS pour
+ * Stripe (ex. 2550) — jamais de flottant envoyé à l'API de paiement. Rejette
+ * NaN/Infinity, les montants négatifs ou nuls, et plus de 2 décimales (un
+ * montant qui n'est pas un nombre rond de centimes n'est pas un montant en
+ * euros valide, ce n'est pas à cette fonction de deviner comment l'arrondir).
+ */
+export function eurosToCents(amount: number): number {
+  if (typeof amount !== 'number' || !Number.isFinite(amount)) {
+    throw new InvalidAmountCentsError('Montant invalide.');
+  }
+  if (amount <= 0) {
+    throw new InvalidAmountCentsError('Le montant doit être supérieur à 0.');
+  }
+  const scaled = amount * 100;
+  const cents = Math.round(scaled);
+  // Tolérance flottante minime (ex. 30.1 + 0.2 = 30.299999999999997) : au-delà,
+  // c'est qu'il y avait réellement plus de 2 décimales (ex. 12.345).
+  if (Math.abs(scaled - cents) > 1e-6) {
+    throw new InvalidAmountCentsError('Le montant ne peut pas avoir plus de 2 décimales.');
+  }
+  if (!Number.isSafeInteger(cents)) {
+    throw new InvalidAmountCentsError('Montant hors limites.');
+  }
+  return cents;
+}
+
 export function formatEUR(n: number): string {
   return new Intl.NumberFormat('fr-FR', {
     style: 'currency',

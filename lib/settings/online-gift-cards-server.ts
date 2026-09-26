@@ -4,6 +4,7 @@ import {
   ONLINE_GIFT_CARDS_KEY,
   mergeOnlineGiftCardsDefaults,
   generatePublicKey,
+  looksLikePublicKey,
   type OnlineGiftCardsSettings,
 } from './online-gift-cards';
 
@@ -78,4 +79,21 @@ export async function resolveOrgByPublicKey(
     organizationId: rows[0]!.organization_id,
     settings: mergeOnlineGiftCardsDefaults(rows[0]!.value),
   };
+}
+
+/**
+ * Résolution complète, partagée par toutes les routes PUBLIQUES de ce
+ * module (config lecture seule, et paiement) : clé bien formée, connue, ET
+ * intégration active. Renvoie `null` pour CHAQUE cas d'échec, sans
+ * distinction — c'est aux appelants de traduire ça en la même réponse
+ * neutre (404 GIFT_CARDS_NOT_AVAILABLE), pour ne jamais permettre de
+ * distinguer publiquement une clé inconnue d'une intégration désactivée.
+ */
+export async function resolveActiveOnlineGiftCards(
+  publicKey: string,
+): Promise<{ organizationId: string; settings: OnlineGiftCardsSettings } | null> {
+  if (!looksLikePublicKey(publicKey)) return null;
+  const resolved = await resolveOrgByPublicKey(publicKey);
+  if (!resolved || !resolved.settings.enabled) return null;
+  return resolved;
 }

@@ -203,6 +203,65 @@ export function validateGiftCardCommerceConfig(input: GiftCardCommerceInput): {
 }
 
 /**
+ * Forme minimale attendue d'une clé publique AVANT même d'interroger la base
+ * — rejette vite un paramètre manifestement malformé, sans requête inutile
+ * ni information révélée. Partagé par l'API publique de configuration
+ * (étape 2) et celle de paiement (étape 3).
+ */
+export function looksLikePublicKey(key: string): boolean {
+  return /^hp_gc_[A-Za-z0-9_-]{10,}$/.test(key);
+}
+
+/**
+ * Un montant (en euros) est-il achetable pour cette organisation ? Un
+ * montant proposé (`preset_amounts`) est TOUJOURS valide, que le montant
+ * libre soit autorisé ou non ; sinon, il faut `allow_custom_amount` ET être
+ * compris entre `min_amount` et `max_amount`.
+ */
+export function isGiftCardAmountAllowed(
+  amountEuros: number,
+  cfg: Pick<OnlineGiftCardsSettings, 'preset_amounts' | 'allow_custom_amount' | 'min_amount' | 'max_amount'>,
+): boolean {
+  if (typeof amountEuros !== 'number' || !Number.isFinite(amountEuros)) return false;
+  const amount = round2(amountEuros);
+  if (cfg.preset_amounts.some((p) => round2(p) === amount)) return true;
+  if (!cfg.allow_custom_amount) return false;
+  return amount >= cfg.min_amount && amount <= cfg.max_amount;
+}
+
+/**
+ * Chemins de retour par défaut après un Checkout — utilisés quand le site
+ * appelant n'en fournit pas explicitement (voir `validateReturnPath` et
+ * docs/api-public-gift-cards.md, section Checkout).
+ */
+export const DEFAULT_SUCCESS_PATH = '/carte-cadeau/succes';
+export const DEFAULT_CANCEL_PATH = '/carte-cadeau';
+
+/**
+ * Valide un chemin de retour (success_path / cancel_path) fourni par le site
+ * appelant : jamais une URL absolue, jamais un chemin protocole-relatif
+ * (`//evil.com`), jamais de changement d'origine. Le serveur reconstruit
+ * ensuite lui-même `origineValidée + chemin` — le navigateur ne choisit
+ * JAMAIS l'origine de la redirection, seulement le chemin sur CELLE de
+ * l'organisation résolue. `undefined` (champ absent) renvoie `fallback`
+ * (chemin par défaut) ; toute autre valeur invalide renvoie `null`.
+ */
+export function validateReturnPath(raw: string | undefined, fallback: string): string | null {
+  if (raw === undefined) return fallback;
+  if (typeof raw !== 'string') return null;
+  if (raw.length === 0 || raw.length > 200) return null;
+  if (!raw.startsWith('/')) return null;
+  if (raw.startsWith('//')) return null; // protocole-relatif (//evil.com)
+  if (raw.includes('://')) return null;
+  if (raw.includes('\\')) return null; // certains parseurs traitent \ comme /
+  // Chemin strict : segments, tirets/underscores, points (extensions) —
+  // explicitement PAS de `?`/`&`/`=` : la query de retour Stripe
+  // (?session_id=...) est ajoutée par le serveur, jamais par l'appelant.
+  if (!/^\/[A-Za-z0-9\-_/.]*$/.test(raw)) return null;
+  return raw;
+}
+
+/**
  * Clé publique d'intégration : préfixe repérable + 20 octets aléatoires en
  * base64url (non séquentielle, non devinable). Ce n'est PAS un secret — elle
  * identifie publiquement l'organisation à un futur site de vente, elle ne

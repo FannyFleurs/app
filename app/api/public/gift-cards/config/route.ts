@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db/client';
-import { resolveOrgByPublicKey } from '@/lib/settings/online-gift-cards-server';
+import { resolveActiveOnlineGiftCards } from '@/lib/settings/online-gift-cards-server';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,15 +20,6 @@ export const dynamic = 'force-dynamic';
 const NOT_AVAILABLE = { error: 'GIFT_CARDS_NOT_AVAILABLE' } as const;
 
 /**
- * Forme minimale attendue AVANT même d'interroger la base : rejette vite un
- * paramètre manifestement malformé sans révéler d'information ni faire de
- * requête inutile.
- */
-function looksLikePublicKey(key: string): boolean {
-  return /^hp_gc_[A-Za-z0-9_-]{10,}$/.test(key);
-}
-
-/**
  * Résout la clé en organisation + réglage, uniquement si TOUT est valide :
  * clé bien formée, clé connue, intégration active, organisation active.
  * Renvoie `null` pour CHAQUE cas d'échec, sans distinction — voir le
@@ -38,10 +29,8 @@ async function resolve(req: Request): Promise<{ organizationName: string; giftCa
   preset_amounts: number[]; allow_custom_amount: boolean; min_amount: number; max_amount: number;
 }; allowedOrigins: string[] } | null> {
   const key = new URL(req.url).searchParams.get('key') ?? '';
-  if (!looksLikePublicKey(key)) return null;
-
-  const resolved = await resolveOrgByPublicKey(key);
-  if (!resolved || !resolved.settings.enabled) return null;
+  const resolved = await resolveActiveOnlineGiftCards(key);
+  if (!resolved) return null;
 
   const org = await query<{ name: string }>(
     `SELECT name FROM organizations WHERE id = $1 AND is_active = TRUE`,
