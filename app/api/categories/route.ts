@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { query } from '@/lib/db/client';
 import { requirePermission } from '@/lib/auth/guards';
-import { parseJson } from '@/lib/validation/api';
+import { parseJson, jsonError } from '@/lib/validation/api';
 
 const schema = z.object({
   name: z.string().min(1).max(120),
@@ -14,6 +14,7 @@ const schema = z.object({
   visible_in_pos: z.boolean().default(true),
   store_ids: z.array(z.string().uuid()).optional(),
   loyalty_eligible: z.boolean().optional(),
+  default_tax_rate_id: z.string().uuid().nullable().optional(),
 });
 
 // Introspection : la colonne product_categories.store_ids (migration 0046)
@@ -63,6 +64,22 @@ async function hasLoyaltyColumn(): Promise<boolean> {
     _hasLoyalty = rows[0]?.exists ?? false;
   } catch { _hasLoyalty = false; }
   return _hasLoyalty;
+}
+
+// Introspection : colonne default_tax_rate_id (migration 0078).
+let _hasDefaultTaxRate: boolean | null = null;
+async function hasDefaultTaxRateColumn(): Promise<boolean> {
+  if (_hasDefaultTaxRate !== null) return _hasDefaultTaxRate;
+  try {
+    const { rows } = await query<{ exists: boolean }>(
+      `SELECT EXISTS (
+         SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'product_categories' AND column_name = 'default_tax_rate_id'
+       ) AS exists`,
+    );
+    _hasDefaultTaxRate = rows[0]?.exists ?? false;
+  } catch { _hasDefaultTaxRate = false; }
+  return _hasDefaultTaxRate;
 }
 
 export async function GET(req: Request) {
@@ -116,8 +133,10 @@ export async function GET(req: Request) {
   const transportCol = hasTransport ? 'transport_cost_ht' : '0 AS transport_cost_ht';
   const pctCol = hasTransport ? 'transport_cost_pct' : 'NULL::numeric AS transport_cost_pct';
   const loyaltyCol = (await hasLoyaltyColumn()) ? 'loyalty_eligible' : 'TRUE AS loyalty_eligible';
+  const defaultTaxCol = (await hasDefaultTaxRateColumn())
+    ? 'default_tax_rate_id' : 'NULL AS default_tax_rate_id';
   const { rows } = await query(
-    `SELECT id, name, parent_id, color, icon, image_url, position, visible_in_pos, is_active, ${storeCol}, ${transportCol}, ${pctCol}, ${loyaltyCol}
+    `SELECT id, name, parent_id, color, icon, image_url, position, visible_in_pos, is_active, ${storeCol}, ${transportCol}, ${pctCol}, ${loyaltyCol}, ${defaultTaxCol}
        FROM product_categories
       WHERE ${where}
       ORDER BY position ASC, name ASC`,
@@ -132,6 +151,14 @@ export async function POST(req: Request) {
   const parsed = await parseJson(req, schema);
   if ('response' in parsed) return parsed.response;
   const c = parsed.data;
+  // Sanity : le taux de TVA par défaut appartient bien à l'org.
+  if (c.default_tax_rate_id) {
+    const tax = await query(
+      `SELECT 1 FROM tax_rates WHERE id = $1 AND organization_id = $2`,
+      [c.default_tax_rate_id, g.user.organizationId],
+    );
+    if (tax.rowCount === 0) return jsonError('TAX_RATE_NOT_FOUND', 404);
+  }
   try {
     // Rattachement boutique : fourni (back-office) → tel quel ; absent (app) →
     // boutique(s) de l'utilisateur (owner/sans rattachement = catégorie
@@ -158,6 +185,10 @@ export async function POST(req: Request) {
     if (await hasLoyaltyColumn()) {
       extraCols.push('loyalty_eligible');
       extraVals.push(c.loyalty_eligible ?? true);
+    }
+    if (await hasDefaultTaxRateColumn()) {
+      extraCols.push('default_tax_rate_id');
+      extraVals.push(c.default_tax_rate_id ?? null);
     }
     const baseVals: unknown[] = [
       g.user.organizationId,

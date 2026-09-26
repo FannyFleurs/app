@@ -57,7 +57,7 @@ export default function ProductFormModal({
 }: {
   product: Product | null;
   taxRates: { id: string; code: string; rate: number; label: string; is_default: boolean }[];
-  categories: { id: string; name: string }[];
+  categories: { id: string; name: string; default_tax_rate_id?: string | null }[];
   onClose: () => void;
   onSaved: (savedId?: string) => void;
   /** true = panneau intégré (page Produits), false = modale superposée. */
@@ -146,6 +146,10 @@ export default function ProductFormModal({
   const [tab, setTab] = useState<'details' | 'stock' | 'movement' | 'history'>('details');
   const [showLabel, setShowLabel] = useState(false);
   const [duplicateMode, setDuplicateMode] = useState(false);
+  // Catégorie et fournisseur obligatoires uniquement À LA CRÉATION (limite les
+  // erreurs de saisie sans bloquer la modification d'articles existants créés
+  // avant cette règle).
+  const isCreating = !product || duplicateMode;
 
   // Création rapide en ligne (catégorie / fournisseur inexistant).
   const [newCat, setNewCat] = useState<string | null>(null);   // null = fermé
@@ -338,8 +342,6 @@ export default function ProductFormModal({
     if (product && !duplicateMode && form.price_change_reason) {
       payload.price_change_reason = form.price_change_reason;
     }
-    const isCreating = !product || duplicateMode;
-
     const res = !isCreating
       ? await fetch(`/api/products/${product.id}`, {
           method: 'PATCH', headers: { 'Content-Type': 'application/json' },
@@ -483,15 +485,29 @@ export default function ProductFormModal({
                 </Field>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Field label="Catégorie">
+                  <Field label={isCreating ? 'Catégorie *' : 'Catégorie'}>
                     {newCat === null ? (
                       <div className="flex gap-2">
                         <select
+                          required={isCreating}
                           className="input h-11 text-base flex-1"
                           value={form.category_id ?? ''}
-                          onChange={(e) => setForm({ ...form, category_id: e.target.value })}
+                          onChange={(e) => {
+                            const categoryId = e.target.value;
+                            // Pré-remplit le taux de TVA selon le taux par défaut
+                            // de la catégorie choisie, s'il en a un — évite les
+                            // erreurs de saisie. Reste modifiable ensuite.
+                            const cat = liveCategories.find((c) => c.id === categoryId);
+                            setForm((f) => ({
+                              ...f,
+                              category_id: categoryId,
+                              tax_rate_id: cat?.default_tax_rate_id || f.tax_rate_id,
+                            }));
+                          }}
                         >
-                          <option value="">— Aucune catégorie —</option>
+                          {isCreating
+                            ? <option value="" disabled>— Choisir une catégorie —</option>
+                            : <option value="">— Aucune catégorie —</option>}
                           {liveCategories.map((c) => (
                             <option key={c.id} value={c.id}>{c.name}</option>
                           ))}
@@ -532,15 +548,18 @@ export default function ProductFormModal({
                     )}
                   </Field>
 
-                  <Field label="Fournisseur">
+                  <Field label={isCreating ? 'Fournisseur *' : 'Fournisseur'}>
                     {newSup === null ? (
                       <div className="flex gap-2">
                         <select
+                          required={isCreating}
                           className="input h-11 text-base flex-1"
                           value={form.supplier_id ?? ''}
                           onChange={(e) => setForm({ ...form, supplier_id: e.target.value })}
                         >
-                          <option value="">— Aucun fournisseur —</option>
+                          {isCreating
+                            ? <option value="" disabled>— Choisir un fournisseur —</option>
+                            : <option value="">— Aucun fournisseur —</option>}
                           {suppliers.map((s) => (
                             <option key={s.id} value={s.id}>{s.name}</option>
                           ))}
@@ -1210,7 +1229,11 @@ export default function ProductFormModal({
                 <span className="text-sm text-success font-medium">✓ Enregistré</span>
               )}
               <button onClick={onClose} className="btn-ghost">Fermer</button>
-              <button disabled={saving || !form.name.trim()} onClick={() => void submit()} className="btn-primary">
+              <button
+                disabled={saving || !form.name.trim() || (isCreating && (!form.category_id || !form.supplier_id))}
+                onClick={() => void submit()}
+                className="btn-primary"
+              >
                 {saving
                   ? 'Enregistrement…'
                   : duplicateMode

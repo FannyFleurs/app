@@ -9,8 +9,12 @@ const productSchema = z.object({
   name: z.string().min(1).max(200),
   short_description: z.string().max(500).optional().nullable(),
   long_description: z.string().max(5000).optional().nullable(),
-  category_id: z.string().uuid().optional().nullable(),
-  supplier_id: z.string().uuid().optional().nullable(),
+  // Obligatoires à la création (formulaire) : évite les erreurs de saisie —
+  // taux de TVA erroné faute de catégorie, coût de revient introuvable faute
+  // de fournisseur. Pas de contrainte NOT NULL en base pour autant : les
+  // articles déjà existants sans catégorie/fournisseur restent modifiables.
+  category_id: z.string().uuid(),
+  supplier_id: z.string().uuid(),
   discount_type: z.enum(['percent', 'amount']).optional().nullable(),
   discount_value: z.number().min(0).optional().nullable(),
   sku: z.string().max(80).optional().nullable(),
@@ -302,6 +306,24 @@ export async function POST(req: Request) {
     [p.tax_rate_id, g.user.organizationId],
   );
   if (tax.rowCount === 0) return jsonError('TAX_RATE_NOT_FOUND', 404);
+
+  // Sanity : catégorie appartient bien à l'org (catégorie obligatoire à la
+  // création — voir commentaire du schéma).
+  const cat = await query(
+    `SELECT 1 FROM product_categories WHERE id = $1 AND organization_id = $2`,
+    [p.category_id, g.user.organizationId],
+  );
+  if (cat.rowCount === 0) return jsonError('CATEGORY_NOT_FOUND', 404);
+
+  // Sanity : fournisseur appartient bien à l'org (uniquement si la colonne
+  // existe — sinon la migration 0038 n'est pas encore déployée).
+  if (await hasSupplierColumn()) {
+    const sup = await query(
+      `SELECT 1 FROM suppliers WHERE id = $1 AND organization_id = $2`,
+      [p.supplier_id, g.user.organizationId],
+    );
+    if (sup.rowCount === 0) return jsonError('SUPPLIER_NOT_FOUND', 404);
+  }
 
   const withTop = await hasTopColumn();
 
