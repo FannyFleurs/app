@@ -1870,13 +1870,13 @@ export default function CashRegister({
               className="btn-soft h-11 w-11 shrink-0 inline-flex items-center justify-center text-ink-soft disabled:opacity-60"
             >
               {drawerFlash ? (
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                   <path d="M20 6 9 17l-5-5" />
                 </svg>
               ) : (
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                  <rect x="2" y="4" width="20" height="16" rx="2" />
-                  <line x1="8" y1="12" x2="16" y2="12" />
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <rect x="1" y="3" width="22" height="18" rx="2" />
+                  <line x1="6" y1="12" x2="18" y2="12" />
                 </svg>
               )}
             </button>
