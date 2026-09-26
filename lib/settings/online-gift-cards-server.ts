@@ -54,3 +54,28 @@ export async function regenerateOnlineGiftCardsKey(
   await saveOnlineGiftCards(organizationId, next, updatedBy);
   return next;
 }
+
+/**
+ * Retrouve l'organisation à partir de la clé publique d'intégration
+ * (hp_gc_...) — utilisé par l'API PUBLIQUE (aucune session). Recherche
+ * indexée (migration 0079, index d'expression sur `value->>'public_key'`) :
+ * PAS de scan de tous les settings, contrairement au lookup par jeton de
+ * order_integration (tolérable là car peu d'organisations l'activent — ici
+ * l'API sera appelée par des sites publics, potentiellement bien plus souvent).
+ */
+export async function resolveOrgByPublicKey(
+  publicKey: string,
+): Promise<{ organizationId: string; settings: OnlineGiftCardsSettings } | null> {
+  const trimmed = publicKey.trim();
+  if (!trimmed) return null;
+  const { rows } = await query<{ organization_id: string; value: Partial<OnlineGiftCardsSettings> }>(
+    `SELECT organization_id, value FROM settings
+      WHERE key = $1 AND value->>'public_key' = $2`,
+    [ONLINE_GIFT_CARDS_KEY, trimmed],
+  );
+  if (rows.length === 0) return null;
+  return {
+    organizationId: rows[0]!.organization_id,
+    settings: mergeOnlineGiftCardsDefaults(rows[0]!.value),
+  };
+}

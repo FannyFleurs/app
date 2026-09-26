@@ -14,6 +14,7 @@
  */
 
 import { randomBytes } from 'node:crypto';
+import { round2 } from '@/lib/services/money';
 
 export const ONLINE_GIFT_CARDS_KEY = 'online_gift_cards';
 
@@ -30,6 +31,14 @@ export interface OnlineGiftCardsSettings {
   allowed_origins: string[];
   /** Date de première configuration (la table `settings` ne garde qu'`updated_at`). */
   created_at: string;
+  /** Montants proposés en euros, triés croissant, sans doublon. */
+  preset_amounts: number[];
+  /** Autorise l'acheteur à saisir un montant libre (entre min_amount et max_amount). */
+  allow_custom_amount: boolean;
+  /** Montant minimum en euros (> 0). */
+  min_amount: number;
+  /** Montant maximum en euros (> min_amount). */
+  max_amount: number;
 }
 
 export const ONLINE_GIFT_CARDS_DEFAULTS: OnlineGiftCardsSettings = {
@@ -37,17 +46,26 @@ export const ONLINE_GIFT_CARDS_DEFAULTS: OnlineGiftCardsSettings = {
   public_key: '',
   allowed_origins: [],
   created_at: '',
+  preset_amounts: [25, 50, 75, 100],
+  allow_custom_amount: true,
+  min_amount: 10,
+  max_amount: 500,
 };
 
 export function mergeOnlineGiftCardsDefaults(
   partial: Partial<OnlineGiftCardsSettings> | null | undefined,
 ): OnlineGiftCardsSettings {
-  if (!partial) return { ...ONLINE_GIFT_CARDS_DEFAULTS, allowed_origins: [] };
+  if (!partial) return { ...ONLINE_GIFT_CARDS_DEFAULTS, allowed_origins: [], preset_amounts: [...ONLINE_GIFT_CARDS_DEFAULTS.preset_amounts] };
   return {
     enabled: partial.enabled ?? ONLINE_GIFT_CARDS_DEFAULTS.enabled,
     public_key: partial.public_key ?? ONLINE_GIFT_CARDS_DEFAULTS.public_key,
     allowed_origins: Array.isArray(partial.allowed_origins) ? partial.allowed_origins : [],
     created_at: partial.created_at ?? ONLINE_GIFT_CARDS_DEFAULTS.created_at,
+    preset_amounts: Array.isArray(partial.preset_amounts)
+      ? partial.preset_amounts : [...ONLINE_GIFT_CARDS_DEFAULTS.preset_amounts],
+    allow_custom_amount: partial.allow_custom_amount ?? ONLINE_GIFT_CARDS_DEFAULTS.allow_custom_amount,
+    min_amount: partial.min_amount ?? ONLINE_GIFT_CARDS_DEFAULTS.min_amount,
+    max_amount: partial.max_amount ?? ONLINE_GIFT_CARDS_DEFAULTS.max_amount,
   };
 }
 
@@ -114,6 +132,74 @@ export class InvalidOriginError extends Error {
     super(`Domaine invalide : "${value}"`);
     this.name = 'InvalidOriginError';
   }
+}
+
+/** Nombre maximum de montants proposés — hygiène, pas une vraie limite métier. */
+export const MAX_PRESET_AMOUNTS = 10;
+
+export class InvalidAmountError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'InvalidAmountError';
+  }
+}
+
+export interface GiftCardCommerceInput {
+  preset_amounts: number[];
+  allow_custom_amount: boolean;
+  min_amount: number;
+  max_amount: number;
+}
+
+/**
+ * Valide et normalise la configuration commerciale (montants proposés,
+ * montant libre, bornes min/max). Lève une `InvalidAmountError` explicite au
+ * premier problème plutôt que de corriger/retirer silencieusement une valeur
+ * incohérente — l'admin doit voir précisément ce qui cloche.
+ *
+ * Les montants sont arrondis au centime (`round2`, même règle que le reste de
+ * la caisse) : on évite ainsi les valeurs binaires flottantes du type
+ * 25.5000000000000004 avant stockage.
+ */
+export function validateGiftCardCommerceConfig(input: GiftCardCommerceInput): {
+  preset_amounts: number[]; allow_custom_amount: boolean; min_amount: number; max_amount: number;
+} {
+  if (typeof input.allow_custom_amount !== 'boolean') {
+    throw new InvalidAmountError('« Autoriser le montant libre » doit être vrai ou faux.');
+  }
+  if (typeof input.min_amount !== 'number' || !Number.isFinite(input.min_amount)) {
+    throw new InvalidAmountError('Montant minimum invalide.');
+  }
+  if (typeof input.max_amount !== 'number' || !Number.isFinite(input.max_amount)) {
+    throw new InvalidAmountError('Montant maximum invalide.');
+  }
+  const min = round2(input.min_amount);
+  const max = round2(input.max_amount);
+  if (!(min > 0)) throw new InvalidAmountError('Le montant minimum doit être supérieur à 0.');
+  if (!(max > min)) throw new InvalidAmountError('Le montant maximum doit être supérieur au montant minimum.');
+
+  if (!Array.isArray(input.preset_amounts)) {
+    throw new InvalidAmountError('Montants proposés invalides.');
+  }
+  if (input.preset_amounts.length > MAX_PRESET_AMOUNTS) {
+    throw new InvalidAmountError(`Trop de montants proposés (maximum ${MAX_PRESET_AMOUNTS}).`);
+  }
+  const seen = new Set<number>();
+  for (const raw of input.preset_amounts) {
+    if (typeof raw !== 'number' || !Number.isFinite(raw)) {
+      throw new InvalidAmountError('Montant proposé invalide.');
+    }
+    const amount = round2(raw);
+    if (!(amount > 0)) throw new InvalidAmountError(`Montant invalide : ${amount} €.`);
+    if (amount < min || amount > max) {
+      throw new InvalidAmountError(`Le montant ${amount} € doit être compris entre ${min} € et ${max} €.`);
+    }
+    if (seen.has(amount)) throw new InvalidAmountError(`Montant en double : ${amount} €.`);
+    seen.add(amount);
+  }
+
+  const preset_amounts = [...seen].sort((a, b) => a - b);
+  return { preset_amounts, allow_custom_amount: input.allow_custom_amount, min_amount: min, max_amount: max };
 }
 
 /**

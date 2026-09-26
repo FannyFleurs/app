@@ -8,7 +8,10 @@ import {
   InvalidOriginError,
   ONLINE_GIFT_CARDS_DEFAULTS,
   MAX_ALLOWED_ORIGINS,
+  MAX_PRESET_AMOUNTS,
   generatePublicKey,
+  validateGiftCardCommerceConfig,
+  InvalidAmountError,
 } from '@/lib/settings/online-gift-cards';
 
 /**
@@ -38,6 +41,69 @@ describe('Réglage cartes cadeaux en ligne', () => {
 
   it('les valeurs par défaut restent stables', () => {
     expect(ONLINE_GIFT_CARDS_DEFAULTS.enabled).toBe(false);
+    expect(ONLINE_GIFT_CARDS_DEFAULTS.preset_amounts).toEqual([25, 50, 75, 100]);
+    expect(ONLINE_GIFT_CARDS_DEFAULTS.allow_custom_amount).toBe(true);
+    expect(ONLINE_GIFT_CARDS_DEFAULTS.min_amount).toBe(10);
+    expect(ONLINE_GIFT_CARDS_DEFAULTS.max_amount).toBe(500);
+  });
+});
+
+describe('Configuration commerciale (montants)', () => {
+  const base = { preset_amounts: [25, 50, 75, 100], allow_custom_amount: true, min_amount: 10, max_amount: 500 };
+
+  it('accepte une configuration valide et trie les montants', () => {
+    const out = validateGiftCardCommerceConfig({ ...base, preset_amounts: [100, 25, 75, 50] });
+    expect(out.preset_amounts).toEqual([25, 50, 75, 100]);
+    expect(out.min_amount).toBe(10);
+    expect(out.max_amount).toBe(500);
+  });
+
+  it('rejette les doublons plutôt que de les retirer silencieusement', () => {
+    expect(() => validateGiftCardCommerceConfig({ ...base, preset_amounts: [25, 50, 25] }))
+      .toThrow(InvalidAmountError);
+  });
+
+  it('rejette un montant proposé hors bornes min/max', () => {
+    expect(() => validateGiftCardCommerceConfig({ ...base, preset_amounts: [5, 50] }))
+      .toThrow(InvalidAmountError);
+    expect(() => validateGiftCardCommerceConfig({ ...base, preset_amounts: [50, 600] }))
+      .toThrow(InvalidAmountError);
+  });
+
+  it('rejette un montant proposé <= 0', () => {
+    expect(() => validateGiftCardCommerceConfig({ ...base, preset_amounts: [0, 50] }))
+      .toThrow(InvalidAmountError);
+    expect(() => validateGiftCardCommerceConfig({ ...base, preset_amounts: [-10, 50] }))
+      .toThrow(InvalidAmountError);
+  });
+
+  it('exige min_amount > 0', () => {
+    expect(() => validateGiftCardCommerceConfig({ ...base, min_amount: 0 })).toThrow(InvalidAmountError);
+    expect(() => validateGiftCardCommerceConfig({ ...base, min_amount: -5 })).toThrow(InvalidAmountError);
+  });
+
+  it('exige max_amount > min_amount', () => {
+    expect(() => validateGiftCardCommerceConfig({ ...base, min_amount: 100, max_amount: 100 }))
+      .toThrow(InvalidAmountError);
+    expect(() => validateGiftCardCommerceConfig({ ...base, min_amount: 100, max_amount: 50 }))
+      .toThrow(InvalidAmountError);
+  });
+
+  it('exige un allow_custom_amount strictement booléen', () => {
+    expect(() => validateGiftCardCommerceConfig({ ...base, allow_custom_amount: 'oui' as unknown as boolean }))
+      .toThrow(InvalidAmountError);
+  });
+
+  it('rejette plus de montants que la limite', () => {
+    const many = Array.from({ length: MAX_PRESET_AMOUNTS + 1 }, (_, i) => 10 + i);
+    expect(() => validateGiftCardCommerceConfig({ ...base, preset_amounts: many, max_amount: 500 }))
+      .toThrow(InvalidAmountError);
+  });
+
+  it('gère correctement les décimales monétaires (pas de résidu flottant)', () => {
+    const out = validateGiftCardCommerceConfig({ ...base, preset_amounts: [25.5, 30.1 + 0.2] });
+    // 30.1 + 0.2 vaut 30.299999999999997 en flottant natif : round2 corrige.
+    expect(out.preset_amounts).toEqual([25.5, 30.3]);
   });
 });
 
