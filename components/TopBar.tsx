@@ -134,7 +134,7 @@ export default function TopBar({
               : 'text-ink-soft hover:text-ink hover:bg-gray-50'
           }`}
         >
-          <Icon name="comment" size={20} />
+          <Icon name="helpline" size={20} />
         </Link>
       ) : null}
 

@@ -46,7 +46,8 @@ export type IconName =
   | 'warning'
   | 'sparkle'
   | 'transfer'
-  | 'discount';
+  | 'discount'
+  | 'helpline';
 
 const ICONS: Record<IconName, React.ReactNode> = {
   dashboard: (
@@ -291,6 +292,14 @@ const ICONS: Record<IconName, React.ReactNode> = {
       <line x1="19" y1="5" x2="5" y2="19" />
       <circle cx="7.5" cy="7.5" r="2.5" />
       <circle cx="16.5" cy="16.5" r="2.5" />
+    </>
+  ),
+  helpline: (
+    // Casque d'assistance — une ligne d'aide, pas un simple message.
+    <>
+      <path d="M4 15v-3a8 8 0 0 1 16 0v3" />
+      <path d="M4 15a2 2 0 0 1 2-2h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1H6a2 2 0 0 1-2-2Z" />
+      <path d="M20 15a2 2 0 0 0-2-2h-1a1 1 0 0 0-1 1v3a1 1 0 0 0 1 1h1a2 2 0 0 0 2-2Z" />
     </>
   ),
 };

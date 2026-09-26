@@ -1875,8 +1875,8 @@ export default function CashRegister({
                 </svg>
               ) : (
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                  <rect x="3" y="5" width="18" height="14" rx="2" />
-                  <line x1="9" y1="12" x2="15" y2="12" />
+                  <rect x="2" y="4" width="20" height="16" rx="2" />
+                  <line x1="8" y1="12" x2="16" y2="12" />
                 </svg>
               )}
             </button>
