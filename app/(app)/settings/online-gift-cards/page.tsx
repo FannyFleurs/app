@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
  * Cartes cadeaux en ligne : configuration PAR BOUTIQUE (une organisation
  * multi-boutiques peut vendre pour plusieurs sites, chacun avec sa propre
  * clé publique/domaines/montants) — même sélecteur que /settings/email et
- * /settings/stripe.
+ * la section Stripe de /settings/payment-methods.
  */
 export default async function OnlineGiftCardsSettingsPage() {
   const user = (await readSessionFromCookie())!;

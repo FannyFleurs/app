@@ -41,6 +41,31 @@ navigateur : côté public (checkout, config, widget), la boutique est
 (`resolveActiveOnlineGiftCards`) ; côté back-office, elle est vérifiée
 contre l'organisation de l'appelant (`storeInOrg`) avant tout accès.
 
+### 1 bis. Où Stripe se configure réellement dans l'interface
+
+**Stripe se configure UNIQUEMENT dans Paramètres → Modes de règlement**
+(`/settings/payment-methods`, `PaymentMethodsForm.tsx`) : la section
+« Configuration Stripe » qui s'affiche dès qu'un mode de règlement
+« Lien de paiement Stripe » est actif. C'est le seul écran Stripe qui
+existe dans l'interface — il n'y a jamais eu, et il n'y a toujours pas,
+d'entrée de menu séparée pour Stripe.
+
+Une route `/settings/stripe` (page + formulaire dédiés) avait été créée par
+erreur lors d'une évolution précédente de ce chantier, sans jamais être
+reliée au menu ni à aucun lien de l'application (`app/(app)/settings/layout.tsx`
+ne la référence pas) : son sélecteur de boutique n'était donc jamais visible
+en pratique, pendant que l'écran réellement utilisé
+(`/settings/payment-methods`) continuait d'appeler `/api/settings/stripe`
+**sans** `store_id`, toujours au niveau organisation. Cette route orpheline
+a été supprimée (pas de duplication d'interface) ; c'est désormais la
+section Stripe de `/settings/payment-methods` qui porte le sélecteur de
+boutique, exactement comme `/settings/email`.
+
+L'API (`app/api/settings/stripe/route.ts`, `lib/settings/stripe-server.ts`)
+n'a pas changé : elle acceptait déjà `store_id` et utilisait déjà
+`scopedSettingKey` — seul le formulaire qui l'appelle ne le lui transmettait
+pas.
+
 ### Migration de la configuration existante
 
 - **`online_gift_cards`** : la configuration organisation existante,
@@ -54,9 +79,10 @@ contre l'organisation de l'appelant (`storeInOrg`) avant tout accès.
   actuellement configuré au niveau organisation peut appartenir à une
   boutique précise (ex. Fanny Fleurs) — le transférer arbitrairement vers
   une autre boutique serait une erreur silencieuse. Chaque boutique doit
-  recevoir ses identifiants Stripe **explicitement**, depuis
-  `/settings/stripe` (sélecteur de boutique). Tant qu'une boutique n'a pas
-  sa propre configuration, elle continue de retomber sur la configuration
+  recevoir ses identifiants Stripe **explicitement**, depuis la section
+  Stripe de `/settings/payment-methods` (« Modes de règlement », sélecteur
+  de boutique — voir § 1 bis). Tant qu'une boutique n'a pas sa propre
+  configuration, elle continue de retomber sur la configuration
   organisation existante (compatibilité préservée).
 
 ## 2. Chiffrement au repos des secrets Stripe
@@ -90,13 +116,13 @@ contre l'organisation de l'appelant (`storeInOrg`) avant tout accès.
    en clair (comportement identique à avant), aucune casse.
 3. **Après** le déploiement (variable présente) : toute **nouvelle**
    écriture Stripe (`saveStripeSettings`, donc tout enregistrement depuis
-   `/settings/stripe`) est automatiquement chiffrée. Les secrets déjà en
+   section Stripe de `/settings/payment-methods`) est automatiquement chiffrée. Les secrets déjà en
    base **avant** ce déploiement restent en clair jusqu'à leur **prochaine
    modification** (migration paresseuse, pas de script de migration en
    masse qui manipulerait des secrets en production) — ils restent lisibles
    dans l'intervalle (`decryptSecret` tolère le texte en clair).
 4. Pour forcer le chiffrement d'un secret existant sans le changer :
-   ré-enregistrer la même valeur depuis `/settings/stripe` une fois la
+   ré-enregistrer la même valeur depuis la section Stripe de `/settings/payment-methods` une fois la
    variable en place.
 
 Ne jamais supprimer la tolérance au texte en clair dans `decryptSecret`

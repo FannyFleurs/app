@@ -239,7 +239,7 @@ export default function PaymentMethodsForm({ canWrite, stores }: {
         )}
       </div>
 
-      {stripeEnabled && <StripeConfig canWrite={canWrite} />}
+      {stripeEnabled && <StripeConfig canWrite={canWrite} stores={stores} />}
     </div>
   );
 }
@@ -247,10 +247,17 @@ export default function PaymentMethodsForm({ canWrite, stores }: {
 /**
  * Configuration Stripe inline, affichee uniquement si un mode
  * "payment_link" est actif dans la liste ci-dessus. Contient les
- * cles API + secret webhook + URL de retour.
+ * cles API + secret webhook + URL de retour — PROPRES À CHAQUE BOUTIQUE
+ * (repli organisation tant qu'une boutique n'a pas la sienne). Sélecteur
+ * masqué pour une organisation mono-boutique (comme le reste de cette
+ * page, voir `multiStore` ci-dessus) : la config reste alors au niveau
+ * organisation, comportement historique inchangé.
  */
-function StripeConfig({ canWrite }: { canWrite: boolean }) {
+function StripeConfig({ canWrite, stores }: { canWrite: boolean; stores: { id: string; name: string }[] }) {
+  const multiStore = stores.length > 1;
+  const [storeId, setStoreId] = useState<string>(multiStore ? (stores[0]?.id ?? '') : '');
   const [data, setData] = useState<StripeData | null>(null);
+  const [inherited, setInherited] = useState(false);
   const [pk, setPk] = useState('');
   const [sk, setSk] = useState('');
   const [whs, setWhs] = useState('');
@@ -259,24 +266,33 @@ function StripeConfig({ canWrite }: { canWrite: boolean }) {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // (Re)charge la config Stripe de la boutique sélectionnée — même
+  // sélecteur/qs que /settings/email et /settings/online-gift-cards.
   async function reload() {
-    const r = await fetch('/api/settings/stripe');
+    setData(null); setError(null); setSaved(false); setSk(''); setWhs('');
+    const qs = storeId ? `?store_id=${encodeURIComponent(storeId)}` : '';
+    const r = await fetch(`/api/settings/stripe${qs}`);
     if (r.ok) {
       const j = await r.json();
       setData(j.settings);
+      setInherited(!!j.inherited);
       setPk(j.settings.publishable_key);
       setReturnUrl(j.settings.return_url);
     }
   }
-  useEffect(() => { void reload(); }, []);
+  useEffect(() => { void reload(); }, [storeId]);
 
   async function submit() {
     setSaving(true); setError(null); setSaved(false);
     const r = await fetch('/api/settings/stripe', {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        store_id: storeId || undefined,
         enabled: true,
         publishable_key: pk.trim(),
+        // Champ vide = inchangé (ne remplace JAMAIS un secret déjà en base
+        // par la valeur masquée — l'input n'est de toute façon jamais
+        // pré-rempli avec le masque, voir ci-dessous).
         secret_key: sk.trim() || undefined,
         webhook_secret: whs.trim() || undefined,
         return_url: returnUrl.trim(),
@@ -289,21 +305,57 @@ function StripeConfig({ canWrite }: { canWrite: boolean }) {
       return;
     }
     setSaved(true);
-    setSk(''); setWhs('');
     setTimeout(() => setSaved(false), 2500);
     void reload();
   }
+
+  const currentStoreName = stores.find((s) => s.id === storeId)?.name ?? null;
 
   return (
     <div className="card p-5 space-y-4">
       <div>
         <h2 className="font-semibold">Configuration Stripe</h2>
         <p className="mt-1 text-xs text-ink-soft">
-          Cles API + secret webhook necessaires pour generer les liens
-          de paiement Stripe utilises par le mode « Lien de paiement »
-          ci-dessus.
+          Clés API + secret webhook nécessaires pour générer les liens
+          de paiement Stripe utilisés par le mode « Lien de paiement »
+          ci-dessus (et les cartes cadeaux en ligne, si activées) — propres
+          à chaque boutique.
         </p>
       </div>
+
+      {multiStore && (
+        <label className="block">
+          <span className="block text-xs font-medium text-ink-soft mb-1">Boutique</span>
+          <select
+            className="input h-10 w-full sm:w-72"
+            value={storeId}
+            onChange={(e) => setStoreId(e.target.value)}
+          >
+            {stores.map((st) => <option key={st.id} value={st.id}>{st.name}</option>)}
+          </select>
+        </label>
+      )}
+
+      {!data ? (
+        <p className="text-sm text-ink-soft">Chargement…</p>
+      ) : (
+      <>
+      <div className="flex items-center justify-between gap-3 rounded-xl border border-border px-3 py-2 text-sm">
+        {multiStore && <span>Boutique : <strong>{currentStoreName}</strong></span>}
+        <span className={data.secret_key_set ? 'text-success font-medium' : 'text-ink-soft'}>
+          {data.secret_key_set ? '● Compte Stripe configuré' : '○ Compte Stripe non configuré'}
+        </span>
+      </div>
+
+      {inherited && (
+        <div className="rounded-xl border-l-4 border-amber-400 bg-amber-50 px-3 py-2 text-xs text-ink-soft">
+          Configuration héritée de l&apos;organisation — {currentStoreName ?? 'cette boutique'} n&apos;a pas
+          encore son propre compte Stripe. Une boutique sans configuration
+          propre ne reçoit jamais les identifiants d&apos;une autre boutique.
+          Enregistre ci-dessous pour configurer Stripe spécifiquement pour
+          cette boutique.
+        </div>
+      )}
 
       <div>
         <label className="text-sm font-medium text-ink-soft">Clé publique (pk_live_ / pk_test_)</label>
@@ -317,7 +369,7 @@ function StripeConfig({ canWrite }: { canWrite: boolean }) {
 
       <div>
         <label className="text-sm font-medium text-ink-soft">Clé secrète (sk_live_ / sk_test_)</label>
-        {data?.secret_key_set && !sk && (
+        {data.secret_key_set && !sk && (
           <div className="mt-1 rounded-xl border border-border bg-gray-50 px-3 py-2 text-sm font-mono">
             {data.secret_key_masked}
             <span className="ml-2 text-xs text-ink-soft">(saisie pour remplacer)</span>
@@ -325,10 +377,10 @@ function StripeConfig({ canWrite }: { canWrite: boolean }) {
         )}
         <input
           type="password"
-          className={`input ${data?.secret_key_set ? 'mt-2' : 'mt-1'} font-mono text-sm`}
+          className={`input ${data.secret_key_set ? 'mt-2' : 'mt-1'} font-mono text-sm`}
           value={sk} onChange={(e) => setSk(e.target.value)}
           disabled={!canWrite}
-          placeholder={data?.secret_key_set ? 'Laisser vide pour conserver' : 'sk_test_xxxxxxxxxxxx'}
+          placeholder={data.secret_key_set ? 'Laisser vide pour conserver' : 'sk_test_xxxxxxxxxxxx'}
         />
         <p className="mt-1 text-xs text-ink-soft">
           Stockée chiffrée en base. Jamais réaffichée en clair.
@@ -337,20 +389,24 @@ function StripeConfig({ canWrite }: { canWrite: boolean }) {
 
       <div>
         <label className="text-sm font-medium text-ink-soft">Webhook signing secret (whsec_…)</label>
-        {data?.webhook_secret_set && !whs && (
+        {data.webhook_secret_set && !whs && (
           <div className="mt-1 rounded-xl border border-border bg-gray-50 px-3 py-2 text-sm font-mono">
             {data.webhook_secret_masked}
           </div>
         )}
         <input
           type="password"
-          className={`input ${data?.webhook_secret_set ? 'mt-2' : 'mt-1'} font-mono text-sm`}
+          className={`input ${data.webhook_secret_set ? 'mt-2' : 'mt-1'} font-mono text-sm`}
           value={whs} onChange={(e) => setWhs(e.target.value)}
           disabled={!canWrite}
-          placeholder={data?.webhook_secret_set ? 'Laisser vide pour conserver' : 'whsec_xxxxxxxxxxxx'}
+          placeholder={data.webhook_secret_set ? 'Laisser vide pour conserver' : 'whsec_xxxxxxxxxxxx'}
         />
         <p className="mt-1 text-xs text-ink-soft">
-          URL webhook à configurer dans Stripe : <code className="bg-gray-100 px-1 rounded">https://VOTRE-DOMAINE/api/webhooks/stripe</code>
+          Endpoint HelloPos à configurer dans Stripe — <strong>le même pour
+          toutes les boutiques/comptes</strong> (il détermine lui-même quel
+          compte a signé chaque événement) :{' '}
+          <code className="bg-gray-100 px-1 rounded">https://VOTRE-DOMAINE/api/webhooks/stripe</code>.
+          {multiStore && ' Le secret ci-dessus, lui, est propre à cette boutique.'}
         </p>
       </div>
 
@@ -369,8 +425,10 @@ function StripeConfig({ canWrite }: { canWrite: boolean }) {
 
       {canWrite && (
         <button onClick={() => void submit()} disabled={saving} className="btn-primary">
-          {saving ? 'Enregistrement…' : 'Enregistrer Stripe'}
+          {saving ? 'Enregistrement…' : inherited ? 'Configurer Stripe pour cette boutique' : 'Enregistrer Stripe'}
         </button>
+      )}
+      </>
       )}
     </div>
   );

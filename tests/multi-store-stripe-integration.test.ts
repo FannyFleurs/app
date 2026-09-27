@@ -71,6 +71,14 @@ describe.skipIf(!hasDb)('Stripe & cartes cadeaux en ligne par boutique — inté
 
     // Confirmation explicite : jamais les credentials de l'autre boutique.
     expect(loadedA.settings.secret_key).not.toBe(loadedB.settings.secret_key);
+
+    // Aucune écriture accidentelle sous la clé organisation (`stripe` seule) :
+    // chaque sauvegarde scoped ne touche QUE sa propre clé `stripe:<storeId>`.
+    const orgLevel = await query<{ n: string }>(
+      `SELECT COUNT(*)::text n FROM settings WHERE organization_id = $1 AND key = 'stripe'`,
+      [organizationId],
+    );
+    expect(orgLevel.rows[0]!.n).toBe('0');
   });
 
   it("une boutique SANS configuration Stripe propre retombe sur l'organisation, jamais sur une AUTRE boutique", async () => {
