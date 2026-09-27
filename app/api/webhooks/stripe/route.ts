@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import crypto from 'node:crypto';
 import { query } from '@/lib/db/client';
-import { STRIPE_KEY, mergeStripeDefaults, type StripeSettings } from '@/lib/settings/stripe';
 import { loadStripeSettings } from '@/lib/settings/stripe-server';
 import { fulfillOnlineGiftCardCheckout, markOnlineGiftCardOrderExpired } from '@/lib/services/online-gift-card-fulfillment';
 
@@ -14,15 +13,21 @@ export const runtime = 'nodejs';
  * sales.payment_status / online_gift_card_orders (émission de carte cadeau,
  * étape 4 — voir docs/api-public-gift-cards.md).
  *
- * URL à configurer dans Stripe Dashboard → Webhooks :
+ * Le MÊME endpoint reçoit les événements de TOUS les comptes Stripe d'une
+ * organisation (un par boutique — voir docs/architecture-multi-store-stripe.md) :
  *   POST https://VOTRE-DOMAINE/api/webhooks/stripe
- * Événements à écouter au minimum :
+ * à configurer UNE FOIS dans chaque compte Stripe (Fanny Fleurs, Plante
+ * Verte, …), chacun avec son PROPRE secret de signature (enregistré dans
+ * Paramètres → Modes de règlement, section Stripe, boutique par boutique).
+ * Ce handler ne fait jamais confiance à la boutique indiquée en metadata :
+ * il relit la vente/commande/commande carte cadeau réellement persistée
+ * pour savoir QUEL secret doit vérifier l'événement (voir
+ * `handleGiftCardWebhook`/`handleSaleOrOrderWebhook` ci-dessous).
+ *
+ * Événements à écouter au minimum, pour CHAQUE compte Stripe :
  *   - checkout.session.completed
  *   - checkout.session.expired
  *   - payment_intent.payment_failed
- *
- * Le webhook signing secret doit être enregistré dans
- * Paramètres → Stripe (whsec_...) pour valider la signature.
  */
 export async function POST(req: Request) {
   const sigHeader = req.headers.get('stripe-signature');
@@ -76,33 +81,77 @@ export async function POST(req: Request) {
     });
   }
 
-  // Charge la config Stripe de cette orga pour vérifier la signature
-  const cfgRes = await query<{ value: Partial<StripeSettings> }>(
-    `SELECT value FROM settings WHERE organization_id = $1 AND key = $2`,
-    [orgId, STRIPE_KEY],
-  );
-  const cfg = mergeStripeDefaults(cfgRes.rows[0]?.value ?? null);
+  // --- Lien de paiement vente/commande différée : MULTI-COMPTES Stripe,
+  //     même principe que les cartes cadeaux — jamais confiance à la seule
+  //     metadata pour choisir le compte qui doit vérifier la signature. ---
+  return handleSaleOrOrderWebhook({
+    event, sessionObj, orderId, saleId, metadataOrgId: orgId, sigHeader, raw,
+  });
+}
 
-  // Validation de la signature Stripe (HMAC SHA256) — OBLIGATOIRE.
-  // Sans secret configuré ou sans en-tête de signature, on refuse : sinon un
-  // acteur malveillant pourrait POSTer un faux événement « paid » sans
-  // signature et marquer une vente/commande comme payée gratuitement.
-  if (!cfg.webhook_secret || !sigHeader
-      || !verifyStripeSignature(raw, sigHeader, cfg.webhook_secret)) {
+/**
+ * Lien de paiement (vente caisse ou commande différée), MULTI-COMPTES
+ * Stripe — même résolution de confiance que `handleGiftCardWebhook` :
+ *   1. On relit la vente/commande PERSISTÉE par son id — jamais la
+ *      metadata reçue. `organization_id`/`store_id` de cette ligne sont la
+ *      SEULE source de vérité (posés à la création de la vente/commande,
+ *      jamais fournis par le client final qui paie).
+ *   2. Si l'`organization_id` de la metadata reçue ne correspond pas à
+ *      celle de la ligne réellement enregistrée, on ignore SANS tenter de
+ *      vérifier la signature.
+ *   3. On charge le compte Stripe de LA BOUTIQUE de cette vente/commande
+ *      (repli organisation si elle n'a pas encore son compte propre) et on
+ *      vérifie la signature avec CE secret précis — un client de Plante
+ *      Verte ne peut donc jamais faire confirmer son paiement via le
+ *      compte Fanny Fleurs, et inversement : la signature ne
+ *      correspondrait jamais.
+ */
+async function handleSaleOrOrderWebhook(args: {
+  event: { type: string };
+  sessionObj: { payment_status?: string };
+  orderId: string | undefined;
+  saleId: string | undefined;
+  metadataOrgId: string;
+  sigHeader: string | null;
+  raw: string;
+}): Promise<NextResponse> {
+  let target: { organization_id: string; store_id: string } | null = null;
+  if (args.orderId) {
+    const r = await query<{ organization_id: string; store_id: string }>(
+      `SELECT organization_id, store_id FROM orders WHERE id = $1`,
+      [args.orderId],
+    );
+    target = r.rows[0] ?? null;
+  } else if (args.saleId) {
+    const r = await query<{ organization_id: string; store_id: string }>(
+      `SELECT organization_id, store_id FROM sales WHERE id = $1`,
+      [args.saleId],
+    );
+    target = r.rows[0] ?? null;
+  }
+  if (!target) return NextResponse.json({ ok: true, ignored: true });
+  if (target.organization_id !== args.metadataOrgId) {
+    return NextResponse.json({ ok: true, ignored: true });
+  }
+
+  const { settings: cfg } = await loadStripeSettings(target.organization_id, target.store_id);
+  if (!cfg.webhook_secret || !args.sigHeader
+      || !verifyStripeSignature(args.raw, args.sigHeader, cfg.webhook_secret)) {
     return NextResponse.json({ error: 'INVALID_SIGNATURE' }, { status: 400 });
   }
 
+  // Signature valide POUR LE COMPTE STRIPE DE CETTE BOUTIQUE PRÉCISE.
   let newStatus: 'paid' | 'failed' | null = null;
-  if (event.type === 'checkout.session.completed' && sessionObj.payment_status === 'paid') {
+  if (args.event.type === 'checkout.session.completed' && args.sessionObj.payment_status === 'paid') {
     newStatus = 'paid';
-  } else if (event.type === 'payment_intent.payment_failed') {
+  } else if (args.event.type === 'payment_intent.payment_failed') {
     newStatus = 'failed';
-  } else if (event.type === 'checkout.session.expired') {
+  } else if (args.event.type === 'checkout.session.expired') {
     newStatus = 'failed';
   }
 
   if (newStatus) {
-    if (orderId) {
+    if (args.orderId) {
       await query(
         `UPDATE orders
             SET payment_status = $1,
@@ -113,10 +162,10 @@ export async function POST(req: Request) {
                 END,
                 updated_at = now()
           WHERE id = $2 AND organization_id = $3`,
-        [newStatus, orderId, orgId],
+        [newStatus, args.orderId, target.organization_id],
       );
     }
-    if (saleId) {
+    if (args.saleId) {
       // Migration 0020 ajoute payment_status sur sales — silencieux sinon
       try {
         await query(
@@ -125,7 +174,7 @@ export async function POST(req: Request) {
                   paid_at = CASE WHEN $1 = 'paid' THEN now() ELSE paid_at END,
                   updated_at = now()
             WHERE id = $2 AND organization_id = $3`,
-          [newStatus, saleId, orgId],
+          [newStatus, args.saleId, target.organization_id],
         );
       } catch { /* migration absente */ }
     }

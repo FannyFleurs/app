@@ -33,10 +33,30 @@ const orderStores: Record<string, { organization_id: string; store_id: string | 
   'order-store-b': { organization_id: 'org-a-uuid', store_id: STORE_B_ID },
 };
 
+// Ventes/commandes (lien de paiement, chemin legacy) : `store_id` réel de la
+// ligne persistée — jamais deviné depuis la metadata reçue.
+const legacySales: Record<string, { organization_id: string; store_id: string }> = {
+  'sale-1': { organization_id: 'org-a-uuid', store_id: 'store-a-uuid' },
+  'sale-store-b': { organization_id: 'org-a-uuid', store_id: STORE_B_ID },
+};
+const legacyOrders: Record<string, { organization_id: string; store_id: string }> = {
+  'order-legacy-store-b': { organization_id: 'org-a-uuid', store_id: STORE_B_ID },
+};
+
 const queryMock = vi.fn(async (text: string, params: unknown[] = []) => {
   if (text.includes('SELECT organization_id, store_id FROM online_gift_card_orders')) {
     const [orderId] = params as [string];
     const row = orderStores[orderId];
+    return { rows: row ? [row] : [], rowCount: row ? 1 : 0 };
+  }
+  if (text.includes('SELECT organization_id, store_id FROM sales')) {
+    const [saleId] = params as [string];
+    const row = legacySales[saleId];
+    return { rows: row ? [row] : [], rowCount: row ? 1 : 0 };
+  }
+  if (text.includes('SELECT organization_id, store_id FROM orders')) {
+    const [orderId] = params as [string];
+    const row = legacyOrders[orderId];
     return { rows: row ? [row] : [], rowCount: row ? 1 : 0 };
   }
   // loadStripeSettings (key = ANY([storeKey, 'stripe'])) : la boutique B a
@@ -255,5 +275,63 @@ describe('Webhook Stripe — isolation multi-comptes (une boutique = un compte S
     expect(res.status).toBe(200);
     expect((await res.json()).ignored).toBe(true);
     expect(fulfillMock).not.toHaveBeenCalled();
+  });
+
+  it("une VENTE (lien de paiement) rattachée à une boutique avec son propre compte n'est validée que par le secret DE CETTE boutique", async () => {
+    const body = {
+      type: 'checkout.session.completed',
+      data: { object: {
+        id: 'cs_test_sale_store_b', payment_status: 'paid',
+        metadata: { organization_id: 'org-a-uuid', sale_id: 'sale-store-b' },
+      } },
+    };
+    const t = Math.floor(Date.now() / 1000);
+    const payload = JSON.stringify(body);
+    const v1 = createHmac('sha256', STORE_B_WEBHOOK_SECRET).update(`${t}.${payload}`).digest('hex');
+    const res = await post(body, `t=${t},v1=${v1}`);
+    expect(res.status).toBe(200);
+    expect(queryMock.mock.calls.some((c) => String(c[0]).includes('UPDATE sales'))).toBe(true);
+  });
+
+  it("la même vente signée avec le secret ORGANISATION (au lieu du secret de sa boutique) est refusée", async () => {
+    const body = {
+      type: 'checkout.session.completed',
+      data: { object: {
+        id: 'cs_test_sale_store_b_2', payment_status: 'paid',
+        metadata: { organization_id: 'org-a-uuid', sale_id: 'sale-store-b' },
+      } },
+    };
+    const res = await post(body, sign(JSON.stringify(body)));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('INVALID_SIGNATURE');
+  });
+
+  it("une COMMANDE différée rattachée à une boutique avec son propre compte n'est validée que par le secret DE CETTE boutique", async () => {
+    const body = {
+      type: 'checkout.session.completed',
+      data: { object: {
+        id: 'cs_test_order_store_b', payment_status: 'paid',
+        metadata: { organization_id: 'org-a-uuid', order_id: 'order-legacy-store-b' },
+      } },
+    };
+    const t = Math.floor(Date.now() / 1000);
+    const payload = JSON.stringify(body);
+    const v1 = createHmac('sha256', STORE_B_WEBHOOK_SECRET).update(`${t}.${payload}`).digest('hex');
+    const res = await post(body, `t=${t},v1=${v1}`);
+    expect(res.status).toBe(200);
+    expect(queryMock.mock.calls.some((c) => String(c[0]).includes('UPDATE orders'))).toBe(true);
+  });
+
+  it("un client de la boutique B ne peut jamais faire confirmer son paiement via le secret de l'organisation/boutique A (isolation client)", async () => {
+    const body = {
+      type: 'checkout.session.completed',
+      data: { object: {
+        id: 'cs_test_order_store_b_2', payment_status: 'paid',
+        metadata: { organization_id: 'org-a-uuid', order_id: 'order-legacy-store-b' },
+      } },
+    };
+    const res = await post(body, sign(JSON.stringify(body)));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('INVALID_SIGNATURE');
   });
 });

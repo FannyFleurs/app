@@ -3,6 +3,7 @@ import { confirmThemed } from '@/lib/ui/dialog';
 
 import { useEffect, useState } from 'react';
 import PageHeader from '@/components/PageHeader';
+import { SITE_URL } from '@/lib/site/meta';
 
 interface Data {
   enabled: boolean;
@@ -32,6 +33,7 @@ export default function OnlineGiftCardsSettingsForm(
   const [saved, setSaved] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [copiedSnippet, setCopiedSnippet] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Section « Montants proposés » : brouillon local, enregistré explicitement
@@ -113,6 +115,20 @@ export default function OnlineGiftCardsSettingsForm(
       await navigator.clipboard.writeText(data.public_key);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+    } catch { /* presse-papier indisponible */ }
+  }
+
+  function widgetSnippet(publicKey: string): string {
+    return `<hellopos-gift-card data-key="${publicKey}"></hellopos-gift-card>\n`
+      + `<script src="${SITE_URL}/gift-cards/widget/v1/embed.js" async></script>`;
+  }
+
+  async function copySnippet() {
+    if (!data?.public_key) return;
+    try {
+      await navigator.clipboard.writeText(widgetSnippet(data.public_key));
+      setCopiedSnippet(true);
+      setTimeout(() => setCopiedSnippet(false), 2000);
     } catch { /* presse-papier indisponible */ }
   }
 
@@ -296,6 +312,60 @@ export default function OnlineGiftCardsSettingsForm(
 
       {error && <div className="rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
       {saved && <div className="rounded-xl bg-success/10 px-3 py-2 text-sm text-success">✓ Enregistré</div>}
+
+      {data?.public_key && (
+        <div className="card p-5 space-y-4">
+          <div>
+            <h2 className="text-base font-semibold">Code à intégrer sur votre site</h2>
+            <p className="mt-0.5 text-xs text-ink-soft">
+              Un widget prêt à l&apos;emploi (aucune installation, aucune
+              dépendance) pour vendre des cartes cadeaux depuis votre site —
+              propre à <strong>{currentStoreName ?? 'cette configuration'}</strong>.
+            </p>
+          </div>
+
+          <ol className="space-y-2 text-sm list-decimal list-inside text-ink-soft">
+            <li>
+              Activez l&apos;intégration ci-dessus, et ajoutez le domaine exact
+              de votre site (ex. <code className="bg-gray-100 px-1 rounded">https://www.mon-site.fr</code>)
+              dans <strong>Domaines autorisés</strong> — sans cette étape, le
+              widget affichera « indisponible » sur votre site.
+            </li>
+            <li>
+              Copiez le code ci-dessous et collez-le à l&apos;endroit de votre
+              page où le formulaire doit apparaître.
+            </li>
+            <li>
+              C&apos;est tout : le widget affiche automatiquement les montants
+              proposés, gère le paiement et l&apos;envoi de la carte — rien
+              d&apos;autre à configurer sur votre site.
+            </li>
+          </ol>
+
+          <div>
+            <div className="flex items-center justify-between gap-2 mb-1">
+              <span className="text-sm font-medium text-ink-soft">Code à copier-coller</span>
+              <button
+                type="button" onClick={() => void copySnippet()}
+                className="btn-soft whitespace-nowrap shrink-0 text-xs h-7 px-2"
+              >
+                {copiedSnippet ? '✓ Copié' : 'Copier le code'}
+              </button>
+            </div>
+            <pre className="rounded-xl border border-border bg-gray-50 px-3 py-2 text-xs font-mono overflow-x-auto whitespace-pre-wrap break-all">
+              {widgetSnippet(data.public_key)}
+            </pre>
+          </div>
+
+          <p className="text-xs text-ink-soft">
+            Aucune donnée sensible dans ce code : la clé publique n&apos;authentifie
+            rien, elle indique seulement quelle configuration (boutique et
+            montants) le widget doit afficher. Testez d&apos;abord en local en
+            ajoutant <code className="bg-gray-100 px-1 rounded">http://localhost:PORT</code> à
+            vos domaines autorisés.
+          </p>
+        </div>
+      )}
 
       <div className="card p-5 space-y-4">
         <div>

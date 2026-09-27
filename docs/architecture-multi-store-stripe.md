@@ -279,15 +279,30 @@ DATABASE_URL=postgres://user:pass@localhost:5432/webpos_test npm run db:migrate
 DATABASE_URL=postgres://user:pass@localhost:5432/webpos_test npm test
 ```
 
-## 7. Suivi / recommandations non traitées ici
+## 7. Liens de paiement (ventes/commandes) — également store-scoped
 
-- `app/api/sales/[id]/payment-link/route.ts` et
-  `app/api/orders/[id]/payment-link/route.ts` résolvent encore Stripe au
-  niveau **organisation** uniquement (comportement historique inchangé) —
-  une évolution naturelle serait de les faire résoudre le compte de la
-  boutique de la vente/commande, comme le checkout de cartes cadeaux.
-  Non traité ici : hors du périmètre « cartes cadeaux en ligne », risque
-  de régression sur un flux existant à ne pas modifier sans validation
-  explicite.
+`app/api/sales/[id]/payment-link/route.ts` et
+`app/api/orders/[id]/payment-link/route.ts` résolvent désormais Stripe via
+`loadStripeSettings(organizationId, storeId)`, avec le `store_id` **réel**
+de la vente/commande (jamais fourni par l'appelant) — même mécanisme que le
+checkout de cartes cadeaux. Un client de Plante Verte paie donc toujours via
+le compte Stripe Plante Verte, jamais celui de Fanny Fleurs, et inversement.
+
+Le webhook (`app/api/webhooks/stripe/route.ts`, `handleSaleOrOrderWebhook`)
+applique la même résolution de confiance que pour les cartes cadeaux : il
+relit la vente/commande **persistée** par son id pour connaître sa boutique
+réelle, recoupe l'`organization_id` de la metadata, puis vérifie la
+signature avec le secret de **cette** boutique précise — jamais celui d'une
+autre. Un événement du compte Plante Verte ne peut donc jamais valider une
+vente/commande de Fanny Fleurs, et inversement.
+
+## 8. Suivi / recommandations non traitées ici
+
 - Ventilations `by_vendor`/`by_mode` de `computeDayReport` : voir § 3,
   limite connue.
+- `payment_intent.payment_failed` reste actuellement inerte pour les deux
+  flux (cartes cadeaux et liens de paiement) : aucun des créateurs de
+  Checkout Session ne pose `payment_intent_data[metadata]`, donc l'objet
+  PaymentIntent reçu par le webhook pour cet événement n'a pas de metadata
+  exploitable (voir l'audit détaillé du webhook). Sans effet pratique
+  aujourd'hui ; à corriger si ce cas devient nécessaire.

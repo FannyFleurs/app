@@ -3,7 +3,7 @@ import { query } from '@/lib/db/client';
 import { requirePermission } from '@/lib/auth/guards';
 import { jsonError } from '@/lib/validation/api';
 import { audit } from '@/lib/audit/log';
-import { STRIPE_KEY, mergeStripeDefaults, type StripeSettings } from '@/lib/settings/stripe';
+import { loadStripeSettings } from '@/lib/settings/stripe-server';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,29 +15,23 @@ export const dynamic = 'force-dynamic';
  *   - La vente existe et appartient à l'organisation.
  *   - Stripe est activé.
  *   - sales.payment_status est NULL ou 'pending'.
+ *
+ * Compte Stripe : celui de LA BOUTIQUE de la vente (`stripe:<storeId>`,
+ * repli organisation si cette boutique n'a pas encore le sien — voir
+ * lib/settings/stripe-server.ts) — jamais un autre. Un client de Plante
+ * Verte ne doit jamais se retrouver sur une session Stripe (ni, plus tard,
+ * une page de retour) de Fanny Fleurs, et inversement.
  */
 export async function POST(_req: Request, { params }: { params: { id: string } }) {
   const g = await requirePermission('pos.use');
   if ('response' in g) return g.response;
 
-  // Charge la config Stripe
-  const cfgRes = await query<{ value: Partial<StripeSettings> }>(
-    `SELECT value FROM settings WHERE organization_id = $1 AND key = $2`,
-    [g.user.organizationId, STRIPE_KEY],
-  );
-  const cfg = mergeStripeDefaults(cfgRes.rows[0]?.value ?? null);
-  if (!cfg.enabled || !cfg.secret_key) {
-    return jsonError('STRIPE_NOT_CONFIGURED', 400, {
-      message: 'Configurez votre clé Stripe dans Paramètres → Stripe.',
-    });
-  }
-
   const saleRes = await query<{
-    id: string; total_ttc: string; payment_status: string | null;
+    id: string; store_id: string; total_ttc: string; payment_status: string | null;
     customer_email: string | null; customer_name: string | null;
     receipt_number: string | null;
   }>(
-    `SELECT s.id, s.total_ttc::text,
+    `SELECT s.id, s.store_id, s.total_ttc::text,
             s.payment_status,
             c.email AS customer_email,
             COALESCE(c.company_name,
@@ -51,6 +45,15 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
   );
   if (saleRes.rowCount === 0) return jsonError('NOT_FOUND', 404);
   const sale = saleRes.rows[0]!;
+
+  // Charge la config Stripe DE CETTE BOUTIQUE, résolue seulement APRÈS
+  // avoir lu la vente (jamais depuis un store_id fourni par l'appelant).
+  const { settings: cfg, decryptionFailed } = await loadStripeSettings(g.user.organizationId, sale.store_id);
+  if (!cfg.enabled || !cfg.secret_key || decryptionFailed) {
+    return jsonError('STRIPE_NOT_CONFIGURED', 400, {
+      message: 'Configurez votre clé Stripe dans Paramètres → Modes de règlement.',
+    });
+  }
 
   if (sale.payment_status === 'paid') return jsonError('ALREADY_PAID', 409);
 
@@ -75,6 +78,10 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
   // metadata.sale_id : exploité par le webhook pour updater la vente
   params2.append('metadata[sale_id]', sale.id);
   params2.append('metadata[organization_id]', g.user.organizationId);
+  // Indicatif seulement (confort dashboard Stripe) : le webhook ne fait
+  // JAMAIS confiance à ce champ pour choisir le compte — il relit
+  // store_id RÉELLEMENT persisté sur la vente.
+  params2.append('metadata[store_id]', sale.store_id);
 
   let session: { id: string; url: string };
   try {

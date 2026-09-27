@@ -3,7 +3,7 @@ import { query } from '@/lib/db/client';
 import { requirePermission } from '@/lib/auth/guards';
 import { jsonError } from '@/lib/validation/api';
 import { audit } from '@/lib/audit/log';
-import { STRIPE_KEY, mergeStripeDefaults, type StripeSettings } from '@/lib/settings/stripe';
+import { loadStripeSettings } from '@/lib/settings/stripe-server';
 
 /**
  * Crée une session Stripe Checkout pour une commande différée et renvoie
@@ -13,29 +13,23 @@ import { STRIPE_KEY, mergeStripeDefaults, type StripeSettings } from '@/lib/sett
  *   - La commande existe et appartient à l'organisation.
  *   - Stripe est activé (settings).
  *   - Le payment_status est encore 'pending'.
+ *
+ * Compte Stripe : celui de LA BOUTIQUE de la commande (`stripe:<storeId>`,
+ * repli organisation si cette boutique n'a pas encore le sien — voir
+ * lib/settings/stripe-server.ts) — jamais un autre. Un client de Plante
+ * Verte ne doit jamais se retrouver sur une session Stripe de Fanny
+ * Fleurs, et inversement.
  */
 export async function POST(_req: Request, { params }: { params: { id: string } }) {
   const g = await requirePermission('pos.use');
   if ('response' in g) return g.response;
 
-  // Charge la config Stripe
-  const cfgRes = await query<{ value: Partial<StripeSettings> }>(
-    `SELECT value FROM settings WHERE organization_id = $1 AND key = $2`,
-    [g.user.organizationId, STRIPE_KEY],
-  );
-  const cfg = mergeStripeDefaults(cfgRes.rows[0]?.value ?? null);
-  if (!cfg.enabled || !cfg.secret_key) {
-    return jsonError('STRIPE_NOT_CONFIGURED', 400, {
-      message: 'Configurez votre clé Stripe dans Paramètres → Stripe.',
-    });
-  }
-
   const orderRes = await query<{
-    id: string; total_amount: string; payment_status: string;
+    id: string; store_id: string; total_amount: string; payment_status: string;
     customer_email: string | null; customer_name: string | null;
     recipient_name: string | null;
   }>(
-    `SELECT o.id, o.total_amount::text, COALESCE(o.payment_status, 'pending') AS payment_status,
+    `SELECT o.id, o.store_id, o.total_amount::text, COALESCE(o.payment_status, 'pending') AS payment_status,
             c.email AS customer_email,
             COALESCE(c.company_name,
               NULLIF(TRIM(CONCAT(c.first_name,' ',c.last_name)), '')) AS customer_name,
@@ -47,6 +41,15 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
   );
   if (orderRes.rowCount === 0) return jsonError('NOT_FOUND', 404);
   const order = orderRes.rows[0]!;
+
+  // Charge la config Stripe DE CETTE BOUTIQUE, résolue seulement APRÈS
+  // avoir lu la commande (jamais depuis un store_id fourni par l'appelant).
+  const { settings: cfg, decryptionFailed } = await loadStripeSettings(g.user.organizationId, order.store_id);
+  if (!cfg.enabled || !cfg.secret_key || decryptionFailed) {
+    return jsonError('STRIPE_NOT_CONFIGURED', 400, {
+      message: 'Configurez votre clé Stripe dans Paramètres → Modes de règlement.',
+    });
+  }
 
   if (order.payment_status === 'paid') {
     return jsonError('ALREADY_PAID', 409);
@@ -72,6 +75,10 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
   if (order.customer_email) params2.append('customer_email', order.customer_email);
   params2.append('metadata[order_id]', order.id);
   params2.append('metadata[organization_id]', g.user.organizationId);
+  // Indicatif seulement (confort dashboard Stripe) : le webhook ne fait
+  // JAMAIS confiance à ce champ pour choisir le compte — il relit
+  // store_id RÉELLEMENT persisté sur la commande.
+  params2.append('metadata[store_id]', order.store_id);
 
   let session: { id: string; url: string };
   try {
