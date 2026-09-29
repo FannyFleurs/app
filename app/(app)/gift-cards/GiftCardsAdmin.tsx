@@ -142,58 +142,110 @@ export default function GiftCardsAdmin() {
           description="Créez votre première carte cadeau avec le bouton en haut à droite."
         />
       ) : (
-        <div className="card overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-white text-ink-soft text-xs uppercase border-b border-border">
-              <tr>
-                <th className="text-left px-4 py-3">Code</th>
-                <th className="text-left px-4 py-3">Type</th>
-                <th className="text-left px-4 py-3">Bénéficiaire</th>
-                <th className="text-right px-4 py-3">Initial</th>
-                <th className="text-right px-4 py-3">Solde</th>
-                <th className="text-center px-4 py-3">Statut</th>
-                <th className="text-left px-4 py-3">Émise le</th>
-                <th className="text-right px-4 py-3"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((c) => {
-                const s = STATUS[c.status] ?? { label: c.status, tone: 'neutral' as const };
-                const benefName = c.beneficiary_name ?? c.buyer_name ?? null;
-                const benefPhone = c.beneficiary_phone ?? c.buyer_phone ?? null;
-                return (
-                  <tr key={c.id} className="border-t border-border">
-                    <td className="px-4 py-3 font-mono text-xs">{c.code}</td>
-                    <td className="px-4 py-3">
-                      {c.kind === 'voucher'
-                        ? <Badge tone="warning">Bon d&apos;achat</Badge>
-                        : <Badge tone="soft">Carte cadeau</Badge>}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="text-sm">{benefName ?? '—'}</div>
-                      {benefPhone && (
-                        <div className="text-xs text-ink-soft">{benefPhone}</div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-right">{formatEUR(Number(c.initial_amount))}</td>
-                    <td className="px-4 py-3 text-right font-medium">{formatEUR(Number(c.balance))}</td>
-                    <td className="px-4 py-3 text-center"><Badge tone={s.tone}>{s.label}</Badge></td>
-                    <td className="px-4 py-3 text-ink-soft text-xs">
-                      {new Date(c.issued_at).toLocaleDateString('fr-FR')}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <TicketPrintButton
-                        url={`/api/gift-cards/${c.id}/print`}
-                        pdfUrl={`/api/gift-cards/${c.id}/pdf`}
-                        size="xs"
-                      />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <>
+          {/* Mobile/tablette (< md) : une carte par ligne, toutes les infos
+              visibles directement — jamais besoin de défiler horizontalement
+              ni de chercher le solde/statut/impression d'une carte ailleurs
+              dans la liste. */}
+          <div className="md:hidden space-y-2">
+            {filtered.map((c) => {
+              const s = STATUS[c.status] ?? { label: c.status, tone: 'neutral' as const };
+              const benefName = c.beneficiary_name ?? c.buyer_name ?? null;
+              const benefPhone = c.beneficiary_phone ?? c.buyer_phone ?? null;
+              return (
+                <div key={c.id} className="card p-3 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="font-mono text-xs text-ink-soft truncate">{c.code}</div>
+                      <div className="text-sm font-medium truncate">{benefName ?? '—'}</div>
+                      {benefPhone && <div className="text-xs text-ink-soft">{benefPhone}</div>}
+                    </div>
+                    {c.kind === 'voucher'
+                      ? <Badge tone="warning">Bon d&apos;achat</Badge>
+                      : <Badge tone="soft">Carte cadeau</Badge>}
+                  </div>
+
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-ink-soft">Solde</span>
+                    <span>
+                      <span className="font-semibold">{formatEUR(Number(c.balance))}</span>
+                      <span className="text-xs text-ink-soft"> / {formatEUR(Number(c.initial_amount))}</span>
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <Badge tone={s.tone}>{s.label}</Badge>
+                    <span className="text-xs text-ink-soft">
+                      Émise le {new Date(c.issued_at).toLocaleDateString('fr-FR')}
+                    </span>
+                  </div>
+
+                  <div className="pt-1 border-t border-border flex justify-end">
+                    <TicketPrintButton
+                      url={`/api/gift-cards/${c.id}/print`}
+                      pdfUrl={`/api/gift-cards/${c.id}/pdf`}
+                      size="sm"
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Desktop/tablette large (>= md) : tableau complet. */}
+          <div className="hidden md:block card overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-white text-ink-soft text-xs uppercase border-b border-border">
+                <tr>
+                  <th className="text-left px-4 py-3">Code</th>
+                  <th className="text-left px-4 py-3">Type</th>
+                  <th className="text-left px-4 py-3">Bénéficiaire</th>
+                  <th className="text-right px-4 py-3">Initial</th>
+                  <th className="text-right px-4 py-3">Solde</th>
+                  <th className="text-center px-4 py-3">Statut</th>
+                  <th className="text-left px-4 py-3">Émise le</th>
+                  <th className="text-right px-4 py-3"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((c) => {
+                  const s = STATUS[c.status] ?? { label: c.status, tone: 'neutral' as const };
+                  const benefName = c.beneficiary_name ?? c.buyer_name ?? null;
+                  const benefPhone = c.beneficiary_phone ?? c.buyer_phone ?? null;
+                  return (
+                    <tr key={c.id} className="border-t border-border">
+                      <td className="px-4 py-3 font-mono text-xs">{c.code}</td>
+                      <td className="px-4 py-3">
+                        {c.kind === 'voucher'
+                          ? <Badge tone="warning">Bon d&apos;achat</Badge>
+                          : <Badge tone="soft">Carte cadeau</Badge>}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="text-sm">{benefName ?? '—'}</div>
+                        {benefPhone && (
+                          <div className="text-xs text-ink-soft">{benefPhone}</div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right">{formatEUR(Number(c.initial_amount))}</td>
+                      <td className="px-4 py-3 text-right font-medium">{formatEUR(Number(c.balance))}</td>
+                      <td className="px-4 py-3 text-center"><Badge tone={s.tone}>{s.label}</Badge></td>
+                      <td className="px-4 py-3 text-ink-soft text-xs">
+                        {new Date(c.issued_at).toLocaleDateString('fr-FR')}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <TicketPrintButton
+                          url={`/api/gift-cards/${c.id}/print`}
+                          pdfUrl={`/api/gift-cards/${c.id}/pdf`}
+                          size="xs"
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
 
     </div>
