@@ -217,8 +217,14 @@ export default function CustomersList({ customers: initialCustomers, total, canW
             que sept mots et rognait d'autant le contenu — elle est passée en
             onglets au-dessus de la fiche. */}
         <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[minmax(240px,1fr)_3fr] md:overflow-hidden">
-        {/* COLONNE 1 — Liste clients */}
-        <aside className="border-r border-border bg-white flex flex-col overflow-hidden">
+        {/* COLONNE 1 — Liste clients. Sur mobile (< md), la liste et la fiche
+            ne peuvent pas tenir empilées sur un seul écran (jusqu'à plus de
+            mille clients) : sélectionner un client obligeait à dérouler toute
+            la liste pour atteindre sa fiche, rendue tout en bas. On bascule
+            donc entre les deux (comme une navigation liste ↔ détail
+            classique en mobile) ; à partir de md, les deux colonnes restent
+            toujours visibles côte à côte, comportement desktop inchangé. */}
+        <aside className={`border-r border-border bg-white flex-col overflow-hidden ${selectedId ? 'hidden md:flex' : 'flex'}`}>
           <div className="p-3 space-y-2 border-b border-border">
             <div className="relative">
               <input
@@ -295,8 +301,10 @@ export default function CustomersList({ customers: initialCustomers, total, canW
           </div>
         </aside>
 
-        {/* COLONNE 2 — Fiche client */}
-        <main className="overflow-y-auto bg-white">
+        {/* COLONNE 2 — Fiche client. Cachée sur mobile tant qu'aucun client
+            n'est sélectionné (la liste seule occupe alors l'écran) ; visible
+            en plein écran dès qu'un client l'est, avec un bouton Retour. */}
+        <main className={`overflow-y-auto bg-white ${selectedId ? 'block' : 'hidden md:block'}`}>
           {!selectedId ? (
             <div className="h-full grid place-items-center p-10">
               <EmptyState
@@ -306,7 +314,15 @@ export default function CustomersList({ customers: initialCustomers, total, canW
               />
             </div>
           ) : loadingDetail || !detail ? (
-            <div className="p-10 text-center text-ink-soft text-sm">Chargement…</div>
+            <div className="p-4">
+              <button
+                onClick={() => { setSelectedId(null); setDetail(null); }}
+                className="md:hidden inline-flex items-center gap-1.5 text-sm font-medium text-ink-soft hover:text-ink"
+              >
+                ← Retour à la liste
+              </button>
+              <div className="text-center text-ink-soft text-sm py-10">Chargement…</div>
+            </div>
           ) : (
             <CustomerDetailContent
               tab={tab}
@@ -315,6 +331,7 @@ export default function CustomersList({ customers: initialCustomers, total, canW
               canWrite={canWrite}
               onEdit={() => setEditing(detail.customer as unknown as CustomerLike)}
               onReload={() => void selectCustomer(detail.customer.id)}
+              onBack={() => { setSelectedId(null); setDetail(null); }}
               onArchived={() => {
                 setTick((t) => t + 1);
                 router.refresh();
@@ -348,10 +365,10 @@ export default function CustomersList({ customers: initialCustomers, total, canW
   );
 }
 
-function CustomerDetailContent({ tab, onTabChange, detail, canWrite, onEdit, onReload, onArchived }: {
+function CustomerDetailContent({ tab, onTabChange, detail, canWrite, onEdit, onReload, onBack, onArchived }: {
   tab: Tab; onTabChange: (t: Tab) => void;
   detail: CustomerDetail; canWrite: boolean;
-  onEdit: () => void; onReload: () => void; onArchived: () => void;
+  onEdit: () => void; onReload: () => void; onBack: () => void; onArchived: () => void;
 }) {
   const c = detail.customer;
   const archived = !!c.archived_at;
@@ -424,22 +441,32 @@ function CustomerDetailContent({ tab, onTabChange, detail, canWrite, onEdit, onR
       {/* Identité et onglets collés en haut : sur les listes longues (tickets,
           achats), on garde sous les yeux de qui l'on parle et par où passer. */}
       <div className="sticky top-0 z-10 bg-white border-b border-border">
-        <div className="px-4 sm:px-6 pt-5 pb-3 flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h2 className="text-xl font-semibold tracking-tight truncate">{display}</h2>
-              {archived && <Badge tone="warning">Archivé</Badge>}
-            </div>
-            <div className="text-sm text-ink-soft mt-0.5">
-              {archived
-                ? <>Fiche archivée le {new Date(c.archived_at!).toLocaleDateString('fr-FR')} — invisible dans les recherches</>
-                : lastVisit
-                ? <>Dernière visite le {new Date(lastVisit).toLocaleDateString('fr-FR')}</>
-                : <>Client depuis le {new Date(c.created_at).toLocaleDateString('fr-FR')}</>
-              }
+        <div className="px-4 sm:px-6 pt-5 pb-3 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+          <div className="min-w-0 flex items-start gap-1">
+            <button
+              onClick={onBack}
+              className="md:hidden shrink-0 h-8 w-8 -ml-1.5 grid place-items-center rounded-lg text-ink-soft hover:bg-gray-100"
+              aria-label="Retour à la liste des clients"
+              title="Retour à la liste"
+            >
+              ←
+            </button>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h2 className="text-xl font-semibold tracking-tight truncate">{display}</h2>
+                {archived && <Badge tone="warning">Archivé</Badge>}
+              </div>
+              <div className="text-sm text-ink-soft mt-0.5">
+                {archived
+                  ? <>Fiche archivée le {new Date(c.archived_at!).toLocaleDateString('fr-FR')} — invisible dans les recherches</>
+                  : lastVisit
+                  ? <>Dernière visite le {new Date(lastVisit).toLocaleDateString('fr-FR')}</>
+                  : <>Client depuis le {new Date(c.created_at).toLocaleDateString('fr-FR')}</>
+                }
+              </div>
             </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2 sm:shrink-0">
             {canWrite && (
               <button onClick={() => void toggleArchive()} disabled={archiving}
                       className="btn-soft text-sm whitespace-nowrap"
