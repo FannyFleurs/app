@@ -9,6 +9,14 @@ export interface IncomingOrderLine {
   tax_rate?: number;
   reference?: string | null;
   message_carte?: string | null;
+  /**
+   * Nom EXACT d'une catégorie HelloPos existante (ex. "Fleurs coupées"),
+   * tel que renseigné sur la fiche produit côté site/OGF. Recherché sans
+   * tenir compte de la casse ni des espaces ; sans correspondance (ou non
+   * fourni), la ligne retombe sur la catégorie "Divers" de l'organisation
+   * — voir resolveCategoryId ci-dessous.
+   */
+  category?: string | null;
 }
 
 export interface IncomingOrderInput {
@@ -56,8 +64,10 @@ function resolvePickupOrDelivery(type: string | null | undefined, hasDelivery: b
  *
  * Idempotent : deux envois avec le même `externalRef` renvoient la même vente.
  * Les lignes sont des prix libres (pas de rattachement produit), avec le taux
- * de TVA par défaut de la boutique (ou le taux imposé par ligne). La commande
- * apparaît dans « En attente » ; le caissier la rappelle et l'encaisse.
+ * de TVA par défaut de la boutique (ou le taux imposé par ligne) et une
+ * catégorie résolue par nom (ou "Divers" à défaut — voir resolveCategoryId),
+ * pour que les exports qui ventilent par famille restent complets. La
+ * commande apparaît dans « En attente » ; le caissier la rappelle et l'encaisse.
  */
 export async function createIncomingOrder(input: IncomingOrderInput): Promise<IncomingOrderResult> {
   return withTransaction(async (client) => {
@@ -129,8 +139,44 @@ export async function createIncomingOrder(input: IncomingOrderInput): Promise<In
       if (m) { defaultCode = m.code; defaultRate = Number(m.rate); }
     }
 
-    // 5. Lignes prix libre.
-    const computed = input.lines.map((l) => {
+    // 5. Catégorie par ligne : nom envoyé par la source -> catégorie existante
+    //    de l'organisation (insensible à la casse/aux espaces). Sans
+    //    correspondance (nom inconnu ou absent), on retombe sur "Divers"
+    //    (créée au besoin) : les exports qui ventilent par famille restent
+    //    complets même si la source envoie un nom pas encore déclaré côté
+    //    HelloPos, plutôt que de laisser la ligne sans aucune catégorie.
+    const catsRes = await client.query<{ id: string; name: string }>(
+      `SELECT id, name FROM product_categories WHERE organization_id = $1`,
+      [input.organizationId],
+    );
+    const categoryByName = new Map<string, string>();
+    for (const r of catsRes.rows) categoryByName.set(r.name.trim().toLowerCase(), r.id);
+    let fallbackCategoryId: string | null = null;
+    async function resolveCategoryId(name: string | null | undefined): Promise<string | null> {
+      const key = (name ?? '').trim().toLowerCase();
+      const found = key ? categoryByName.get(key) : undefined;
+      if (found) return found;
+      if (!fallbackCategoryId) {
+        const existing = await client.query<{ id: string }>(
+          `SELECT id FROM product_categories WHERE organization_id = $1 AND LOWER(TRIM(name)) = 'divers' LIMIT 1`,
+          [input.organizationId],
+        );
+        fallbackCategoryId = existing.rows[0]?.id ?? (
+          await client.query<{ id: string }>(
+            `INSERT INTO product_categories (organization_id, name) VALUES ($1, 'Divers') RETURNING id`,
+            [input.organizationId],
+          )
+        ).rows[0]!.id;
+      }
+      return fallbackCategoryId;
+    }
+    // Séquentiel (pas Promise.all) : la création paresseuse de "Divers" ne
+    // doit pas se produire deux fois en parallèle sur la même transaction.
+    const categoryIds: (string | null)[] = [];
+    for (const l of input.lines) categoryIds.push(await resolveCategoryId(l.category));
+
+    // 6. Lignes prix libre.
+    const computed = input.lines.map((l, i) => {
       const rate = l.tax_rate != null ? Number(l.tax_rate) : defaultRate;
       const code = (l.tax_rate != null && rateToCode.get(rate)) || defaultCode;
       const c = computeLine({
@@ -139,11 +185,14 @@ export async function createIncomingOrder(input: IncomingOrderInput): Promise<In
         discountAmount: 0,
         taxRate: rate,
       });
-      return { ...c, code, label: l.label, reference: l.reference ?? null, message_carte: l.message_carte ?? null };
+      return {
+        ...c, code, label: l.label, reference: l.reference ?? null,
+        message_carte: l.message_carte ?? null, category_id: categoryIds[i] ?? null,
+      };
     });
     const totals = computeTotals(computed);
 
-    // 6. Contexte livraison/retrait rangé dans delivery_info (lu par le ticket).
+    // 7. Contexte livraison/retrait rangé dans delivery_info (lu par le ticket).
     const hasDelivery = !!(input.delivery?.address || input.delivery?.recipient);
     const kind = resolvePickupOrDelivery(input.delivery?.type, hasDelivery);
     const requestedAt = input.delivery?.date ? isoOrNull(input.delivery.date) : null;
@@ -169,7 +218,7 @@ export async function createIncomingOrder(input: IncomingOrderInput): Promise<In
 
     const heldLabel = buildHeldLabel(kind, input.delivery?.date, deliveryInfo.recipient_name);
 
-    // 7. Insertion de la vente en attente + lignes.
+    // 8. Insertion de la vente en attente + lignes.
     let saleId: string;
     try {
       const ins = await client.query<{ id: string }>(
@@ -206,8 +255,9 @@ export async function createIncomingOrder(input: IncomingOrderInput): Promise<In
       await client.query(
         `INSERT INTO sale_lines
            (organization_id, sale_id, line_index, label, unit_price_ttc, quantity,
-            discount_amount, tax_rate, tax_rate_code, line_ht, line_tva, line_ttc, metadata)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb)`,
+            discount_amount, tax_rate, tax_rate_code, line_ht, line_tva, line_ttc, metadata,
+            category_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14)`,
         [
           input.organizationId, saleId, i, c.label, c.unit_price_ttc, c.quantity,
           c.discount_amount, c.tax_rate, c.code, c.line_ht, c.line_tva, c.line_ttc,
@@ -216,6 +266,7 @@ export async function createIncomingOrder(input: IncomingOrderInput): Promise<In
             ...(c.reference ? { reference_article: c.reference } : {}),
             ...(c.message_carte ? { message_carte: c.message_carte } : {}),
           }),
+          c.category_id,
         ],
       );
     }

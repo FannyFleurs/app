@@ -60,7 +60,8 @@ export async function GET(req: Request) {
        FROM sale_lines sl
        JOIN sales s ON s.id = sl.sale_id
        LEFT JOIN products p ON p.id = sl.product_id
-       LEFT JOIN product_categories c ON c.id = p.category_id
+       -- Ligne sans produit (commande web/OGF) : catégorie sl.category_id.
+       LEFT JOIN product_categories c ON c.id = COALESCE(p.category_id, sl.category_id)
       WHERE s.organization_id = $1
         AND s.status = 'validated'
         AND ${DAY} BETWEEN $2::date AND $3::date

@@ -57,7 +57,7 @@ describe('AllPagesOverlay — "Changer de boutique" (pos.roaming_device)', () =>
         onClose={onClose} onLogout={vi.fn()}
       />,
     );
-    fireEvent.click(screen.getAllByText('Changer de boutique')[0]);
+    fireEvent.click(screen.getAllByText('Changer de boutique')[0]!);
 
     expect(onClose).toHaveBeenCalled();
     expect(localStorage.getItem('webpos_roaming_register')).toBeNull();

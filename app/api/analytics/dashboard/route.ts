@@ -259,8 +259,9 @@ export async function GET(req: Request) {
         GROUP BY sl.label ORDER BY SUM(sl.line_ttc) DESC`,
       argsCur,
     ),
-    // Ventes par catégorie (courant) — via le produit rattaché à la ligne.
-    // Une ligne sans produit (prix libre) ou sans catégorie tombe dans
+    // Ventes par catégorie (courant) — via le produit rattaché à la ligne,
+    // ou sl.category_id pour une ligne sans produit (commande web/OGF —
+    // order-intake.ts). Une ligne sans aucune des deux tombe dans
     // « Sans catégorie ».
     query<{ label: string; ttc: string; ht: string }>(
       `SELECT COALESCE(c.name, 'Sans catégorie') AS label,
@@ -268,7 +269,7 @@ export async function GET(req: Request) {
               COALESCE(SUM(sl.line_ht),0)::text  AS ht
          FROM sale_lines sl JOIN sales s ON s.id = sl.sale_id
          LEFT JOIN products p ON p.id = sl.product_id
-         LEFT JOIN product_categories c ON c.id = p.category_id
+         LEFT JOIN product_categories c ON c.id = COALESCE(p.category_id, sl.category_id)
         WHERE s.organization_id = $1 AND s.status = 'validated'
           AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date ${storeSql}
         GROUP BY COALESCE(c.name, 'Sans catégorie') ORDER BY SUM(sl.line_ttc) DESC`,

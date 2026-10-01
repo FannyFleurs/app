@@ -52,13 +52,14 @@ export async function GET(req: Request) {
     vat_rate: string; ht: string;
   }>(
     `SELECT s.store_id, st.name AS store_name,
-            p.category_id, c.name AS category_name,
+            COALESCE(p.category_id, sl.category_id) AS category_id, c.name AS category_name,
             sl.tax_rate::text AS vat_rate,
             SUM(sl.line_ht)::text AS ht
        FROM sale_lines sl
        JOIN sales s ON s.id = sl.sale_id
        LEFT JOIN products p ON p.id = sl.product_id
-       LEFT JOIN product_categories c ON c.id = p.category_id
+       -- Ligne sans produit (commande web/OGF) : catégorie sl.category_id.
+       LEFT JOIN product_categories c ON c.id = COALESCE(p.category_id, sl.category_id)
        LEFT JOIN stores st ON st.id = s.store_id
       WHERE s.organization_id = $1
         AND s.status = 'validated'
@@ -68,7 +69,7 @@ export async function GET(req: Request) {
         -- compte, hors ventilation des ventes.
         AND sl.metadata->>'gift_card' IS DISTINCT FROM 'true'
         ${storeFilter}
-      GROUP BY s.store_id, st.name, p.category_id, c.name, sl.tax_rate`,
+      GROUP BY s.store_id, st.name, COALESCE(p.category_id, sl.category_id), c.name, sl.tax_rate`,
     [g.user.organizationId, from, to, ...storeArgs],
   );
 

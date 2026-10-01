@@ -21,6 +21,9 @@ const schema = z.object({
     tax_rate: z.number().min(0).max(100).optional(),
     reference: z.string().max(120).nullable().optional(),
     message_carte: z.string().max(2000).nullable().optional(),
+    // Nom exact d'une catégorie HelloPos existante (ex. "Fleurs coupées") —
+    // voir resolveCategoryId dans order-intake.ts pour la résolution.
+    category: z.string().max(120).nullable().optional(),
   })).min(1).max(50),
   total_ttc: z.number().optional(),
   client: z.object({
