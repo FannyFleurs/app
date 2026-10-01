@@ -8,6 +8,7 @@ import type { Role, Permission } from '@/lib/auth/rbac';
 import Icon from './Icon';
 import { useBrand } from './BrandMark';
 import { useSchoolMode, activateSchoolMode, deactivateSchoolMode } from '@/lib/school-mode';
+import { clearRoamingChoice } from '@/lib/caisse/roaming';
 
 interface Props {
   role: Role;
@@ -51,6 +52,19 @@ export default function AllPagesOverlay({ role, hiddenPaths, permissions, backOf
       document.body.style.overflow = '';
     };
   }, [onClose]);
+
+  // Poste itinérant (pos.roaming_device) : change de boutique sans lier
+  // l'appareil, sans intervention d'un admin — voir lib/caisse/roaming.ts.
+  // Navigation "dure" (comme le mode école ci-dessus) : on veut que /caisse
+  // redémarre entièrement et redétecte l'état (liaison fixe ou choix
+  // itinérant) depuis zéro, pas une transition client qui garderait l'état
+  // de la session de vente en cours.
+  const canRoam = permissions.has('pos.roaming_device');
+  function changeStore() {
+    clearRoamingChoice();
+    onClose();
+    window.location.assign('/caisse');
+  }
 
   void role; // gardé dans la signature pour compat future
   const visible = SIDEBAR_ITEMS
@@ -134,7 +148,7 @@ export default function AllPagesOverlay({ role, hiddenPaths, permissions, backOf
 
           <section>
             <h2 className="px-1 pb-2 text-sm font-medium text-accent-deep">Outils</h2>
-            <div className="rounded-2xl bg-white border border-border overflow-hidden">
+            <div className="rounded-2xl bg-white border border-border overflow-hidden divide-y divide-border/70">
               <button
                 onClick={toggleSchool}
                 className="w-full flex items-center gap-3 px-3.5 py-3.5 text-left active:bg-gray-50"
@@ -149,6 +163,20 @@ export default function AllPagesOverlay({ role, hiddenPaths, permissions, backOf
                 </span>
                 <Chevron />
               </button>
+              {canRoam && (
+                <button
+                  onClick={changeStore}
+                  className="w-full flex items-center gap-3 px-3.5 py-3.5 text-left active:bg-gray-50"
+                >
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-accent-soft text-accent-deep">
+                    <Icon name="transfer" size={19} />
+                  </span>
+                  <span className="flex-1 min-w-0 font-medium text-ink truncate">
+                    Changer de boutique
+                  </span>
+                  <Chevron />
+                </button>
+              )}
             </div>
           </section>
         </div>
@@ -214,6 +242,19 @@ export default function AllPagesOverlay({ role, hiddenPaths, permissions, backOf
                 Mode école {schoolActive && '· ON'}
               </span>
             </button>
+            {canRoam && (
+              <button
+                onClick={changeStore}
+                className="card p-2 flex flex-col items-center justify-center text-center aspect-[4/3] transition-all hover:shadow-md hover:border-gray-300"
+              >
+                <span className="grid h-8 w-8 place-items-center rounded-lg mb-1 bg-accent-soft text-accent-deep group-hover:scale-105 transition-transform">
+                  <Icon name="transfer" size={18} />
+                </span>
+                <span className="text-[11px] font-medium leading-tight text-ink line-clamp-2">
+                  Changer de boutique
+                </span>
+              </button>
+            )}
           </div>
         </section>
       </div>

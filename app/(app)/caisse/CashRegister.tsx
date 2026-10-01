@@ -15,6 +15,7 @@ import CategoryIcon, { categoryIconDef } from '@/lib/category-icons';
 import { useSchoolMode, isSchoolCustomerId } from '@/lib/school-mode';
 import { tileMetrics, type PosUiSettings } from '@/lib/settings/pos-ui';
 import { confirmThemed } from '@/lib/ui/dialog';
+import { readRoamingChoice, writeRoamingChoice, clearRoamingChoice } from '@/lib/caisse/roaming';
 
 // Modales chargées à la demande : aucune ne s'affiche au premier rendu, donc
 // on les sort du bundle initial de la caisse (temps d'affichage plus court).
@@ -145,29 +146,6 @@ function writeCatalogCache(storeId: string, v: { products: PosProduct[]; categor
  * Résout un article scanné par son code : code principal, SKU, ou l'un des
  * codes-barres supplémentaires (multi-EAN). Insensible à la casse.
  */
-/**
- * Choix de caisse "itinérant" (pos.roaming_device) : mémorisé en LOCAL
- * SEULEMENT, jamais en base — contrairement à la liaison permanente
- * (registers.device_id), ce choix ne lie jamais l'appareil et se change
- * librement via "Changer de boutique", sans intervention d'un admin.
- */
-const ROAMING_KEY = 'webpos_roaming_register';
-function readRoamingChoice(): { storeId: string; registerId: string } | null {
-  try {
-    const raw = localStorage.getItem(ROAMING_KEY);
-    if (!raw) return null;
-    const v = JSON.parse(raw) as { storeId?: string; registerId?: string };
-    if (v.storeId && v.registerId) return { storeId: v.storeId, registerId: v.registerId };
-  } catch { /* stockage indisponible */ }
-  return null;
-}
-function writeRoamingChoice(storeId: string, registerId: string): void {
-  try { localStorage.setItem(ROAMING_KEY, JSON.stringify({ storeId, registerId })); } catch { /* quota */ }
-}
-function clearRoamingChoice(): void {
-  try { localStorage.removeItem(ROAMING_KEY); } catch { /* stockage indisponible */ }
-}
-
 function matchProductByCode(products: PosProduct[], code: string): PosProduct | undefined {
   const c = code.trim();
   if (!c) return undefined;
