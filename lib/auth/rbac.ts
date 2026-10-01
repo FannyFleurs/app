@@ -18,6 +18,15 @@ export const PERMISSIONS = {
   'pos.refund': ['super_admin', 'owner', 'manager'],
   'pos.void_validated_sale': [], // jamais directement : passage par avoir uniquement
   'pos.settings.write': ['super_admin', 'owner', 'manager'],
+  /**
+   * Choisir sa caisse SANS lier l'appareil en permanence (poste itinérant :
+   * un même compte/appareil personnel navigue entre plusieurs boutiques,
+   * sans dépendre d'un admin pour libérer un poste à chaque changement — voir
+   * RegisterPicker/CashRegister). Réservé par défaut à Admin (owner) et
+   * super_admin ; réglable par rôle comme toute autre permission depuis
+   * Paramètres → Permissions par rôle.
+   */
+  'pos.roaming_device': ['super_admin', 'owner'],
   // Produits
   'products.read': ['super_admin', 'owner', 'manager', 'vendeur', 'lecture_seule', 'support_technique'],
   'products.write': ['super_admin', 'owner', 'manager'],

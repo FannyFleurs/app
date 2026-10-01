@@ -99,6 +99,13 @@ interface Props {
   posUi: PosUiSettings;
   /** Si false, le bouton "Commande differee (retrait a date)" est masque. */
   deferredOrdersEnabled: boolean;
+  /** Droit `pos.roaming_device` (Paramètres → Permissions par rôle) : ce
+   *  compte peut choisir sa caisse SANS lier l'appareil en permanence
+   *  (poste itinérant — plusieurs boutiques depuis un même appareil
+   *  personnel, sans intervention d'un admin pour libérer un poste à
+   *  chaque changement). Calculé côté serveur, jamais fait confiance au
+   *  client seul. */
+  canRoam?: boolean;
   /** État initial résolu côté serveur (poste appairé + session ouverte) pour
    *  un 1er rendu sans « Chargement caisse… ». Null si non appairé. */
   initial?: { deviceId: string; storeId: string; registerId: string; sessionId: string | null } | null;
@@ -138,6 +145,29 @@ function writeCatalogCache(storeId: string, v: { products: PosProduct[]; categor
  * Résout un article scanné par son code : code principal, SKU, ou l'un des
  * codes-barres supplémentaires (multi-EAN). Insensible à la casse.
  */
+/**
+ * Choix de caisse "itinérant" (pos.roaming_device) : mémorisé en LOCAL
+ * SEULEMENT, jamais en base — contrairement à la liaison permanente
+ * (registers.device_id), ce choix ne lie jamais l'appareil et se change
+ * librement via "Changer de boutique", sans intervention d'un admin.
+ */
+const ROAMING_KEY = 'webpos_roaming_register';
+function readRoamingChoice(): { storeId: string; registerId: string } | null {
+  try {
+    const raw = localStorage.getItem(ROAMING_KEY);
+    if (!raw) return null;
+    const v = JSON.parse(raw) as { storeId?: string; registerId?: string };
+    if (v.storeId && v.registerId) return { storeId: v.storeId, registerId: v.registerId };
+  } catch { /* stockage indisponible */ }
+  return null;
+}
+function writeRoamingChoice(storeId: string, registerId: string): void {
+  try { localStorage.setItem(ROAMING_KEY, JSON.stringify({ storeId, registerId })); } catch { /* quota */ }
+}
+function clearRoamingChoice(): void {
+  try { localStorage.removeItem(ROAMING_KEY); } catch { /* stockage indisponible */ }
+}
+
 function matchProductByCode(products: PosProduct[], code: string): PosProduct | undefined {
   const c = code.trim();
   if (!c) return undefined;
@@ -150,7 +180,7 @@ function matchProductByCode(products: PosProduct[], code: string): PosProduct | 
 }
 
 export default function CashRegister({
-  stores, registers, taxRates, storeTaxDefaults, currentUser, posUi, deferredOrdersEnabled, initial,
+  stores, registers, taxRates, storeTaxDefaults, currentUser, posUi, deferredOrdersEnabled, initial, canRoam,
 }: Props) {
   const metrics = useMemo(() => tileMetrics(posUi.tile_size), [posUi.tile_size]);
   // Mode école : quand actif, on ne fait AUCUN appel mutant côté serveur.
@@ -182,12 +212,47 @@ export default function CashRegister({
       setStoreId(bound.store_id);
       setRegisterId(bound.id);
       setPickerNeeded(false);
+      return;
+    }
+    // Pas de liaison permanente sur cet appareil : pour un compte itinérant
+    // (pos.roaming_device), un choix précédent — jamais lié, mémorisé en
+    // local uniquement — peut encore tenir (caisse toujours libre). Sinon,
+    // écran de sélection comme pour un poste neuf.
+    const roaming = canRoam ? readRoamingChoice() : null;
+    const stillFree = roaming
+      ? registers.find((r) => r.id === roaming.registerId && !r.device_id)
+      : undefined;
+    if (roaming && stillFree) {
+      setStoreId(roaming.storeId);
+      setRegisterId(roaming.registerId);
+      setPickerNeeded(false);
     } else {
+      if (roaming) clearRoamingChoice(); // caisse reprise par un poste fixe entre-temps
       setStoreId('');
       setRegisterId('');
       setPickerNeeded(true);
     }
-  }, [registers]);
+  }, [registers, canRoam]);
+
+  /** Choix "itinérant" (pos.roaming_device) : jamais une liaison permanente
+   *  en base, jamais d'appel réseau — juste la mémoire locale de l'appareil. */
+  const chooseRoaming = useCallback((sId: string, rId: string) => {
+    writeRoamingChoice(sId, rId);
+    setStoreId(sId);
+    setRegisterId(rId);
+    setPickerNeeded(false);
+  }, []);
+
+  /** Revient à l'écran de choix de boutique, sans toucher à une éventuelle
+   *  liaison permanente d'un autre poste. */
+  const changeStore = useCallback(() => {
+    clearRoamingChoice();
+    setStoreId('');
+    setRegisterId('');
+    setSessionId(null);
+    sessionKnownRef.current = false;
+    setPickerNeeded(true);
+  }, []);
 
   const [sessionId, setSessionId] = useState<string | null>(initial?.sessionId ?? null);
   // Session déjà résolue côté serveur (poste appairé) → pas d'écran de
@@ -1523,11 +1588,13 @@ export default function CashRegister({
         stores={stores}
         registers={registers}
         deviceId={deviceId}
+        canRoam={!!canRoam}
         onBound={(sId, rId) => {
           setStoreId(sId);
           setRegisterId(rId);
           setPickerNeeded(false);
         }}
+        onRoam={chooseRoaming}
       />
     );
   }
@@ -1546,6 +1613,7 @@ export default function CashRegister({
             status={onboarding}
             storeName={currentStore?.name}
             onOpenCaisse={() => setShowOpenSession(true)}
+            onChangeStore={canRoam ? changeStore : undefined}
           />
         ) : (
           <div className="h-full grid place-items-center px-4">
@@ -1578,6 +1646,14 @@ export default function CashRegister({
                 <a href="/ma-journee" className="btn-soft mt-4 w-full h-12 text-base flex items-center justify-center">
                   Voir Ma journée
                 </a>
+              )}
+              {canRoam && (
+                <button
+                  className="mt-4 w-full text-sm text-ink-soft hover:text-ink underline underline-offset-2"
+                  onClick={changeStore}
+                >
+                  Changer de boutique
+                </button>
               )}
             </div>
           </div>

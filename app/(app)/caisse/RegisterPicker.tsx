@@ -17,6 +17,12 @@ interface Props {
   registers: Register[];
   deviceId: string;
   onBound: (storeId: string, registerId: string) => void;
+  /** Droit `pos.roaming_device` : affiche, pour chaque caisse libre, une
+   *  option secondaire "utiliser sans lier" (voir `onRoam`). */
+  canRoam?: boolean;
+  /** Choix "itinérant" : jamais un appel réseau, jamais de liaison — juste
+   *  mémorisé localement sur CET appareil (voir CashRegister.chooseRoaming). */
+  onRoam?: (storeId: string, registerId: string) => void;
 }
 
 /**
@@ -26,8 +32,16 @@ interface Props {
  * avec le nom de l'appareil en cours et un message "Contactez un admin".
  * Le nom du poste (facultatif) aide l'admin a identifier l'appareil
  * dans la liste "Postes connectes" pour eventuellement le liberer.
+ *
+ * Pour un compte itinérant (`canRoam`), chaque caisse LIBRE propose en plus
+ * "Utiliser sans lier cet appareil" : aucune écriture en base, juste un
+ * choix mémorisé sur cet appareil, changeable à tout moment (bouton
+ * "Changer de boutique" dans CashRegister) sans intervention d'un admin.
+ * Une caisse déjà liée à un autre poste reste grisée dans les deux cas —
+ * l'itinérance choisit une caisse LIBRE dédiée, elle n'en partage jamais
+ * une déjà utilisée par un poste fixe.
  */
-export default function RegisterPicker({ stores, registers, deviceId, onBound }: Props) {
+export default function RegisterPicker({ stores, registers, deviceId, onBound, canRoam, onRoam }: Props) {
   const [selected, setSelected] = useState<string | null>(null);
   const [deviceName, setDeviceName] = useState<string>(() => {
     if (typeof window === 'undefined') return '';
@@ -115,19 +129,15 @@ export default function RegisterPicker({ stores, registers, deviceId, onBound }:
                   {regs.map((r) => {
                     const taken = r.device_id && r.device_id !== deviceId;
                     const isSelected = selected === r.id;
-                    return (
-                      <button
-                        key={r.id}
-                        disabled={!!taken || busy}
-                        onClick={() => { setSelected(r.id); void bind(r.id); }}
-                        className={`text-left rounded-xl border p-4 transition ${
-                          taken
-                            ? 'border-border bg-gray-50 opacity-60 cursor-not-allowed'
-                            : isSelected
-                              ? 'border-accent bg-accent-soft'
-                              : 'border-border hover:border-accent hover:bg-accent-soft/40'
-                        }`}
-                      >
+                    const cardCls = `rounded-xl border p-4 transition ${
+                      taken
+                        ? 'border-border bg-gray-50 opacity-60'
+                        : isSelected
+                          ? 'border-accent bg-accent-soft'
+                          : 'border-border'
+                    }`;
+                    const info = (
+                      <>
                         <div className="flex items-baseline gap-2">
                           <span className="font-mono text-xs text-ink-soft">{r.code}</span>
                           <span className="font-medium">{r.name}</span>
@@ -141,6 +151,48 @@ export default function RegisterPicker({ stores, registers, deviceId, onBound }:
                             {busy && isSelected ? 'Liaison en cours…' : 'Disponible'}
                           </div>
                         )}
+                      </>
+                    );
+                    // Compte itinérant : une caisse LIBRE propose les deux
+                    // actions côte à côte (lier en permanence, ou l'utiliser
+                    // sans lier) — jamais sur une caisse déjà prise par un
+                    // autre poste, qui reste grisée dans les deux cas.
+                    if (canRoam && !taken) {
+                      return (
+                        <div key={r.id} className={`text-left ${cardCls}`}>
+                          {info}
+                          <div className="mt-3 flex flex-col gap-1.5">
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => { setSelected(r.id); void bind(r.id); }}
+                              className="btn-soft h-9 text-xs"
+                            >
+                              Lier cet appareil en permanence
+                            </button>
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => onRoam?.(r.store_id, r.id)}
+                              className="btn-primary h-9 text-xs"
+                              title="Choix mémorisé sur cet appareil uniquement — changeable à tout moment, jamais une liaison permanente"
+                            >
+                              Utiliser sans lier (itinérant)
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return (
+                      <button
+                        key={r.id}
+                        disabled={!!taken || busy}
+                        onClick={() => { setSelected(r.id); void bind(r.id); }}
+                        className={`text-left ${cardCls} ${
+                          taken ? 'cursor-not-allowed' : 'hover:border-accent hover:bg-accent-soft/40'
+                        }`}
+                      >
+                        {info}
                       </button>
                     );
                   })}

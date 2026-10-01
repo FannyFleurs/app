@@ -40,4 +40,17 @@ describe('RBAC', () => {
     expect(hasPermission('lecture_seule', 'customers.write')).toBe(false);
     expect(hasPermission('lecture_seule', 'closures.daily')).toBe(false);
   });
+
+  it('poste itinérant (pos.roaming_device) réservé par défaut à Admin (owner) et super_admin', () => {
+    expect(hasPermission('owner', 'pos.roaming_device')).toBe(true);
+    expect(hasPermission('super_admin', 'pos.roaming_device')).toBe(true);
+    // Ni le responsable ni les autres rôles ne l'ont par défaut — un
+    // owner peut l'accorder à un rôle précis depuis Paramètres → Permissions
+    // par rôle, mais ça ne doit jamais être le comportement de base.
+    expect(hasPermission('manager', 'pos.roaming_device')).toBe(false);
+    expect(hasPermission('vendeur', 'pos.roaming_device')).toBe(false);
+    expect(hasPermission('comptable', 'pos.roaming_device')).toBe(false);
+    expect(hasPermission('lecture_seule', 'pos.roaming_device')).toBe(false);
+    expect(hasPermission('support_technique', 'pos.roaming_device')).toBe(false);
+  });
 });

@@ -20,10 +20,15 @@ export default function WelcomeOnboarding({
   status,
   storeName,
   onOpenCaisse,
+  onChangeStore,
 }: {
   status: OnboardingStatus;
   storeName?: string;
   onOpenCaisse: () => void;
+  /** Poste itinérant (pos.roaming_device) uniquement : lien "Changer de
+   *  boutique" — une boutique neuve (aucune vente/catalogue) passe par cet
+   *  écran plutôt que par la carte "Caisse fermée" habituelle. */
+  onChangeStore?: () => void;
 }) {
   const steps = [
     {
@@ -109,6 +114,14 @@ export default function WelcomeOnboarding({
         <button onClick={onOpenCaisse} className="btn-primary mt-6 w-full h-12 text-base">
           Ouvrir ma caisse
         </button>
+        {onChangeStore && (
+          <button
+            onClick={onChangeStore}
+            className="mt-4 w-full text-sm text-ink-soft hover:text-ink underline underline-offset-2"
+          >
+            Changer de boutique
+          </button>
+        )}
       </div>
     </div>
   );

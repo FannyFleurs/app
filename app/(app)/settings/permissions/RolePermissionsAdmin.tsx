@@ -54,6 +54,7 @@ const PERMISSION_LABELS: Record<string, string> = {
   'pos.refund': 'Remboursement / retour',
   'pos.void_validated_sale': 'Annuler une vente validée',
   'pos.settings.write': 'Modifier paramètres caisse',
+  'pos.roaming_device': 'Poste itinérant (changer de boutique sans lier l\'appareil)',
   'products.read': 'Voir le catalogue',
   'products.write': 'Créer / modifier produits',
   'categories.write': 'Gérer les catégories',

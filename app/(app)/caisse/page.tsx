@@ -22,6 +22,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function CaissePage() {
   const user = (await readSessionFromCookie())!;
+  const canRoam = await userCan(user, 'pos.roaming_device');
   if (!(await userCan(user, 'pos.use'))) {
     return (
       <div className="p-8">
@@ -149,6 +150,7 @@ export default async function CaissePage() {
       posUi={posSettings}
       deferredOrdersEnabled={deferredSeed}
       initial={initial}
+      canRoam={canRoam}
       />
     </>
   );
