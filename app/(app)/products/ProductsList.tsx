@@ -234,7 +234,7 @@ export default function ProductsList({
 
   return (
     <div className="flex flex-col md:h-full md:overflow-hidden">
-      <div className="px-6 md:px-8 pt-6 md:pt-8 pb-4 shrink-0 border-b border-border">
+      <div className="px-4 pt-4 pb-3 shrink-0 border-b border-border">
         <PageHeader
           title="Produits"
           subtitle="Articles, packs, services, cartes cadeaux."
@@ -264,7 +264,7 @@ export default function ProductsList({
         <aside className={`border-r border-border bg-white flex-col min-h-0 md:flex md:overflow-hidden ${
           panelOpen ? 'hidden md:flex' : 'flex'
         }`}>
-          <div className="px-4 md:px-3 py-3 border-b border-border space-y-2 shrink-0">
+          <div className="px-3 py-2 border-b border-border space-y-2 shrink-0">
             <div className="flex gap-2">
               <input
                 className="input flex-1"
