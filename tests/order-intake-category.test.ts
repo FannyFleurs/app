@@ -7,12 +7,14 @@ import { createIncomingOrder } from '@/lib/services/order-intake';
  * Catégorie des lignes de commande entrante (web / OGF) : ces lignes sont en
  * prix libre, sans produit rattaché (voir order-intake.ts), donc la
  * catégorie ne peut pas venir d'un product_id — elle est résolue par NOM
- * (celui envoyé par la source) contre les catégories existantes de
- * l'organisation, insensible à la casse/aux espaces. Sans correspondance (ou
- * sans nom fourni), elle retombe sur "Divers" (créée au besoin), pour que les
- * exports qui ventilent par famille restent complets. Intégration contre une
- * VRAIE base Postgres (comme les autres suites d'intégration *-stripe- et
- * *-scoping).
+ * (celui envoyé par la source), sinon par le LIBELLÉ de la ligne lui-même
+ * (utile pour un libellé constant comme "Livraison", qui n'a pas besoin
+ * d'être explicitement catégorisé à chaque commande une fois la catégorie du
+ * même nom créée), contre les catégories existantes de l'organisation,
+ * insensible à la casse/aux espaces. Sans aucune correspondance, elle
+ * retombe sur "Divers" (créée au besoin), pour que les exports qui
+ * ventilent par famille restent complets. Intégration contre une VRAIE base
+ * Postgres (comme les autres suites d'intégration *-stripe- et *-scoping).
  */
 const hasDb = !!process.env.DATABASE_URL;
 
@@ -20,6 +22,7 @@ describe.skipIf(!hasDb)('order-intake — catégorie des lignes web/OGF', () => 
   let organizationId: string;
   let storeId: string;
   let fleursCategoryId: string;
+  let livraisonCategoryId: string;
 
   beforeAll(async () => {
     const org = await query<{ id: string }>(
@@ -54,6 +57,12 @@ describe.skipIf(!hasDb)('order-intake — catégorie des lignes web/OGF', () => 
       [organizationId],
     );
     fleursCategoryId = cat.rows[0]!.id;
+
+    const catLivraison = await query<{ id: string }>(
+      `INSERT INTO product_categories (organization_id, name) VALUES ($1, 'Livraison') RETURNING id`,
+      [organizationId],
+    );
+    livraisonCategoryId = catLivraison.rows[0]!.id;
   });
 
   afterAll(async () => {
@@ -76,6 +85,16 @@ describe.skipIf(!hasDb)('order-intake — catégorie des lignes web/OGF', () => 
     });
     const ids = await lineCategoryIds(res.id);
     expect(ids).toEqual([fleursCategoryId]);
+  });
+
+  it('sans nom de catégorie fourni, une ligne dont le LIBELLÉ correspond à une catégorie existante la rejoint automatiquement', async () => {
+    const res = await createIncomingOrder({
+      organizationId, storeId, externalRef: `ref-${randomUUID()}`,
+      boutiqueLabel: 'Fanny Fleurs', source: 'WEB',
+      lines: [{ label: 'Livraison', amount_ttc: 10.90 }],
+    });
+    const ids = await lineCategoryIds(res.id);
+    expect(ids).toEqual([livraisonCategoryId]);
   });
 
   it('une ligne sans correspondance (nom inconnu) retombe sur "Divers", créée automatiquement', async () => {

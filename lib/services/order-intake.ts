@@ -12,9 +12,13 @@ export interface IncomingOrderLine {
   /**
    * Nom EXACT d'une catégorie HelloPos existante (ex. "Fleurs coupées"),
    * tel que renseigné sur la fiche produit côté site/OGF. Recherché sans
-   * tenir compte de la casse ni des espaces ; sans correspondance (ou non
-   * fourni), la ligne retombe sur la catégorie "Divers" de l'organisation
-   * — voir resolveCategoryId ci-dessous.
+   * tenir compte de la casse ni des espaces. Optionnel : si absent (ou sans
+   * correspondance), on retente avec le LIBELLÉ de la ligne lui-même — utile
+   * pour un libellé constant d'une commande à l'autre (ex. "Livraison") qui
+   * n'a pas besoin d'être explicitement catégorisé à chaque fois une fois la
+   * catégorie du même nom créée. Sans aucune correspondance, la ligne
+   * retombe sur la catégorie "Divers" de l'organisation — voir
+   * resolveCategoryId ci-dessous.
    */
   category?: string | null;
 }
@@ -140,11 +144,15 @@ export async function createIncomingOrder(input: IncomingOrderInput): Promise<In
     }
 
     // 5. Catégorie par ligne : nom envoyé par la source -> catégorie existante
-    //    de l'organisation (insensible à la casse/aux espaces). Sans
-    //    correspondance (nom inconnu ou absent), on retombe sur "Divers"
-    //    (créée au besoin) : les exports qui ventilent par famille restent
-    //    complets même si la source envoie un nom pas encore déclaré côté
-    //    HelloPos, plutôt que de laisser la ligne sans aucune catégorie.
+    //    de l'organisation (insensible à la casse/aux espaces). À défaut, on
+    //    essaie le LIBELLÉ de la ligne lui-même — un libellé toujours identique
+    //    d'une commande à l'autre (ex. "Livraison") correspond logiquement à
+    //    une catégorie du même nom une fois qu'elle existe, sans que la
+    //    source ait besoin de l'envoyer explicitement à chaque fois. Sans
+    //    aucune correspondance, on retombe sur "Divers" (créée au besoin) :
+    //    les exports qui ventilent par famille restent complets même si la
+    //    source envoie un nom pas encore déclaré côté HelloPos, plutôt que de
+    //    laisser la ligne sans aucune catégorie.
     const catsRes = await client.query<{ id: string; name: string }>(
       `SELECT id, name FROM product_categories WHERE organization_id = $1`,
       [input.organizationId],
@@ -152,10 +160,11 @@ export async function createIncomingOrder(input: IncomingOrderInput): Promise<In
     const categoryByName = new Map<string, string>();
     for (const r of catsRes.rows) categoryByName.set(r.name.trim().toLowerCase(), r.id);
     let fallbackCategoryId: string | null = null;
-    async function resolveCategoryId(name: string | null | undefined): Promise<string | null> {
-      const key = (name ?? '').trim().toLowerCase();
-      const found = key ? categoryByName.get(key) : undefined;
-      if (found) return found;
+    async function resolveCategoryId(name: string | null | undefined, label: string): Promise<string | null> {
+      for (const candidate of [name, label]) {
+        const key = (candidate ?? '').trim().toLowerCase();
+        if (key && categoryByName.has(key)) return categoryByName.get(key)!;
+      }
       if (!fallbackCategoryId) {
         const existing = await client.query<{ id: string }>(
           `SELECT id FROM product_categories WHERE organization_id = $1 AND LOWER(TRIM(name)) = 'divers' LIMIT 1`,
@@ -173,7 +182,7 @@ export async function createIncomingOrder(input: IncomingOrderInput): Promise<In
     // Séquentiel (pas Promise.all) : la création paresseuse de "Divers" ne
     // doit pas se produire deux fois en parallèle sur la même transaction.
     const categoryIds: (string | null)[] = [];
-    for (const l of input.lines) categoryIds.push(await resolveCategoryId(l.category));
+    for (const l of input.lines) categoryIds.push(await resolveCategoryId(l.category, l.label));
 
     // 6. Lignes prix libre.
     const computed = input.lines.map((l, i) => {
