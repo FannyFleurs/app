@@ -7,6 +7,7 @@ import Badge from '@/components/Badge';
 import EmptyState from '@/components/EmptyState';
 import BankDepositModal from './BankDepositModal';
 import { promptThemed, confirmThemed } from '@/lib/ui/dialog';
+import { readRoamingChoice } from '@/lib/caisse/roaming';
 
 // Seuls ces modes se réconcilient à la clôture : espèces (comptées au tiroir),
 // CB et chèques. Les autres (carte cadeau, différé, virement, avoir…) ne se
@@ -65,6 +66,25 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
   userName?: string;
 }) {
   const [storeId, setStoreId] = useState(defaultStoreId || stores[0]?.id || '');
+
+  /**
+   * Poste itinérant (pos.roaming_device) : le serveur ne connaît que la
+   * liaison PERMANENTE d'un appareil (registers.device_id — voir
+   * resolveDeviceStoreId) ; sans elle, `defaultStoreId` retombait sur la 1re
+   * boutique de l'organisation, jamais celle réellement choisie en itinérant
+   * (mémorisée seulement en localStorage — voir lib/caisse/roaming.ts). Filet
+   * de sécurité ici, quel que soit le chemin d'arrivée sur /closures (le lien
+   * « Fermer ma caisse » de Ma journée transmet déjà le bon store_id en
+   * query, mais ce n'est pas la seule porte d'entrée possible).
+   */
+  useEffect(() => {
+    const roamingStoreId = readRoamingChoice()?.storeId;
+    if (roamingStoreId && roamingStoreId !== storeId && stores.some((s) => s.id === roamingStoreId)) {
+      setStoreId(roamingStoreId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const [date] = useState(new Date().toISOString().slice(0, 10));
   const [preview, setPreview] = useState<PreviewData | null>(initialPreview ?? null);
   const [denomCount, setDenomCount] = useState<Record<string, number>>({});

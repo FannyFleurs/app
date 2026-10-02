@@ -7,7 +7,11 @@ import ClosuresAdmin from './ClosuresAdmin';
 
 export const dynamic = 'force-dynamic';
 
-export default async function ClosuresPage() {
+export default async function ClosuresPage({
+  searchParams,
+}: {
+  searchParams?: { store_id?: string };
+}) {
   const user = (await readSessionFromCookie())!;
   if (!(await userCan(user, 'closures.daily'))) {
     return <div className="p-8">Accès refusé.</div>;
@@ -22,8 +26,17 @@ export default async function ClosuresPage() {
     [user.organizationId],
   );
 
-  // Clôture de la boutique du POSTE (caisse appairée), sinon 1re boutique.
-  const defaultStoreId = (await resolveDeviceStoreId(user.organizationId)) ?? stores.rows[0]?.id ?? '';
+  // Boutique explicite (ex. poste itinérant — lien depuis « Ma journée », voir
+  // MaJourneeClient.tsx) en priorité ; sinon celle du POSTE (caisse appairée) ;
+  // sinon la 1re boutique. `resolveDeviceStoreId` ne connaît que la liaison
+  // PERMANENTE d'un appareil (registers.device_id) — jamais le choix
+  // itinérant, mémorisé seulement en localStorage côté client (voir
+  // lib/caisse/roaming.ts) — d'où ce paramètre explicite en repli.
+  const requestedStoreId = searchParams?.store_id;
+  const requestedStoreValid = !!requestedStoreId && stores.rows.some((s) => s.id === requestedStoreId);
+  const defaultStoreId = (requestedStoreValid ? requestedStoreId : null)
+    ?? (await resolveDeviceStoreId(user.organizationId))
+    ?? stores.rows[0]?.id ?? '';
   const today = new Date().toISOString().slice(0, 10);
   // Rendu SERVEUR de l'aperçu : la page arrive déjà remplie (pas de fetch
   // client à peindre après coup, qui restait bloqué sur certains desktop).

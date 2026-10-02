@@ -135,6 +135,11 @@ export default function MaJourneeClient() {
    * arbitraire (la première accessible) — pas forcément celle choisie.
    */
   const roamingStoreId = useMemo(() => readRoamingChoice()?.storeId ?? null, []);
+  // Même raison : sans cela, « Fermer ma caisse » envoyait un poste itinérant
+  // vers /closures qui retombait sur resolveDeviceStoreId (null pour lui) puis
+  // la 1re boutique de l'organisation — jamais celle réellement choisie, avec
+  // à la clé une confirmation de clôture DÉJÀ FAITE sur une autre boutique.
+  const closuresHref = roamingStoreId ? `/closures?store_id=${encodeURIComponent(roamingStoreId)}` : '/closures';
 
   // Impression DIRECTE du X sur l'imprimante ticket (comme le Z). Repli sur le
   // PDF uniquement si aucune imprimante ticket n'est configurée. On envoie
@@ -460,13 +465,13 @@ export default function MaJourneeClient() {
           <div className="flex-1" />
 
           {sealedAt ? (
-            <a href="/closures"
+            <a href={closuresHref}
                className="btn-soft h-12 rounded-2xl flex items-center justify-center gap-2 text-sm"
                title="La journée est déjà clôturée — réimprimer le Z ou réouvrir la journée">
               Journée clôturée — réouvrir / réimprimer le Z
             </a>
           ) : (
-            <a href="/closures"
+            <a href={closuresHref}
                className="btn-primary h-12 rounded-2xl flex items-center justify-center gap-2 text-sm font-semibold">
               <Icon name="lock" size={16} /> Fermer ma caisse
             </a>
