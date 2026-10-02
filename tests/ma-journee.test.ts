@@ -121,3 +121,25 @@ describe('Composition de l\'écran', () => {
     expect(page).toContain('Imprimer le X');
   });
 });
+
+describe('Poste itinérant — scope boutique de « Ma journée »', () => {
+  const page = readFileSync('app/(app)/ma-journee/MaJourneeClient.tsx', 'utf8');
+
+  /**
+   * Un poste itinérant (pos.roaming_device) ne lie jamais son device à une
+   * caisse (lib/caisse/roaming.ts) : le serveur ne peut donc pas déduire sa
+   * boutique comme il le fait pour un poste lié en permanence
+   * (resolveDeviceStoreId, basé sur registers.device_id). Sans transmettre
+   * le choix explicitement, les ventes remontaient de TOUTES les boutiques
+   * et le rapport X tombait sur une boutique arbitraire.
+   */
+  it('lit le choix itinérant et le transmet à chaque appel qui scope par boutique', () => {
+    expect(page).toContain("import { readRoamingChoice } from '@/lib/caisse/roaming'");
+    expect(page).toMatch(/readRoamingChoice\(\)\?\.storeId/);
+    // Les trois appels qui doivent recevoir store_id pour ne pas retomber sur
+    // le repli "toutes boutiques" / "boutique arbitraire".
+    expect(page).toMatch(/fetch\(`\/api\/sales\/today\?date=\$\{date\}\$\{storeQ\}`\)/);
+    expect(page).toMatch(/fetch\(`\/api\/sales\/today\?date=\$\{iso\}\$\{storeQ\}`\)/);
+    expect(page).toMatch(/fetch\(`\/api\/reports\/day\?date=\$\{date\}\$\{storeQ\}`\)/);
+  });
+});

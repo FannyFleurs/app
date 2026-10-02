@@ -18,6 +18,7 @@ import GiftReceiptPickerModal from '@/components/GiftReceiptPickerModal';
 import type { DayReport } from '@/lib/services/day-report';
 import { promptThemed } from '@/lib/ui/dialog';
 import { printReceipt } from '@/lib/pos/receipt-print';
+import { readRoamingChoice } from '@/lib/caisse/roaming';
 
 interface Sale {
   id: string; receipt_number: string;
@@ -124,6 +125,17 @@ export default function MaJourneeClient() {
   // explicitement à l'impression du X → verrouillage sur la bonne boutique.
   const [reportStoreId, setReportStoreId] = useState<string | null>(null);
 
+  /**
+   * Poste itinérant (pos.roaming_device) : la boutique choisie n'existe qu'en
+   * localStorage (jamais en base, jamais dans le cookie device — voir
+   * lib/caisse/roaming.ts), donc le serveur ne peut pas la déduire seul comme
+   * il le fait pour un poste lié en permanence. Sans la transmettre
+   * explicitement : les ventes remontaient de TOUTES les boutiques (repli
+   * d'un poste non appairé) et le rapport X tombait sur une boutique
+   * arbitraire (la première accessible) — pas forcément celle choisie.
+   */
+  const roamingStoreId = useMemo(() => readRoamingChoice()?.storeId ?? null, []);
+
   // Impression DIRECTE du X sur l'imprimante ticket (comme le Z). Repli sur le
   // PDF uniquement si aucune imprimante ticket n'est configurée. On envoie
   // TOUJOURS le store_id de la boutique affichée (pas de résolution implicite).
@@ -148,7 +160,8 @@ export default function MaJourneeClient() {
   function reloadDay(clearSelection = true) {
     setLoading(true);
     if (clearSelection) { setSelected(null); setDetail(null); }
-    fetch(`/api/sales/today?date=${date}`)
+    const storeQ = roamingStoreId ? `&store_id=${encodeURIComponent(roamingStoreId)}` : '';
+    fetch(`/api/sales/today?date=${date}${storeQ}`)
       .then((r) => r.json())
       .then((j) => {
         setSales(j.sales ?? []);
@@ -232,7 +245,8 @@ export default function MaJourneeClient() {
     veilleDate.setDate(veilleDate.getDate() - 1);
     const iso = veilleDate.toISOString().slice(0, 10);
     setVeille(null);
-    void fetch(`/api/sales/today?date=${iso}`)
+    const storeQ = roamingStoreId ? `&store_id=${encodeURIComponent(roamingStoreId)}` : '';
+    void fetch(`/api/sales/today?date=${iso}${storeQ}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
         if (!j) return;
@@ -254,7 +268,8 @@ export default function MaJourneeClient() {
   useEffect(() => {
     setLoadingReport(true);
     setDayReport(null);
-    void fetch(`/api/reports/day?date=${date}`)
+    const storeQ = roamingStoreId ? `&store_id=${encodeURIComponent(roamingStoreId)}` : '';
+    void fetch(`/api/reports/day?date=${date}${storeQ}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
         if (j?.report) setDayReport(j.report as DayReport);

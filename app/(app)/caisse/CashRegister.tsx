@@ -1649,6 +1649,12 @@ export default function CashRegister({
   }
 
   const showingProducts = searchQ.length > 0 || view.kind === 'products';
+  // Poste itinérant (pos.roaming_device) uniquement : aucune caisse fixe ne
+  // porte ce repère (son écran ne change jamais de boutique), mais un compte
+  // itinérant navigue d'une boutique à l'autre sans liaison permanente — un
+  // rappel visuel de "où" on est évite d'encaisser par erreur dans la
+  // mauvaise boutique après un changement.
+  const roamingStoreName = canRoam ? (stores.find((s) => s.id === storeId)?.name ?? null) : null;
 
   return (
     <div
@@ -1806,6 +1812,17 @@ export default function CashRegister({
             />
           )}
         </div>
+
+        {/* Repère boutique, poste itinérant uniquement : voir roamingStoreName. */}
+        {roamingStoreName && (
+          <div
+            className="absolute bottom-3 left-3 z-20 inline-flex items-center gap-1.5 rounded-full bg-white shadow-md border border-border px-3 py-1.5 text-xs font-medium text-ink-soft pointer-events-none"
+            role="status"
+          >
+            <Icon name="transfer" size={12} />
+            <span>{roamingStoreName}</span>
+          </div>
+        )}
       </div>
 
       {/* Badge sync flottant : apparaît brièvement en haut à droite quand
