@@ -46,10 +46,21 @@ describe.skipIf(!hasDb)('order-intake — catégorie des lignes web/OGF', () => 
        VALUES ($1, $2, 'x', 'Testeur', 'owner')`,
       [organizationId, `oic-${randomUUID()}@example.test`],
     );
+    const tva20 = await query<{ id: string }>(
+      `INSERT INTO tax_rates (organization_id, code, label, rate, is_default)
+       VALUES ($1, 'TVA20', '20%', 20, TRUE) RETURNING id`,
+      [organizationId],
+    );
     await query(
       `INSERT INTO tax_rates (organization_id, code, label, rate, is_default)
-       VALUES ($1, 'TVA20', '20%', 20, TRUE)`,
+       VALUES ($1, 'TVA10', '10%', 10, FALSE)`,
       [organizationId],
+    );
+    // Taux par défaut DE LA BOUTIQUE (ex. 10 % — produits floraux) distinct du
+    // taux par défaut de l'organisation (20 %) — voir /api/settings/tva.
+    await query(
+      `INSERT INTO settings (organization_id, key, value) VALUES ($1, $2, $3::jsonb)`,
+      [organizationId, `tax:${storeId}`, JSON.stringify({ default_code: 'TVA10' })],
     );
 
     const cat = await query<{ id: string }>(
@@ -58,9 +69,13 @@ describe.skipIf(!hasDb)('order-intake — catégorie des lignes web/OGF', () => 
     );
     fleursCategoryId = cat.rows[0]!.id;
 
+    // "Livraison" porte son propre taux par défaut (20 %, standard) distinct
+    // du taux de la boutique (10 %, réduit pour les fleurs) : la livraison
+    // n'est pas de la fleur, elle ne doit pas hériter du taux boutique.
     const catLivraison = await query<{ id: string }>(
-      `INSERT INTO product_categories (organization_id, name) VALUES ($1, 'Livraison') RETURNING id`,
-      [organizationId],
+      `INSERT INTO product_categories (organization_id, name, default_tax_rate_id)
+       VALUES ($1, 'Livraison', $2) RETURNING id`,
+      [organizationId, tva20.rows[0]!.id],
     );
     livraisonCategoryId = catLivraison.rows[0]!.id;
   });
@@ -75,6 +90,14 @@ describe.skipIf(!hasDb)('order-intake — catégorie des lignes web/OGF', () => 
       [saleId],
     );
     return r.rows.map((row) => row.category_id);
+  }
+
+  async function lineTaxRates(saleId: string): Promise<number[]> {
+    const r = await query<{ tax_rate: string }>(
+      `SELECT tax_rate::text FROM sale_lines WHERE sale_id = $1 ORDER BY line_index`,
+      [saleId],
+    );
+    return r.rows.map((row) => Number(row.tax_rate));
   }
 
   it('une ligne dont la catégorie correspond exactement (casse/espaces près) est rattachée à cette catégorie', async () => {
@@ -95,6 +118,38 @@ describe.skipIf(!hasDb)('order-intake — catégorie des lignes web/OGF', () => 
     });
     const ids = await lineCategoryIds(res.id);
     expect(ids).toEqual([livraisonCategoryId]);
+  });
+
+  it('une ligne sans taux imposé prend le taux par défaut DE SA CATÉGORIE, pas celui de la boutique', async () => {
+    // Boutique à 10 % (fleurs), "Livraison" configurée à 20 % (standard) —
+    // la ligne ne doit pas hériter du taux boutique.
+    const res = await createIncomingOrder({
+      organizationId, storeId, externalRef: `ref-${randomUUID()}`,
+      boutiqueLabel: 'Fanny Fleurs', source: 'WEB',
+      lines: [{ label: 'Livraison', amount_ttc: 10.90 }],
+    });
+    const rates = await lineTaxRates(res.id);
+    expect(rates).toEqual([20]);
+  });
+
+  it('une catégorie sans taux par défaut configuré laisse la ligne au taux boutique', async () => {
+    const res = await createIncomingOrder({
+      organizationId, storeId, externalRef: `ref-${randomUUID()}`,
+      boutiqueLabel: 'Fanny Fleurs', source: 'WEB',
+      lines: [{ label: 'Bouquet rond', amount_ttc: 35, category: 'Fleurs coupées' }],
+    });
+    const rates = await lineTaxRates(res.id);
+    expect(rates).toEqual([10]);
+  });
+
+  it('un taux explicitement envoyé par la ligne l\'emporte toujours, même sur le défaut de sa catégorie', async () => {
+    const res = await createIncomingOrder({
+      organizationId, storeId, externalRef: `ref-${randomUUID()}`,
+      boutiqueLabel: 'Fanny Fleurs', source: 'WEB',
+      lines: [{ label: 'Livraison', amount_ttc: 10.90, tax_rate: 5.5 }],
+    });
+    const rates = await lineTaxRates(res.id);
+    expect(rates).toEqual([5.5]);
   });
 
   it('une ligne sans correspondance (nom inconnu) retombe sur "Divers", créée automatiquement', async () => {

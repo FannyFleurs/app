@@ -5,7 +5,12 @@ export interface IncomingOrderLine {
   label: string;
   amount_ttc: number;
   quantity?: number;
-  /** Taux TVA % imposé par l'app commande ; sinon taux par défaut de la boutique. */
+  /**
+   * Taux TVA % imposé par l'app commande. Sinon : le taux par défaut DE LA
+   * CATÉGORIE résolue pour la ligne, s'il en a un configuré (fiche
+   * catégorie — ex. "Livraison" à 20 % même dans une boutique à 10 %) ;
+   * sinon le taux par défaut de la boutique.
+   */
   tax_rate?: number;
   reference?: string | null;
   message_carte?: string | null;
@@ -67,11 +72,13 @@ function resolvePickupOrDelivery(type: string | null | undefined, hasDelivery: b
  * de la bonne boutique, sans session de caisse (elle sera liée à l'encaissement).
  *
  * Idempotent : deux envois avec le même `externalRef` renvoient la même vente.
- * Les lignes sont des prix libres (pas de rattachement produit), avec le taux
- * de TVA par défaut de la boutique (ou le taux imposé par ligne) et une
- * catégorie résolue par nom (ou "Divers" à défaut — voir resolveCategoryId),
- * pour que les exports qui ventilent par famille restent complets. La
- * commande apparaît dans « En attente » ; le caissier la rappelle et l'encaisse.
+ * Les lignes sont des prix libres (pas de rattachement produit). Chaque ligne
+ * reçoit une catégorie, résolue par nom ou par libellé (ou "Divers" à défaut
+ * — voir resolveCategoryId), pour que les exports qui ventilent par famille
+ * restent complets ; et un taux de TVA résolu par priorité : imposé par la
+ * ligne, sinon défaut de cette catégorie si elle en a un, sinon défaut
+ * boutique. La commande apparaît dans « En attente » ; le caissier la rappelle
+ * et l'encaisse.
  */
 export async function createIncomingOrder(input: IncomingOrderInput): Promise<IncomingOrderResult> {
   return withTransaction(async (client) => {
@@ -153,12 +160,26 @@ export async function createIncomingOrder(input: IncomingOrderInput): Promise<In
     //    les exports qui ventilent par famille restent complets même si la
     //    source envoie un nom pas encore déclaré côté HelloPos, plutôt que de
     //    laisser la ligne sans aucune catégorie.
-    const catsRes = await client.query<{ id: string; name: string }>(
-      `SELECT id, name FROM product_categories WHERE organization_id = $1`,
+    const catsRes = await client.query<{
+      id: string; name: string; default_tax_rate: string | null; default_tax_code: string | null;
+    }>(
+      `SELECT c.id, c.name, tr.rate::text AS default_tax_rate, tr.code AS default_tax_code
+         FROM product_categories c
+         LEFT JOIN tax_rates tr ON tr.id = c.default_tax_rate_id
+        WHERE c.organization_id = $1`,
       [input.organizationId],
     );
     const categoryByName = new Map<string, string>();
-    for (const r of catsRes.rows) categoryByName.set(r.name.trim().toLowerCase(), r.id);
+    // Taux de TVA par défaut DE LA CATÉGORIE (fiche catégorie, migration 0078)
+    // — ex. "Livraison" à 20 % alors que la boutique vend des fleurs à 10 %.
+    // Utilisé seulement si la ligne n'impose pas déjà son propre taux.
+    const categoryDefaultTax = new Map<string, { rate: number; code: string }>();
+    for (const r of catsRes.rows) {
+      categoryByName.set(r.name.trim().toLowerCase(), r.id);
+      if (r.default_tax_rate != null && r.default_tax_code != null) {
+        categoryDefaultTax.set(r.id, { rate: Number(r.default_tax_rate), code: r.default_tax_code });
+      }
+    }
     let fallbackCategoryId: string | null = null;
     async function resolveCategoryId(name: string | null | undefined, label: string): Promise<string | null> {
       for (const candidate of [name, label]) {
@@ -184,10 +205,15 @@ export async function createIncomingOrder(input: IncomingOrderInput): Promise<In
     const categoryIds: (string | null)[] = [];
     for (const l of input.lines) categoryIds.push(await resolveCategoryId(l.category, l.label));
 
-    // 6. Lignes prix libre.
+    // 6. Lignes prix libre. Taux de TVA : celui imposé par la ligne en
+    //    priorité, sinon le défaut DE LA CATÉGORIE résolue si elle en a un,
+    //    sinon le défaut boutique/organisation.
     const computed = input.lines.map((l, i) => {
-      const rate = l.tax_rate != null ? Number(l.tax_rate) : defaultRate;
-      const code = (l.tax_rate != null && rateToCode.get(rate)) || defaultCode;
+      const categoryTax = categoryDefaultTax.get(categoryIds[i] ?? '');
+      const rate = l.tax_rate != null ? Number(l.tax_rate) : (categoryTax?.rate ?? defaultRate);
+      const code = l.tax_rate != null
+        ? (rateToCode.get(rate) || defaultCode)
+        : (categoryTax?.code ?? defaultCode);
       const c = computeLine({
         unitPriceTtc: Number(l.amount_ttc),
         quantity: l.quantity != null ? Number(l.quantity) : 1,
