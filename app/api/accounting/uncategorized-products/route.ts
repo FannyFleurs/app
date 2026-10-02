@@ -100,6 +100,11 @@ export async function GET(req: Request) {
          JOIN sales s ON s.id = sl.sale_id
         WHERE ${where}
           AND sl.product_id IS NULL
+          -- Une ligne déjà rangée (ex. commande web/OGF catégorisée par
+          -- order-intake.ts) n'est plus « sans famille » : son croisement
+          -- (coverage/accounts) la compte déjà ailleurs, elle ne doit pas
+          -- réapparaître ici à rattacher une seconde fois.
+          AND sl.category_id IS NULL
         GROUP BY sl.label
         ORDER BY SUM(sl.line_ht) DESC, sl.label`,
       base,

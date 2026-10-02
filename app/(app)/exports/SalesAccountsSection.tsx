@@ -490,8 +490,10 @@ function ArticlesModal({ crossing, categories, canAssignFamily, from, to, onClos
   const [freeLines, setFreeLines] = useState<FreeLine[]>([]);
   const [done, setDone] = useState<Record<string, string>>({});
   const [linked, setLinked] = useState<Record<string, string>>({});
+  const [categorized, setCategorized] = useState<Record<string, string>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
   const [linkingLabel, setLinkingLabel] = useState<string | null>(null);
+  const [categorizingLabel, setCategorizingLabel] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -538,6 +540,23 @@ function ArticlesModal({ crossing, categories, canAssignFamily, from, to, onClos
       return;
     }
     setLinked((d) => ({ ...d, [f.label]: f.suggestion!.category_name ?? f.suggestion!.name }));
+    onChanged();
+  }
+
+  async function categorize(f: FreeLine, categoryId: string) {
+    if (!categoryId) return;
+    setCategorizingLabel(f.label); setError(null);
+    const res = await fetch('/api/accounting/categorize-free-lines', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label: f.label, category_id: categoryId }),
+    }).catch(() => null);
+    setCategorizingLabel(null);
+    if (!res || !res.ok) {
+      setError('Attribution impossible. Réessayez.');
+      return;
+    }
+    setCategorized((d) => ({ ...d, [f.label]: categories.find((c) => c.id === categoryId)?.name ?? 'Famille' }));
     onChanged();
   }
 
@@ -630,21 +649,24 @@ function ArticlesModal({ crossing, categories, canAssignFamily, from, to, onClos
             )}
 
             {/* Ventes saisies au prix (product_id nul). Si un article du même nom
-                existe, on relie la ligne à cet article : la famille suit. */}
+                existe, on relie la ligne à cet article : la famille suit. Sinon
+                (ou en plus), on pose directement une famille sur la ligne — seule
+                option pour un libellé qui ne sera jamais un article (livraison…). */}
             {freeLines.length > 0 && (
               <div className="space-y-1.5">
                 <h3 className="text-sm font-semibold">Ventes saisies au prix</h3>
                 <p className="text-xs text-ink-soft">
                   Ces ventes n&apos;ont pas été passées par la fiche article, elles n&apos;en
-                  connaissent donc pas la famille. Rattachez-les à l&apos;article du même nom :
-                  la famille suivra, ici et dans les stats de l&apos;article. Le rattachement
-                  vaut pour toutes les ventes de ce libellé.
+                  connaissent donc pas la famille. Rattachez-les à l&apos;article du même nom
+                  (la famille suivra aussi dans les stats de l&apos;article), ou choisissez une
+                  famille directement — utile pour une ligne qui ne sera jamais un article
+                  (ex. frais de livraison). Vaut pour toutes les ventes de ce libellé.
                 </p>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm border-collapse">
                     <thead>
                       <tr className="text-[11px] uppercase tracking-wider text-ink-soft border-b border-border">
-                        <Th>Libellé</Th><Th>Quantité</Th><Th>CA HT</Th><Th>Article</Th>
+                        <Th>Libellé</Th><Th>Quantité</Th><Th>CA HT</Th><Th>Famille</Th>
                       </tr>
                     </thead>
                     <tbody>
@@ -656,19 +678,33 @@ function ArticlesModal({ crossing, categories, canAssignFamily, from, to, onClos
                           <Td>
                             {linked[f.label] ? (
                               <span className="text-success text-xs">✓ Rattaché ({linked[f.label]})</span>
-                            ) : !f.suggestion ? (
-                              <span className="text-ink-soft text-xs italic">Aucun article de ce nom</span>
+                            ) : categorized[f.label] ? (
+                              <span className="text-success text-xs">✓ Rangé dans {categorized[f.label]}</span>
                             ) : canAssignFamily ? (
-                              <button
-                                className="btn-soft text-xs h-8 px-3 whitespace-nowrap"
-                                disabled={linkingLabel === f.label}
-                                onClick={() => void link(f)}>
-                                {linkingLabel === f.label
-                                  ? 'Rattachement…'
-                                  : `Rattacher${f.suggestion.category_name ? ` · ${f.suggestion.category_name}` : ' (article sans famille)'}`}
-                              </button>
+                              <div className="flex flex-col items-start gap-1">
+                                {f.suggestion && (
+                                  <button
+                                    className="btn-soft text-xs h-8 px-3 whitespace-nowrap"
+                                    disabled={linkingLabel === f.label}
+                                    onClick={() => void link(f)}>
+                                    {linkingLabel === f.label
+                                      ? 'Rattachement…'
+                                      : `Rattacher · ${f.suggestion.category_name ? f.suggestion.category_name : 'article sans famille'}`}
+                                  </button>
+                                )}
+                                <select className="input h-8 text-xs" defaultValue=""
+                                        disabled={categorizingLabel === f.label}
+                                        onChange={(e) => void categorize(f, e.target.value)}>
+                                  <option value="" disabled>
+                                    {f.suggestion ? 'ou choisir une famille…' : 'Choisir une famille…'}
+                                  </option>
+                                  {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                </select>
+                              </div>
                             ) : (
-                              <span className="text-ink-soft text-xs">{f.suggestion.name}</span>
+                              <span className="text-ink-soft text-xs italic">
+                                {f.suggestion ? f.suggestion.name : 'Aucun article de ce nom'}
+                              </span>
                             )}
                           </Td>
                         </tr>
