@@ -2,12 +2,15 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 
 /**
- * Repère visuel « quelle boutique » en caisse, pour un poste itinérant
- * (pos.roaming_device) uniquement : un poste lié en permanence ne change
- * jamais de boutique, il n'a donc pas besoin de ce rappel — un compte
- * itinérant, si, pour éviter d'encaisser par erreur dans la mauvaise
- * boutique après un changement. Affiché en bas à gauche du bloc tuiles
- * catégories (app/(app)/caisse/CashRegister.tsx).
+ * Repère visuel « quelle boutique » en caisse, pour une SESSION itinérante
+ * en cours (isRoamingSession) uniquement : un poste lié en permanence ne
+ * change jamais de boutique, il n'a donc pas besoin de ce rappel — même un
+ * compte qui A la permission pos.roaming_device (ex. owner) mais travaille
+ * ce jour-là sur un poste lié en permanence ne doit pas le voir. C'est
+ * `isRoamingSession` (choix itinérant réellement actif) qui gate l'affichage,
+ * pas `canRoam` (simple permission) — sinon un owner voit le badge même sur
+ * une caisse fixe. Affiché en bas à gauche du bloc tuiles catégories
+ * (app/(app)/caisse/CashRegister.tsx).
  *
  * CashRegister.tsx est un très gros composant client, sans rendu complet en
  * test (voir tests/ma-journee.test.ts pour le même choix) : on vérifie la
@@ -16,10 +19,16 @@ import { readFileSync } from 'node:fs';
 describe('Caisse — repère boutique pour poste itinérant', () => {
   const page = readFileSync('app/(app)/caisse/CashRegister.tsx', 'utf8');
 
-  it("n'existe QUE pour un compte itinérant (canRoam), jamais pour un poste lié en permanence", () => {
+  it("n'existe QUE pendant une session itinérante active (isRoamingSession), jamais pour un poste lié en permanence", () => {
     expect(page).toMatch(
-      /const roamingStoreName = canRoam \? \(stores\.find\(\(s\) => s\.id === storeId\)\?\.name \?\? null\) : null;/,
+      /const roamingStoreName = isRoamingSession \? \(stores\.find\(\(s\) => s\.id === storeId\)\?\.name \?\? null\) : null;/,
     );
+    // isRoamingSession passe à true UNIQUEMENT dans la branche "choix
+    // itinérant encore valide" de l'effet d'ouverture, et dans chooseRoaming
+    // — jamais dans la branche "poste lié en permanence" (bound).
+    expect(page).toMatch(/setIsRoamingSession\(true\);/);
+    const boundBranch = page.match(/if \(bound\) \{[\s\S]*?setIsRoamingSession\(false\);[\s\S]*?return;\s*\}/);
+    expect(boundBranch).not.toBeNull();
   });
 
   it('affiche le nom de la boutique courante, ancré au bloc catalogue (pas plein écran)', () => {

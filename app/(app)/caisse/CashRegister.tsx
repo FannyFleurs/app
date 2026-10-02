@@ -177,6 +177,11 @@ export default function CashRegister({
   const [storeId, setStoreId] = useState<string>(initial?.storeId ?? '');
   const [registerId, setRegisterId] = useState<string>(initial?.registerId ?? '');
   const [pickerNeeded, setPickerNeeded] = useState(false);
+  // true SEULEMENT quand cet appareil utilise un choix itinérant (pas de
+  // liaison permanente) — jamais pour un compte qui a juste la permission
+  // pos.roaming_device mais travaille sur un poste lié en permanence. Sert
+  // uniquement au repère visuel "quelle boutique" (voir roamingStoreName).
+  const [isRoamingSession, setIsRoamingSession] = useState(false);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -190,6 +195,7 @@ export default function CashRegister({
       setStoreId(bound.store_id);
       setRegisterId(bound.id);
       setPickerNeeded(false);
+      setIsRoamingSession(false);
       return;
     }
     // Pas de liaison permanente sur cet appareil : pour un compte itinérant
@@ -204,11 +210,13 @@ export default function CashRegister({
       setStoreId(roaming.storeId);
       setRegisterId(roaming.registerId);
       setPickerNeeded(false);
+      setIsRoamingSession(true);
     } else {
       if (roaming) clearRoamingChoice(); // caisse reprise par un poste fixe entre-temps
       setStoreId('');
       setRegisterId('');
       setPickerNeeded(true);
+      setIsRoamingSession(false);
     }
   }, [registers, canRoam]);
 
@@ -219,12 +227,14 @@ export default function CashRegister({
     setStoreId(sId);
     setRegisterId(rId);
     setPickerNeeded(false);
+    setIsRoamingSession(true);
   }, []);
 
   /** Revient à l'écran de choix de boutique, sans toucher à une éventuelle
    *  liaison permanente d'un autre poste. */
   const changeStore = useCallback(() => {
     clearRoamingChoice();
+    setIsRoamingSession(false);
     setStoreId('');
     setRegisterId('');
     setSessionId(null);
@@ -266,7 +276,18 @@ export default function CashRegister({
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showHeld, setShowHeld] = useState(false);
-  const [showFreePrice, setShowFreePrice] = useState<{ label?: string } | null>(null);
+  const [showFreePrice, setShowFreePrice] = useState<{
+    label?: string;
+    /**
+     * Renseigné UNIQUEMENT quand la saisie prix libre part d'un article du
+     * catalogue marqué "prix libre" (addProduct ci-dessous) — jamais pour un
+     * montant libre ad hoc (raccourci F2, sans article). La ligne garde
+     * alors le lien vers l'article : sa famille, son taux de TVA de fiche
+     * suivent, au lieu de retomber "Sans famille" comme une ligne anonyme.
+     */
+    productId?: string;
+    taxRateCode?: string;
+  } | null>(null);
   const [showPicker, setShowPicker] = useState(false);
   const [showSettle, setShowSettle] = useState(false);
   const [customer, setCustomer] = useState<PickedCustomer | null>(null);
@@ -858,7 +879,10 @@ export default function CashRegister({
   const addProduct = useCallback((p: PosProduct) => {
     if (p.is_pack) { void addPack(p); return; }
     void ensureSale();
-    if (p.price_is_free) { setShowFreePrice({ label: p.name }); return; }
+    if (p.price_is_free) {
+      setShowFreePrice({ label: p.name, productId: p.id, taxRateCode: p.tax_rate_code });
+      return;
+    }
     // Remise systématique du client : appliquée automatiquement à chaque ajout
     // SAUF si le produit est marqué "prix fort" (no_discount = true) — typiquement
     // les cartes cadeaux, qui sont toujours vendues au prix affiché.
@@ -942,7 +966,10 @@ export default function CashRegister({
     const discount = autoPct > 0 ? round2((amount * autoPct) / 100) : 0;
     setLines((cur) => [...cur, {
       key: cryptoKey(),
-      product_id: null, variant_id: null,
+      // Article du catalogue à l'origine de la saisie (addProduct) : garde le
+      // lien, pour que la famille et les stats de l'article suivent. Null
+      // pour un montant libre ad hoc (F2, sans article).
+      product_id: showFreePrice?.productId ?? null, variant_id: null,
       label, unit_price_ttc: amount, quantity: 1, discount_amount: discount,
       tax_rate: tax.rate, tax_rate_code: tax.code,
       metadata: autoPct > 0 ? { freeform: true, auto_discount_pct: autoPct } : { freeform: true },
@@ -1654,7 +1681,7 @@ export default function CashRegister({
   // itinérant navigue d'une boutique à l'autre sans liaison permanente — un
   // rappel visuel de "où" on est évite d'encaisser par erreur dans la
   // mauvaise boutique après un changement.
-  const roamingStoreName = canRoam ? (stores.find((s) => s.id === storeId)?.name ?? null) : null;
+  const roamingStoreName = isRoamingSession ? (stores.find((s) => s.id === storeId)?.name ?? null) : null;
 
   return (
     <div
@@ -2257,7 +2284,14 @@ export default function CashRegister({
       )}
       {showFreePrice && (
         <FreePriceModal
-          defaultTaxCode={storeTaxDefaults?.[storeId] ?? taxRates.find((t) => t.is_default)?.code ?? FREE_PRICE_TAX_CODE_DEFAULT}
+          defaultTaxCode={
+            // Taux de LA FICHE ARTICLE en priorité (ex. 10 % pour des fleurs),
+            // avant le défaut boutique — un article "prix libre" garde son
+            // propre taux, il n'a pas à hériter de celui de la boutique.
+            (showFreePrice.taxRateCode && taxRates.some((t) => t.code === showFreePrice.taxRateCode)
+              ? showFreePrice.taxRateCode : null)
+            ?? storeTaxDefaults?.[storeId] ?? taxRates.find((t) => t.is_default)?.code ?? FREE_PRICE_TAX_CODE_DEFAULT
+          }
           defaultLabel={showFreePrice.label}
           taxRates={taxRates}
           onClose={() => setShowFreePrice(null)}
