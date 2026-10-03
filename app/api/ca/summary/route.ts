@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { query } from '@/lib/db/client';
 import { requireSession } from '@/lib/auth/guards';
 import { jsonError } from '@/lib/validation/api';
+import { importOnlyCaTotal } from '@/lib/analytics/revenue-blend';
 
 export const dynamic = 'force-dynamic';
 
@@ -88,18 +89,27 @@ export async function GET(req: Request) {
   );
   const rowM = margin.rows[0]!;
 
-  const ca_ttc = Number(rowM.ca_ttc);
+  // Historique importé (revenue_history) : comble les jours de la période
+  // SANS vente réelle (ex. période antérieure à l'usage de HelloPos). Vient
+  // s'AJOUTER au CA réel ci-dessus, jamais le remplacer — voir
+  // lib/analytics/revenue-blend.ts pour pourquoi (exclusion carte cadeau).
+  const imported = await importOnlyCaTotal({
+    organizationId: g.user.organizationId, from, to, storeId: store_id ?? null,
+  });
+
+  const ca_ttc = Number(rowM.ca_ttc) + imported.ca_ttc;
+  const ca_ht_total = Number(rowM.ca_ht) + imported.ca_ht;
   const revenue_ht = Number(rowM.revenue_ht);
   const cost_ht = Number(rowM.cost_ht);
   const marge_ht = Number((revenue_ht - cost_ht).toFixed(2));
   const marge_pct = revenue_ht > 0 ? Number(((marge_ht / revenue_ht) * 100).toFixed(1)) : 0;
-  const tickets = Number(rowS.tickets_count);
+  const tickets = Number(rowS.tickets_count) + imported.tickets;
   const avg_ticket_ttc = tickets > 0 ? Number((ca_ttc / tickets).toFixed(2)) : 0;
 
   return NextResponse.json({
     period: { from, to },
     ca_ttc,
-    ca_ht: Number(rowM.ca_ht),
+    ca_ht: ca_ht_total,
     tva: Number(rowM.ca_tva),
     discount: Number(rowM.real_discount),
     marge_ht,

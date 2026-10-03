@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { query } from '@/lib/db/client';
 import { requireSession } from '@/lib/auth/guards';
 import { jsonError } from '@/lib/validation/api';
+import { importOnlyCaByStore } from '@/lib/analytics/revenue-blend';
 
 export const dynamic = 'force-dynamic';
 
@@ -68,6 +69,7 @@ export async function GET(req: Request) {
   );
 
   let prevCaByStore = new Map<string, number>();
+  let importedPrevByStore = new Map<string, { ca_ttc: number; ca_ht: number; tickets: number }>();
   if (prev_from && prev_to) {
     const prev = await query<{ store_id: string; ca_ttc: string }>(
       `SELECT s.store_id::text AS store_id, COALESCE(SUM(s.total_ttc), 0)::text AS ca_ttc
@@ -79,7 +81,13 @@ export async function GET(req: Request) {
       [orgId, prev_from, prev_to],
     );
     prevCaByStore = new Map(prev.rows.map((r) => [r.store_id, Number(r.ca_ttc)]));
+    importedPrevByStore = await importOnlyCaByStore({ organizationId: orgId, from: prev_from, to: prev_to });
   }
+
+  // Historique importé (revenue_history) : comble les boutiques/jours de la
+  // période SANS vente réelle. S'AJOUTE au CA réel ci-dessous, jamais ne le
+  // remplace — voir lib/analytics/revenue-blend.ts.
+  const importedCurByStore = await importOnlyCaByStore({ organizationId: orgId, from, to });
 
   const salesByStore = new Map(sales.rows.map((r) => [r.store_id, r]));
   const marginByStore = new Map(margin.rows.map((r) => [r.store_id, r]));
@@ -87,15 +95,20 @@ export async function GET(req: Request) {
   const result = stores.rows.map((st) => {
     const s = salesByStore.get(st.id);
     const m = marginByStore.get(st.id);
-    const ca_ttc = s ? Number(s.ca_ttc) : 0;
-    const tickets_count = s ? s.tickets_count : 0;
+    const imported = importedCurByStore.get(st.id);
+    const ca_ttc = (s ? Number(s.ca_ttc) : 0) + (imported?.ca_ttc ?? 0);
+    const tickets_count = (s ? s.tickets_count : 0) + (imported?.tickets ?? 0);
     const revenue_ht = m ? Number(m.revenue_ht) : 0;
     const cost_ht = m ? Number(m.cost_ht) : 0;
     const marge_ht = Number((revenue_ht - cost_ht).toFixed(2));
     const marge_pct = revenue_ht > 0 ? Number(((marge_ht / revenue_ht) * 100).toFixed(1)) : 0;
     const items_sold = m ? Number(m.items_sold) : 0;
     const avg_ticket_ttc = tickets_count > 0 ? Number((ca_ttc / tickets_count).toFixed(2)) : 0;
-    const prevCa = prevCaByStore.get(st.id) ?? null;
+    const importedPrev = importedPrevByStore.get(st.id);
+    const prevCaRaw = prevCaByStore.get(st.id) ?? null;
+    const prevCa = prevCaRaw !== null || importedPrev
+      ? (prevCaRaw ?? 0) + (importedPrev?.ca_ttc ?? 0)
+      : null;
     const growth_pct = prevCa !== null && prevCa > 0
       ? Number((((ca_ttc - prevCa) / prevCa) * 100).toFixed(1))
       : null;
