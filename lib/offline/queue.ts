@@ -22,6 +22,8 @@ export interface QueuedSale {
     tax_rate: number;
     tax_rate_code: string;
     metadata?: Record<string, unknown>;
+    /** Catégorie résolue pour une ligne sans produit (commande web/OGF). */
+    category_id?: string | null;
   }>;
   payments: Array<{
     method: 'cash' | 'card' | 'check' | 'transfer' | 'gift_card' | 'credit_note' | 'deferred' | 'other' | 'loyalty';

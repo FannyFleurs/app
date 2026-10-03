@@ -83,6 +83,14 @@ export interface CartLine {
   tax_rate: number;
   tax_rate_code: string;
   metadata: Record<string, unknown>;
+  /**
+   * Catégorie résolue pour une ligne SANS produit (commande web/OGF — voir
+   * order-intake.ts/resolveCategoryId). Portée ici uniquement pour que
+   * syncLines() la retransmette à chaque resynchro — sinon elle était
+   * effacée en silence dès le premier rappel du ticket (setLines remplace
+   * toutes les lignes de la vente à chaque appel).
+   */
+  category_id?: string | null;
 }
 
 export interface TaxRate { id: string; code: string; rate: number; is_default: boolean; }
@@ -659,6 +667,7 @@ export default function CashRegister({
           tax_rate: Number(l.tax_rate),
           tax_rate_code: l.tax_rate_code as string,
           metadata: (l.metadata as Record<string, unknown>) ?? {},
+          category_id: (l.category_id as string | null) ?? null,
         })));
         await restoreCustomerForSale(s.customer_id ?? null);
       } finally {
@@ -730,6 +739,7 @@ export default function CashRegister({
             tax_rate: l.tax_rate,
             tax_rate_code: l.tax_rate_code,
             metadata: l.metadata,
+            category_id: l.category_id ?? null,
           })),
         }),
       });
@@ -1192,6 +1202,7 @@ export default function CashRegister({
       tax_rate: Number(l.tax_rate),
       tax_rate_code: l.tax_rate_code as string,
       metadata: (l.metadata as Record<string, unknown>) ?? {},
+      category_id: (l.category_id as string | null) ?? null,
     })));
     // Restaure le commentaire du ticket (sales.notes).
     setCartComment((j.sale?.notes as string) ?? '');
@@ -1231,6 +1242,7 @@ export default function CashRegister({
         unit_price_ttc: l.unit_price_ttc, quantity: l.quantity,
         discount_amount: l.discount_amount, tax_rate: l.tax_rate,
         tax_rate_code: l.tax_rate_code, metadata: l.metadata,
+        category_id: l.category_id ?? null,
       })),
       payments,
       loyalty_redemption_amount: loyaltyUsed > 0 ? loyaltyUsed : undefined,

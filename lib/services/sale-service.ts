@@ -24,6 +24,15 @@ export interface SaleLineInput {
   tax_rate: number;
   tax_rate_code: string;
   metadata?: Record<string, unknown>;
+  /**
+   * Catégorie résolue à l'origine pour une ligne SANS produit (commande
+   * web/OGF — voir order-intake.ts/resolveCategoryId). À transmettre tel
+   * quel à chaque resynchronisation : setLines REMPLACE toutes les lignes
+   * de la vente à chaque appel (DELETE puis réinsertion), donc un appelant
+   * qui omettrait ce champ effacerait silencieusement la catégorie déjà
+   * résolue — c'est exactement le bug que ce champ corrige.
+   */
+  category_id?: string | null;
 }
 
 export interface SalePaymentInput {
@@ -131,8 +140,9 @@ export class SaleService {
           `INSERT INTO sale_lines
             (organization_id, sale_id, line_index, product_id, variant_id,
              label, unit_price_ttc, quantity, discount_amount,
-             tax_rate, tax_rate_code, line_ht, line_tva, line_ttc, metadata)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+             tax_rate, tax_rate_code, line_ht, line_tva, line_ttc, metadata,
+             category_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
           [
             organizationId,
             saleId,
@@ -149,6 +159,7 @@ export class SaleService {
             c.line_tva,
             c.line_ttc,
             JSON.stringify(l.metadata ?? {}),
+            l.category_id ?? null,
           ],
         );
       }

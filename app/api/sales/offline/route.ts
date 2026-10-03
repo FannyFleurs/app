@@ -16,6 +16,9 @@ const lineSchema = z.object({
   tax_rate: z.number(),
   tax_rate_code: z.string().max(20),
   metadata: z.record(z.unknown()).optional(),
+  // Catégorie résolue pour une ligne sans produit (commande web/OGF reprise
+  // puis encaissée hors-ligne) — voir SaleLineInput.category_id.
+  category_id: z.string().uuid().nullable().optional(),
 });
 
 const paymentSchema = z.object({

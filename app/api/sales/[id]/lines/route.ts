@@ -16,6 +16,10 @@ const lineSchema = z.object({
   tax_rate: z.number().min(0).max(100),
   tax_rate_code: z.string().min(1).max(40),
   metadata: z.record(z.unknown()).optional(),
+  // Catégorie résolue pour une ligne sans produit (commande web/OGF) — voir
+  // SaleLineInput.category_id. Doit être retransmis à chaque resynchro,
+  // sinon il est silencieusement effacé (setLines remplace toutes les lignes).
+  category_id: z.string().uuid().nullable().optional(),
 });
 const schema = z.object({ lines: z.array(lineSchema) });
 
