@@ -122,4 +122,31 @@ describe.skipIf(!hasDb)('SaleLineInput.category_id — survit à une resynchro s
     }]);
     expect(await lineCategoryIds(res.id)).toEqual([null]);
   });
+
+  it('identique pour une commande OGF (subtype: "ogf") — rien dans le chemin n\'est spécifique à WEB', async () => {
+    // order-intake.ts ne traite différemment que l'attribution du client
+    // (subtype === 'ogf' → "OGF Services Financiers") ; la résolution de
+    // catégorie et le round-trip caisse sont strictement identiques.
+    const res = await createIncomingOrder({
+      organizationId, storeId, externalRef: `ref-${randomUUID()}`,
+      boutiqueLabel: 'Fanny Fleurs', source: 'OGF', subtype: 'ogf',
+      lines: [{ label: 'Bouquet rond', amount_ttc: 35, category: 'Bouquets' }],
+    });
+    expect(await lineCategoryIds(res.id)).toEqual([categoryId]);
+
+    const fetched = await query<{
+      product_id: string | null; variant_id: string | null; label: string;
+      unit_price_ttc: string; quantity: string; discount_amount: string;
+      tax_rate: string; tax_rate_code: string; metadata: unknown; category_id: string | null;
+    }>(`SELECT * FROM sale_lines WHERE sale_id = $1 ORDER BY line_index`, [res.id]);
+    const roundtripLines: SaleLineInput[] = fetched.rows.map((l) => ({
+      product_id: l.product_id, variant_id: l.variant_id, label: l.label,
+      unit_price_ttc: Number(l.unit_price_ttc), quantity: Number(l.quantity),
+      discount_amount: Number(l.discount_amount), tax_rate: Number(l.tax_rate),
+      tax_rate_code: l.tax_rate_code, metadata: l.metadata as Record<string, unknown>,
+      category_id: l.category_id,
+    }));
+    await SaleService.setLines(res.id, organizationId, roundtripLines);
+    expect(await lineCategoryIds(res.id)).toEqual([categoryId]);
+  });
 });
