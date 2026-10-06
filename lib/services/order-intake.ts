@@ -1,5 +1,5 @@
 import { withTransaction } from '@/lib/db/client';
-import { computeLine, computeTotals } from './money';
+import { computeLine, computeTotals, round2 } from './money';
 
 export interface IncomingOrderLine {
   label: string;
@@ -103,10 +103,14 @@ export async function createIncomingOrder(input: IncomingOrderInput): Promise<In
    
     // Compte client imposé pour les commandes OGF.
     let customerId: string | null = null;
+    // Remise systématique de ce client (fiche client, ex. OGF Services
+    // Financiers à -20 %) — voir son application plus bas (étape 6) : même
+    // règle que CashRegister.tsx/pickCustomer (remise % du prix ligne).
+    let customerDiscountPct: number | null = null;
 
     if (String(input.subtype || '').toLowerCase() === 'ogf') {
-      const customerRes = await client.query<{ id: string }>(
-        `SELECT id
+      const customerRes = await client.query<{ id: string; default_discount_pct: string | null }>(
+        `SELECT id, default_discount_pct
            FROM customers
           WHERE organization_id = $1
             AND LOWER(TRIM(company_name)) = LOWER(TRIM($2))
@@ -117,6 +121,8 @@ export async function createIncomingOrder(input: IncomingOrderInput): Promise<In
       );
 
       customerId = customerRes.rows[0]?.id ?? null;
+      const pct = customerRes.rows[0]?.default_discount_pct;
+      customerDiscountPct = pct != null && Number(pct) > 0 ? Number(pct) : null;
     }
 
     // 3. Utilisateur porteur : le propriétaire (ou le plus ancien). L'attribution
@@ -214,10 +220,17 @@ export async function createIncomingOrder(input: IncomingOrderInput): Promise<In
       const code = l.tax_rate != null
         ? (rateToCode.get(rate) || defaultCode)
         : (categoryTax?.code ?? defaultCode);
+      const unitPriceTtc = Number(l.amount_ttc);
+      const quantity = l.quantity != null ? Number(l.quantity) : 1;
+      // Remise systématique du client (ex. OGF Services Financiers à -20 %),
+      // même formule que CashRegister.tsx/pickCustomer.
+      const discountAmount = customerDiscountPct
+        ? round2((unitPriceTtc * quantity * customerDiscountPct) / 100)
+        : 0;
       const c = computeLine({
-        unitPriceTtc: Number(l.amount_ttc),
-        quantity: l.quantity != null ? Number(l.quantity) : 1,
-        discountAmount: 0,
+        unitPriceTtc,
+        quantity,
+        discountAmount,
         taxRate: rate,
       });
       return {
@@ -300,6 +313,10 @@ export async function createIncomingOrder(input: IncomingOrderInput): Promise<In
             source: 'commande',
             ...(c.reference ? { reference_article: c.reference } : {}),
             ...(c.message_carte ? { message_carte: c.message_carte } : {}),
+            // Tague la remise comme "automatique client" (et non manuelle)
+            // pour les rapports de remises — même convention que
+            // CashRegister.tsx/pickCustomer.
+            ...(customerDiscountPct ? { auto_discount_pct: customerDiscountPct } : {}),
           }),
           c.category_id,
         ],
