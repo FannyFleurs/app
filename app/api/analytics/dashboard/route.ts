@@ -175,9 +175,13 @@ export async function GET(req: Request) {
 
   // ---- CA journalier « mélangé » pour le N-1 -------------------------------
   // Par boutique et par jour : on garde la VENTE RÉELLE si elle existe, sinon
-  // la valeur importée dans revenue_history. Puis on somme par jour (toutes
-  // boutiques du périmètre). Sert au comparatif N-1 même avant HelloPos, et
-  // quelle que soit la caisse (donnée au niveau organisation / boutique).
+  // la valeur importée NON additive dans revenue_history (comble les trous).
+  // Un import marqué `additive` (migration 0090 — ex. CA boutique physique
+  // d'une migration en plusieurs étapes, à additionner au CA web/OGF déjà
+  // réel) s'ajoute lui TOUJOURS, qu'il y ait ou non déjà une vente ce jour-là.
+  // Puis on somme par jour (toutes boutiques du périmètre). Sert au
+  // comparatif N-1 même avant HelloPos, et quelle que soit la caisse (donnée
+  // au niveau organisation / boutique).
   async function blendedDaily(args: unknown[]) {
     const storeSales = store_id ? 'AND s.store_id = $4' : '';
     const storeHist = store_id ? 'AND rh.store_id = $4' : '';
@@ -191,25 +195,39 @@ export async function GET(req: Request) {
             AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date ${storeSales}
           GROUP BY 1, 2
        ),
-       h AS (
+       h_fill AS (
          SELECT rh.store_id AS store_id, rh.day AS d,
                 rh.ca_ttc AS ttc, rh.ca_ht AS ht, rh.tickets AS n
            FROM revenue_history rh
           WHERE rh.organization_id = $1
             AND rh.day BETWEEN $2::date AND $3::date ${storeHist}
+            AND rh.additive = FALSE
        ),
-       blend AS (
-         SELECT COALESCE(r.d, h.d) AS d,
-                CASE WHEN r.store_id IS NOT NULL THEN r.ttc ELSE h.ttc END AS ttc,
-                CASE WHEN r.store_id IS NOT NULL THEN r.ht  ELSE h.ht  END AS ht,
-                CASE WHEN r.store_id IS NOT NULL THEN r.n   ELSE h.n   END AS n
-           FROM r FULL OUTER JOIN h ON r.store_id = h.store_id AND r.d = h.d
+       h_add AS (
+         SELECT rh.store_id AS store_id, rh.day AS d,
+                rh.ca_ttc AS ttc, rh.ca_ht AS ht, rh.tickets AS n
+           FROM revenue_history rh
+          WHERE rh.organization_id = $1
+            AND rh.day BETWEEN $2::date AND $3::date ${storeHist}
+            AND rh.additive = TRUE
+       ),
+       base AS (
+         SELECT COALESCE(r.d, h_fill.d) AS d,
+                CASE WHEN r.store_id IS NOT NULL THEN r.ttc ELSE h_fill.ttc END AS ttc,
+                CASE WHEN r.store_id IS NOT NULL THEN r.ht  ELSE h_fill.ht  END AS ht,
+                CASE WHEN r.store_id IS NOT NULL THEN r.n   ELSE h_fill.n   END AS n
+           FROM r FULL OUTER JOIN h_fill ON r.store_id = h_fill.store_id AND r.d = h_fill.d
+       ),
+       combined AS (
+         SELECT d, ttc, ht, n FROM base
+         UNION ALL
+         SELECT d, ttc, ht, n FROM h_add
        )
        SELECT d::text AS d,
               COALESCE(SUM(ttc), 0)::text AS ttc,
               COALESCE(SUM(ht), 0)::text  AS ht,
               COALESCE(SUM(n), 0)::int    AS n
-         FROM blend
+         FROM combined
         GROUP BY d`,
       args,
     )).rows;

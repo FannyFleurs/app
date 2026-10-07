@@ -29,6 +29,7 @@ function fmtDay(iso: string | null): string {
 export default function RevenueHistoryClient({ canEdit }: { canEdit: boolean }) {
   const [coverage, setCoverage] = useState<Coverage[]>([]);
   const [file, setFile] = useState<File | null>(null);
+  const [additive, setAdditive] = useState(false);
   const [rows, setRows] = useState<PreviewRow[] | null>(null);
   const [errorCount, setErrorCount] = useState(0);
   const [truncated, setTruncated] = useState(false);
@@ -59,10 +60,11 @@ export default function RevenueHistoryClient({ canEdit }: { canEdit: boolean }) 
     if (!file) return;
     setBusy(true); setMsg(null); setErr(null);
     try {
-      const r = await fetch('/api/analytics/revenue-history/commit', { method: 'POST', body: file });
+      const url = `/api/analytics/revenue-history/commit${additive ? '?additive=1' : ''}`;
+      const r = await fetch(url, { method: 'POST', body: file });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) { setErr(j.message ?? 'Import impossible.'); return; }
-      setMsg(`${j.imported} ligne(s) importée(s)${j.skipped ? `, ${j.skipped} ignorée(s)` : ''}.`);
+      setMsg(`${j.imported} ligne(s) importée(s)${j.skipped ? `, ${j.skipped} ignorée(s)` : ''}${additive ? ' — en complément du CA réel déjà saisi.' : '.'}`);
       setFile(null); setRows(null);
       if (inputRef.current) inputRef.current.value = '';
       await loadCoverage();
@@ -87,9 +89,11 @@ export default function RevenueHistoryClient({ canEdit }: { canEdit: boolean }) 
           <li>Déposez le fichier ci-dessous, vérifiez l&apos;aperçu, puis importez.</li>
         </ol>
         <p className="text-xs text-ink-soft">
-          La boutique est reconnue par son nom. Pour un même jour et une même boutique, les
-          ventes réelles enregistrées dans HelloPos restent prioritaires : l&apos;import ne
-          comble que les jours sans vente.
+          La boutique est reconnue par son nom. Par défaut, pour un même jour et une même
+          boutique, les ventes réelles enregistrées dans HelloPos restent prioritaires :
+          l&apos;import ne comble que les jours sans vente (reprise d&apos;une période
+          entièrement antérieure à HelloPos). Voir l&apos;option ci-dessous pour une
+          migration en plusieurs étapes.
         </p>
         <a href="/api/analytics/revenue-history/template" className="btn-soft inline-flex h-10 px-4 items-center text-sm w-fit">
           Télécharger le modèle Excel
@@ -107,6 +111,22 @@ export default function RevenueHistoryClient({ canEdit }: { canEdit: boolean }) 
             onChange={(e) => void onPick(e.target.files?.[0] ?? null)}
             className="block text-sm file:mr-3 file:h-10 file:px-4 file:rounded-lg file:border-0 file:bg-accent-soft file:text-accent-deep file:font-medium"
           />
+          <label className="flex items-start gap-2 text-sm cursor-pointer">
+            <input
+              type="checkbox" className="mt-0.5 accent-current"
+              checked={additive} onChange={(e) => setAdditive(e.target.checked)}
+            />
+            <span>
+              <span className="font-medium">Ce CA est un complément, à additionner au CA déjà réel</span>
+              <span className="block text-xs text-ink-soft">
+                À cocher pour une migration en plusieurs étapes (ex. les ventes web/OGF sont déjà
+                dans HelloPos avant le déploiement de la caisse en boutique) : le CA importé
+                s&apos;ADDITIONNE alors au CA réel du jour, même s&apos;il y en a déjà. Laissez
+                décoché pour une reprise d&apos;une période entièrement avant l&apos;usage de
+                HelloPos (comportement habituel).
+              </span>
+            </span>
+          </label>
           {busy && <p className="text-sm text-ink-soft">Traitement…</p>}
           {err && <p className="text-sm text-danger">{err}</p>}
           {msg && <p className="text-sm text-success">{msg}</p>}
