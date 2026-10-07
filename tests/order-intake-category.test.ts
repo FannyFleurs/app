@@ -185,6 +185,67 @@ describe.skipIf(!hasDb)('order-intake — catégorie des lignes web/OGF', () => 
     expect(ids[0]).toBe(diversRows.rows[0]!.id);
   });
 
+  it('une commande OGF (subtype: "ogf") sans correspondance retombe sur "Deuil" (pas "Divers") si la catégorie existe', async () => {
+    const deuil = await query<{ id: string }>(
+      `INSERT INTO product_categories (organization_id, name) VALUES ($1, 'Deuil') RETURNING id`,
+      [organizationId],
+    );
+    const res = await createIncomingOrder({
+      organizationId, storeId, externalRef: `ref-${randomUUID()}`,
+      boutiqueLabel: 'Fanny Fleurs', source: 'OGF', subtype: 'ogf',
+      // Article du catalogue OGF, pas de HelloPos : pas de `category` envoyé,
+      // libellé ne correspondant à aucune catégorie existante.
+      lines: [{ label: 'Composition personnalisée', amount_ttc: 89 }],
+    });
+    const ids = await lineCategoryIds(res.id);
+    expect(ids).toEqual([deuil.rows[0]!.id]);
+  });
+
+  it('une commande OGF garde la priorité à une catégorie EXPLICITEMENT résolue (nom ou libellé) avant de retomber sur "Deuil"', async () => {
+    const res = await createIncomingOrder({
+      organizationId, storeId, externalRef: `ref-${randomUUID()}`,
+      boutiqueLabel: 'Fanny Fleurs', source: 'OGF', subtype: 'ogf',
+      lines: [{ label: 'Bouquet rond', amount_ttc: 35, category: 'Fleurs coupées' }],
+    });
+    const ids = await lineCategoryIds(res.id);
+    expect(ids).toEqual([fleursCategoryId]);
+  });
+
+  it('une commande OGF sans catégorie "Deuil" dans l\'organisation retombe sur "Divers" comme avant (pas de création automatique de "Deuil")', async () => {
+    const org2 = await query<{ id: string }>(
+      `INSERT INTO organizations (name, legal_name) VALUES ($1, $1) RETURNING id`,
+      [`Test Order Intake OGF Sans Deuil ${randomUUID()}`],
+    );
+    const org2Id = org2.rows[0]!.id;
+    const store2 = await query<{ id: string }>(
+      `INSERT INTO stores (organization_id, code, name) VALUES ($1, 'FF', 'Fanny Fleurs') RETURNING id`,
+      [org2Id],
+    );
+    await query(
+      `INSERT INTO registers (organization_id, store_id, code, name) VALUES ($1, $2, 'R1', 'Caisse')`,
+      [org2Id, store2.rows[0]!.id],
+    );
+    await query(
+      `INSERT INTO users (organization_id, email, password_hash, full_name, role)
+       VALUES ($1, $2, 'x', 'Testeur', 'owner')`,
+      [org2Id, `oic2-${randomUUID()}@example.test`],
+    );
+    await query(
+      `INSERT INTO tax_rates (organization_id, code, label, rate, is_default)
+       VALUES ($1, 'TVA20', '20%', 20, TRUE)`,
+      [org2Id],
+    );
+
+    const res = await createIncomingOrder({
+      organizationId: org2Id, storeId: store2.rows[0]!.id, externalRef: `ref-${randomUUID()}`,
+      boutiqueLabel: 'Fanny Fleurs', source: 'OGF', subtype: 'ogf',
+      lines: [{ label: 'Composition personnalisée', amount_ttc: 89 }],
+    });
+    const ids = await lineCategoryIds(res.id);
+    const cat = await query<{ name: string }>(`SELECT name FROM product_categories WHERE id = $1`, [ids[0]]);
+    expect(cat.rows[0]!.name).toBe('Divers');
+  });
+
   it('plusieurs lignes de la même commande peuvent avoir des catégories différentes', async () => {
     const res = await createIncomingOrder({
       organizationId, storeId, externalRef: `ref-${randomUUID()}`,

@@ -186,12 +186,21 @@ export async function createIncomingOrder(input: IncomingOrderInput): Promise<In
         categoryDefaultTax.set(r.id, { rate: Number(r.default_tax_rate), code: r.default_tax_code });
       }
     }
+    const isOgf = String(input.subtype || '').toLowerCase() === 'ogf';
     let fallbackCategoryId: string | null = null;
     async function resolveCategoryId(name: string | null | undefined, label: string): Promise<string | null> {
       for (const candidate of [name, label]) {
         const key = (candidate ?? '').trim().toLowerCase();
         if (key && categoryByName.has(key)) return categoryByName.get(key)!;
       }
+      // Commandes OGF (client funéraire) : un article de SON catalogue, sans
+      // correspondance exacte (ex. composition "personnalisée", sans nom de
+      // catégorie envoyé), est toujours lié au deuil — "Deuil" est un
+      // meilleur filet que "Divers" si cette catégorie existe déjà dans
+      // l'organisation. Si elle n'existe pas, on ne la crée pas d'office
+      // (contrairement à "Divers") : ce n'est pas à nous de décider qu'une
+      // organisation qui n'a jamais créé "Deuil" doit en avoir une.
+      if (isOgf && categoryByName.has('deuil')) return categoryByName.get('deuil')!;
       if (!fallbackCategoryId) {
         const existing = await client.query<{ id: string }>(
           `SELECT id FROM product_categories WHERE organization_id = $1 AND LOWER(TRIM(name)) = 'divers' LIMIT 1`,
