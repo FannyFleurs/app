@@ -4,14 +4,14 @@ import { useEffect, useState } from 'react';
 
 interface Store { id: string; name: string; is_active?: boolean }
 interface ImportResult {
-  created: number; updated: number; ambiguous: number; loyalty_updated: number; skipped: number;
+  created: number; updated: number; ambiguous: number; loyalty_updated: number; balance_updated: number; skipped: number;
   errors: { row: number; message: string }[];
 }
 interface PreviewSummary {
   total: number; create: number; update: number; ambiguous: number; invalid: number;
-  with_points: number; by_email: number; by_phone: number; by_name: number;
+  with_points: number; with_balance_due: number; by_email: number; by_phone: number; by_name: number;
 }
-interface PreviewItem { row: number; label: string; action: string; matched_by?: string; points: number; error?: string }
+interface PreviewItem { row: number; label: string; action: string; matched_by?: string; points: number; balance_due: number; error?: string }
 interface Preview { summary: PreviewSummary; items: PreviewItem[] }
 
 const ACTION_LABEL: Record<string, string> = {
@@ -126,7 +126,10 @@ export default function CustomerImportModal({ onClose, onDone }: {
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 21h16"/></svg>
                 Modèle Excel (.xlsx)
               </a>
-              <p className="text-xs text-ink-soft mt-1">Une ligne par client. Colonne « Points fidélité » = nombre entier.</p>
+              <p className="text-xs text-ink-soft mt-1">
+                Une ligne par client. Colonne « Points fidélité » = nombre entier.
+                Colonne « Solde dû (en compte) € » = montant positif que le client doit (reprise d&apos;un ancien système) ; vide = inchangé.
+              </p>
             </div>
 
             {/* Étape 3 : fichier rempli */}
@@ -152,9 +155,11 @@ export default function CustomerImportModal({ onClose, onDone }: {
                   {s.ambiguous > 0 && (<><span className="text-warning">Ambigus (créés, à vérifier)</span><span className="text-right text-warning tabular-nums">{s.ambiguous}</span></>)}
                   {s.invalid > 0 && (<><span className="text-danger">Invalides (ignorés)</span><span className="text-right text-danger tabular-nums">{s.invalid}</span></>)}
                   <span>Lignes avec points fidélité</span><span className="text-right tabular-nums">{s.with_points}</span>
+                  {s.with_balance_due > 0 && (<><span>Lignes avec solde dû</span><span className="text-right tabular-nums">{s.with_balance_due}</span></>)}
                 </div>
                 <p className="text-[11px] text-ink-soft">
                   Les points sont <strong>cumulés</strong> au solde existant de la (des) boutique(s) choisie(s) (rapatriement).
+                  Le solde dû, lui, est <strong>remplacé</strong> par la valeur du fichier (pas cumulé).
                   L&apos;e-mail d&apos;une fiche fusionnée n&apos;est jamais écrasé.
                 </p>
                 <details className="text-xs">
@@ -198,6 +203,7 @@ export default function CustomerImportModal({ onClose, onDone }: {
                 <li>{result.updated} fusionné(s) (fiche existante mise à jour)</li>
                 {result.ambiguous > 0 && <li className="text-warning">{result.ambiguous} ambigu(s) créé(s) — à vérifier</li>}
                 <li>{result.loyalty_updated} avec points de fidélité crédités</li>
+                {result.balance_updated > 0 && <li>{result.balance_updated} avec solde dû repris</li>}
                 {result.skipped > 0 && <li className="text-warning">{result.skipped} ligne(s) ignorée(s)</li>}
               </ul>
             </div>

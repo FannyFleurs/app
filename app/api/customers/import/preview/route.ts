@@ -46,16 +46,16 @@ export async function POST(req: Request) {
   );
   const idx = buildIndex(existing.rows);
 
-  const summary = { total: 0, create: 0, update: 0, ambiguous: 0, invalid: 0, with_points: 0, by_email: 0, by_phone: 0, by_name: 0 };
+  const summary = { total: 0, create: 0, update: 0, ambiguous: 0, invalid: 0, with_points: 0, with_balance_due: 0, by_email: 0, by_phone: 0, by_name: 0 };
   const items: {
-    row: number; label: string; action: string; matched_by?: string; points: number; error?: string;
+    row: number; label: string; action: string; matched_by?: string; points: number; balance_due: number; error?: string;
   }[] = [];
 
   for (const row of rows) {
     summary.total++;
     if (row.error) {
       summary.invalid++;
-      items.push({ row: row.rowNumber, label: row.label, action: 'invalid', points: 0, error: row.error });
+      items.push({ row: row.rowNumber, label: row.label, action: 'invalid', points: 0, balance_due: 0, error: row.error });
       continue;
     }
     const m = matchRow(row, idx);
@@ -67,9 +67,10 @@ export async function POST(req: Request) {
     } else if (m.action === 'ambiguous') summary.ambiguous++;
     else summary.create++;
     if (row.hasPoints && row.points > 0) summary.with_points++;
+    if (row.hasBalanceDue) summary.with_balance_due++;
     items.push({
       row: row.rowNumber, label: row.label, action: m.action,
-      matched_by: m.matchedBy, points: row.points,
+      matched_by: m.matchedBy, points: row.points, balance_due: row.balanceDue,
     });
   }
 

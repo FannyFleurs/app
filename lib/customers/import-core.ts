@@ -27,6 +27,14 @@ export interface ParsedRow {
   consent_email: boolean; consent_sms: boolean;
   internal_notes: string; loyalty_code: string;
   hasPoints: boolean; points: number; // en euros de fidélité (déjà converti)
+  /**
+   * Solde "en compte" (règlement différé) repris d'un ancien système, en
+   * EUROS DUS (toujours positif ou nul dans le fichier — ex. 250 = le client
+   * doit 250 €). Stocké en base comme account_balance NÉGATIF (voir
+   * sale-service.ts/invoice-service.ts : account_balance < 0 = dette), pour
+   * pouvoir être soldé normalement depuis la caisse/fiche client ensuite.
+   */
+  hasBalanceDue: boolean; balanceDue: number;
   label: string;
   error?: string;
 }
@@ -93,6 +101,9 @@ export async function parseCustomerWorkbook(
     const pointsRaw = val('loyalty_points');
     const hasPoints = pointsRaw !== '';
     const rawPoints = hasPoints ? Number(pointsRaw.replace(',', '.')) : 0;
+    const balanceRaw = val('balance_due');
+    const hasBalanceDue = balanceRaw !== '';
+    const rawBalanceDue = hasBalanceDue ? Number(balanceRaw.replace(',', '.')) : 0;
 
     const label = (company || `${first} ${last}`.trim() || email || phone).trim();
     const base: ParsedRow = {
@@ -100,7 +111,7 @@ export async function parseCustomerWorkbook(
       siret: val('siret'), vat_number: val('vat_number'), address,
       consent_email: parseBool(val('consent_email')), consent_sms: parseBool(val('consent_sms')),
       internal_notes: val('internal_notes'), loyalty_code: val('loyalty_code'),
-      hasPoints, points: 0, label,
+      hasPoints, points: 0, hasBalanceDue, balanceDue: 0, label,
     };
 
     if (isParticulier ? !(first || last) : !company) {
@@ -113,7 +124,15 @@ export async function parseCustomerWorkbook(
       rows.push(base);
       continue;
     }
+    if (hasBalanceDue && !Number.isFinite(rawBalanceDue)) {
+      base.error = `Solde dû invalide (« ${balanceRaw} »).`;
+      rows.push(base);
+      continue;
+    }
     base.points = hasPoints ? Math.round(rawPoints * loyRate * 100) / 100 : 0;
+    // Toujours en valeur absolue : le fichier exprime un montant DÛ (toujours
+    // positif), qu'un -250 collé depuis un ancien export reste équivalent à 250.
+    base.balanceDue = hasBalanceDue ? Math.round(Math.abs(rawBalanceDue) * 100) / 100 : 0;
     rows.push(base);
   }
   return { rows };

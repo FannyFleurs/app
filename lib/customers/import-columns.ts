@@ -27,6 +27,7 @@ export const CUSTOMER_IMPORT_COLUMNS: ImportColumn[] = [
   { key: 'internal_notes', header: 'Notes', width: 24, example: '' },
   { key: 'loyalty_code', header: 'Code fidélité', width: 16, example: '' },
   { key: 'loyalty_points', header: 'Points fidélité', width: 16, example: 120 },
+  { key: 'balance_due', header: 'Solde dû (en compte) €', width: 22, example: '' },
 ];
 
 export const CUSTOMER_TYPES = ['particulier', 'professionnel', 'collectivite', 'association'] as const;

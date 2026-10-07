@@ -65,7 +65,7 @@ export async function POST(req: Request) {
   );
   const idx = buildIndex(existing.rows);
 
-  const result = { created: 0, updated: 0, ambiguous: 0, loyalty_updated: 0, skipped: 0, errors: [] as { row: number; message: string }[] };
+  const result = { created: 0, updated: 0, ambiguous: 0, loyalty_updated: 0, balance_updated: 0, skipped: 0, errors: [] as { row: number; message: string }[] };
 
   for (const row of rows) {
     if (row.error) { result.errors.push({ row: row.rowNumber, message: row.error }); result.skipped++; continue; }
@@ -77,6 +77,10 @@ export async function POST(req: Request) {
           customerId = m.matchId;
           // Fusion : on met à jour la fiche existante. L'e-mail n'est PAS écrasé
           // (clé possible d'unicité) ; les autres champs sont complétés.
+          // Solde dû (account_balance) : SET (pas cumulé, contrairement aux
+          // points) si la colonne est renseignée (y compris « 0 », qui solde
+          // explicitement) — NULL (colonne vide dans le fichier) ne touche
+          // pas au solde existant.
           await client.query(
             `UPDATE customers SET
                type = $2, first_name = $3, last_name = $4, company_name = $5,
@@ -87,30 +91,35 @@ export async function POST(req: Request) {
                consent_email = $10, consent_sms = $11,
                internal_notes = COALESCE(NULLIF($12,''), internal_notes),
                loyalty_code = COALESCE(NULLIF($13,''), loyalty_code),
+               account_balance = COALESCE($15::numeric, account_balance),
                updated_at = now(), updated_by = $14
              WHERE id = $1`,
             [customerId, row.type, row.first || null, row.last || null, row.company || null,
              row.phone, row.siret, row.vat_number,
              JSON.stringify(cleanAddr(row.address)),
              row.consent_email, row.consent_sms,
-             row.internal_notes, row.loyalty_code, g.user.id],
+             row.internal_notes, row.loyalty_code, g.user.id,
+             row.hasBalanceDue ? -row.balanceDue : null],
           );
           result.updated++;
+          if (row.hasBalanceDue) result.balance_updated++;
         } else {
           const ins = await client.query<{ id: string }>(
             `INSERT INTO customers
                (organization_id, type, first_name, last_name, company_name,
                 email, phone, siret, vat_number, address,
                 consent_email, consent_sms, internal_notes, loyalty_code,
-                created_by, updated_by)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$15)
+                account_balance, created_by, updated_by)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$16)
              RETURNING id`,
             [g.user.organizationId, row.type, row.first || null, row.last || null, row.company || null,
              row.email || null, row.phone || null, row.siret || null, row.vat_number || null,
              JSON.stringify(cleanAddr(row.address)),
              row.consent_email, row.consent_sms,
-             row.internal_notes || null, row.loyalty_code || null, g.user.id],
+             row.internal_notes || null, row.loyalty_code || null,
+             row.hasBalanceDue ? -row.balanceDue : 0, g.user.id],
           );
+          if (row.hasBalanceDue) result.balance_updated++;
           customerId = ins.rows[0]!.id;
           if (m.action === 'ambiguous') result.ambiguous++; else result.created++;
           // Dédoublonne aussi deux lignes identiques DU MÊME fichier.
@@ -162,7 +171,7 @@ export async function POST(req: Request) {
   await audit({
     organizationId: g.user.organizationId, userId: g.user.id,
     action: 'customers.import', entityType: 'customer', entityId: null,
-    payload: { created: result.created, updated: result.updated, ambiguous: result.ambiguous, loyalty_updated: result.loyalty_updated, stores: validStoreIds, errors: result.errors.length },
+    payload: { created: result.created, updated: result.updated, ambiguous: result.ambiguous, loyalty_updated: result.loyalty_updated, balance_updated: result.balance_updated, stores: validStoreIds, errors: result.errors.length },
   });
 
   return NextResponse.json(result);
