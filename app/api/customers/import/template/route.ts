@@ -43,7 +43,7 @@ export async function GET() {
     '5. Colonnes « Consentement » : écrivez oui ou non.',
     '6. Colonne « Points fidélité » : un nombre entier (ex. 120). Laissez vide pour ne pas toucher aux points.',
     '7. À l’import, vous choisirez la ou les boutiques concernées : les points y sont CUMULÉS au solde existant (rapatriement).',
-    '8. Colonne « Solde dû (en compte) € » : montant que le client doit (reprise d’un ancien système), TOUJOURS un nombre positif (ex. 250 pour 250 € dus) — jamais de signe négatif. Laissez vide pour ne pas toucher au solde. Écrivez 0 pour solder explicitement un client. Ce solde s’affiche ensuite sur la fiche client et peut être réglé normalement (caisse, page Facturation).',
+    '8. Colonne « Solde dû (en compte) € » : montant que le client doit (reprise d’un ancien système), TOUJOURS un nombre positif (ex. 250 pour 250 € dus) — jamais de signe négatif. Il est CUMULÉ à l’éventuel encours déjà existant (ex. vente « Différé client » déjà en caisse) : il ne l’efface jamais. Laissez vide (ou 0) pour ne rien ajouter. Ce solde s’affiche ensuite sur la fiche client et peut être réglé normalement (caisse, page Facturation). Attention : ré-importer deux fois le même fichier additionne deux fois ce montant.',
     '9. Dédoublonnage : un client existant est reconnu par son Email, sinon son Téléphone, sinon son Nom / sa Société. Sa fiche est alors mise à jour (fusion), sans doublon. Un aperçu est proposé avant l’import.',
     '',
     'Ne modifiez pas la ligne d’en-têtes (elle sert à identifier les colonnes).',

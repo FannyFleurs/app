@@ -121,26 +121,39 @@ describe.skipIf(!hasDb)('POST /api/customers/import — écriture du solde dû',
     expect(Number(c.rows[0]!.account_balance)).toBe(-250);
   });
 
-  it('un client existant fusionné : le solde dû REMPLACE (ne cumule pas) le solde existant', async () => {
+  it('un client existant fusionné : le solde dû se CUMULE avec le solde existant (jamais remplacé)', async () => {
     const email = `fusion-${randomUUID()}@example.test`;
     await doImport([{ type: 'particulier', first_name: 'Alice', last_name: 'Durand', email, balance_due: 100 }]);
-    // Ré-importe le MÊME fichier (même montant) : doit rester à -100, pas -200.
-    await doImport([{ type: 'particulier', first_name: 'Alice', last_name: 'Durand', email, balance_due: 100 }]);
-    const c1 = await query<{ account_balance: string }>(
-      `SELECT account_balance::text FROM customers WHERE organization_id = $1 AND email = $2`,
-      [organizationId, email],
-    );
-    expect(Number(c1.rows[0]!.account_balance)).toBe(-100);
-
-    // Correction à 180€ : remplace bien -100 par -180.
-    const result = await doImport([{ type: 'particulier', first_name: 'Alice', last_name: 'Durand', email, balance_due: 180 }]);
+    // Ré-importe le même fichier : le solde s'ADDITIONNE (-100 puis -200), comme
+    // les points de fidélité — pour ne jamais écraser un encours RÉEL déjà
+    // accumulé en caisse (ventes "Différé client" sur plusieurs boutiques).
+    const result = await doImport([{ type: 'particulier', first_name: 'Alice', last_name: 'Durand', email, balance_due: 100 }]);
     expect(result.updated).toBe(1);
     expect(result.balance_updated).toBe(1);
-    const c2 = await query<{ account_balance: string }>(
+    const c = await query<{ account_balance: string }>(
       `SELECT account_balance::text FROM customers WHERE organization_id = $1 AND email = $2`,
       [organizationId, email],
     );
-    expect(Number(c2.rows[0]!.account_balance)).toBe(-180);
+    expect(Number(c.rows[0]!.account_balance)).toBe(-200);
+  });
+
+  it('un encours réel déjà accumulé en caisse (vente "Différé client") n\'est jamais écrasé par un import ultérieur', async () => {
+    const email = `encours-reel-${randomUUID()}@example.test`;
+    // Encours réel pré-existant (ex. vente "Différé client" validée en caisse).
+    const created = await doImport([{ type: 'particulier', first_name: 'Sophie', last_name: 'Caisse', email }]);
+    expect(created.created).toBe(1);
+    await query(
+      `UPDATE customers SET account_balance = -303.20 WHERE organization_id = $1 AND email = $2`,
+      [organizationId, email],
+    );
+    // Import d'un encours historique supplémentaire (ancien système) : doit
+    // s'AJOUTER aux -303,20€ déjà dus, jamais les effacer.
+    await doImport([{ type: 'particulier', first_name: 'Sophie', last_name: 'Caisse', email, balance_due: 150 }]);
+    const c = await query<{ account_balance: string }>(
+      `SELECT account_balance::text FROM customers WHERE organization_id = $1 AND email = $2`,
+      [organizationId, email],
+    );
+    expect(Number(c.rows[0]!.account_balance)).toBe(-453.2);
   });
 
   it('une fusion SANS colonne solde dû renseignée ne touche pas au solde existant', async () => {
@@ -155,15 +168,16 @@ describe.skipIf(!hasDb)('POST /api/customers/import — écriture du solde dû',
     expect(Number(c.rows[0]!.account_balance)).toBe(-75);
   });
 
-  it('« 0 » explicite solde bien le client (account_balance remis à 0)', async () => {
+  it('« 0 » explicite n\'a aucun effet (équivalent à une cellule vide, puisque le solde est cumulatif)', async () => {
     const email = `solde-${randomUUID()}@example.test`;
     await doImport([{ type: 'particulier', first_name: 'Eva', last_name: 'Blanc', email, balance_due: 60 }]);
-    await doImport([{ type: 'particulier', first_name: 'Eva', last_name: 'Blanc', email, balance_due: 0 }]);
+    const result = await doImport([{ type: 'particulier', first_name: 'Eva', last_name: 'Blanc', email, balance_due: 0 }]);
+    expect(result.balance_updated).toBe(0);
     const c = await query<{ account_balance: string }>(
       `SELECT account_balance::text FROM customers WHERE organization_id = $1 AND email = $2`,
       [organizationId, email],
     );
-    expect(Number(c.rows[0]!.account_balance)).toBe(0);
+    expect(Number(c.rows[0]!.account_balance)).toBe(-60);
   });
 
   it('le client importé avec solde dû apparaît bien dans /api/billing/customers (account_balance < 0)', async () => {

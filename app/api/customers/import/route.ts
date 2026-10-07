@@ -77,10 +77,12 @@ export async function POST(req: Request) {
           customerId = m.matchId;
           // Fusion : on met à jour la fiche existante. L'e-mail n'est PAS écrasé
           // (clé possible d'unicité) ; les autres champs sont complétés.
-          // Solde dû (account_balance) : SET (pas cumulé, contrairement aux
-          // points) si la colonne est renseignée (y compris « 0 », qui solde
-          // explicitement) — NULL (colonne vide dans le fichier) ne touche
-          // pas au solde existant.
+          // Solde dû (account_balance) : CUMULÉ (comme les points), jamais
+          // remplacé — un client peut déjà avoir un encours réel accumulé en
+          // caisse (ventes "Différé client" sur plusieurs boutiques, le solde
+          // n'est pas scindé par boutique) ; écraser ce solde avec la seule
+          // valeur du fichier effacerait silencieusement une vraie dette.
+          // Colonne vide = +0 (aucun effet).
           await client.query(
             `UPDATE customers SET
                type = $2, first_name = $3, last_name = $4, company_name = $5,
@@ -91,7 +93,7 @@ export async function POST(req: Request) {
                consent_email = $10, consent_sms = $11,
                internal_notes = COALESCE(NULLIF($12,''), internal_notes),
                loyalty_code = COALESCE(NULLIF($13,''), loyalty_code),
-               account_balance = COALESCE($15::numeric, account_balance),
+               account_balance = COALESCE(account_balance, 0) - $15::numeric,
                updated_at = now(), updated_by = $14
              WHERE id = $1`,
             [customerId, row.type, row.first || null, row.last || null, row.company || null,
@@ -99,10 +101,10 @@ export async function POST(req: Request) {
              JSON.stringify(cleanAddr(row.address)),
              row.consent_email, row.consent_sms,
              row.internal_notes, row.loyalty_code, g.user.id,
-             row.hasBalanceDue ? -row.balanceDue : null],
+             row.hasBalanceDue ? row.balanceDue : 0],
           );
           result.updated++;
-          if (row.hasBalanceDue) result.balance_updated++;
+          if (row.hasBalanceDue && row.balanceDue !== 0) result.balance_updated++;
         } else {
           const ins = await client.query<{ id: string }>(
             `INSERT INTO customers
@@ -119,7 +121,7 @@ export async function POST(req: Request) {
              row.internal_notes || null, row.loyalty_code || null,
              row.hasBalanceDue ? -row.balanceDue : 0, g.user.id],
           );
-          if (row.hasBalanceDue) result.balance_updated++;
+          if (row.hasBalanceDue && row.balanceDue !== 0) result.balance_updated++;
           customerId = ins.rows[0]!.id;
           if (m.action === 'ambiguous') result.ambiguous++; else result.created++;
           // Dédoublonne aussi deux lignes identiques DU MÊME fichier.

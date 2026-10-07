@@ -128,7 +128,7 @@ export default function CustomerImportModal({ onClose, onDone }: {
               </a>
               <p className="text-xs text-ink-soft mt-1">
                 Une ligne par client. Colonne « Points fidélité » = nombre entier.
-                Colonne « Solde dû (en compte) € » = montant positif que le client doit (reprise d&apos;un ancien système) ; vide = inchangé.
+                Colonne « Solde dû (en compte) € » = montant positif que le client doit (reprise d&apos;un ancien système) ; cumulé à l&apos;encours déjà existant, vide = rien n&apos;est ajouté.
               </p>
             </div>
 
@@ -158,8 +158,8 @@ export default function CustomerImportModal({ onClose, onDone }: {
                   {s.with_balance_due > 0 && (<><span>Lignes avec solde dû</span><span className="text-right tabular-nums">{s.with_balance_due}</span></>)}
                 </div>
                 <p className="text-[11px] text-ink-soft">
-                  Les points sont <strong>cumulés</strong> au solde existant de la (des) boutique(s) choisie(s) (rapatriement).
-                  Le solde dû, lui, est <strong>remplacé</strong> par la valeur du fichier (pas cumulé).
+                  Les points et le solde dû sont <strong>cumulés</strong> aux soldes déjà existants (rapatriement) — jamais remplacés,
+                  pour ne jamais écraser un encours déjà accumulé en caisse.
                   L&apos;e-mail d&apos;une fiche fusionnée n&apos;est jamais écrasé.
                 </p>
                 <details className="text-xs">
