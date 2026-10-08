@@ -41,10 +41,12 @@ export class SaleCancelService {
         total_ht: string; total_tva: string; total_ttc: string;
         tva_breakdown: { rate: number; base_ht: number; tva: number; ttc: number }[] | null;
         account_invoice_id: string | null;
+        validated_today: boolean;
       }>(
         `SELECT id, status, store_id, register_id, cash_session_id, receipt_number,
                 customer_id, total_ht::text, total_tva::text, total_ttc::text,
-                tva_breakdown, account_invoice_id
+                tva_breakdown, account_invoice_id,
+                (validated_at::date = now()::date) AS validated_today
            FROM sales WHERE id = $1 AND organization_id = $2 FOR UPDATE`,
         [args.saleId, args.organizationId],
       );
@@ -225,8 +227,18 @@ export class SaleCancelService {
       // Sortie espèces sur la session ACTUELLEMENT ouverte, résolue comme
       // ailleurs (fonds commun => session de la boutique, sinon session du
       // poste). Repli sur la session d'origine si aucune n'est ouverte.
+      //
+      // UNIQUEMENT si la vente annulée a été validée un AUTRE jour (déjà
+      // sortie du calcul « espèces attendues » du jour de sa clôture, qui est
+      // figé) : le rapport du jour de l'annulation (lib/services/day-report.ts,
+      // cashExpected) exclut déjà toute vente non 'validated' de la somme des
+      // ventes espèces — pour une vente annulée LE JOUR MÊME, cette exclusion
+      // suffit à elle seule à neutraliser son effet (retour exact au fond de
+      // caisse). Ajouter aussi une sortie de caisse la soustrairait UNE
+      // SECONDE FOIS (régression constatée : « espèces attendues » passait
+      // sous le fond de caisse, « autres mouvements » devenait négatif).
       let cashSessionId: string | null = null;
-      if (paymentsRes.rows.some((p) => p.method === 'cash')) {
+      if (!sale.validated_today && paymentsRes.rows.some((p) => p.method === 'cash')) {
         const shared = await isSharedFloat(args.organizationId, sale.store_id, client);
         const openId = await CashSessionService.resolveOpenSessionId({
           storeId: sale.store_id,
