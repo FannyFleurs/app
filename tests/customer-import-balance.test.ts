@@ -189,4 +189,20 @@ describe.skipIf(!hasDb)('POST /api/customers/import — écriture du solde dû',
     const row = body.customers.find((c) => c.name === 'Marc Noir');
     expect(row?.account_balance).toBe(-303.2);
   });
+
+  it('POST /api/customers/import/preview : "lignes avec solde dû" ne compte pas les "0" explicites (régression affichage trompeur)', async () => {
+    const buf = await makeXlsx([
+      { type: 'particulier', first_name: 'A', last_name: 'Zero', balance_due: 0 },
+      { type: 'particulier', first_name: 'B', last_name: 'Vide', balance_due: '' },
+      { type: 'particulier', first_name: 'C', last_name: 'Reel', balance_due: 42 },
+    ]);
+    const { POST: previewCustomers } = await import('@/app/api/customers/import/preview/route');
+    const form = new FormData();
+    form.append('file', new Blob([buf]), 'clients.xlsx');
+    const req = new Request('https://x.test/api/customers/import/preview', { method: 'POST', body: form });
+    const res = await previewCustomers(req);
+    const body = await res.json() as { summary: { with_balance_due: number } };
+    // Sur 3 lignes (0, vide, 42), une seule a vraiment un solde dû.
+    expect(body.summary.with_balance_due).toBe(1);
+  });
 });

@@ -67,7 +67,7 @@ export async function POST(req: Request) {
     } else if (m.action === 'ambiguous') summary.ambiguous++;
     else summary.create++;
     if (row.hasPoints && row.points > 0) summary.with_points++;
-    if (row.hasBalanceDue) summary.with_balance_due++;
+    if (row.hasBalanceDue && row.balanceDue !== 0) summary.with_balance_due++;
     items.push({
       row: row.rowNumber, label: row.label, action: m.action,
       matched_by: m.matchedBy, points: row.points, balance_due: row.balanceDue,
