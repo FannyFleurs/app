@@ -12,6 +12,7 @@
  */
 import ExcelJS from 'exceljs';
 import { CUSTOMER_IMPORT_COLUMNS, CUSTOMER_TYPES, parseBool } from './import-columns';
+import { repairNamespacedXlsx } from '@/lib/excel/repair-xlsx';
 
 export const MAX_ROWS = 5000;
 /** En dessous de ce nombre de chiffres, un téléphone n'est pas un critère fiable. */
@@ -66,8 +67,18 @@ export async function parseCustomerWorkbook(
   buffer: Buffer, loyRate: number,
 ): Promise<{ headerError?: string; rows: ParsedRow[] }> {
   const wb = new ExcelJS.Workbook();
-  try { await wb.xlsx.load(buffer); }
-  catch { return { headerError: 'Fichier illisible : utilisez le modèle Excel fourni.', rows: [] }; }
+  try {
+    await wb.xlsx.load(buffer);
+  } catch {
+    // Fichier .xlsx valide mais généré par un outil qui préfixe l'espace de
+    // noms (ex. <x:workbook xmlns:x="...">) — non corrompu, juste non
+    // reconnu par ExcelJS tel quel. Une seule tentative de réparation avant
+    // d'abandonner (voir repair-xlsx.ts).
+    const repaired = await repairNamespacedXlsx(buffer).catch(() => null);
+    if (!repaired) return { headerError: 'Fichier illisible : utilisez le modèle Excel fourni.', rows: [] };
+    try { await wb.xlsx.load(repaired); }
+    catch { return { headerError: 'Fichier illisible : utilisez le modèle Excel fourni.', rows: [] }; }
+  }
   const ws = wb.worksheets[0];
   if (!ws) return { headerError: 'Fichier vide.', rows: [] };
 
