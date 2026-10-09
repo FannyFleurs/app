@@ -437,8 +437,51 @@ export default function CashRegister({
   // qu'il n'apparaisse JAMAIS puis disparaisse quand l'option est décochée.
   const [deferredResolved, setDeferredResolved] = useState<boolean>(!!initial);
 
-  // Charge produits + catégories + réglage écran/livraison (re-fetch a chaque
-  // changement de boutique — la portee par boutique peut varier).
+  // Charge produits + catégories + réglage écran/livraison. Extrait en
+  // fonction réutilisable : appelée au changement de boutique, mais aussi en
+  // silence par la vérification automatique du catalogue plus bas (prix
+  // modifié au BO pendant que la caisse reste ouverte).
+  const loadCatalog = useCallback(async (sId: string) => {
+    const [pRes, cRes, sdRes] = await Promise.all([
+      fetch(`/api/products?pos=1&store_id=${encodeURIComponent(sId)}`),
+      fetch(`/api/categories?pos=1&store_id=${encodeURIComponent(sId)}`),
+      fetch(`/api/settings/screen-delivery?store_id=${encodeURIComponent(sId)}`),
+    ]);
+    let freshProducts: PosProduct[] | null = null;
+    let freshCategories: Category[] | null = null;
+    if (pRes.ok) {
+      const j = await pRes.json();
+      freshProducts = j.products.map((p: Record<string, unknown>) => ({
+        ...p,
+        sale_price_ttc: Number(p.sale_price_ttc),
+        tax_rate: Number(p.tax_rate),
+        discount_value: p.discount_value != null ? Number(p.discount_value) : null,
+      })) as PosProduct[];
+      setProducts(freshProducts);
+    }
+    if (cRes.ok) {
+      freshCategories = (await cRes.json()).categories as Category[];
+      setCategories(freshCategories);
+    }
+    if (sdRes.ok) setDeferredEnabled(Boolean((await sdRes.json()).settings?.enabled));
+    // Valeur confirmée pour cette boutique : le bouton peut désormais refléter
+    // l'état réel (affiché si activé, définitivement masqué sinon).
+    setDeferredResolved(true);
+    // Met le cache à jour avec les données fraîches.
+    if (freshProducts && freshCategories) {
+      writeCatalogCache(sId, { products: freshProducts, categories: freshCategories });
+    }
+  }, []);
+
+  // Dernier horodatage catalogue connu (voir /api/products/catalog-version) —
+  // sert de référence à la vérification automatique ci-dessous. null tant
+  // qu'aucune référence n'a encore été posée (nouvelle boutique).
+  const catalogVersionRef = useRef<string | null>(null);
+
+  // Charge produits + catégories (re-fetch a chaque changement de boutique —
+  // la portee par boutique peut varier). Pose aussi la référence de version
+  // juste après, pour que les vérifications suivantes ne rechargent que si
+  // quelque chose a RÉELLEMENT changé depuis ce chargement frais.
   useEffect(() => {
     if (!storeId) return;
     // Peinture instantanée depuis le cache (stale-while-revalidate) : le
@@ -448,38 +491,52 @@ export default function CashRegister({
       if (cached.products.length) setProducts(cached.products);
       if (cached.categories.length) setCategories(cached.categories);
     }
+    catalogVersionRef.current = null;
     void (async () => {
-      const [pRes, cRes, sdRes] = await Promise.all([
-        fetch(`/api/products?pos=1&store_id=${encodeURIComponent(storeId)}`),
-        fetch(`/api/categories?pos=1&store_id=${encodeURIComponent(storeId)}`),
-        fetch(`/api/settings/screen-delivery?store_id=${encodeURIComponent(storeId)}`),
-      ]);
-      let freshProducts: PosProduct[] | null = null;
-      let freshCategories: Category[] | null = null;
-      if (pRes.ok) {
-        const j = await pRes.json();
-        freshProducts = j.products.map((p: Record<string, unknown>) => ({
-          ...p,
-          sale_price_ttc: Number(p.sale_price_ttc),
-          tax_rate: Number(p.tax_rate),
-          discount_value: p.discount_value != null ? Number(p.discount_value) : null,
-        })) as PosProduct[];
-        setProducts(freshProducts);
-      }
-      if (cRes.ok) {
-        freshCategories = (await cRes.json()).categories as Category[];
-        setCategories(freshCategories);
-      }
-      if (sdRes.ok) setDeferredEnabled(Boolean((await sdRes.json()).settings?.enabled));
-      // Valeur confirmée pour cette boutique : le bouton peut désormais refléter
-      // l'état réel (affiché si activé, définitivement masqué sinon).
-      setDeferredResolved(true);
-      // Met le cache à jour avec les données fraîches.
-      if (freshProducts && freshCategories) {
-        writeCatalogCache(storeId, { products: freshProducts, categories: freshCategories });
-      }
+      await loadCatalog(storeId);
+      try {
+        const vRes = await fetch('/api/products/catalog-version');
+        if (vRes.ok) catalogVersionRef.current = ((await vRes.json()) as { version: string | null }).version;
+      } catch { /* pas grave : posée au prochain cycle de vérification */ }
     })();
-  }, [storeId]);
+  }, [storeId, loadCatalog]);
+
+  // Vérification automatique du catalogue : un prix modifié au back-office
+  // pendant que la caisse reste ouverte (sans jamais être quittée des yeux)
+  // ne se voyait auparavant qu'après un rechargement manuel de la page.
+  // Interrogation légère (juste un horodatage, pas le catalogue entier) —
+  // ne recharge les produits que si ce dernier a changé. Totalement
+  // silencieux : aucun écran de chargement, le panier en cours n'est jamais
+  // touché (les lignes du panier sont des instantanés indépendants, voir
+  // CartLine — elles ne référencent pas les objets `products`).
+  const checkCatalogVersion = useCallback(async () => {
+    if (!storeId) return;
+    try {
+      const res = await fetch('/api/products/catalog-version');
+      if (!res.ok) return;
+      const { version } = await res.json() as { version: string | null };
+      if (catalogVersionRef.current !== null && version !== catalogVersionRef.current) {
+        catalogVersionRef.current = version;
+        void loadCatalog(storeId);
+        return;
+      }
+      catalogVersionRef.current = version;
+    } catch { /* réseau indisponible : on retentera au prochain cycle */ }
+  }, [storeId, loadCatalog]);
+
+  useEffect(() => {
+    if (!storeId) return;
+    const t = setInterval(() => { void checkCatalogVersion(); }, 15000);
+    return () => clearInterval(t);
+  }, [storeId, checkCatalogVersion]);
+
+  useEffect(() => {
+    function onVisible() {
+      if (document.visibilityState === 'visible') void checkCatalogVersion();
+    }
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [checkCatalogVersion]);
 
   // iOS en PWA « standalone » throttle la peinture après une navigation : les
   // mises à jour issues d'un fetch (le catalogue) ne sont composées qu'au
