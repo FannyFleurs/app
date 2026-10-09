@@ -13,7 +13,7 @@ import dynamic from 'next/dynamic';
 import Icon from '@/components/Icon';
 import CategoryIcon, { categoryIconDef } from '@/lib/category-icons';
 import { useSchoolMode, isSchoolCustomerId } from '@/lib/school-mode';
-import { tileMetrics, type PosUiSettings } from '@/lib/settings/pos-ui';
+import { tileMetrics, type PosUiSettings, type PosTileSize } from '@/lib/settings/pos-ui';
 import { confirmThemed } from '@/lib/ui/dialog';
 import { readRoamingChoice, writeRoamingChoice, clearRoamingChoice } from '@/lib/caisse/roaming';
 
@@ -104,6 +104,9 @@ interface Props {
   taxRates: TaxRate[];
   /** Taux TVA par défaut spécifique à chaque boutique (code), sinon défaut org. */
   storeTaxDefaults?: Record<string, string>;
+  /** Taille des tuiles produit par boutique (voir tile-size-server.ts),
+   *  sinon défaut organisation (posUi.tile_size). */
+  storeTileSizes?: Record<string, PosTileSize>;
   currentUser: { id: string; name: string; role: string };
   posUi: PosUiSettings;
   /** Si false, le bouton "Commande differee (retrait a date)" est masque. */
@@ -166,9 +169,8 @@ function matchProductByCode(products: PosProduct[], code: string): PosProduct | 
 }
 
 export default function CashRegister({
-  stores, registers, taxRates, storeTaxDefaults, currentUser, posUi, deferredOrdersEnabled, initial, canRoam,
+  stores, registers, taxRates, storeTaxDefaults, storeTileSizes, currentUser, posUi, deferredOrdersEnabled, initial, canRoam,
 }: Props) {
-  const metrics = useMemo(() => tileMetrics(posUi.tile_size), [posUi.tile_size]);
   // Mode école : quand actif, on ne fait AUCUN appel mutant côté serveur.
   // La caisse a une session fictive auto-ouverte, les lignes restent en
   // local, "encaisser" génère un faux ticket. Toutes les données sont
@@ -190,6 +192,11 @@ export default function CashRegister({
   // pos.roaming_device mais travaille sur un poste lié en permanence. Sert
   // uniquement au repère visuel "quelle boutique" (voir roamingStoreName).
   const [isRoamingSession, setIsRoamingSession] = useState(false);
+
+  // Taille des tuiles : propre à CETTE boutique si réglée (voir
+  // app/(app)/pos-settings — réglage par boutique), sinon défaut organisation.
+  const effectiveTileSize: PosTileSize = storeTileSizes?.[storeId] ?? posUi.tile_size;
+  const metrics = useMemo(() => tileMetrics(effectiveTileSize), [effectiveTileSize]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;

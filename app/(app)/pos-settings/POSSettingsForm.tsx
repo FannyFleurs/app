@@ -27,17 +27,76 @@ import {
 interface Props {
   initial: PosUiSettings;
   canWrite: boolean;
+  /** Boutiques visibles par l'utilisateur — pour choisir sur laquelle régler
+   *  la taille des tuiles (réglage par boutique, voir plus bas). */
+  stores: { id: string; name: string }[];
+  /** Poste de caisse appairé : verrouille le réglage taille des tuiles sur
+   *  SA boutique (pas de sélecteur). Null en back-office. */
+  lockStoreId: string | null;
+  /** Taille effective (override boutique, sinon défaut organisation) pour
+   *  storeId = lockStoreId ?? '' (« toutes les boutiques ») au 1er rendu. */
+  initialTileSize: PosTileSize;
 }
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
-export default function POSSettingsForm({ initial, canWrite }: Props) {
+export default function POSSettingsForm({ initial, canWrite, stores, lockStoreId, initialTileSize }: Props) {
   const router = useRouter();
   const [settings, setSettings] = useState<PosUiSettings>(initial);
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [error, setError] = useState<string | null>(null);
   const firstRender = useRef(true);
   const lastSaved = useRef<PosUiSettings>(initial);
+
+  // Taille des tuiles : réglage PAR BOUTIQUE, géré séparément du reste (qui
+  // reste au niveau organisation) — sa propre boutique sélectionnée, sa
+  // propre valeur, sa propre sauvegarde. '' = « toutes les boutiques »
+  // (réglage par défaut, repris par une boutique sans réglage propre).
+  const [tileSizeStoreId, setTileSizeStoreId] = useState<string>(lockStoreId ?? '');
+  const [tileSize, setTileSize] = useState<PosTileSize>(initialTileSize);
+  const [tileSizeLoading, setTileSizeLoading] = useState(false);
+  const tileSizeFirstRender = useRef(true);
+  const tileSizeLastSaved = useRef<{ storeId: string; size: PosTileSize }>({ storeId: lockStoreId ?? '', size: initialTileSize });
+
+  useEffect(() => {
+    // Changement de boutique sélectionnée (back-office uniquement, jamais
+    // sur un poste verrouillé) : recharge la valeur effective de CETTE
+    // boutique avant d'autoriser une sauvegarde (sinon on écraserait son
+    // réglage avec celui de la boutique précédente).
+    if (lockStoreId) return; // verrouillé : jamais de rechargement par sélection
+    if (tileSizeFirstRender.current) { tileSizeFirstRender.current = false; return; }
+    let cancelled = false;
+    setTileSizeLoading(true);
+    void fetch(`/api/settings/pos/tile-size${tileSizeStoreId ? `?store_id=${tileSizeStoreId}` : ''}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (cancelled || !j) return;
+        setTileSize(j.tile_size);
+        tileSizeLastSaved.current = { storeId: tileSizeStoreId, size: j.tile_size };
+      })
+      .finally(() => { if (!cancelled) setTileSizeLoading(false); });
+    return () => { cancelled = true; };
+  }, [tileSizeStoreId, lockStoreId]);
+
+  // Auto-save (debounce 400ms) de la taille des tuiles, indépendant du reste.
+  useEffect(() => {
+    if (!canWrite) return;
+    if (tileSizeLastSaved.current.storeId === tileSizeStoreId && tileSizeLastSaved.current.size === tileSize) return;
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch('/api/settings/pos/tile-size', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ store_id: tileSizeStoreId || null, tile_size: tileSize }),
+        });
+        if (res.ok) {
+          tileSizeLastSaved.current = { storeId: tileSizeStoreId, size: tileSize };
+          router.refresh();
+        }
+      } catch { /* tant pis, l'utilisateur peut recliquer */ }
+    }, 400);
+    return () => clearTimeout(t);
+  }, [tileSize, tileSizeStoreId, canWrite, router]);
 
   // Échelle de l'interface : réglage PROPRE À CET ÉCRAN (localStorage), pas au
   // niveau organisation — chaque poste a sa taille d'écran. Indépendant de
@@ -155,18 +214,40 @@ export default function POSSettingsForm({ initial, canWrite }: Props) {
 
         <Section
           title="Apparence des tuiles produit"
-          description="Taille des cartes affichées sur la grille produits de la caisse."
+          description="Taille des cartes affichées sur la grille produits de la caisse. Réglage PROPRE À CHAQUE BOUTIQUE — contrairement au reste de cette page, changer la taille ici n'affecte que la boutique sélectionnée."
         >
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {lockStoreId ? (
+            <p className="mb-3 text-xs text-ink-soft">
+              Poste de caisse : réglage de{' '}
+              <strong>{stores.find((s) => s.id === lockStoreId)?.name ?? 'cette boutique'}</strong> uniquement.
+            </p>
+          ) : stores.length > 1 ? (
+            <label className="mb-3 block text-sm">
+              <span className="text-ink-soft">Boutique</span>
+              <select
+                className="input h-10 w-full mt-1 max-w-sm"
+                value={tileSizeStoreId}
+                onChange={(e) => setTileSizeStoreId(e.target.value)}
+                disabled={!canWrite}
+              >
+                <option value="">Toutes les boutiques (réglage par défaut)</option>
+                {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+              <span className="mt-1 block text-xs text-ink-soft">
+                « Toutes les boutiques » ne sert que de valeur par défaut, reprise par une boutique sans réglage propre.
+              </span>
+            </label>
+          ) : null}
+          <div className={`grid grid-cols-2 md:grid-cols-4 gap-3 ${tileSizeLoading ? 'opacity-50' : ''}`}>
             {POS_TILE_SIZES.map((size) => {
               const meta = POS_TILE_SIZE_LABELS[size];
-              const active = settings.tile_size === size;
+              const active = tileSize === size;
               return (
                 <button
                   key={size}
                   type="button"
-                  disabled={!canWrite}
-                  onClick={() => patch('tile_size', size)}
+                  disabled={!canWrite || tileSizeLoading}
+                  onClick={() => setTileSize(size)}
                   className={`text-left rounded-2xl border p-4 transition-all
                     ${active ? 'border-sage bg-sage-soft ring-2 ring-sage/30'
                             : 'border-border bg-white hover:border-sage/40'}
@@ -313,7 +394,7 @@ export default function POSSettingsForm({ initial, canWrite }: Props) {
           <div className="text-xs uppercase tracking-wider text-ink-soft font-semibold px-1">
             Aperçu en direct
           </div>
-          <PreviewGrid settings={settings} />
+          <PreviewGrid settings={{ ...settings, tile_size: tileSize }} />
           <p className="text-xs text-ink-soft px-1">
             L&apos;aperçu reflète vos choix. La grille s&apos;adapte automatiquement à la
             largeur de l&apos;écran sur la vraie caisse.

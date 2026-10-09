@@ -12,6 +12,7 @@ import {
   POS_UI_KEY,
   type PosUiSettings,
 } from '@/lib/settings/pos-ui';
+import { loadAllTileSizeOverrides } from '@/lib/settings/tile-size-server';
 import {
   SCREEN_DELIVERY_KEY,
   mergeScreenDeliveryDefaults,
@@ -45,7 +46,7 @@ export default async function CaissePage() {
   //   comptes vendeur / caisse creees sans configuration explicite.
   // Les 5 requêtes ci-dessous sont indépendantes → on les lance en parallèle
   // (un seul aller-retour groupé au lieu de 5 séquentiels).
-  const [stores, registers, taxRates, posSettingsRows, screenDeliveryRows, storeTaxRows] = await Promise.all([
+  const [stores, registers, taxRates, posSettingsRows, screenDeliveryRows, storeTaxRows, storeTileSizes] = await Promise.all([
     query<{ id: string; code: string; name: string }>(
       `SELECT s.id, s.code, s.name FROM stores s
         WHERE s.organization_id = $2 AND s.is_active
@@ -85,6 +86,11 @@ export default async function CaissePage() {
         WHERE organization_id = $1 AND key LIKE 'tax:%'`,
       [user.organizationId],
     ),
+    // Taille des tuiles par boutique (clé 'pos_tile_size:<storeId>') — voir
+    // tile-size-server.ts. Chargée pour TOUTES les boutiques (comme
+    // storeTaxDefaults) : le storeId du poste n'est résolu que côté client
+    // (poste itinérant compris), impossible de savoir lequel interroger ici.
+    loadAllTileSizeOverrides(user.organizationId),
   ]);
   const storeTaxDefaults: Record<string, string> = {};
   for (const row of storeTaxRows.rows) {
@@ -146,6 +152,7 @@ export default async function CaissePage() {
       registers={registers.rows}
       taxRates={taxRates.rows.map((t) => ({ ...t, rate: Number(t.rate) }))}
       storeTaxDefaults={storeTaxDefaults}
+      storeTileSizes={storeTileSizes}
       currentUser={{ id: user.id, name: user.fullName, role: user.role }}
       posUi={posSettings}
       deferredOrdersEnabled={deferredSeed}
