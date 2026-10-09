@@ -3,6 +3,7 @@ import { confirmThemed } from '@/lib/ui/dialog';
 
 import { useEffect, useRef, useState } from 'react';
 import { generateEan13 } from '@/lib/services/ean';
+import { round2 } from '@/lib/services/money';
 import { getOrCreateDeviceId } from '@/lib/device';
 import ProductHistory from './ProductHistory';
 import ProductStock from './ProductStock';
@@ -35,6 +36,25 @@ interface Product {
 function parseAmount(s: string): number {
   const n = Number(String(s).replace(',', '.'));
   return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * Coefficient multiplicateur = prix de vente HT / coût (achat HT + transport
+ * HT) — même formule que le « Coefficient » affiché dans l'encart Marge
+ * estimée, pour que la saisie et l'affichage ne se contredisent jamais.
+ */
+function computeCoefFromPrices(purchaseHt: number, transportHt: number, saleTtc: number, taxRate: number): number {
+  const cost = purchaseHt + transportHt;
+  if (cost <= 0) return 0;
+  const saleHt = saleTtc / (1 + taxRate / 100);
+  return saleHt / cost;
+}
+
+/** Inverse : prix de vente TTC à partir du coefficient et du coût. */
+function computeSaleTtcFromCoef(purchaseHt: number, transportHt: number, coef: number, taxRate: number): number {
+  const cost = purchaseHt + transportHt;
+  const saleHt = cost * coef;
+  return saleHt * (1 + taxRate / 100);
 }
 
 const PRODUCT_COLORS = [
@@ -114,6 +134,17 @@ export default function ProductFormModal({
       } catch { /* pas de poste lié : comportement par défaut */ }
     })();
   }, [backOffice]);
+  // Coefficient initial (édition d'un article existant) : dérivé des prix
+  // déjà enregistrés, même formule que le calcul live plus bas.
+  const initialTaxRateId = product?.tax_rate_id ?? (defaultTax?.id ?? '');
+  const initialTaxRate = taxRates.find((t) => t.id === initialTaxRateId)?.rate ?? 0;
+  const initialCoef = computeCoefFromPrices(
+    product?.purchase_price_ht ?? 0,
+    product?.transport_cost_ht ?? 0,
+    product?.sale_price_ttc ?? 0,
+    initialTaxRate,
+  );
+
   const [form, setForm] = useState({
     name: product?.name ?? '',
     short_description: product?.short_description ?? '',
@@ -123,6 +154,7 @@ export default function ProductFormModal({
     sale_price_ttc: product?.sale_price_ttc != null ? String(product.sale_price_ttc) : '',
     purchase_price_ht: product?.purchase_price_ht != null ? String(product.purchase_price_ht) : '',
     transport_cost_ht: product?.transport_cost_ht != null ? String(product.transport_cost_ht) : '',
+    sale_coef: initialCoef > 0 ? String(round2(initialCoef)) : '',
     price_is_free: product?.price_is_free ?? false,
     track_stock: product?.track_stock ?? false,
     tax_rate_id: product?.tax_rate_id ?? (defaultTax?.id ?? ''),
@@ -281,6 +313,7 @@ export default function ProductFormModal({
       // Champs volontairement vidés pour le nouvel article
       purchase_price_ht: '',
       sale_price_ttc: '',
+      sale_coef: '',
       barcode: '',
       extra_barcodes: [],
 
@@ -623,19 +656,29 @@ export default function ProductFormModal({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                 <Field label="Prix d'achat HT (€)">
                   <input
                     type="text"
                     inputMode="decimal"
                     className="input h-11 text-base"
                     value={form.purchase_price_ht}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      const purchase_price_ht = e.target.value.replace(/[^0-9.,]/g, '');
+                      // Le prix de vente reste fixe ; le coefficient affiché
+                      // se recalcule pour rester exact (même formule que
+                      // l'encart Marge estimée plus bas).
+                      const taxRate = taxRates.find((t) => t.id === form.tax_rate_id)?.rate ?? 0;
+                      const coef = computeCoefFromPrices(
+                        parseAmount(purchase_price_ht), parseAmount(form.transport_cost_ht),
+                        parseAmount(form.sale_price_ttc), taxRate,
+                      );
                       setForm({
                         ...form,
-                        purchase_price_ht: e.target.value.replace(/[^0-9.,]/g, ''),
-                      })
-                    }
+                        purchase_price_ht,
+                        sale_coef: coef > 0 ? String(round2(coef)) : form.sale_coef,
+                      });
+                    }}
                     placeholder="0,00"
                   />
                 </Field>
@@ -644,12 +687,52 @@ export default function ProductFormModal({
                   <select
                     className="input h-11 text-base"
                     value={form.tax_rate_id}
-                    onChange={(e) => setForm({ ...form, tax_rate_id: e.target.value })}
+                    onChange={(e) => {
+                      const tax_rate_id = e.target.value;
+                      const taxRate = taxRates.find((t) => t.id === tax_rate_id)?.rate ?? 0;
+                      // Le prix de vente TTC reste fixe ; le coefficient
+                      // affiché se recalcule pour rester exact.
+                      const coef = computeCoefFromPrices(
+                        parseAmount(form.purchase_price_ht), parseAmount(form.transport_cost_ht),
+                        parseAmount(form.sale_price_ttc), taxRate,
+                      );
+                      setForm({
+                        ...form,
+                        tax_rate_id,
+                        sale_coef: coef > 0 ? String(round2(coef)) : form.sale_coef,
+                      });
+                    }}
                   >
                     {taxRates.map((t) => (
                       <option key={t.id} value={t.id}>{t.rate}%</option>
                     ))}
                   </select>
+                </Field>
+
+                <Field label="Coef. de vente">
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    className="input h-11 text-base"
+                    value={form.sale_coef}
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(/[^0-9.,]/g, '');
+                      const coef = parseAmount(raw);
+                      const taxRate = taxRates.find((t) => t.id === form.tax_rate_id)?.rate ?? 0;
+                      const purchase = parseAmount(form.purchase_price_ht);
+                      const transport = parseAmount(form.transport_cost_ht);
+                      const saleTtc = coef > 0 && (purchase + transport) > 0
+                        ? computeSaleTtcFromCoef(purchase, transport, coef, taxRate)
+                        : null;
+                      setForm({
+                        ...form,
+                        sale_coef: raw,
+                        sale_price_ttc: saleTtc != null ? String(round2(saleTtc)) : form.sale_price_ttc,
+                      });
+                    }}
+                    disabled={form.price_is_free}
+                    placeholder="ex. 2,5"
+                  />
                 </Field>
 
                 <Field label="Prix de vente TTC (€)">
@@ -658,12 +741,19 @@ export default function ProductFormModal({
                     inputMode="decimal"
                     className="input h-11 text-base"
                     value={form.sale_price_ttc}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      const sale_price_ttc = e.target.value.replace(/[^0-9.,]/g, '');
+                      const taxRate = taxRates.find((t) => t.id === form.tax_rate_id)?.rate ?? 0;
+                      const coef = computeCoefFromPrices(
+                        parseAmount(form.purchase_price_ht), parseAmount(form.transport_cost_ht),
+                        parseAmount(sale_price_ttc), taxRate,
+                      );
                       setForm({
                         ...form,
-                        sale_price_ttc: e.target.value.replace(/[^0-9.,]/g, ''),
-                      })
-                    }
+                        sale_price_ttc,
+                        sale_coef: coef > 0 ? String(round2(coef)) : form.sale_coef,
+                      });
+                    }}
                     disabled={form.price_is_free}
                     placeholder="0,00"
                   />
@@ -692,12 +782,11 @@ export default function ProductFormModal({
 
                   const margin = sellHt - cost;
                   const marginPct = (margin / sellHt) * 100;
-                  const coeff = cost > 0 ? sellHt / cost : 0;
 
                   return (
                     <div className="rounded-2xl bg-[color:var(--primary)]/5 px-4 py-4">
                       <div className="mb-3 text-sm font-medium text-ink">Marge estimée</div>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <Stat
                           label="Marge brute"
                           value={`${margin.toFixed(2)} €`}
@@ -708,7 +797,6 @@ export default function ProductFormModal({
                           value={`${marginPct.toFixed(1)} %`}
                           tone={marginPct >= 50 ? 'success' : marginPct >= 30 ? 'warning' : 'danger'}
                         />
-                        <Stat label="Coefficient" value={`× ${coeff.toFixed(2)}`} />
                       </div>
                     </div>
                   );
@@ -722,12 +810,19 @@ export default function ProductFormModal({
                     inputMode="decimal"
                     className="input h-11 text-base"
                     value={form.transport_cost_ht}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      const transport_cost_ht = e.target.value.replace(/[^0-9.,]/g, '');
+                      const taxRate = taxRates.find((t) => t.id === form.tax_rate_id)?.rate ?? 0;
+                      const coef = computeCoefFromPrices(
+                        parseAmount(form.purchase_price_ht), parseAmount(transport_cost_ht),
+                        parseAmount(form.sale_price_ttc), taxRate,
+                      );
                       setForm({
                         ...form,
-                        transport_cost_ht: e.target.value.replace(/[^0-9.,]/g, ''),
-                      })
-                    }
+                        transport_cost_ht,
+                        sale_coef: coef > 0 ? String(round2(coef)) : form.sale_coef,
+                      });
+                    }}
                     placeholder="Hérité de la catégorie"
                   />
                   <p className="mt-1 text-xs text-ink-soft">
@@ -905,6 +1000,7 @@ export default function ProductFormModal({
                         ...form,
                         price_is_free: v,
                         sale_price_ttc: v ? '' : form.sale_price_ttc,
+                        sale_coef: v ? '' : form.sale_coef,
                       })
                     }
                   />
