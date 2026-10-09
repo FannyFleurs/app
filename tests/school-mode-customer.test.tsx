@@ -74,7 +74,7 @@ describe('Sélecteur de client en mode école', () => {
     fireEvent.click(screen.getByRole('button', { name: '+ Nouveau' }));
     fill('Prénom *', 'Camille');
     fill('Nom *', 'Durand');
-    fill('Téléphone *', '0612345678');
+    fill('Téléphone', '0612345678');
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Créer le client' }));
     });
@@ -112,7 +112,7 @@ describe('Sélecteur de client en mode école', () => {
     fireEvent.click(screen.getByRole('button', { name: '+ Nouveau' }));
     fill('Prénom *', 'Camille');
     fill('Nom *', 'Durand');
-    fill('Téléphone *', '0612345678');
+    fill('Téléphone', '0612345678');
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Créer le client' }));
     });

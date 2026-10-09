@@ -25,10 +25,13 @@ export async function GET(req: Request) {
     const idxLike = params.length;
     params.push(q);
     const idxExact = params.length;
+    // unaccent() des deux côtés : une recherche « Alencon » doit retrouver
+    // « Alençon », « elise » doit retrouver « Élise », peu importe l'accent
+    // saisi ou non (voir migration 0092).
     const conds = [
-      `lower(COALESCE(company_name,'')) LIKE $${idxLike}`,
-      `lower(COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) LIKE $${idxLike}`,
-      `lower(COALESCE(email,'')) LIKE $${idxLike}`,
+      `unaccent(lower(COALESCE(company_name,''))) LIKE unaccent($${idxLike})`,
+      `unaccent(lower(COALESCE(first_name,'') || ' ' || COALESCE(last_name,''))) LIKE unaccent($${idxLike})`,
+      `unaccent(lower(COALESCE(email,''))) LIKE unaccent($${idxLike})`,
       `COALESCE(siret,'') = $${idxExact}`,
     ];
     // Recherche par téléphone insensible aux espaces / séparateurs : depuis le

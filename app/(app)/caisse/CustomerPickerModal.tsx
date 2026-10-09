@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import CustomerFormModal from '@/components/CustomerFormModal';
 import { useSchoolMode, schoolCustomers, addSchoolCustomer } from '@/lib/school-mode';
+import { normSearch } from '@/lib/text/normalize';
 
 export interface PickedCustomer {
   id: string;
@@ -51,10 +52,10 @@ export default function CustomerPickerModal({ onClose, onPick }: Props) {
     return () => clearTimeout(t);
   }, [q, showList]);
 
-  const needle = q.trim().toLowerCase();
+  const needle = normSearch(q.trim());
   const shown: PickedCustomer[] = [
     ...demo.filter((c) => !needle || [c.display_name, c.phone, c.email, c.company_name]
-      .some((f) => f?.toLowerCase().includes(needle))),
+      .some((f) => normSearch(f).includes(needle))),
     ...results,
   ];
 

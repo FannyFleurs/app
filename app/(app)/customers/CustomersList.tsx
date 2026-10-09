@@ -13,6 +13,7 @@ import PageHeader from '@/components/PageHeader';
 import { formatEUR } from '@/lib/services/money';
 import WalletActions from './[id]/WalletActions';
 import LoyaltyPanel from './[id]/LoyaltyPanel';
+import { normSearch } from '@/lib/text/normalize';
 
 // Sur la caisse, on solde un compte via la page d'encaissement générale (mêmes
 // modes, dont le bon d'achat), pour que le règlement compte dans la journée
@@ -157,7 +158,7 @@ export default function CustomersList({ customers: initialCustomers, total, canW
   }, [q, showArchived, tick]);
 
   const filtered = useMemo(() => {
-    const needle = q.trim().toLowerCase();
+    const needle = normSearch(q.trim());
     const usingServer = (needle.length >= 2 || showArchived) && serverResults != null;
     // Sans résultat serveur en vue « Archivés », on n'affiche RIEN plutôt que
     // la liste des fiches actives : ce serait un contresens.
@@ -166,10 +167,10 @@ export default function CustomersList({ customers: initialCustomers, total, canW
       if (type !== 'all' && c.type !== type) return false;
       if (usingServer || !needle) return true;
       return (
-        c.display_name?.toLowerCase().includes(needle) ||
-        c.email?.toLowerCase().includes(needle) ||
+        normSearch(c.display_name).includes(needle) ||
+        normSearch(c.email).includes(needle) ||
         c.phone?.includes(needle) ||
-        c.company_name?.toLowerCase().includes(needle) ||
+        normSearch(c.company_name).includes(needle) ||
         c.siret?.includes(needle)
       );
     });

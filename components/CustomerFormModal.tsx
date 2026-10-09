@@ -104,9 +104,9 @@ export default function CustomerFormModal({ customer, onClose, onSaved, localOnl
 
   async function submit() {
     // Validation côté UI : un client doit au minimum avoir une identité
-    // (nom + prénom pour un particulier, raison sociale pour les autres)
-    // et un téléphone — pour pouvoir le rappeler / rattacher à une carte
-    // cadeau / un compte client.
+    // (nom + prénom pour un particulier, raison sociale pour les autres).
+    // Le téléphone reste utile (rappel, carte cadeau, compte client) mais
+    // n'est plus obligatoire : certains clients n'en communiquent pas.
     if (isPro) {
       if (!companyName.trim()) { setError('Raison sociale obligatoire.'); return; }
     } else {
@@ -114,7 +114,6 @@ export default function CustomerFormModal({ customer, onClose, onSaved, localOnl
         setError('Prénom et nom obligatoires.'); return;
       }
     }
-    if (!phone.trim()) { setError('Téléphone obligatoire.'); return; }
 
     setSaving(true); setError(null);
     const payload = {
@@ -210,7 +209,7 @@ export default function CustomerFormModal({ customer, onClose, onSaved, localOnl
           <Field label="Email">
             <input type="email" className="input" value={email} onChange={(e) => setEmail(e.target.value)} />
           </Field>
-          <Field label="Téléphone *">
+          <Field label="Téléphone">
             <input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} />
           </Field>
 
