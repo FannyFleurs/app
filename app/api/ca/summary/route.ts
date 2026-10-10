@@ -53,7 +53,7 @@ export async function GET(req: Request) {
        FROM sales s
       WHERE s.organization_id = $1
         AND s.status = 'validated'
-        AND s.validated_at::date BETWEEN $2::date AND $3::date
+        AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date
         ${storeFilter}`,
     args,
   );
@@ -83,7 +83,7 @@ export async function GET(req: Request) {
        LEFT JOIN products p ON p.id = sl.product_id
       WHERE s.organization_id = $1
         AND s.status = 'validated'
-        AND s.validated_at::date BETWEEN $2::date AND $3::date
+        AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date
         ${storeFilter}`,
     args,
   );

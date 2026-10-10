@@ -44,7 +44,7 @@ export async function GET(req: Request) {
        JOIN sales s ON s.id = sl.sale_id
       WHERE s.organization_id = $1
         AND s.status = 'validated'
-        AND s.validated_at::date BETWEEN $2::date AND $3::date
+        AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date
         ${storeFilter}
       GROUP BY sl.tax_rate
       ORDER BY sl.tax_rate DESC`,

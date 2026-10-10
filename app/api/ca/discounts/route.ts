@@ -69,7 +69,7 @@ export async function GET(req: Request) {
            FROM sale_lines sl WHERE sl.sale_id = s.id
        ) m ON TRUE
       WHERE s.organization_id = $1 AND s.status = 'validated'
-        AND s.validated_at::date BETWEEN $2::date AND $3::date
+        AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date
         AND d.real_discount > 0
         ${storeFilter}
       ORDER BY d.real_discount DESC, s.validated_at DESC

@@ -53,7 +53,7 @@ export async function GET(req: Request) {
        ) d ON TRUE
       WHERE s.organization_id = $1
         AND s.status = 'validated'
-        AND s.validated_at::date BETWEEN $2::date AND $3::date
+        AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date
         ${storeFilter}
       GROUP BY s.user_id, u.full_name
       ORDER BY ca_ttc DESC`,

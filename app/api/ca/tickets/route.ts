@@ -49,7 +49,7 @@ export async function GET(req: Request) {
        LEFT JOIN customers c ON c.id = s.customer_id
       WHERE s.organization_id = $1
         AND s.status = 'validated'
-        AND s.validated_at::date BETWEEN $2::date AND $3::date
+        AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date
         ${storeFilter}
       ORDER BY s.validated_at DESC
       LIMIT 200`,
