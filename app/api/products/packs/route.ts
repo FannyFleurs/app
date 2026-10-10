@@ -30,10 +30,26 @@ export async function POST(req: Request) {
   const hasStoreIds = await productColumnExists('store_ids');
 
   const id = await withTransaction(async (client) => {
-    const cols = ['organization_id', 'name', 'tax_rate_id', 'sale_price_ttc',
+    // Un pack n'a pas de catégorie propre dans son formulaire de création : on
+    // le rattache par défaut à une catégorie "Pack" (créée au premier pack de
+    // l'organisation si elle n'existe pas encore), au lieu de le laisser sans
+    // catégorie — même principe que le filet "Divers" en réception de commande
+    // (lib/services/order-intake.ts).
+    const existingCat = await client.query<{ id: string }>(
+      `SELECT id FROM product_categories WHERE organization_id = $1 AND LOWER(TRIM(name)) = 'pack' LIMIT 1`,
+      [g.user.organizationId],
+    );
+    const categoryId = existingCat.rows[0]?.id ?? (
+      await client.query<{ id: string }>(
+        `INSERT INTO product_categories (organization_id, name) VALUES ($1, 'Pack') RETURNING id`,
+        [g.user.organizationId],
+      )
+    ).rows[0]!.id;
+
+    const cols = ['organization_id', 'name', 'category_id', 'tax_rate_id', 'sale_price_ttc',
       'track_stock', 'is_pack', 'pack_discount_ttc', 'visible_in_pos', 'is_active'];
     const vals: unknown[] = [
-      g.user.organizationId, p.name, taxRateId, price,
+      g.user.organizationId, p.name, categoryId, taxRateId, price,
       false, true, p.discount_ttc, p.visible_in_pos, p.is_active,
     ];
     if (hasStoreIds) {
