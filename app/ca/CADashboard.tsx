@@ -49,24 +49,36 @@ interface Discounts { total: number; rows: DiscountRow[] }
 type Period = 'today' | 'yesterday' | 'week' | 'month' | 'custom';
 type Tab = 'xz' | 'tickets' | 'account';
 
-function periodDates(p: Period, from: string, to: string): { from: string; to: string } {
+// Date ISO (YYYY-MM-DD) à partir des composants LOCAUX du Date (année/mois/
+// jour tels qu'affichés à l'écran), PAS via toISOString() — qui convertit
+// d'abord en UTC et décale donc la date d'un jour en arrière pour tout
+// fuseau en avance sur UTC (Europe/Paris) : minuit local le 1er du mois,
+// par exemple, devient 22h ou 23h UTC la VEILLE, donc "le dernier jour du
+// mois précédent" une fois formaté avec toISOString(). C'était la cause du
+// bug "Ce mois" qui démarrait un jour trop tôt (31/09 au lieu du 1er).
+export function localIso(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+export function periodDates(p: Period, from: string, to: string): { from: string; to: string } {
   const today = new Date();
-  const iso = (d: Date) => d.toISOString().slice(0, 10);
-  if (p === 'today')     return { from: iso(today), to: iso(today) };
-  if (p === 'yesterday') { const y = new Date(today); y.setDate(y.getDate() - 1); return { from: iso(y), to: iso(y) }; }
-  if (p === 'week')      { const w = new Date(today); w.setDate(w.getDate() - 6); return { from: iso(w), to: iso(today) }; }
-  if (p === 'month')     { const m = new Date(today.getFullYear(), today.getMonth(), 1); return { from: iso(m), to: iso(today) }; }
+  if (p === 'today')     return { from: localIso(today), to: localIso(today) };
+  if (p === 'yesterday') { const y = new Date(today); y.setDate(y.getDate() - 1); return { from: localIso(y), to: localIso(y) }; }
+  if (p === 'week')      { const w = new Date(today); w.setDate(w.getDate() - 6); return { from: localIso(w), to: localIso(today) }; }
+  if (p === 'month')     { const m = new Date(today.getFullYear(), today.getMonth(), 1); return { from: localIso(m), to: localIso(today) }; }
   return { from, to };
 }
 
 // Période de comparaison : même période, année N-1 (même jour/mois, un an
 // plus tôt), pas la période équivalente juste avant.
-function previousRange(from: string, to: string): { from: string; to: string } {
-  const iso = (d: Date) => d.toISOString().slice(0, 10);
+export function previousRange(from: string, to: string): { from: string; to: string } {
   const shiftYear = (s: string) => {
     const d = new Date(`${s}T00:00:00`);
     d.setFullYear(d.getFullYear() - 1);
-    return iso(d);
+    return localIso(d);
   };
   return { from: shiftYear(from), to: shiftYear(to) };
 }
@@ -79,7 +91,7 @@ export default function CADashboard({
 }) {
   const [storeId, setStoreId] = useState<string>('');
   const [period, setPeriod] = useState<Period>('today');
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localIso(new Date());
   const [customFrom, setCustomFrom] = useState(today);
   const [customTo, setCustomTo] = useState(today);
   const [tab, setTab] = useState<Tab>('xz');
