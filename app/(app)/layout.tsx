@@ -19,6 +19,8 @@ import {
   type ScreenDeliverySettings,
 } from '@/lib/settings/screen-delivery';
 import { loadScopedSettingValue } from '@/lib/settings/scoped-server';
+import { loadAutoLogoutOverride } from '@/lib/settings/auto-logout-server';
+import { resolveDeviceStoreId } from '@/lib/pos/current-store';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   // Mode back-office : injecte par le middleware sur le sous-domaine bo.
@@ -68,6 +70,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     [user.organizationId, POS_UI_KEY],
   );
   const ui = mergeWithDefaults(rows[0]?.value ?? null);
+
+  // Déconnexion automatique : réglage PAR BOUTIQUE (voir auto-logout-server.ts)
+  // — la boutique du poste de caisse appairé à CET appareil, sinon repli sur
+  // le réglage par défaut de l'organisation (y compris en back-office, où
+  // AppShell n'applique de toute façon jamais l'auto-déconnexion).
+  const deviceStoreId = await resolveDeviceStoreId(user.organizationId);
+  const autoLogout = (await loadAutoLogoutOverride(user.organizationId, deviceStoreId)) ?? {
+    auto_logout_mode: ui.auto_logout_mode,
+    auto_logout_minutes: ui.auto_logout_minutes,
+  };
 
   // Charge le plan / la date d'échéance (silencieux si migration 0010 absente).
   let subscription: SubscriptionInfo | null = null;
@@ -130,8 +142,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <AppShell
         user={{ id: user.id, fullName: user.fullName, role: user.role, email: user.email, color: userColor }}
         hiddenPaths={hiddenPaths}
-        autoLogoutMode={ui.auto_logout_mode}
-        autoLogoutMinutes={ui.auto_logout_minutes}
+        autoLogoutMode={autoLogout.auto_logout_mode}
+        autoLogoutMinutes={autoLogout.auto_logout_minutes}
         headerTabs={ui.header_tabs ?? []}
         subscription={subscription}
         permissions={Array.from(effectivePerms)}

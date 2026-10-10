@@ -12,6 +12,7 @@ import {
   tileMetrics,
   type PosUiSettings,
   type PosTileSize,
+  type AutoLogoutMode,
 } from '@/lib/settings/pos-ui';
 import { SIDEBAR_ITEMS } from '@/components/Sidebar';
 import Badge from '@/components/Badge';
@@ -36,11 +37,18 @@ interface Props {
   /** Taille effective (override boutique, sinon défaut organisation) pour
    *  storeId = lockStoreId ?? '' (« toutes les boutiques ») au 1er rendu. */
   initialTileSize: PosTileSize;
+  /** Déconnexion automatique effective (override boutique, sinon défaut
+   *  organisation) pour storeId = lockStoreId ?? '' au 1er rendu. */
+  initialAutoLogoutMode: AutoLogoutMode;
+  initialAutoLogoutMinutes: number;
 }
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
-export default function POSSettingsForm({ initial, canWrite, stores, lockStoreId, initialTileSize }: Props) {
+export default function POSSettingsForm({
+  initial, canWrite, stores, lockStoreId, initialTileSize,
+  initialAutoLogoutMode, initialAutoLogoutMinutes,
+}: Props) {
   const router = useRouter();
   const [settings, setSettings] = useState<PosUiSettings>(initial);
   const [saveState, setSaveState] = useState<SaveState>('idle');
@@ -97,6 +105,75 @@ export default function POSSettingsForm({ initial, canWrite, stores, lockStoreId
     }, 400);
     return () => clearTimeout(t);
   }, [tileSize, tileSizeStoreId, canWrite, router]);
+
+  // Déconnexion automatique : réglage PAR BOUTIQUE, géré séparément du reste
+  // (même motif que la taille des tuiles ci-dessus) — sa propre boutique
+  // sélectionnée, ses propres valeurs, sa propre sauvegarde.
+  const [autoLogoutStoreId, setAutoLogoutStoreId] = useState<string>(lockStoreId ?? '');
+  const [autoLogoutMode, setAutoLogoutMode] = useState<AutoLogoutMode>(initialAutoLogoutMode);
+  const [autoLogoutMinutes, setAutoLogoutMinutes] = useState<number>(initialAutoLogoutMinutes);
+  const [autoLogoutLoading, setAutoLogoutLoading] = useState(false);
+  const autoLogoutFirstRender = useRef(true);
+  const autoLogoutLastSaved = useRef<{ storeId: string; mode: AutoLogoutMode; minutes: number }>({
+    storeId: lockStoreId ?? '', mode: initialAutoLogoutMode, minutes: initialAutoLogoutMinutes,
+  });
+  // Vrai PENDANT le chargement de la valeur d'une boutique qu'on vient de
+  // sélectionner : les champs mode/minutes affichés sont encore ceux de la
+  // boutique PRÉCÉDENTE le temps que le fetch réponde. Sans ce verrou, l'effet
+  // de sauvegarde (ci-dessous) s'exécute AVANT que le fetch ait mis à jour
+  // mode/minutes — il lirait alors les anciennes valeurs avec le nouveau
+  // storeId et programmerait une sauvegarde qui copie par erreur le réglage de
+  // l'ancienne boutique sur la nouvelle. Une ref (pas un state) : elle doit
+  // être lue par l'effet de sauvegarde dans la MÊME passe de rendu que celle
+  // où l'effet de chargement la positionne.
+  const autoLogoutSwitching = useRef(false);
+
+  useEffect(() => {
+    if (lockStoreId) return; // verrouillé : jamais de rechargement par sélection
+    if (autoLogoutFirstRender.current) { autoLogoutFirstRender.current = false; return; }
+    autoLogoutSwitching.current = true;
+    let cancelled = false;
+    setAutoLogoutLoading(true);
+    void fetch(`/api/settings/pos/auto-logout${autoLogoutStoreId ? `?store_id=${autoLogoutStoreId}` : ''}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (cancelled || !j) return;
+        setAutoLogoutMode(j.auto_logout_mode);
+        setAutoLogoutMinutes(j.auto_logout_minutes);
+        autoLogoutLastSaved.current = { storeId: autoLogoutStoreId, mode: j.auto_logout_mode, minutes: j.auto_logout_minutes };
+      })
+      .finally(() => { if (!cancelled) { setAutoLogoutLoading(false); autoLogoutSwitching.current = false; } });
+    return () => { cancelled = true; };
+  }, [autoLogoutStoreId, lockStoreId]);
+
+  // Auto-save (debounce 400ms), indépendant du reste.
+  useEffect(() => {
+    if (!canWrite) return;
+    if (autoLogoutSwitching.current) return; // chargement de la boutique sélectionnée en cours
+    if (
+      autoLogoutLastSaved.current.storeId === autoLogoutStoreId
+      && autoLogoutLastSaved.current.mode === autoLogoutMode
+      && autoLogoutLastSaved.current.minutes === autoLogoutMinutes
+    ) return;
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch('/api/settings/pos/auto-logout', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            store_id: autoLogoutStoreId || null,
+            auto_logout_mode: autoLogoutMode,
+            auto_logout_minutes: autoLogoutMinutes,
+          }),
+        });
+        if (res.ok) {
+          autoLogoutLastSaved.current = { storeId: autoLogoutStoreId, mode: autoLogoutMode, minutes: autoLogoutMinutes };
+          router.refresh();
+        }
+      } catch { /* tant pis, l'utilisateur peut recliquer */ }
+    }, 400);
+    return () => clearTimeout(t);
+  }, [autoLogoutMode, autoLogoutMinutes, autoLogoutStoreId, canWrite, router]);
 
   // Échelle de l'interface : réglage PROPRE À CET ÉCRAN (localStorage), pas au
   // niveau organisation — chaque poste a sa taille d'écran. Indépendant de
@@ -298,9 +375,31 @@ export default function POSSettingsForm({ initial, canWrite, stores, lockStoreId
 
         <Section
           title="Déconnexion automatique"
-          description="Comportement de fermeture de la session utilisateur."
+          description="Comportement de fermeture de la session utilisateur. Réglage PROPRE À CHAQUE BOUTIQUE — contrairement au reste de cette page, changer le mode ici n'affecte que la boutique sélectionnée. L'écran de reconnexion (code PIN) reste inchangé."
         >
-          <div className="space-y-2">
+          {lockStoreId ? (
+            <p className="mb-3 text-xs text-ink-soft">
+              Poste de caisse : réglage de{' '}
+              <strong>{stores.find((s) => s.id === lockStoreId)?.name ?? 'cette boutique'}</strong> uniquement.
+            </p>
+          ) : stores.length > 1 ? (
+            <label className="mb-3 block text-sm">
+              <span className="text-ink-soft">Boutique</span>
+              <select
+                className="input h-10 w-full mt-1 max-w-sm"
+                value={autoLogoutStoreId}
+                onChange={(e) => setAutoLogoutStoreId(e.target.value)}
+                disabled={!canWrite}
+              >
+                <option value="">Toutes les boutiques (réglage par défaut)</option>
+                {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+              <span className="mt-1 block text-xs text-ink-soft">
+                « Toutes les boutiques » ne sert que de valeur par défaut, reprise par une boutique sans réglage propre.
+              </span>
+            </label>
+          ) : null}
+          <div className={`space-y-2 ${autoLogoutLoading ? 'opacity-50' : ''}`}>
             {[
               { value: 'never', label: 'Jamais', desc: 'L\'utilisateur reste connecté tant qu\'il ne se déconnecte pas manuellement.' },
               { value: 'after_sale', label: 'Après chaque vente', desc: 'Renvoie sur l\'écran de connexion après chaque ticket validé.' },
@@ -308,13 +407,13 @@ export default function POSSettingsForm({ initial, canWrite, stores, lockStoreId
             ].map((opt) => (
               <label key={opt.value}
                      className={`flex items-start gap-3 rounded-xl border p-3 cursor-pointer ${
-                       settings.auto_logout_mode === opt.value ? 'border-ink bg-accent-soft' : 'border-border bg-white'
-                     } ${!canWrite ? 'opacity-60 cursor-not-allowed' : ''}`}>
+                       autoLogoutMode === opt.value ? 'border-ink bg-accent-soft' : 'border-border bg-white'
+                     } ${!canWrite || autoLogoutLoading ? 'opacity-60 cursor-not-allowed' : ''}`}>
                 <input
                   type="radio" name="auto_logout_mode" value={opt.value}
-                  checked={settings.auto_logout_mode === opt.value}
-                  onChange={() => patch('auto_logout_mode', opt.value as typeof settings.auto_logout_mode)}
-                  disabled={!canWrite}
+                  checked={autoLogoutMode === opt.value}
+                  onChange={() => setAutoLogoutMode(opt.value as AutoLogoutMode)}
+                  disabled={!canWrite || autoLogoutLoading}
                   className="mt-1"
                 />
                 <div className="flex-1">
@@ -323,15 +422,15 @@ export default function POSSettingsForm({ initial, canWrite, stores, lockStoreId
                 </div>
               </label>
             ))}
-            {settings.auto_logout_mode === 'timer' && (
+            {autoLogoutMode === 'timer' && (
               <div className="rounded-xl border border-border bg-white p-3 ml-7">
                 <label className="text-xs font-medium text-ink-soft">Délai d&apos;inactivité (minutes)</label>
                 <input
                   type="number" min={1} max={120}
                   className="input mt-1 max-w-[120px]"
-                  value={settings.auto_logout_minutes}
-                  onChange={(e) => patch('auto_logout_minutes', Math.max(1, Math.min(120, Number(e.target.value) || 1)))}
-                  disabled={!canWrite}
+                  value={autoLogoutMinutes}
+                  onChange={(e) => setAutoLogoutMinutes(Math.max(1, Math.min(120, Number(e.target.value) || 1)))}
+                  disabled={!canWrite || autoLogoutLoading}
                 />
               </div>
             )}

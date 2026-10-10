@@ -10,6 +10,7 @@ import {
   type PosUiSettings,
 } from '@/lib/settings/pos-ui';
 import { loadTileSizeOverride } from '@/lib/settings/tile-size-server';
+import { loadAutoLogoutOverride } from '@/lib/settings/auto-logout-server';
 import PageHeader from '@/components/PageHeader';
 import POSSettingsForm from './POSSettingsForm';
 import PosteRefCard from '@/components/PosteRefCard';
@@ -38,11 +39,19 @@ export default async function POSSettingsPage() {
   const initialTileSize = (await loadTileSizeOverride(user.organizationId, lockStoreId))
     ?? initial.tile_size ?? POS_UI_DEFAULTS.tile_size;
 
+  // Déconnexion automatique : réglage PAR BOUTIQUE (voir auto-logout-server.ts)
+  // — même motif que la taille des tuiles ci-dessus.
+  const autoLogoutOverride = await loadAutoLogoutOverride(user.organizationId, lockStoreId);
+  const initialAutoLogoutMode = autoLogoutOverride?.auto_logout_mode
+    ?? initial.auto_logout_mode ?? POS_UI_DEFAULTS.auto_logout_mode;
+  const initialAutoLogoutMinutes = autoLogoutOverride?.auto_logout_minutes
+    ?? initial.auto_logout_minutes ?? POS_UI_DEFAULTS.auto_logout_minutes;
+
   return (
     <div className="p-6 md:p-8 space-y-5">
       <PageHeader
         title="Paramètres caisse"
-        subtitle="Personnalisez l'interface de vente. Vos réglages sont enregistrés au niveau de votre organisation et appliqués sur toutes les caisses, à l'exception de la taille des tuiles (réglable par boutique)."
+        subtitle="Personnalisez l'interface de vente. Vos réglages sont enregistrés au niveau de votre organisation et appliqués sur toutes les caisses, à l'exception de la taille des tuiles et de la déconnexion automatique (réglables par boutique)."
         badge={!canWrite ? { label: 'Lecture seule pour votre rôle', tone: 'soft' } : undefined}
       />
       <PosteRefCard />
@@ -52,6 +61,8 @@ export default async function POSSettingsPage() {
         stores={stores}
         lockStoreId={lockStoreId}
         initialTileSize={initialTileSize}
+        initialAutoLogoutMode={initialAutoLogoutMode}
+        initialAutoLogoutMinutes={initialAutoLogoutMinutes}
       />
     </div>
   );
