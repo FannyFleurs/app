@@ -4,6 +4,7 @@ import { query } from '@/lib/db/client';
 import { requireSession } from '@/lib/auth/guards';
 import { jsonError } from '@/lib/validation/api';
 import { importOnlyCaTotal } from '@/lib/analytics/revenue-blend';
+import { EXCLUDE_GIFT_CARD_ISSUANCE_SQL } from '@/lib/analytics/gift-card-ca';
 
 export const dynamic = 'force-dynamic';
 
@@ -71,13 +72,13 @@ export async function GET(req: Request) {
     // (metadata.gift_card) : ceux-ci ne comptent pas comme des remises.
     `SELECT COALESCE(SUM(sl.quantity), 0)::text AS items_sold,
             COUNT(DISTINCT sl.product_id)::int AS unique_products,
-            COALESCE(SUM(sl.line_ht) FILTER (WHERE COALESCE(sl.metadata->>'gift_card_ca_deferred','') <> 'true'), 0)::text AS revenue_ht,
-            COALESCE(SUM(COALESCE(p.purchase_price_ht, 0) * sl.quantity) FILTER (WHERE COALESCE(sl.metadata->>'gift_card_ca_deferred','') <> 'true'), 0)::text AS cost_ht,
+            COALESCE(SUM(sl.line_ht) FILTER (WHERE ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}), 0)::text AS revenue_ht,
+            COALESCE(SUM(COALESCE(p.purchase_price_ht, 0) * sl.quantity) FILTER (WHERE ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}), 0)::text AS cost_ht,
             COALESCE(SUM(sl.discount_amount)
               FILTER (WHERE COALESCE(sl.metadata->>'gift_card', '') <> 'true'), 0)::text AS real_discount,
-            COALESCE(SUM(sl.line_ttc) FILTER (WHERE COALESCE(sl.metadata->>'gift_card_ca_deferred','') <> 'true'), 0)::text AS ca_ttc,
-            COALESCE(SUM(sl.line_ht)  FILTER (WHERE COALESCE(sl.metadata->>'gift_card_ca_deferred','') <> 'true'), 0)::text AS ca_ht,
-            COALESCE(SUM(sl.line_tva) FILTER (WHERE COALESCE(sl.metadata->>'gift_card_ca_deferred','') <> 'true'), 0)::text AS ca_tva
+            COALESCE(SUM(sl.line_ttc) FILTER (WHERE ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}), 0)::text AS ca_ttc,
+            COALESCE(SUM(sl.line_ht)  FILTER (WHERE ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}), 0)::text AS ca_ht,
+            COALESCE(SUM(sl.line_tva) FILTER (WHERE ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}), 0)::text AS ca_tva
        FROM sale_lines sl
        JOIN sales s ON s.id = sl.sale_id
        LEFT JOIN products p ON p.id = sl.product_id

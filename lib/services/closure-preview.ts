@@ -1,5 +1,6 @@
 import { query } from '@/lib/db/client';
 import { depositReasonSql } from '@/lib/services/cash-deposit';
+import { EXCLUDE_GIFT_CARD_ISSUANCE_SQL } from '@/lib/analytics/gift-card-ca';
 
 export interface ClosurePreview {
   totals: { sales: number; ht: number; tva: number; ttc: number; discount: number };
@@ -56,15 +57,22 @@ export async function computeClosurePreview(storeId: string, date: string): Prom
   }
   const periodStart: string | null = reopened && lastSeal ? lastSeal.sealed_at : null;
 
+  // ht/tva/ttc/discount calculés depuis sale_lines (PAS sales.total_*), pour
+  // EXCLURE les lignes d'émission de carte cadeau / bon d'achat — dette
+  // envers le client, pas du CA tant qu'elles ne sont pas dépensées (voir
+  // lib/analytics/gift-card-ca.ts). Même règle que la clôture SCELLÉE
+  // (ClosingService.sealDaily) : sans ça, cet aperçu annonçait un CA
+  // différent de celui que la clôture produirait réellement pour ce jour.
   const totals = await query<{ sales: string; ht: string; tva: string; ttc: string; discount: string }>(
-    `SELECT COUNT(*)::text AS sales,
-            COALESCE(SUM(total_ht),0)::text  AS ht,
-            COALESCE(SUM(total_tva),0)::text AS tva,
-            COALESCE(SUM(total_ttc),0)::text AS ttc,
-            COALESCE(SUM(total_discount),0)::text AS discount
-       FROM sales
-      WHERE store_id = $1 AND status='validated' AND validated_at::date = $2::date
-        AND ($3::timestamptz IS NULL OR validated_at > $3)`,
+    `SELECT COUNT(DISTINCT s.id)::text AS sales,
+            COALESCE(SUM(sl.line_ht)  FILTER (WHERE ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}), 0)::text AS ht,
+            COALESCE(SUM(sl.line_tva) FILTER (WHERE ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}), 0)::text AS tva,
+            COALESCE(SUM(sl.line_ttc) FILTER (WHERE ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}), 0)::text AS ttc,
+            COALESCE(SUM(sl.discount_amount) FILTER (WHERE ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}), 0)::text AS discount
+       FROM sales s
+       LEFT JOIN sale_lines sl ON sl.sale_id = s.id
+      WHERE s.store_id = $1 AND s.status='validated' AND s.validated_at::date = $2::date
+        AND ($3::timestamptz IS NULL OR s.validated_at > $3)`,
     [storeId, date, periodStart],
   );
 
@@ -77,6 +85,7 @@ export async function computeClosurePreview(storeId: string, date: string): Prom
        JOIN sales s ON s.id = sl.sale_id
       WHERE s.store_id = $1 AND s.status='validated' AND s.validated_at::date = $2::date
         AND ($3::timestamptz IS NULL OR s.validated_at > $3)
+        AND ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}
       GROUP BY sl.tax_rate ORDER BY sl.tax_rate DESC`,
     [storeId, date, periodStart],
   );

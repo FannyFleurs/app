@@ -7,6 +7,7 @@ import {
   PAYMENT_LABELS,
   type DashboardData, type KpiSet, type ProductRow, type CategoryRow,
 } from '@/lib/analytics/dashboard';
+import { EXCLUDE_GIFT_CARD_ISSUANCE_SQL } from '@/lib/analytics/gift-card-ca';
 
 export const dynamic = 'force-dynamic';
 
@@ -84,18 +85,30 @@ export async function GET(req: Request) {
   const argsPrev: unknown[] = store_id ? [org, pFrom, pTo, store_id] : [org, pFrom, pTo];
 
   // ---- KPIs (courant + N-1) ------------------------------------------------
+  // CA/TVA/marge calculés depuis sale_lines (PAS sales.total_ttc/ht/tva) pour
+  // pouvoir EXCLURE les lignes d'émission de carte cadeau / bon d'achat :
+  // leur vente est un encaissement, pas du chiffre d'affaires, tant qu'elles
+  // ne sont pas dépensées (voir lib/analytics/gift-card-ca.ts). Le nombre de
+  // tickets/clients reste lui au niveau VENTE, sans ce filtre : un ticket
+  // contenant (ou constitué uniquement d') une carte cadeau reste un ticket,
+  // même si sa contribution au CA est nulle — même règle que /api/ca/summary.
   async function kpis(args: unknown[]): Promise<KpiSet> {
-    const s = (await query<{
-      ca_ttc: string; ca_ht: string; tva: string; tickets: number; customers: number;
-    }>(
-      `SELECT COALESCE(SUM(total_ttc),0)::text AS ca_ttc,
-              COALESCE(SUM(total_ht),0)::text  AS ca_ht,
-              COALESCE(SUM(total_tva),0)::text AS tva,
-              COUNT(*)::int AS tickets,
+    const s = (await query<{ tickets: number; customers: number }>(
+      `SELECT COUNT(*)::int AS tickets,
               COUNT(DISTINCT customer_id)::int AS customers
          FROM sales s
         WHERE s.organization_id = $1 AND s.status = 'validated'
           AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date ${storeSql}`,
+      args,
+    )).rows[0]!;
+    const ca = (await query<{ ca_ttc: string; ca_ht: string; tva: string }>(
+      `SELECT COALESCE(SUM(sl.line_ttc),0)::text AS ca_ttc,
+              COALESCE(SUM(sl.line_ht),0)::text  AS ca_ht,
+              COALESCE(SUM(sl.line_tva),0)::text AS tva
+         FROM sale_lines sl JOIN sales s ON s.id = sl.sale_id
+        WHERE s.organization_id = $1 AND s.status = 'validated'
+          AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date ${storeSql}
+          AND ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}`,
       args,
     )).rows[0]!;
     const m = (await query<{ revenue_ht: string; cost_ht: string }>(
@@ -104,13 +117,14 @@ export async function GET(req: Request) {
          FROM sale_lines sl JOIN sales s ON s.id = sl.sale_id
          LEFT JOIN products p ON p.id = sl.product_id
         WHERE s.organization_id = $1 AND s.status = 'validated'
-          AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date ${storeSql}`,
+          AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date ${storeSql}
+          AND ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}`,
       args,
     )).rows[0]!;
-    const ca_ttc = Number(s.ca_ttc), ca_ht = Number(s.ca_ht), tickets = Number(s.tickets);
+    const ca_ttc = Number(ca.ca_ttc), ca_ht = Number(ca.ca_ht), tickets = Number(s.tickets);
     const marge = Number((Number(m.revenue_ht) - Number(m.cost_ht)).toFixed(2));
     return {
-      ca_ttc, ca_ht, tva: Number(s.tva), tickets, customers: Number(s.customers),
+      ca_ttc, ca_ht, tva: Number(ca.tva), tickets, customers: Number(s.customers),
       marge,
       avg_ttc: tickets > 0 ? Number((ca_ttc / tickets).toFixed(2)) : 0,
       avg_ht:  tickets > 0 ? Number((ca_ht / tickets).toFixed(2)) : 0,
@@ -119,13 +133,18 @@ export async function GET(req: Request) {
   }
 
   // ---- Séries journalières (revenu + marge) --------------------------------
+  // LEFT JOIN (pas INNER) sur sale_lines : une vente 100% carte cadeau doit
+  // rester comptée dans `n` (nombre de tickets) même si elle ne contribue
+  // plus rien à ttc/ht une fois ses lignes exclues — sinon elle disparaîtrait
+  // du jour au lieu d'y apparaître avec un CA nul.
   async function dailyRevenue(args: unknown[]) {
     return (await query<{ d: string; ttc: string; ht: string; n: number }>(
       `SELECT (s.validated_at AT TIME ZONE 'Europe/Paris')::date::text AS d,
-              COALESCE(SUM(total_ttc),0)::text AS ttc,
-              COALESCE(SUM(total_ht),0)::text  AS ht,
-              COUNT(*)::int AS n
+              COALESCE(SUM(sl.line_ttc),0)::text AS ttc,
+              COALESCE(SUM(sl.line_ht),0)::text  AS ht,
+              COUNT(DISTINCT s.id)::int AS n
          FROM sales s
+         LEFT JOIN sale_lines sl ON sl.sale_id = s.id AND ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}
         WHERE s.organization_id = $1 AND s.status = 'validated'
           AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date ${storeSql}
         GROUP BY 1`,
@@ -140,6 +159,7 @@ export async function GET(req: Request) {
          LEFT JOIN products p ON p.id = sl.product_id
         WHERE s.organization_id = $1 AND s.status = 'validated'
           AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date ${storeSql}
+          AND ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}
         GROUP BY 1`,
       args,
     )).rows;
@@ -149,11 +169,12 @@ export async function GET(req: Request) {
   async function hourly(args: unknown[]) {
     return (await query<{ h: number; ttc: string; ht: string }>(
       `SELECT EXTRACT(HOUR FROM (s.validated_at AT TIME ZONE 'Europe/Paris'))::int AS h,
-              COALESCE(SUM(total_ttc),0)::text AS ttc,
-              COALESCE(SUM(total_ht),0)::text  AS ht
-         FROM sales s
+              COALESCE(SUM(sl.line_ttc),0)::text AS ttc,
+              COALESCE(SUM(sl.line_ht),0)::text  AS ht
+         FROM sale_lines sl JOIN sales s ON s.id = sl.sale_id
         WHERE s.organization_id = $1 AND s.status = 'validated'
           AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date ${storeSql}
+          AND ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}
         GROUP BY 1`,
       args,
     )).rows;
@@ -163,11 +184,12 @@ export async function GET(req: Request) {
   async function weekday(args: unknown[]) {
     return (await query<{ dow: number; ttc: string; ht: string }>(
       `SELECT EXTRACT(DOW FROM (s.validated_at AT TIME ZONE 'Europe/Paris'))::int AS dow,
-              COALESCE(SUM(total_ttc),0)::text AS ttc,
-              COALESCE(SUM(total_ht),0)::text  AS ht
-         FROM sales s
+              COALESCE(SUM(sl.line_ttc),0)::text AS ttc,
+              COALESCE(SUM(sl.line_ht),0)::text  AS ht
+         FROM sale_lines sl JOIN sales s ON s.id = sl.sale_id
         WHERE s.organization_id = $1 AND s.status = 'validated'
           AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date ${storeSql}
+          AND ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}
         GROUP BY 1`,
       args,
     )).rows;
@@ -189,8 +211,10 @@ export async function GET(req: Request) {
       `WITH r AS (
          SELECT s.store_id AS store_id,
                 (s.validated_at AT TIME ZONE 'Europe/Paris')::date AS d,
-                SUM(s.total_ttc) AS ttc, SUM(s.total_ht) AS ht, COUNT(*) AS n
+                COALESCE(SUM(sl.line_ttc), 0) AS ttc, COALESCE(SUM(sl.line_ht), 0) AS ht,
+                COUNT(DISTINCT s.id) AS n
            FROM sales s
+           LEFT JOIN sale_lines sl ON sl.sale_id = s.id AND ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}
           WHERE s.organization_id = $1 AND s.status = 'validated'
             AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date ${storeSales}
           GROUP BY 1, 2
@@ -253,7 +277,9 @@ export async function GET(req: Request) {
         ORDER BY 2 DESC`,
       argsCur,
     ),
-    // Détail TVA (courant).
+    // Détail TVA (courant). Exclut les lignes carte cadeau : sans ça, leur
+    // valeur faciale (TVA 0%, voir gift-card-ca.ts) gonflerait la tranche
+    // « 0 % » avec un montant qui n'est pas une vente détaxée réelle.
     query<{ rate: string; base_ht: string; tva: string; ttc: string }>(
       `SELECT sl.tax_rate::text AS rate,
               COALESCE(SUM(sl.line_ht),0)::text  AS base_ht,
@@ -262,10 +288,13 @@ export async function GET(req: Request) {
          FROM sale_lines sl JOIN sales s ON s.id = sl.sale_id
         WHERE s.organization_id = $1 AND s.status = 'validated'
           AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date ${storeSql}
+          AND ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}
         GROUP BY sl.tax_rate ORDER BY sl.tax_rate`,
       argsCur,
     ),
-    // Produits (courant) — triés par CA TTC décroissant.
+    // Produits (courant) — triés par CA TTC décroissant. Exclut les lignes
+    // carte cadeau : ce n'est pas un produit vendu, sa valeur faciale n'est
+    // pas du CA tant qu'elle n'est pas dépensée.
     query<{ label: string; qty: string; ttc: string; ht: string }>(
       `SELECT sl.label,
               COALESCE(SUM(sl.quantity),0)::text AS qty,
@@ -274,13 +303,14 @@ export async function GET(req: Request) {
          FROM sale_lines sl JOIN sales s ON s.id = sl.sale_id
         WHERE s.organization_id = $1 AND s.status = 'validated'
           AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date ${storeSql}
+          AND ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}
         GROUP BY sl.label ORDER BY SUM(sl.line_ttc) DESC`,
       argsCur,
     ),
     // Ventes par catégorie (courant) — via le produit rattaché à la ligne,
     // ou sl.category_id pour une ligne sans produit (commande web/OGF —
     // order-intake.ts). Une ligne sans aucune des deux tombe dans
-    // « Sans catégorie ».
+    // « Sans catégorie ». Exclut les lignes carte cadeau (pas du CA).
     query<{ label: string; ttc: string; ht: string }>(
       `SELECT COALESCE(c.name, 'Sans catégorie') AS label,
               COALESCE(SUM(sl.line_ttc),0)::text AS ttc,
@@ -290,6 +320,7 @@ export async function GET(req: Request) {
          LEFT JOIN product_categories c ON c.id = COALESCE(p.category_id, sl.category_id)
         WHERE s.organization_id = $1 AND s.status = 'validated'
           AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date ${storeSql}
+          AND ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}
         GROUP BY COALESCE(c.name, 'Sans catégorie') ORDER BY SUM(sl.line_ttc) DESC`,
       argsCur,
     ),

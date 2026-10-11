@@ -4,6 +4,7 @@ import { query } from '@/lib/db/client';
 import { requirePermission } from '@/lib/auth/guards';
 import { jsonError } from '@/lib/validation/api';
 import { hasTargetsTable, hasRevenueHistoryTable, monthBounds } from '@/lib/analytics/targets-server';
+import { EXCLUDE_GIFT_CARD_ISSUANCE_SQL } from '@/lib/analytics/gift-card-ca';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,10 +38,13 @@ export async function GET(req: Request) {
     ? [g.user.organizationId, start, end, store_id]
     : [g.user.organizationId, start, end];
 
-  // Réalisé (CA TTC) par boutique sur le mois.
+  // Réalisé (CA TTC) par boutique sur le mois — exclut les lignes d'émission
+  // de carte cadeau (dette, pas du CA tant qu'elles ne sont pas dépensées,
+  // voir lib/analytics/gift-card-ca.ts), même calcul que le reste de l'app.
   const actualRes = await query<{ store_id: string; ttc: string }>(
-    `SELECT s.store_id, COALESCE(SUM(s.total_ttc), 0)::text AS ttc
+    `SELECT s.store_id, COALESCE(SUM(sl.line_ttc) FILTER (WHERE ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}), 0)::text AS ttc
        FROM sales s
+       LEFT JOIN sale_lines sl ON sl.sale_id = s.id
       WHERE s.organization_id = $1 AND s.status = 'validated'
         AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date ${storeFilter}
       GROUP BY s.store_id`,

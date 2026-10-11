@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { query } from '@/lib/db/client';
 import { requirePermission } from '@/lib/auth/guards';
 import { jsonError } from '@/lib/validation/api';
+import { EXCLUDE_GIFT_CARD_ISSUANCE_SQL } from '@/lib/analytics/gift-card-ca';
 
 export const dynamic = 'force-dynamic';
 
@@ -65,6 +66,7 @@ export async function GET(req: Request) {
       WHERE s.organization_id = $1
         AND s.status = 'validated'
         AND ${DAY} BETWEEN $2::date AND $3::date
+        AND ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}
         ${storeFilter}
       GROUP BY sl.label
       ORDER BY SUM(sl.line_ttc) DESC

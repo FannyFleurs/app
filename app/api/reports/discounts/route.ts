@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { query } from '@/lib/db/client';
 import { requirePermission } from '@/lib/auth/guards';
 import { reportRange, localDay } from '@/lib/reports/range';
+import { EXCLUDE_GIFT_CARD_ISSUANCE_SQL } from '@/lib/analytics/gift-card-ca';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,12 +35,17 @@ export async function GET(req: Request) {
     // d'achat (metadata.gift_card) : offrir/vendre un bon d'achat moins cher
     // n'est pas une remise commerciale sur des marchandises. Les avoirs, eux,
     // ne sont pas des lignes de vente (moyen de paiement) → déjà hors calcul.
+    // total_ttc EXCLUT lui aussi ces lignes (gift-card-ca.ts) : sinon le taux
+    // de remise (remise / CA brut) serait faussé à la baisse sur une vente
+    // contenant par ailleurs une carte cadeau (dénominateur gonflé par une
+    // valeur qui ne porte jamais de remise).
     `SELECT COALESCE(SUM(sd.real_discount), 0)::text AS total_discount,
-            COALESCE(SUM(sd.total_ttc), 0)::text     AS total_ttc,
+            COALESCE(SUM(sd.ca_ttc), 0)::text        AS total_ttc,
             COUNT(*) FILTER (WHERE sd.real_discount > 0)::text AS discounted,
             COUNT(*)::text AS sales
        FROM (
-         SELECT s.id, s.total_ttc,
+         SELECT s.id,
+                COALESCE(SUM(sl.line_ttc) FILTER (WHERE ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}), 0) AS ca_ttc,
                 COALESCE(SUM(sl.discount_amount)
                   FILTER (WHERE COALESCE(sl.metadata->>'gift_card', '') <> 'true'), 0) AS real_discount
            FROM sales s
@@ -47,7 +53,7 @@ export async function GET(req: Request) {
           WHERE s.organization_id = $1 AND s.status = 'validated'
             AND ${DAY} BETWEEN $2::date AND $3::date
             ${storeFilter}
-          GROUP BY s.id, s.total_ttc
+          GROUP BY s.id
        ) sd`,
     args,
   );
@@ -90,14 +96,15 @@ export async function GET(req: Request) {
             u.full_name AS cashier,
             COALESCE(c.company_name, NULLIF(TRIM(CONCAT(c.first_name, ' ', c.last_name)), '')) AS customer,
             st.name AS store,
-            d.real_discount::text AS discount, s.total_ttc::text AS ttc,
+            d.real_discount::text AS discount, d.ca_ttc::text AS ttc,
             m.motif
        FROM sales s
        LEFT JOIN users u ON u.id = s.user_id
        LEFT JOIN customers c ON c.id = s.customer_id
        LEFT JOIN stores st ON st.id = s.store_id
        JOIN LATERAL (
-         SELECT COALESCE(SUM(sl.discount_amount)
+         SELECT COALESCE(SUM(sl.line_ttc) FILTER (WHERE ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}), 0) AS ca_ttc,
+                COALESCE(SUM(sl.discount_amount)
                   FILTER (WHERE COALESCE(sl.metadata->>'gift_card', '') <> 'true'), 0) AS real_discount
            FROM sale_lines sl WHERE sl.sale_id = s.id
        ) d ON TRUE

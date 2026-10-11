@@ -4,6 +4,7 @@ import { query } from '@/lib/db/client';
 import { requireSession } from '@/lib/auth/guards';
 import { jsonError } from '@/lib/validation/api';
 import { importOnlyCaByStore } from '@/lib/analytics/revenue-blend';
+import { EXCLUDE_GIFT_CARD_ISSUANCE_SQL } from '@/lib/analytics/gift-card-ca';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,11 +42,15 @@ export async function GET(req: Request) {
     [orgId],
   );
 
+  // LEFT JOIN (pas INNER) : une vente 100% carte cadeau reste comptée dans
+  // tickets_count même si l'exclusion lui laisse un CA nul — voir
+  // lib/analytics/gift-card-ca.ts.
   const sales = await query<{ store_id: string; ca_ttc: string; tickets_count: number }>(
     `SELECT s.store_id::text AS store_id,
-            COALESCE(SUM(s.total_ttc), 0)::text AS ca_ttc,
-            COUNT(*)::int AS tickets_count
+            COALESCE(SUM(sl.line_ttc), 0)::text AS ca_ttc,
+            COUNT(DISTINCT s.id)::int AS tickets_count
        FROM sales s
+       LEFT JOIN sale_lines sl ON sl.sale_id = s.id AND ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}
       WHERE s.organization_id = $1
         AND s.status = 'validated'
         AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date
@@ -64,6 +69,7 @@ export async function GET(req: Request) {
       WHERE s.organization_id = $1
         AND s.status = 'validated'
         AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date
+        AND ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}
       GROUP BY s.store_id`,
     [orgId, from, to],
   );
@@ -72,8 +78,9 @@ export async function GET(req: Request) {
   let importedPrevByStore = new Map<string, { ca_ttc: number; ca_ht: number; tickets: number }>();
   if (prev_from && prev_to) {
     const prev = await query<{ store_id: string; ca_ttc: string }>(
-      `SELECT s.store_id::text AS store_id, COALESCE(SUM(s.total_ttc), 0)::text AS ca_ttc
+      `SELECT s.store_id::text AS store_id, COALESCE(SUM(sl.line_ttc), 0)::text AS ca_ttc
          FROM sales s
+         LEFT JOIN sale_lines sl ON sl.sale_id = s.id AND ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}
         WHERE s.organization_id = $1
           AND s.status = 'validated'
           AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date

@@ -7,29 +7,37 @@
  */
 
 export interface AccountingAccounts {
-  sales:     string;  // Ventes de marchandises
-  tva_20:    string;  // TVA collectée 20 %
-  tva_10:    string;  // TVA collectée 10 %
-  tva_55:    string;  // TVA collectée 5,5 %
-  tva_21:    string;  // TVA collectée 2,1 %
-  clients:   string;  // Clients (créances)
-  cash:      string;  // Caisse — espèces
-  bank:      string;  // Banque (CB, virement, chèque)
-  discounts: string;  // Remises accordées
+  sales:      string;  // Ventes de marchandises
+  tva_20:     string;  // TVA collectée 20 %
+  tva_10:     string;  // TVA collectée 10 %
+  tva_55:     string;  // TVA collectée 5,5 %
+  tva_21:     string;  // TVA collectée 2,1 %
+  clients:    string;  // Clients (créances)
+  cash:       string;  // Caisse — espèces
+  bank:       string;  // Banque (CB, virement, chèque)
+  discounts:  string;  // Remises accordées
+  /**
+   * Cartes cadeaux / bons d'achat VENDUS mais pas encore dépensés : une
+   * dette envers le client (produit constaté d'avance), pas du CA — voir
+   * lib/analytics/gift-card-ca.ts. Créditée à l'émission, débitée (soldée)
+   * quand la carte est utilisée pour payer une autre vente.
+   */
+  gift_cards: string;
 }
 
 export const ACCOUNTING_ACCOUNTS_KEY = 'accounting_accounts';
 
 export const ACCOUNTING_ACCOUNTS_DEFAULTS: AccountingAccounts = {
-  sales:     '707000',
-  tva_20:    '445710',
-  tva_10:    '445711',
-  tva_55:    '445712',
-  tva_21:    '445713',
-  clients:   '411000',
-  cash:      '530000',
-  bank:      '512000',
-  discounts: '709000',
+  sales:      '707000',
+  tva_20:     '445710',
+  tva_10:     '445711',
+  tva_55:     '445712',
+  tva_21:     '445713',
+  clients:    '411000',
+  cash:       '530000',
+  bank:       '512000',
+  discounts:  '709000',
+  gift_cards: '487000', // Produits constatés d'avance
 };
 
 export function mergeAccountingAccounts(

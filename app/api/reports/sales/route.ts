@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { query } from '@/lib/db/client';
 import { requirePermission } from '@/lib/auth/guards';
 import { jsonError } from '@/lib/validation/api';
+import { EXCLUDE_GIFT_CARD_ISSUANCE_SQL } from '@/lib/analytics/gift-card-ca';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,17 +50,23 @@ export async function GET(req: Request) {
                  ${storeFilter}`;
 
   /* --- Totaux par jour --- */
+  // ht/tva/ttc/discount depuis sale_lines (PAS sales.total_*) pour EXCLURE
+  // les lignes d'émission de carte cadeau / bon d'achat — dette envers le
+  // client, pas du CA tant qu'elles ne sont pas dépensées (voir
+  // lib/analytics/gift-card-ca.ts). LEFT JOIN (pas INNER) : un ticket 100%
+  // carte cadeau reste compté dans `tickets` même avec un CA nul.
   const daily = await query<{
     day: string; tickets: number;
     ht: string; tva: string; ttc: string; discount: string;
   }>(
     `SELECT ${DAY}::text            AS day,
-            COUNT(*)::int           AS tickets,
-            SUM(s.total_ht)::text   AS ht,
-            SUM(s.total_tva)::text  AS tva,
-            SUM(s.total_ttc)::text  AS ttc,
-            SUM(s.total_discount)::text AS discount
+            COUNT(DISTINCT s.id)::int AS tickets,
+            COALESCE(SUM(sl.line_ht)  FILTER (WHERE ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}), 0)::text AS ht,
+            COALESCE(SUM(sl.line_tva) FILTER (WHERE ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}), 0)::text AS tva,
+            COALESCE(SUM(sl.line_ttc) FILTER (WHERE ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}), 0)::text AS ttc,
+            COALESCE(SUM(sl.discount_amount) FILTER (WHERE ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}), 0)::text AS discount
        FROM sales s
+       LEFT JOIN sale_lines sl ON sl.sale_id = s.id
       WHERE ${SCOPE}
       GROUP BY ${DAY}
       ORDER BY 1 DESC`,
@@ -75,6 +82,7 @@ export async function GET(req: Request) {
        FROM sale_lines sl
        JOIN sales s ON s.id = sl.sale_id
       WHERE ${SCOPE}
+        AND ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}
       GROUP BY 1, 2
       ORDER BY 2 DESC`,
     args,

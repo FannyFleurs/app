@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { query } from '@/lib/db/client';
 import { requireSession } from '@/lib/auth/guards';
 import { jsonError } from '@/lib/validation/api';
+import { EXCLUDE_GIFT_CARD_ISSUANCE_SQL } from '@/lib/analytics/gift-card-ca';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,14 +47,18 @@ export async function GET(req: Request) {
     // Remise « réelle » = remises sur les lignes SAUF cartes cadeaux / bons
     // d'achat (metadata.gift_card) : ils ne font pas partie de la catégorie
     // remise. Les avoirs ne sont pas des lignes de vente → déjà hors calcul.
+    // ttc EXCLUT lui aussi ces lignes (gift-card-ca.ts) : sinon le taux de
+    // remise (remise / CA brut) serait faussé à la baisse sur une vente
+    // contenant par ailleurs une carte cadeau.
     `SELECT s.id, s.receipt_number AS receipt, s.validated_at::text AS date,
             u.full_name AS cashier,
-            d.real_discount::text AS discount, s.total_ttc::text AS ttc,
+            d.real_discount::text AS discount, d.ca_ttc::text AS ttc,
             m.motif
        FROM sales s
        LEFT JOIN users u ON u.id = s.user_id
        JOIN LATERAL (
-         SELECT COALESCE(SUM(sl.discount_amount)
+         SELECT COALESCE(SUM(sl.line_ttc) FILTER (WHERE ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}), 0) AS ca_ttc,
+                COALESCE(SUM(sl.discount_amount)
                   FILTER (WHERE COALESCE(sl.metadata->>'gift_card', '') <> 'true'), 0) AS real_discount
            FROM sale_lines sl WHERE sl.sale_id = s.id
        ) d ON TRUE

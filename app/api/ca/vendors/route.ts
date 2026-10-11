@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { query } from '@/lib/db/client';
 import { requireSession } from '@/lib/auth/guards';
 import { jsonError } from '@/lib/validation/api';
+import { EXCLUDE_GIFT_CARD_ISSUANCE_SQL } from '@/lib/analytics/gift-card-ca';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,15 +38,25 @@ export async function GET(req: Request) {
     user_id: string; full_name: string;
     tickets_count: number; ca_ttc: string; ca_ht: string; discount: string;
   }>(
-    // La remise par vendeur exclut les cartes cadeaux / bons d'achat
-    // (metadata.gift_card) : ils ne comptent pas comme des remises.
+    // La remise par vendeur exclut les cartes cadeaux / bons d'achat : ils ne
+    // comptent pas comme des remises. Le CA exclut aussi ces lignes (pas du
+    // CA tant qu'elles ne sont pas dépensées, voir gift-card-ca.ts). Chaque
+    // agrégat vit dans sa PROPRE LATERAL (une ligne par vente) : les combiner
+    // dans un JOIN direct sur sale_lines dupliquerait l'un des deux par effet
+    // de fan-out (plusieurs lignes par vente) dès qu'une vente a plus d'une
+    // ligne.
     `SELECT s.user_id, u.full_name,
             COUNT(*)::int AS tickets_count,
-            SUM(s.total_ttc)::text AS ca_ttc,
-            SUM(s.total_ht)::text AS ca_ht,
+            COALESCE(SUM(ca.ca_ttc), 0)::text AS ca_ttc,
+            COALESCE(SUM(ca.ca_ht), 0)::text AS ca_ht,
             COALESCE(SUM(d.real_discount), 0)::text AS discount
        FROM sales s
        JOIN users u ON u.id = s.user_id
+       JOIN LATERAL (
+         SELECT COALESCE(SUM(sl.line_ttc) FILTER (WHERE ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}), 0) AS ca_ttc,
+                COALESCE(SUM(sl.line_ht)  FILTER (WHERE ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}), 0) AS ca_ht
+           FROM sale_lines sl WHERE sl.sale_id = s.id
+       ) ca ON TRUE
        JOIN LATERAL (
          SELECT COALESCE(SUM(sl.discount_amount)
                   FILTER (WHERE COALESCE(sl.metadata->>'gift_card', '') <> 'true'), 0) AS real_discount

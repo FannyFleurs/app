@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { query } from '@/lib/db/client';
 import { requireSession } from '@/lib/auth/guards';
 import { jsonError } from '@/lib/validation/api';
+import { EXCLUDE_GIFT_CARD_ISSUANCE_SQL } from '@/lib/analytics/gift-card-ca';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,11 +38,15 @@ export async function GET(req: Request) {
   const r = await query<{ hour: number; ca_ht: string; ca_ttc: string; tickets_count: number }>(
     // Heure LOCALE (Europe/Paris) : validated_at est en UTC ; sans conversion,
     // une vente à 10h Paris (08h UTC) tombait dans la tranche « 8h ».
+    // LEFT JOIN (pas INNER) sur sale_lines : une vente 100% carte cadeau
+    // reste comptée dans tickets_count même avec un CA nul une fois exclue
+    // (voir lib/analytics/gift-card-ca.ts).
     `SELECT EXTRACT(HOUR FROM s.validated_at AT TIME ZONE 'Europe/Paris')::int AS hour,
-            SUM(s.total_ht)::text  AS ca_ht,
-            SUM(s.total_ttc)::text AS ca_ttc,
-            COUNT(*)::int          AS tickets_count
+            COALESCE(SUM(sl.line_ht), 0)::text  AS ca_ht,
+            COALESCE(SUM(sl.line_ttc), 0)::text AS ca_ttc,
+            COUNT(DISTINCT s.id)::int            AS tickets_count
        FROM sales s
+       LEFT JOIN sale_lines sl ON sl.sale_id = s.id AND ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}
       WHERE s.organization_id = $1
         AND s.status = 'validated'
         AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date

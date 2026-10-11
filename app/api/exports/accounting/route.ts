@@ -12,6 +12,7 @@ import {
 } from '@/lib/settings/accounting';
 import { groupByAccount, formatRate, type SalesAccountRule } from '@/lib/services/accounting-mapping';
 import { renderSalesXlsx } from '@/lib/services/accounting-xlsx-workbook';
+import { EXCLUDE_GIFT_CARD_ISSUANCE_SQL } from '@/lib/analytics/gift-card-ca';
 
 /**
  * Comptes des écritures agrégées (Écritures comptables, FEC-like) : ventes du
@@ -81,6 +82,13 @@ export async function POST(req: Request) {
   let payload: Buffer | null = null;
 
   if (format === 'sales_csv') {
+    // Total HT/TVA/TTC recalculés depuis sale_lines, PAS sales.total_*, pour
+    // EXCLURE les lignes d'émission de carte cadeau / bon d'achat (dette
+    // envers le client, pas du CA tant qu'elles ne sont pas dépensées — voir
+    // lib/analytics/gift-card-ca.ts). « Remises » reste s.total_discount : la
+    // remise accordée reste réelle même sur une vente qui contient par
+    // ailleurs une carte cadeau (laquelle n'a jamais de remise, voir
+    // metadata.gift_card plus bas dans ce fichier).
     const sales = await query<{
       receipt_number: string; validated_at: Date;
       total_ht: string; total_tva: string; total_ttc: string;
@@ -89,7 +97,9 @@ export async function POST(req: Request) {
       customer: string | null;
     }>(
       `SELECT s.receipt_number, s.validated_at,
-              s.total_ht::text, s.total_tva::text, s.total_ttc::text,
+              COALESCE(ca.ht, 0)::text AS total_ht,
+              COALESCE(ca.tva, 0)::text AS total_tva,
+              COALESCE(ca.ttc, 0)::text AS total_ttc,
               s.total_discount::text,
               u.full_name AS cashier,
               COALESCE(c.company_name,
@@ -97,9 +107,15 @@ export async function POST(req: Request) {
          FROM sales s
          JOIN users u ON u.id = s.user_id
          LEFT JOIN customers c ON c.id = s.customer_id
+         LEFT JOIN LATERAL (
+           SELECT COALESCE(SUM(sl.line_ht)  FILTER (WHERE ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}), 0) AS ht,
+                  COALESCE(SUM(sl.line_tva) FILTER (WHERE ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}), 0) AS tva,
+                  COALESCE(SUM(sl.line_ttc) FILTER (WHERE ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}), 0) AS ttc
+             FROM sale_lines sl WHERE sl.sale_id = s.id
+         ) ca ON TRUE
         WHERE s.organization_id = $1
           AND s.status = 'validated'
-          AND s.validated_at::date BETWEEN $2::date AND $3::date
+          AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date
           ${storeFilter}
         ORDER BY s.validated_at`,
       [g.user.organizationId, period_start, period_end, ...storeArgs],
@@ -117,38 +133,60 @@ export async function POST(req: Request) {
     ].join(';')));
     content = '﻿' + lines.join('\n');
   } else if (format === 'entries_csv') {
-    // Écritures comptables agrégées par jour : Ventes / TVA / Caisse / CB
-    const rows = await query<{
-      day: Date;
-      total_ttc: string; total_tva: string;
-      cash_total: string; card_total: string;
-    }>(
-      `SELECT s.validated_at::date AS day,
-              SUM(s.total_ttc)::text AS total_ttc,
-              SUM(s.total_tva)::text AS total_tva,
-              COALESCE(SUM(CASE WHEN p.method = 'cash' THEN p.amount ELSE 0 END), 0)::text AS cash_total,
-              COALESCE(SUM(CASE WHEN p.method = 'card' THEN p.amount ELSE 0 END), 0)::text AS card_total
-         FROM sales s
-         LEFT JOIN payments p ON p.sale_id = s.id
+    // Écritures comptables agrégées par jour : Ventes / TVA / Cartes cadeaux
+    // émises / Caisse / CB. Deux requêtes SÉPARÉES (pas un seul LEFT JOIN
+    // payments) : joindre sale_lines ET payments dans la même requête
+    // multiplierait total_ttc/total_tva par le nombre de paiements de chaque
+    // vente (fan-out) dès qu'un ticket est réglé en plusieurs fois.
+    const sales = await query<{ day: Date; ht: string; tva: string; gift_card_ttc: string }>(
+      `SELECT (s.validated_at AT TIME ZONE 'Europe/Paris')::date AS day,
+              COALESCE(SUM(sl.line_ht)  FILTER (WHERE ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}), 0)::text AS ht,
+              COALESCE(SUM(sl.line_tva) FILTER (WHERE ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}), 0)::text AS tva,
+              COALESCE(SUM(sl.line_ttc) FILTER (WHERE NOT (${EXCLUDE_GIFT_CARD_ISSUANCE_SQL})), 0)::text AS gift_card_ttc
+         FROM sale_lines sl
+         JOIN sales s ON s.id = sl.sale_id
         WHERE s.organization_id = $1
           AND s.status = 'validated'
-          AND s.validated_at::date BETWEEN $2::date AND $3::date
+          AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date
           ${storeFilter}
-        GROUP BY s.validated_at::date
-        ORDER BY day`,
+        GROUP BY 1
+        ORDER BY 1`,
       [g.user.organizationId, period_start, period_end, ...storeArgs],
     );
+    const pay = await query<{ day: Date; cash_total: string; card_total: string }>(
+      `SELECT (s.validated_at AT TIME ZONE 'Europe/Paris')::date AS day,
+              COALESCE(SUM(p.amount) FILTER (WHERE p.method = 'cash'), 0)::text AS cash_total,
+              COALESCE(SUM(p.amount) FILTER (WHERE p.method = 'card'), 0)::text AS card_total
+         FROM payments p
+         JOIN sales s ON s.id = p.sale_id
+        WHERE s.organization_id = $1
+          AND s.status = 'validated'
+          AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date
+          ${storeFilter}
+        GROUP BY 1`,
+      [g.user.organizationId, period_start, period_end, ...storeArgs],
+    );
+    const payByDay = new Map(pay.rows.map((r) => [new Date(r.day).toISOString().slice(0, 10), r]));
     const accts = await loadAccounts(g.user.organizationId);
     const header = ['Date', 'Compte', 'Libellé', 'Débit', 'Crédit'];
     const out: string[][] = [];
-    for (const r of rows.rows) {
+    for (const r of sales.rows) {
       const d = new Date(r.day).toISOString().slice(0, 10);
-      const ht = Number(r.total_ttc) - Number(r.total_tva);
-      const tva = Number(r.total_tva);
-      const cash = Number(r.cash_total);
-      const card = Number(r.card_total);
+      const ht = Number(r.ht);
+      const tva = Number(r.tva);
+      const giftCardTtc = Number(r.gift_card_ttc);
+      const p = payByDay.get(d);
+      const cash = Number(p?.cash_total ?? 0);
+      const card = Number(p?.card_total ?? 0);
       out.push([d, accts.sales,   'Ventes du jour',       '0.00', ht.toFixed(2)]);
       out.push([d, accts.tva_20,  'TVA collectée',         '0.00', tva.toFixed(2)]);
+      // Cartes cadeaux / bons d'achat vendus ce jour-là : dette envers le
+      // client, pas du CA tant qu'ils ne sont pas dépensés — voir
+      // lib/analytics/gift-card-ca.ts. Sans cette ligne, l'écriture ne
+      // s'équilibrerait plus (Caisse/CB restent au montant PLEIN encaissé).
+      if (giftCardTtc > 0) {
+        out.push([d, accts.gift_cards, 'Cartes cadeaux émises (à honorer)', '0.00', giftCardTtc.toFixed(2)]);
+      }
       out.push([d, accts.cash,    'Caisse — espèces',      cash.toFixed(2), '0.00']);
       out.push([d, accts.bank,    'Banque — CB',           card.toFixed(2), '0.00']);
     }
@@ -179,11 +217,11 @@ export async function POST(req: Request) {
          LEFT JOIN stores st ON st.id = s.store_id
         WHERE s.organization_id = $1
           AND s.status = 'validated'
-          AND s.validated_at::date BETWEEN $2::date AND $3::date
+          AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date
           -- Émission d'un bon d'achat / carte cadeau : dette « à honorer », pas
-          -- une vente taxable (0 € HT). Hors ventilation des ventes, comme dans
-          -- /accounting/coverage.
-          AND sl.metadata->>'gift_card' IS DISTINCT FROM 'true'
+          -- une vente taxable (0 € HT). Hors ventilation des ventes — voir
+          -- lib/analytics/gift-card-ca.ts.
+          AND ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}
           ${storeFilter}
         GROUP BY s.store_id, st.name, COALESCE(p.category_id, sl.category_id), c.name, sl.tax_rate
         ORDER BY st.name NULLS FIRST, c.name NULLS FIRST, sl.tax_rate`,
@@ -276,14 +314,27 @@ export async function POST(req: Request) {
     }
   } else if (format === 'fec_like') {
     // Format pseudo-FEC : JournalCode|EcritureNum|EcritureDate|CompteNum|CompteLib|PieceRef|PieceDate|EcritureLib|Debit|Credit
+    // ht/tva recalculés depuis sale_lines, EXCLUANT les lignes carte cadeau
+    // (dette, pas du CA — gift-card-ca.ts) ; gift_card_ttc = leur valeur
+    // faciale, créditée séparément pour que l'écriture reste équilibrée
+    // (Caisse reste débitée du montant PLEIN réellement encaissé).
     const sales = await query<{
       receipt_number: string; validated_at: Date;
-      total_ttc: string; total_tva: string;
+      total_ttc: string; ht: string; tva: string; gift_card_ttc: string;
     }>(
-      `SELECT s.receipt_number, s.validated_at, s.total_ttc::text, s.total_tva::text
+      `SELECT s.receipt_number, s.validated_at, s.total_ttc::text,
+              COALESCE(ca.ht, 0)::text AS ht,
+              COALESCE(ca.tva, 0)::text AS tva,
+              COALESCE(ca.gift_card_ttc, 0)::text AS gift_card_ttc
          FROM sales s
+         LEFT JOIN LATERAL (
+           SELECT COALESCE(SUM(sl.line_ht)  FILTER (WHERE ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}), 0) AS ht,
+                  COALESCE(SUM(sl.line_tva) FILTER (WHERE ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}), 0) AS tva,
+                  COALESCE(SUM(sl.line_ttc) FILTER (WHERE NOT (${EXCLUDE_GIFT_CARD_ISSUANCE_SQL})), 0) AS gift_card_ttc
+             FROM sale_lines sl WHERE sl.sale_id = s.id
+         ) ca ON TRUE
         WHERE s.organization_id = $1 AND s.status = 'validated'
-          AND s.validated_at::date BETWEEN $2::date AND $3::date
+          AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date
           ${storeFilter}
         ORDER BY s.validated_at`,
       [g.user.organizationId, period_start, period_end, ...storeArgs],
@@ -298,32 +349,51 @@ export async function POST(req: Request) {
     for (const s of sales.rows) {
       const dRaw = new Date(s.validated_at);
       const d = dRaw.toISOString().slice(0, 10).replace(/-/g, '');
-      const ht = Number(s.total_ttc) - Number(s.total_tva);
-      const tva = Number(s.total_tva);
+      const ht = Number(s.ht);
+      const tva = Number(s.tva);
+      const giftCardTtc = Number(s.gift_card_ttc);
       const ref = s.receipt_number;
       out.push(['VEN', String(num), d, accts.sales,  'Ventes', ref, d, `Ticket ${ref}`, '0.00', ht.toFixed(2)].join('|'));
       out.push(['VEN', String(num), d, accts.tva_20, 'TVA',    ref, d, `Ticket ${ref}`, '0.00', tva.toFixed(2)].join('|'));
+      if (giftCardTtc > 0) {
+        out.push(['VEN', String(num), d, accts.gift_cards, 'Cartes cadeaux émises', ref, d, `Ticket ${ref}`, '0.00', giftCardTtc.toFixed(2)].join('|'));
+      }
       out.push(['VEN', String(num), d, accts.cash,   'Caisse', ref, d, `Ticket ${ref}`, Number(s.total_ttc).toFixed(2), '0.00'].join('|'));
       num++;
     }
     content = '﻿' + out.join('\n');
     mime = 'text/plain';
   } else {
-    // JSON détaillé
+    // JSON détaillé. total_ht/tva/ttc recalculés depuis sale_lines, EXCLUANT
+    // les lignes carte cadeau (gift-card-ca.ts) ; gift_card_ttc expose
+    // séparément leur valeur faciale (dette, pas du CA). NB : tva_breakdown
+    // reste l'instantané brut de sales.tva_breakdown (toutes lignes
+    // confondues) — un éventuel reclassement de carte cadeau y reste dans la
+    // tranche 0 %, ce champ n'est pas un total agrégé comparé ailleurs.
     const data = await query(
       `SELECT s.id, s.receipt_number, s.validated_at,
-              s.total_ht::text, s.total_tva::text, s.total_ttc::text,
+              COALESCE(ca.ht, 0)::text AS total_ht,
+              COALESCE(ca.tva, 0)::text AS total_tva,
+              COALESCE(ca.ttc, 0)::text AS total_ttc,
+              COALESCE(ca.gift_card_ttc, 0)::text AS gift_card_ttc,
               s.tva_breakdown,
               json_agg(json_build_object(
                 'method', p.method, 'amount', p.amount
               )) AS payments
          FROM sales s
          LEFT JOIN payments p ON p.sale_id = s.id
+         LEFT JOIN LATERAL (
+           SELECT COALESCE(SUM(sl.line_ht)  FILTER (WHERE ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}), 0) AS ht,
+                  COALESCE(SUM(sl.line_tva) FILTER (WHERE ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}), 0) AS tva,
+                  COALESCE(SUM(sl.line_ttc) FILTER (WHERE ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}), 0) AS ttc,
+                  COALESCE(SUM(sl.line_ttc) FILTER (WHERE NOT (${EXCLUDE_GIFT_CARD_ISSUANCE_SQL})), 0) AS gift_card_ttc
+             FROM sale_lines sl WHERE sl.sale_id = s.id
+         ) ca ON TRUE
         WHERE s.organization_id = $1
           AND s.status = 'validated'
-          AND s.validated_at::date BETWEEN $2::date AND $3::date
+          AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date
           ${storeFilter}
-        GROUP BY s.id
+        GROUP BY s.id, ca.ht, ca.tva, ca.ttc, ca.gift_card_ttc
         ORDER BY s.validated_at`,
       [g.user.organizationId, period_start, period_end, ...storeArgs],
     );

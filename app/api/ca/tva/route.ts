@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { query } from '@/lib/db/client';
 import { requireSession } from '@/lib/auth/guards';
 import { jsonError } from '@/lib/validation/api';
+import { EXCLUDE_GIFT_CARD_ISSUANCE_SQL } from '@/lib/analytics/gift-card-ca';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,6 +46,7 @@ export async function GET(req: Request) {
       WHERE s.organization_id = $1
         AND s.status = 'validated'
         AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date
+        AND ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}
         ${storeFilter}
       GROUP BY sl.tax_rate
       ORDER BY sl.tax_rate DESC`,

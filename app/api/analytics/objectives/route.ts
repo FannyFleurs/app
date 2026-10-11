@@ -6,6 +6,7 @@ import { jsonError } from '@/lib/validation/api';
 import { monthBreakdown } from '@/lib/analytics/objectives';
 import { loadSchedules, scheduleFor } from '@/lib/analytics/objectives-server';
 import { hasTargetsTable, hasRevenueHistoryTable, monthBounds } from '@/lib/analytics/targets-server';
+import { EXCLUDE_GIFT_CARD_ISSUANCE_SQL } from '@/lib/analytics/gift-card-ca';
 
 export const dynamic = 'force-dynamic';
 
@@ -64,12 +65,17 @@ export async function GET(req: Request) {
     objectiveMonth = Number(t.rows[0]?.target_ttc ?? 0);
   }
 
-  // Réalisé par jour du mois (CA TTC + nb tickets).
+  // Réalisé par jour du mois (CA TTC + nb tickets). CA TTC exclut les lignes
+  // d'émission de carte cadeau (dette, pas du CA — gift-card-ca.ts) ; LEFT
+  // JOIN (pas INNER) pour qu'un ticket 100% carte cadeau reste compté dans
+  // `n` même avec un CA nul une fois exclu.
   const { start, end } = monthBounds(year, month);
   const dayRes = await query<{ d: string; ttc: string; n: number }>(
     `SELECT (s.validated_at AT TIME ZONE 'Europe/Paris')::date::text AS d,
-            COALESCE(SUM(s.total_ttc), 0)::text AS ttc, COUNT(*)::int AS n
+            COALESCE(SUM(sl.line_ttc) FILTER (WHERE ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}), 0)::text AS ttc,
+            COUNT(DISTINCT s.id)::int AS n
        FROM sales s
+       LEFT JOIN sale_lines sl ON sl.sale_id = s.id
       WHERE s.organization_id = $1 AND s.store_id = $2 AND s.status = 'validated'
         AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $3::date AND $4::date
       GROUP BY 1`,
@@ -104,8 +110,9 @@ export async function GET(req: Request) {
     : [];
   const yRealRows = (await query<{ m: number; ttc: string }>(
     `SELECT EXTRACT(MONTH FROM (s.validated_at AT TIME ZONE 'Europe/Paris'))::int AS m,
-            COALESCE(SUM(s.total_ttc), 0)::text AS ttc
+            COALESCE(SUM(sl.line_ttc) FILTER (WHERE ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}), 0)::text AS ttc
        FROM sales s
+       LEFT JOIN sale_lines sl ON sl.sale_id = s.id
       WHERE s.organization_id = $1 AND s.store_id = $2 AND s.status = 'validated'
         AND EXTRACT(YEAR FROM (s.validated_at AT TIME ZONE 'Europe/Paris'))::int = $3
       GROUP BY 1`,

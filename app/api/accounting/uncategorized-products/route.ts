@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db/client';
 import { requirePermission } from '@/lib/auth/guards';
+import { EXCLUDE_GIFT_CARD_ISSUANCE_SQL } from '@/lib/analytics/gift-card-ca';
 
 export const dynamic = 'force-dynamic';
 
@@ -55,10 +56,10 @@ export async function GET(req: Request) {
   const storeFilter = storeId ? `s.store_id = $${base.push(storeId)}` : 's.store_id IS NULL';
   const where = `s.organization_id = $1
         AND s.status = 'validated'
-        AND s.validated_at::date BETWEEN $2::date AND $3::date
+        AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date
         AND ABS(sl.tax_rate - $4::numeric) < 0.005
         -- Bons d'achat / cartes cadeaux exclus, comme dans coverage/export.
-        AND sl.metadata->>'gift_card' IS DISTINCT FROM 'true'
+        AND ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}
         AND ${storeFilter}`;
 
   // Articles du croisement : ceux de la famille demandée, ou sans famille.
