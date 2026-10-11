@@ -6,8 +6,17 @@ import { query } from '@/lib/db/client';
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
   const g = await requirePermission('pos.use');
   if ('response' in g) return g.response;
+  // s.* + nom du vendeur / du client (la table sales ne stocke que les id) —
+  // même expression que la liste du jour (app/api/sales/today/route.ts), pour
+  // que « Vendeur : » et « Client : » s'affichent aussi dans le détail d'une
+  // vente (ils restaient vides jusqu'ici, SELECT * ne les résolvait pas).
   const sale = await query(
-    `SELECT * FROM sales WHERE id = $1 AND organization_id = $2`,
+    `SELECT s.*, u.full_name AS cashier,
+            COALESCE(c.company_name, NULLIF(TRIM(CONCAT(c.first_name,' ',c.last_name)), '')) AS customer
+       FROM sales s
+       JOIN users u ON u.id = s.user_id
+       LEFT JOIN customers c ON c.id = s.customer_id
+      WHERE s.id = $1 AND s.organization_id = $2`,
     [params.id, g.user.organizationId],
   );
   if (sale.rowCount === 0) return jsonError('NOT_FOUND', 404);

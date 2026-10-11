@@ -1238,7 +1238,16 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
           >
             ↩ Retour produit{fullyReturned ? ' (déjà retourné)' : ''}
           </button>
-          {!s.customer_id && (
+          {s.customer_id ? (
+            <button
+              onClick={() => setShowAttach(true)}
+              disabled={!!detail.invoice}
+              title={detail.invoice ? 'Facture déjà émise : le client ne peut plus être changé pour cette vente.' : undefined}
+              className="btn-soft text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              ⇄ Changer de client
+            </button>
+          ) : (
             <button onClick={() => setShowAttach(true)} className="btn-soft text-sm">
               + Attribuer un client
             </button>
@@ -1492,13 +1501,15 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
       {showAttach && (
         <AttachCustomerAfterSaleModal
           saleId={s.id}
+          currentCustomerName={s.customer}
           onClose={() => setShowAttach(false)}
           onSuccess={(loyalty) => {
             setShowAttach(false);
+            const verb = s.customer_id ? 'changé' : 'attribué';
             setInfo(
               loyalty?.earned
-                ? `Client attribué · +${loyalty.earned} € de fidélité crédités (solde ${loyalty.new_balance} €)`
-                : 'Client attribué.',
+                ? `Client ${verb} · +${loyalty.earned} € de fidélité crédités (solde ${loyalty.new_balance} €)`
+                : `Client ${verb}.`,
             );
             setTimeout(() => setInfo(null), 4000);
             onInvoiceGenerated();

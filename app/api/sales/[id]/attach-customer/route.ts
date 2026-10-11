@@ -13,9 +13,19 @@ const schema = z.object({
 });
 
 /**
- * Attache un client à une vente déjà validée (cas : oubli en caisse).
+ * Attache un client à une vente déjà validée (cas : oubli en caisse), ou
+ * remplace le client déjà attaché (cas : erreur d'attribution).
  * Le trigger fn_protect_validated_sale autorise la mise à jour de
  * customer_id : seuls les champs fiscaux sont gelés.
+ *
+ * Changer de client est bloqué si une facture a déjà été émise pour cette
+ * vente (elle reste au nom de l'ancien client ; la remplacer silencieusement
+ * créerait une incohérence facture/vente — il faudrait annuler la facture
+ * d'abord). Si la vente avait déjà un client ET des points fidélité gagnés à
+ * son compte pour CETTE vente, ce gain est contre-passé (même mécanisme que
+ * l'annulation de vente, lib/services/sale-cancel-service.ts) avant de
+ * créditer le nouveau client, pour ne jamais laisser les points sur le
+ * mauvais compte.
  *
  * Si le programme fidélité est activé et que la vente n'a pas encore
  * généré de gain pour ce client, on crédite automatiquement le compte.
@@ -40,13 +50,60 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       if (saleRes.rowCount === 0) throw new Error('SALE_NOT_FOUND');
       const sale = saleRes.rows[0]!;
       if (sale.status !== 'validated') throw new Error('SALE_NOT_VALIDATED');
-      if (sale.customer_id) throw new Error('CUSTOMER_ALREADY_ATTACHED');
+      const previousCustomerId = sale.customer_id;
+      if (previousCustomerId === customer_id) {
+        return { customer_id, loyalty: null };
+      }
+      if (previousCustomerId) {
+        const invoiced = await client.query(
+          `SELECT 1 FROM invoices WHERE sale_id = $1 AND status <> 'cancelled' LIMIT 1`,
+          [sale.id],
+        );
+        if (invoiced.rowCount! > 0) throw new Error('INVOICE_ALREADY_GENERATED');
+      }
 
       const cust = await client.query(
         `SELECT 1 FROM customers WHERE id = $1 AND organization_id = $2`,
         [customer_id, g.user.organizationId],
       );
       if (cust.rowCount === 0) throw new Error('CUSTOMER_NOT_FOUND');
+
+      // Changement de client : contre-passe le gain fidélité déjà crédité à
+      // l'ancien client pour cette vente, avant d'attacher le nouveau — même
+      // mécanisme que l'annulation de vente (sale-cancel-service.ts).
+      if (previousCustomerId) {
+        const lm = await client.query<{ account_id: string; net: string }>(
+          `SELECT account_id, COALESCE(SUM(points_delta),0)::text AS net
+             FROM loyalty_movements
+            WHERE source_type = 'sale' AND source_id = $1
+            GROUP BY account_id`,
+          [sale.id],
+        );
+        for (const row of lm.rows) {
+          const net = Number(row.net);
+          if (net === 0) continue;
+          const accSel = await client.query<{ points_balance: string }>(
+            `SELECT points_balance::text FROM loyalty_accounts WHERE id = $1 FOR UPDATE`,
+            [row.account_id],
+          );
+          const current = Number(accSel.rows[0]?.points_balance ?? 0);
+          const target = Math.max(0, current - net);
+          const delta = target - current;
+          if (delta === 0) continue;
+          await client.query(
+            `INSERT INTO loyalty_movements
+               (organization_id, account_id, movement_type, points_delta, balance_after,
+                reason, source_type, source_id, user_id)
+             VALUES ($1,$2,'cancel',$3,$4,$5,'sale',$6,$7)`,
+            [g.user.organizationId, row.account_id, delta, target,
+             `Changement de client ticket ${sale.receipt_number}`, sale.id, g.user.id],
+          );
+          await client.query(
+            `UPDATE loyalty_accounts SET points_balance = $1, updated_at = now() WHERE id = $2`,
+            [target, row.account_id],
+          );
+        }
+      }
 
       // Maj de la vente (autorisé : ne touche pas aux champs gelés)
       await client.query(
@@ -150,6 +207,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
           sale_id: sale.id,
           receipt_number: sale.receipt_number,
           customer_id,
+          previous_customer_id: previousCustomerId,
           loyalty: loyaltyResult,
         },
         amountTtcDelta: 0,
@@ -170,7 +228,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const msg = (e as Error).message;
     const status =
       msg === 'SALE_NOT_FOUND' || msg === 'CUSTOMER_NOT_FOUND' ? 404 :
-      msg === 'SALE_NOT_VALIDATED' || msg === 'CUSTOMER_ALREADY_ATTACHED' ? 409 : 400;
+      msg === 'SALE_NOT_VALIDATED' || msg === 'INVOICE_ALREADY_GENERATED' ? 409 : 400;
     return jsonError(msg, status);
   }
 }
