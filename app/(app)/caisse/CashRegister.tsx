@@ -1776,21 +1776,22 @@ export default function CashRegister({
       >
         <OfflineBanner />
         <div className="pos-topbar relative flex items-center gap-2 px-3 md:px-5 py-2.5 shrink-0 border-b border-border bg-white">
-          {/* Hauteur des contrôles (h-11) et padding vertical (py-2.5) alignés
-              EXACTEMENT sur la ligne d'actions du ticket, pour que les deux
-              bordures basses (catalogue / ticket) se rejoignent au même
-              pixel de part et d'autre de la séparation verticale. */}
+          {/* Hauteur des contrôles (h-[57px], +30% des h-11 d'origine) et
+              padding vertical (py-2.5) alignés EXACTEMENT sur la ligne
+              d'actions du ticket (même hauteur reprise plus bas), pour que
+              les deux bordures basses (catalogue / ticket) se rejoignent au
+              même pixel de part et d'autre de la séparation verticale. */}
           {/* Barre de recherche VISIBLE : champ dès qu'ouverte, sinon une barre
               cliquable claire (pas une simple loupe). */}
           {searchOpen ? (
-            <div className="flex-1 md:flex-none md:w-80 md:ml-auto relative">
+            <div className="flex-1 md:flex-none md:w-[416px] md:ml-auto relative">
               <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-soft" aria-hidden>
-                <Icon name="search" size={18} />
+                <Icon name="search" size={23} />
               </span>
               <input
                 ref={searchRef}
                 autoFocus
-                className="input h-11 w-full pl-10 pr-10 text-sm"
+                className="input h-[57px] w-full pl-[52px] pr-[52px] text-lg"
                 placeholder="Rechercher / scanner…"
                 aria-label="Rechercher un article"
                 value={search}
@@ -1817,9 +1818,9 @@ export default function CashRegister({
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => { setSearch(''); searchRef.current?.focus(); }}
                   aria-label="Effacer la recherche"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 grid place-items-center h-7 w-7 rounded-full text-ink-soft hover:bg-gray-100 hover:text-ink"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 grid place-items-center h-9 w-9 rounded-full text-ink-soft hover:bg-gray-100 hover:text-ink"
                 >
-                  <span aria-hidden className="text-lg leading-none">×</span>
+                  <span aria-hidden className="text-[23px] leading-none">×</span>
                 </button>
               )}
             </div>
@@ -1828,26 +1829,26 @@ export default function CashRegister({
               onClick={() => setSearchOpen(true)}
               title="Rechercher / scanner ( / )"
               aria-label="Rechercher un article"
-              className="flex-1 md:flex-none md:w-80 md:ml-auto h-11 rounded-xl border border-border bg-white hover:bg-gray-50 flex items-center gap-2 px-3.5 text-ink-soft text-sm text-left transition-colors"
+              className="flex-1 md:flex-none md:w-[416px] md:ml-auto h-[57px] rounded-xl border border-border bg-white hover:bg-gray-50 flex items-center gap-2 px-[18px] text-ink-soft text-lg text-left transition-colors"
             >
-              <Icon name="search" size={20} />
+              <Icon name="search" size={26} />
               <span>Rechercher / scanner…</span>
             </button>
           )}
           {/* Scanner caméra : uniquement sur mobile/tablette. */}
           <button
-            className="btn-ghost h-11 px-3.5 hidden [@media(pointer:coarse)]:inline-flex"
+            className="btn-ghost h-[57px] px-[18px] hidden [@media(pointer:coarse)]:inline-flex"
             onClick={() => setShowScanner(true)}
             title="Scanner code-barres / QR"
             aria-label="Scanner"
           >
-            <Icon name="camera" size={24} />
+            <Icon name="camera" size={31} />
           </button>
-          <button className="btn-soft h-11 px-5 text-sm inline-flex items-center gap-1.5 whitespace-nowrap" onClick={() => setShowHeld(true)} title="F4" aria-label="Paniers en attente">
+          <button className="btn-soft h-[57px] px-[26px] text-lg inline-flex items-center gap-1.5 whitespace-nowrap" onClick={() => setShowHeld(true)} title="F4" aria-label="Paniers en attente">
             <span className="hidden md:inline">Tickets en attente</span>
-            <span className="md:hidden"><Icon name="pause" size={22} /></span>
+            <span className="md:hidden"><Icon name="pause" size={29} /></span>
             {heldCount > 0 && (
-              <span className="inline-flex items-center justify-center h-5 min-w-[1.25rem] px-1.5 rounded-full text-[11px] font-semibold accent-bar text-white">
+              <span className="inline-flex items-center justify-center h-[26px] min-w-[26px] px-2 rounded-full text-sm font-semibold accent-bar text-white">
                 {heldCount}
               </span>
             )}
@@ -1998,7 +1999,7 @@ export default function CashRegister({
           <div className="flex items-center gap-2">
             <button
               onClick={() => setMobileCartOpen(false)}
-              className="md:hidden -ml-1 h-11 w-10 shrink-0 grid place-items-center text-ink-soft hover:text-ink text-2xl"
+              className="md:hidden -ml-1 h-[57px] w-[52px] shrink-0 grid place-items-center text-ink-soft hover:text-ink text-[31px]"
               aria-label="Retour aux articles (glissez à droite)"
             >
               ←
@@ -2009,9 +2010,9 @@ export default function CashRegister({
               onClick={() => void holdSale()}
               aria-label="Mettre ce ticket en attente"
               title="Mettre ce ticket en attente"
-              className="btn-soft h-11 w-11 shrink-0 grid place-items-center disabled:opacity-40 disabled:cursor-not-allowed"
+              className="btn-soft h-[57px] w-[57px] shrink-0 grid place-items-center disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              <Icon name="pause" size={20} />
+              <Icon name="pause" size={26} />
             </button>
             {/* Remise — compact icône. */}
             <button
@@ -2019,9 +2020,9 @@ export default function CashRegister({
               onClick={() => setCartActions('discount')}
               aria-label="Remise globale sur le ticket"
               title="Remise globale sur le ticket"
-              className="btn-soft h-11 w-11 shrink-0 grid place-items-center disabled:opacity-40 disabled:cursor-not-allowed"
+              className="btn-soft h-[57px] w-[57px] shrink-0 grid place-items-center disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              <Icon name="discount" size={20} />
+              <Icon name="discount" size={26} />
             </button>
             {/* Commentaire — compact icône. */}
             <button
@@ -2029,9 +2030,9 @@ export default function CashRegister({
               onClick={() => setCartActions('comment')}
               aria-label="Ajouter un commentaire au ticket"
               title="Ajouter un commentaire au ticket"
-              className="btn-soft h-11 w-11 shrink-0 grid place-items-center disabled:opacity-40 disabled:cursor-not-allowed"
+              className="btn-soft h-[57px] w-[57px] shrink-0 grid place-items-center disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              <Icon name="comment" size={20} />
+              <Icon name="comment" size={26} />
             </button>
             {/* Ouverture tiroir — VOLONTAIREMENT DISCRÈTE : icône neutre, aucun
                 libellé texte ni infobulle explicite, pour ne pas signaler la
@@ -2041,10 +2042,10 @@ export default function CashRegister({
               onClick={() => void openDrawer()}
               disabled={drawerBusy}
               aria-label="Ouvrir le tiroir-caisse"
-              className="btn-soft h-11 w-11 shrink-0 inline-flex items-center justify-center text-ink-soft disabled:opacity-60"
+              className="btn-soft h-[57px] w-[57px] shrink-0 inline-flex items-center justify-center text-ink-soft disabled:opacity-60"
             >
               {drawerFlash ? (
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <svg width="31" height="31" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                   <path d="M20 6 9 17l-5-5" />
                 </svg>
               ) : (
@@ -2054,7 +2055,7 @@ export default function CashRegister({
                 // malgré les ajustements précédents, à côté d'icônes au
                 // tracé plus épais. Le remplissage suit currentColor (pas de
                 // couleur de fond à deviner selon l'état du bouton).
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <svg width="31" height="31" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                   <rect x="1.5" y="3.5" width="21" height="17" rx="2" fill="currentColor" fillOpacity="0.15" />
                   <line x1="7" y1="12" x2="17" y2="12" />
                 </svg>
@@ -2065,10 +2066,10 @@ export default function CashRegister({
             <button
               disabled={lines.length === 0 && !saleId}
               onClick={async () => { setMobileCartOpen(true); if (await confirmThemed({ title: 'Annuler ce ticket', message: 'La vente en cours sera définitivement abandonnée.', confirmLabel: 'Annuler le ticket', cancelLabel: 'Retour', danger: true })) void cancelTicket(); }}
-              className="ml-auto h-11 px-4 shrink-0 rounded-xl text-sm font-medium whitespace-nowrap border border-danger/40 text-danger hover:bg-danger/10 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
+              className="ml-auto h-[57px] px-[21px] shrink-0 rounded-xl text-lg font-medium whitespace-nowrap border border-danger/40 text-danger hover:bg-danger/10 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
               title="Annuler ce ticket"
             >
-              <span aria-hidden className="text-base leading-none">✕</span>
+              <span aria-hidden className="text-[21px] leading-none">✕</span>
               Annuler
             </button>
           </div>
