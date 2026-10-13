@@ -33,20 +33,34 @@ interface Row {
   saved: boolean;
 }
 
-function parseNum(s: string): number {
+export function parseNum(s: string): number {
   const n = Number(s.replace(',', '.').replace(/[^0-9.]/g, ''));
   return Number.isFinite(n) ? n : 0;
 }
 const fmt = (n: number) => (Math.round(n * 100) / 100).toLocaleString('fr-FR', { maximumFractionDigits: 2 });
 
+/**
+ * Arrondi au dixième SUPÉRIEUR (ex. 2,87 € → 2,90 €) — prix d'appel.
+ * round2() d'abord : sans ça, le bruit de calcul en virgule flottante
+ * (ex. 10 × 0,29 = 2,9000000000000004) ferait basculer un prix déjà
+ * « rond » au palier suivant (2,90 € → 3,00 €), ce qui n'est pas voulu.
+ */
+export function ceilToTenth(n: number): number {
+  return round2(Math.ceil(round2(n) * 10) / 10);
+}
+
 function toRow(p: ApiProduct, catTransport: number, catPct: number | null): Row {
   const purchase = p.purchase_price_ht ?? 0;
   const sale = p.sale_price_ttc ?? 0;
-  const coef = purchase > 0 ? round2(sale / purchase) : 0;
   // Transport effectif : surcharge article si définie (fixe), sinon défaut
-  // catégorie (montant fixe ou % du prix d'achat).
+  // catégorie (montant fixe ou % du prix d'achat). Calculé AVANT le
+  // coefficient : le coût de référence du coefficient est achat + transport,
+  // pas achat seul (le transport doit peser sur le prix de vente comme
+  // l'achat, voir le calcul de marge plus bas qui l'a toujours inclus).
   const manual = p.transport_cost_ht != null;
   const transport = manual ? Number(p.transport_cost_ht) : catTransport;
+  const cost = purchase + transport;
+  const coef = cost > 0 ? round2(sale / cost) : 0;
   return {
     id: p.id,
     name: p.name,
@@ -126,41 +140,57 @@ export default function PricingManager() {
   function patchRow(id: string, changes: Partial<Row>) {
     setRows((cur) => ({ ...cur, [id]: { ...cur[id]!, ...changes, dirty: true, saved: false } }));
   }
-  // Change achat → recalcule la vente à coef constant, et le transport si celui-ci
-  // suit un taux (%) de la catégorie sans surcharge manuelle.
+  // Change achat → recalcule la vente à coef constant (coût = achat +
+  // transport), et le transport si celui-ci suit un taux (%) de la
+  // catégorie sans surcharge manuelle.
   function onPurchase(id: string, v: string) {
     const r = rows[id]!;
     const purchase = parseNum(v);
     const coef = parseNum(r.coef);
-    const sale = coef > 0 ? round2(purchase * coef) : parseNum(r.sale);
-    const changes: Partial<Row> = { purchase: v, sale: sale ? String(sale) : r.sale };
+    let transport = parseNum(r.transport);
+    const changes: Partial<Row> = { purchase: v };
     if (r.transportPct != null && !r.transportManual) {
-      const transport = round2((purchase * r.transportPct) / 100);
+      transport = round2((purchase * r.transportPct) / 100);
       // On garde l'héritage (override=null) en alignant aussi le défaut catégorie.
       changes.transport = transport ? String(transport) : '';
       changes.catTransport = transport;
     }
+    const cost = purchase + transport;
+    const sale = coef > 0 ? ceilToTenth(cost * coef) : parseNum(r.sale);
+    changes.sale = sale ? String(sale) : r.sale;
     patchRow(id, changes);
   }
-  // Change coef → recalcule la vente.
+  // Change coef → recalcule la vente (coût = achat + transport).
   function onCoef(id: string, v: string) {
     const r = rows[id]!;
     const purchase = parseNum(r.purchase);
+    const transport = parseNum(r.transport);
     const coef = parseNum(v);
-    const sale = purchase > 0 ? round2(purchase * coef) : parseNum(r.sale);
+    const cost = purchase + transport;
+    const sale = cost > 0 ? ceilToTenth(cost * coef) : parseNum(r.sale);
     patchRow(id, { coef: v, sale: sale ? String(sale) : r.sale });
   }
-  // Change vente → recalcule le coef.
+  // Change vente → recalcule le coef (coût = achat + transport).
   function onSale(id: string, v: string) {
     const r = rows[id]!;
     const purchase = parseNum(r.purchase);
+    const transport = parseNum(r.transport);
     const sale = parseNum(v);
-    const coef = purchase > 0 ? round2(sale / purchase) : 0;
+    const cost = purchase + transport;
+    const coef = cost > 0 ? round2(sale / cost) : 0;
     patchRow(id, { sale: v, coef: coef ? String(coef) : r.coef });
   }
-  // Change transport → surcharge manuelle (fixe) : ne suit plus le taux catégorie.
+  // Change transport → surcharge manuelle (fixe) : ne suit plus le taux
+  // catégorie. Recalcule la vente à coef constant, comme le prix d'achat :
+  // le transport pèse sur le coût au même titre que l'achat.
   function onTransport(id: string, v: string) {
-    patchRow(id, { transport: v, transportManual: true });
+    const r = rows[id]!;
+    const transport = parseNum(v);
+    const purchase = parseNum(r.purchase);
+    const coef = parseNum(r.coef);
+    const cost = purchase + transport;
+    const sale = coef > 0 ? ceilToTenth(cost * coef) : parseNum(r.sale);
+    patchRow(id, { transport: v, transportManual: true, sale: sale ? String(sale) : r.sale });
   }
 
   async function save(id: string) {
@@ -197,7 +227,7 @@ export default function PricingManager() {
       <div className="px-6 md:px-8 pt-6 md:pt-8 pb-4 shrink-0 border-b border-border">
         <PageHeader
           title="Gestion de prix"
-          subtitle="Ajustez achat, coefficient et prix de vente article par article. Le coefficient = prix de vente TTC ÷ prix d'achat HT."
+          subtitle="Ajustez achat, coefficient et prix de vente article par article. Le coefficient = prix de vente TTC ÷ (prix d'achat HT + transport HT)."
           actions={(
             <label className="text-sm">
               <span className="sr-only">Catégorie</span>
@@ -287,7 +317,8 @@ export default function PricingManager() {
               </tbody>
             </table>
             <p className="mt-3 text-xs text-ink-soft">
-              Achat HT × coefficient = vente TTC. Modifier l&apos;un recalcule l&apos;autre.
+              (Achat HT + Transport HT) × coefficient = vente TTC, arrondie au dixième supérieur
+              (ex. 2,87 € → 2,90 €). Modifier l&apos;un recalcule l&apos;autre.
               Marge HT = vente HT − achat HT − transport HT (taux de marque entre parenthèses).
               Le transport est pré-rempli avec le défaut de la catégorie (Réglages → Coûts de transport).
             </p>
