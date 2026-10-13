@@ -53,7 +53,7 @@ interface Props {
 }
 
 export default function PaymentModal({ saleId, totalTtc, lines = [], storeId, hasCustomer = false, loyaltyRedemption, schoolMode, offlineEnabled, onOfflineFinalize, onClose, onValidated, settlement, onSettled }: Props) {
-  const [methods, setMethods] = useState<Array<{ kind: Method; label: string }>>(FALLBACK_METHODS);
+  const [methods, setMethods] = useState<Array<{ kind: Method; label: string; opens_drawer?: boolean }>>(FALLBACK_METHODS);
   const [amountStr, setAmountStr] = useState<string>('');
   const [payments, setPayments] = useState<RegisteredPayment[]>([]);
   const [loading, setLoading] = useState(false);
@@ -82,12 +82,12 @@ export default function PaymentModal({ saleId, totalTtc, lines = [], storeId, ha
       const r = await fetch(`/api/payment-methods${storeId ? `?store_id=${encodeURIComponent(storeId)}` : ''}`);
       if (r.ok) {
         const j = await r.json();
-        const active = (j.methods as Array<{ kind: Method; label: string; is_active: boolean }>)
+        const active = (j.methods as Array<{ kind: Method; label: string; is_active: boolean; opens_drawer?: boolean }>)
           .filter((m) => m.is_active)
           // Règlement d'un compte : on ne peut pas régler « en compte » avec
           // « en compte », ni via lien de paiement (asynchrone).
           .filter((m) => !settlement || (m.kind !== 'deferred' && m.kind !== 'payment_link'));
-        if (active.length > 0) setMethods(active.map((m) => ({ kind: m.kind, label: m.label })));
+        if (active.length > 0) setMethods(active.map((m) => ({ kind: m.kind, label: m.label, opens_drawer: m.opens_drawer })));
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -145,7 +145,7 @@ export default function PaymentModal({ saleId, totalTtc, lines = [], storeId, ha
    *     Le montant alloué reste = restant, given_amount = saisie.
    *   - Pour les autres méthodes : on alloue min(saisie, restant).
    */
-  async function tapMethod(m: { kind: Method; label: string }) {
+  async function tapMethod(m: { kind: Method; label: string; opens_drawer?: boolean }) {
     setError(null);
     const typed = Number(amountStr || '0');
 
@@ -298,6 +298,31 @@ export default function PaymentModal({ saleId, totalTtc, lines = [], storeId, ha
         return;
       }
       const j = await res.json();
+
+      // Sur la caisse native, l'ouverture physique du tiroir est pilotée par
+      // le même endpoint que le bouton « ouvrir le tiroir ». Le serveur de
+      // validation conserve son comportement CloudPRNT ; cet appel permet à
+      // la coque native d'intercepter la demande et d'envoyer l'impulsion IP.
+      // On ne le déclenche que si au moins un mode réellement utilisé est
+      // configuré avec « Tiroir » dans les réglages.
+      const shouldOpenDrawer = payments.some((p) =>
+        methods.some((m) => m.kind === p.method && m.opens_drawer === true),
+      );
+      if (shouldOpenDrawer) {
+        try {
+          await fetch('/api/cash-sessions/open-drawer', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              store_id: storeId || undefined,
+              reason: 'Encaissement',
+            }),
+          });
+        } catch {
+          // Une panne d'ouverture du tiroir ne doit jamais annuler une vente
+          // déjà validée fiscalement.
+        }
+      }
 
       // Si l'utilisateur a inclus un règlement "payment_link", on déclenche
       // la création de la session Stripe et l'envoi au client par email.
