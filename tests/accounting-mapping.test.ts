@@ -135,6 +135,30 @@ describe('Regroupement par compte', () => {
     expect(somme(avec)).toBe(213);
     expect(somme(sans)).toBe(213);
   });
+
+  it('omet un croisement qui retombe à 0 € HT (article offert, remise à 100 %)', () => {
+    // Ex. un "Sac Kraft Offert" à 0 € : aucune écriture réelle n'en découle,
+    // le signaler comme « à paramétrer » n'aide personne — ça ne fait que
+    // semer la confusion sur une vente qui, de fait, n'a rien rapporté.
+    const avecOffert = [
+      ...lignes,
+      { store_id: BOUTIQUE_A, category_id: BOUGIES, vat_rate: 20, ht: 0, tva: 0, ttc: 0,
+        category_name: 'Accessoire', store_name: 'Plante Verte' },
+    ];
+    const totaux = groupByAccount(avecOffert, []);
+    expect(totaux.map((t) => t.account_label)).not.toContain('Accessoire · 20 % · Plante Verte');
+    expect(totaux).toHaveLength(2);
+  });
+
+  it('garde un croisement négatif (avoir) : il a un vrai montant à ventiler', () => {
+    const avecAvoir = [
+      { store_id: BOUTIQUE_A, category_id: BOUGIES, vat_rate: 20, ht: -40, tva: -8, ttc: -48,
+        category_name: 'Bougies', store_name: 'Plante Verte' },
+    ];
+    const totaux = groupByAccount(avecAvoir, []);
+    expect(totaux).toHaveLength(1);
+    expect(totaux[0]).toMatchObject({ ht: -40, ttc: -48 });
+  });
 });
 
 describe('Affichage du taux', () => {

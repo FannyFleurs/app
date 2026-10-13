@@ -137,6 +137,10 @@ export function groupByAccount(
   }
   return [...byKey.values()]
     .map((t) => ({ ...t, ht: round2(t.ht), tva: round2(t.tva), ttc: round2(t.ttc) }))
+    // Un croisement qui retombe à 0 € HT (article offert, remise à 100 %…)
+    // ne produit aucune écriture réelle — l'omettre évite une ligne
+    // 0,00/0,00/0,00 muette dans le grand livre du comptable.
+    .filter((t) => t.ht !== 0 || t.ttc !== 0)
     .sort((a, b) => a.account_code.localeCompare(b.account_code)
       || a.account_label.localeCompare(b.account_label));
 }

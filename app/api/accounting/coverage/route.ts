@@ -95,6 +95,13 @@ export async function GET(req: Request) {
       account_label: rule?.account_label ?? null,
     };
   })
+    // Un croisement à 0 € HT (ex. un article offert à 0 €, ou une remise à
+    // 100 %) ne pèse sur aucun compte : l'export n'y produit aucune écriture
+    // réelle. Le signaler « à paramétrer » n'aiderait personne — ça n'a fait
+    // que semer la confusion (« je n'ai pourtant pas vendu ça »). Un montant
+    // négatif (avoir seul sur ce croisement) reste affiché : lui a un vrai
+    // montant à ventiler, juste au crédit.
+    .filter((c) => c.ht !== 0)
     // Les manquants d'abord, puis le plus gros chiffre d'affaires : l'ordre
     // dans lequel on a intérêt à traiter la liste.
     .sort((a, b) => Number(!!a.account_code) - Number(!!b.account_code) || b.ht - a.ht);
