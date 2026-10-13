@@ -90,56 +90,58 @@ export async function GET(req: Request) {
     qty: r3(Number(r.qty)), ht: r2(Number(r.ht)),
   }));
 
-  // Les lignes sans produit n'existent que dans le croisement « Sans famille ».
-  let freeLines: FreeLine[] = [];
-  if (!categoryId) {
-    const free = await query<{ label: string; qty: string; ht: string }>(
-      `SELECT sl.label,
-              SUM(sl.quantity)::text AS qty,
-              SUM(sl.line_ht)::text  AS ht
-         FROM sale_lines sl
-         JOIN sales s ON s.id = sl.sale_id
-        WHERE ${where}
-          AND sl.product_id IS NULL
-          -- Une ligne déjà rangée (ex. commande web/OGF catégorisée par
-          -- order-intake.ts) n'est plus « sans famille » : son croisement
-          -- (coverage/accounts) la compte déjà ailleurs, elle ne doit pas
-          -- réapparaître ici à rattacher une seconde fois.
-          AND sl.category_id IS NULL
-        GROUP BY sl.label
-        ORDER BY SUM(sl.line_ht) DESC, sl.label`,
-      base,
+  // Lignes sans produit : pour « Sans famille », celles qui n'ont encore
+  // aucune catégorie ; pour un croisement classé, celles rangées directement
+  // sur la ligne (ex. commande web/OGF catégorisée par order-intake.ts, qui
+  // ne passe jamais par un article). Sans ce second cas, leur CA apparaît
+  // dans le croisement mais leur détail reste introuvable — exactement ce qui
+  // les rend incompréhensibles depuis cet écran.
+  const freeParams = [...base];
+  const freeCatFilter = categoryId
+    ? `sl.category_id = $${freeParams.push(categoryId)}`
+    : 'sl.category_id IS NULL';
+  const free = await query<{ label: string; qty: string; ht: string }>(
+    `SELECT sl.label,
+            SUM(sl.quantity)::text AS qty,
+            SUM(sl.line_ht)::text  AS ht
+       FROM sale_lines sl
+       JOIN sales s ON s.id = sl.sale_id
+      WHERE ${where}
+        AND sl.product_id IS NULL
+        AND ${freeCatFilter}
+      GROUP BY sl.label
+      ORDER BY SUM(sl.line_ht) DESC, sl.label`,
+    freeParams,
+  );
+
+  // Article du catalogue portant EXACTEMENT ce libellé : rattachement évident.
+  // Un libellé porté par plusieurs articles est ambigu → aucune proposition.
+  const labels = [...new Set(free.rows.map((r) => r.label.trim().toLowerCase()).filter(Boolean))];
+  const byName = new Map<string, Suggestion[]>();
+  if (labels.length) {
+    const m = await query<{ id: string; name: string; category_id: string | null; category_name: string | null }>(
+      `SELECT p.id, p.name, p.category_id, c.name AS category_name
+         FROM products p
+         LEFT JOIN product_categories c ON c.id = p.category_id
+        WHERE p.organization_id = $1
+          AND lower(btrim(p.name)) = ANY($2::text[])`,
+      [g.user.organizationId, labels],
     );
-
-    // Article du catalogue portant EXACTEMENT ce libellé : rattachement évident.
-    // Un libellé porté par plusieurs articles est ambigu → aucune proposition.
-    const labels = [...new Set(free.rows.map((r) => r.label.trim().toLowerCase()).filter(Boolean))];
-    const byName = new Map<string, Suggestion[]>();
-    if (labels.length) {
-      const m = await query<{ id: string; name: string; category_id: string | null; category_name: string | null }>(
-        `SELECT p.id, p.name, p.category_id, c.name AS category_name
-           FROM products p
-           LEFT JOIN product_categories c ON c.id = p.category_id
-          WHERE p.organization_id = $1
-            AND lower(btrim(p.name)) = ANY($2::text[])`,
-        [g.user.organizationId, labels],
-      );
-      for (const r of m.rows) {
-        const k = r.name.trim().toLowerCase();
-        const list = byName.get(k) ?? [];
-        list.push({ id: r.id, name: r.name, category_id: r.category_id, category_name: r.category_name });
-        byName.set(k, list);
-      }
+    for (const r of m.rows) {
+      const k = r.name.trim().toLowerCase();
+      const list = byName.get(k) ?? [];
+      list.push({ id: r.id, name: r.name, category_id: r.category_id, category_name: r.category_name });
+      byName.set(k, list);
     }
-
-    freeLines = free.rows.map((r) => {
-      const cand = byName.get(r.label.trim().toLowerCase());
-      return {
-        label: r.label, qty: r3(Number(r.qty)), ht: r2(Number(r.ht)),
-        suggestion: cand && cand.length === 1 ? cand[0]! : null,
-      };
-    });
   }
+
+  const freeLines: FreeLine[] = free.rows.map((r) => {
+    const cand = byName.get(r.label.trim().toLowerCase());
+    return {
+      label: r.label, qty: r3(Number(r.qty)), ht: r2(Number(r.ht)),
+      suggestion: cand && cand.length === 1 ? cand[0]! : null,
+    };
+  });
 
   return NextResponse.json({ articles, freeLines });
 }

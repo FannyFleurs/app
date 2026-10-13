@@ -651,16 +651,31 @@ function ArticlesModal({ crossing, categories, canAssignFamily, from, to, onClos
             {/* Ventes saisies au prix (product_id nul). Si un article du même nom
                 existe, on relie la ligne à cet article : la famille suit. Sinon
                 (ou en plus), on pose directement une famille sur la ligne — seule
-                option pour un libellé qui ne sera jamais un article (livraison…). */}
+                option pour un libellé qui ne sera jamais un article (livraison…).
+                Pour un croisement déjà classé, ces lignes ont leur famille posée
+                directement par une commande entrante (web/OGF) plutôt que par un
+                article — c'est pour ça qu'elles n'apparaissaient nulle part en
+                détail jusqu'ici, alors qu'elles pèsent déjà dans le CA affiché. */}
             {freeLines.length > 0 && (
               <div className="space-y-1.5">
                 <h3 className="text-sm font-semibold">Ventes saisies au prix</h3>
                 <p className="text-xs text-ink-soft">
-                  Ces ventes n&apos;ont pas été passées par la fiche article, elles n&apos;en
-                  connaissent donc pas la famille. Rattachez-les à l&apos;article du même nom
-                  (la famille suivra aussi dans les stats de l&apos;article), ou choisissez une
-                  famille directement — utile pour une ligne qui ne sera jamais un article
-                  (ex. frais de livraison). Vaut pour toutes les ventes de ce libellé.
+                  {sansFamille ? (
+                    <>
+                      Ces ventes n&apos;ont pas été passées par la fiche article, elles n&apos;en
+                      connaissent donc pas la famille. Rattachez-les à l&apos;article du même nom
+                      (la famille suivra aussi dans les stats de l&apos;article), ou choisissez une
+                      famille directement — utile pour une ligne qui ne sera jamais un article
+                      (ex. frais de livraison). Vaut pour toutes les ventes de ce libellé.
+                    </>
+                  ) : (
+                    <>
+                      Ces ventes n&apos;ont pas été passées par la fiche article : leur famille
+                      vient directement de la commande (web/OGF), pas d&apos;un article. Vous
+                      pouvez les rattacher à l&apos;article du même nom si un existe, ou corriger
+                      directement leur famille ci-dessous. Vaut pour toutes les ventes de ce libellé.
+                    </>
+                  )}
                 </p>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm border-collapse">
@@ -703,7 +718,9 @@ function ArticlesModal({ crossing, categories, canAssignFamily, from, to, onClos
                               </div>
                             ) : (
                               <span className="text-ink-soft text-xs italic">
-                                {f.suggestion ? f.suggestion.name : 'Aucun article de ce nom'}
+                                {f.suggestion
+                                  ? f.suggestion.name
+                                  : sansFamille ? 'Aucun article de ce nom' : 'Via la commande'}
                               </span>
                             )}
                           </Td>

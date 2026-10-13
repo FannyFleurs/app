@@ -122,4 +122,21 @@ describe.skipIf(!hasDb)('Ventes saisies au prix — attribution directe d\'une f
     expect(labels).not.toContain('Livraison');
     expect(labels).toContain('Mystère');
   });
+
+  it('une ligne déjà rangée (ex. commande web/OGF) apparaît dans le détail de SON croisement', async () => {
+    // Avant le correctif, ce croisement « Livraison » apparaissait bien dans
+    // /api/accounting/coverage (son CA y est compté), mais son détail restait
+    // introuvable : ni « articles » (pas de produit), ni « freeLines » (la
+    // requête ne regardait que category_id IS NULL). D'où la confusion de
+    // l'utilisateur : une famille avec du CA, mais « Voir le détail » vide.
+    const url = `https://x.test/api/accounting/uncategorized-products`
+      + `?from=${today}&to=${today}&vat_rate=20&store_id=${storeId}&category_id=${categoryId}`;
+    const res = await uncategorizedProducts(new Request(url));
+    expect(res.status).toBe(200);
+    const body = await res.json() as { freeLines: { label: string; qty: number; ht: number }[] };
+    const livraison = body.freeLines.find((f) => f.label === 'Livraison');
+    expect(livraison).toBeTruthy();
+    expect(livraison!.qty).toBe(2);
+    expect(livraison!.ht).toBeCloseTo(18.16, 2);
+  });
 });
