@@ -6,7 +6,10 @@
  * en cache que le nécessaire pour faire tourner la caisse : documents de
  * navigation, assets Next/_next, icônes, et quelques API « catalogue » en GET.
  */
-const VERSION = 'v4';
+// Remplacée à CHAQUE build par scripts/stamp-sw-version.ts (SHA du commit
+// déployé) — ne JAMAIS la bumper ici à la main, le script l'écrase de toute
+// façon, et un bump manuel oublié est précisément le bug que ça a causé.
+const VERSION = 'build-local';
 const CACHE = 'webpos-' + VERSION;
 
 // API en lecture, sûres à mettre en cache (pas de données sensibles cross-user).
