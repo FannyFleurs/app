@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { downloadFile } from '@/lib/ui/download-file';
 
 /**
- * Téléchargement des PDF générés côté serveur (facture, avoir, ticket).
+ * Téléchargement des PDF générés côté serveur (ticket, en repli).
  *
  * Dans l'app native (Capacitor), un lien classique `target="_blank"` vers une
  * route authentifiée bascule sur Safari, qui n'a pas la session de la
@@ -12,6 +12,12 @@ import { downloadFile } from '@/lib/ui/download-file';
  * (voir lib/ui/download-file.ts). `downloadFile` fetch le PDF depuis la page
  * elle-même (session valide) puis le télécharge localement, sans jamais
  * naviguer vers l'URL du serveur.
+ *
+ * Facture et avoirs (Ma Journée), eux, passent par PdfPreviewModal plutôt que
+ * downloadFile : un téléchargement silencieux ne donnait aucun signe de vie
+ * au clic (« rien ne se passe ») — la modale affiche le PDF (ou l'erreur) et
+ * propose Imprimer/Télécharger, tout en restant dans la page (voir
+ * components/PdfPreviewModal.tsx).
  */
 
 afterEach(() => {
@@ -29,8 +35,6 @@ describe('downloadFile', () => {
     vi.stubGlobal('URL', { ...URL, createObjectURL, revokeObjectURL });
 
     let clicked = false;
-    let downloadAttr = '';
-    let hrefAttr = '';
     const realCreateElement = document.createElement.bind(document);
     vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
       const el = realCreateElement(tag);
@@ -40,10 +44,10 @@ describe('downloadFile', () => {
       return el;
     });
 
-    const ok = await downloadFile('/api/invoices/1/pdf', 'facture-F2026-001.pdf');
+    const ok = await downloadFile('/api/receipts/by-sale/1/pdf', 'ticket.pdf');
 
     expect(ok).toBe(true);
-    expect(fetchMock).toHaveBeenCalledWith('/api/invoices/1/pdf');
+    expect(fetchMock).toHaveBeenCalledWith('/api/receipts/by-sale/1/pdf');
     expect(clicked).toBe(true);
     expect(createObjectURL).toHaveBeenCalledWith(blob);
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:fake-url');
@@ -51,28 +55,29 @@ describe('downloadFile', () => {
 
   it('renvoie false si le serveur répond une erreur (ex. session absente)', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false }) as unknown as Response));
-    expect(await downloadFile('/api/invoices/1/pdf', 'facture.pdf')).toBe(false);
+    expect(await downloadFile('/api/receipts/by-sale/1/pdf', 'ticket.pdf')).toBe(false);
   });
 
   it('renvoie false si le réseau échoue, sans lever d\'exception', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('network'); }));
-    await expect(downloadFile('/api/invoices/1/pdf', 'facture.pdf')).resolves.toBe(false);
+    await expect(downloadFile('/api/receipts/by-sale/1/pdf', 'ticket.pdf')).resolves.toBe(false);
   });
 });
 
-describe('Les liens PDF de Ma Journée ne naviguent plus vers la route authentifiée', () => {
+describe('Ma Journée — facture et avoirs s\'ouvrent dans la modale d\'aperçu PDF', () => {
   const maJournee = readFileSync('app/(app)/ma-journee/MaJourneeClient.tsx', 'utf8');
   const receiptPrint = readFileSync('lib/pos/receipt-print.ts', 'utf8');
 
-  it('facture et avoirs passent par downloadFile, plus par target="_blank"', () => {
-    expect(maJournee).toContain("downloadFile(`/api/invoices/");
-    expect(maJournee).toContain("downloadFile(");
-    const creditNoteDownloads = maJournee.match(/downloadFile\(\s*`\/api\/credit-notes\//g) ?? [];
-    expect(creditNoteDownloads.length).toBe(2);
+  it('ouvre PdfPreviewModal pour la facture et les deux avoirs, plus de target="_blank" ni de téléchargement silencieux', () => {
+    expect(maJournee).toContain("import PdfPreviewModal from '@/components/PdfPreviewModal'");
+    expect(maJournee).toContain('<PdfPreviewModal');
+    const setPdfPreviewCalls = maJournee.match(/setPdfPreview\(\{/g) ?? [];
+    expect(setPdfPreviewCalls.length).toBe(3);
+    expect(maJournee).not.toContain('downloadFile');
     expect(maJournee).not.toMatch(/href=\{`\/api\/(invoices|credit-notes)\/[^}]*\}\s*target="_blank"/);
   });
 
-  it('le repli PDF du ticket télécharge aussi au lieu de naviguer', () => {
+  it('le repli PDF du ticket télécharge toujours au lieu de naviguer', () => {
     expect(receiptPrint).toContain('downloadFile(');
     expect(receiptPrint).not.toContain('window.open');
   });

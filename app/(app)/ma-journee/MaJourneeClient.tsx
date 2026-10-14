@@ -18,7 +18,7 @@ import GiftReceiptPickerModal from '@/components/GiftReceiptPickerModal';
 import type { DayReport } from '@/lib/services/day-report';
 import { promptThemed } from '@/lib/ui/dialog';
 import { printReceipt } from '@/lib/pos/receipt-print';
-import { downloadFile } from '@/lib/ui/download-file';
+import PdfPreviewModal from '@/components/PdfPreviewModal';
 import { readRoamingChoice } from '@/lib/caisse/roaming';
 
 interface Sale {
@@ -1099,6 +1099,7 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
   const [showAttach, setShowAttach] = useState(false);
   const [info, setInfo] = useState<string | null>(null);
   const [showGiftPicker, setShowGiftPicker] = useState(false);
+  const [pdfPreview, setPdfPreview] = useState<{ url: string; title: string; filename: string } | null>(null);
 
   const receiptApiBase = `/api/receipts/by-sale/${s.id}`;
   const receiptPdfUrl = `/api/receipts/by-sale/${s.id}/pdf`;
@@ -1204,8 +1205,11 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
                 <button
                   onClick={() => {
                     const invoice = detail.invoice!;
-                    void downloadFile(`/api/invoices/${invoice.id}/pdf`, `facture-${invoice.number}.pdf`)
-                      .then((ok) => { if (!ok) setError('Téléchargement de la facture impossible.'); });
+                    setPdfPreview({
+                      url: `/api/invoices/${invoice.id}/pdf`,
+                      title: `Facture ${invoice.number}`,
+                      filename: `facture-${invoice.number}.pdf`,
+                    });
                   }}
                   className="btn-soft text-xs whitespace-nowrap">
                   Imprimer facture {detail.invoice.number}
@@ -1414,9 +1418,11 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
             />
             {/* Repli : le PDF reste accessible si l'imprimante ticket manque. */}
             <button
-              onClick={() => void downloadFile(
-                `/api/credit-notes/${creditNote.id}/pdf`, `avoir-${creditNote.number}.pdf`,
-              ).then((ok) => { if (!ok) setError('Téléchargement de l’avoir impossible.'); })}
+              onClick={() => setPdfPreview({
+                url: `/api/credit-notes/${creditNote.id}/pdf`,
+                title: `Avoir ${creditNote.number}`,
+                filename: `avoir-${creditNote.number}.pdf`,
+              })}
               className="btn-ghost text-xs">
               PDF
             </button>
@@ -1448,9 +1454,11 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
                   </div>
                 </div>
                 <button
-                  onClick={() => void downloadFile(
-                    `/api/credit-notes/${cn.id}/pdf`, `avoir-${cn.number}.pdf`,
-                  ).then((ok) => { if (!ok) setError('Téléchargement de l’avoir impossible.'); })}
+                  onClick={() => setPdfPreview({
+                    url: `/api/credit-notes/${cn.id}/pdf`,
+                    title: `Avoir ${cn.number}`,
+                    filename: `avoir-${cn.number}.pdf`,
+                  })}
                   className="text-accent-deep text-xs hover:underline shrink-0">
                   PDF
                 </button>
@@ -1534,6 +1542,14 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
           pdfBaseUrl={receiptPdfUrl}
           onPrint={(indices) => void printTicket(true, indices)}
           onClose={() => setShowGiftPicker(false)}
+        />
+      )}
+      {pdfPreview && (
+        <PdfPreviewModal
+          url={pdfPreview.url}
+          title={pdfPreview.title}
+          filename={pdfPreview.filename}
+          onClose={() => setPdfPreview(null)}
         />
       )}
     </div>
