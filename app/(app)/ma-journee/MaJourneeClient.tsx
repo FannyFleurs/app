@@ -1099,7 +1099,11 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
   const [showAttach, setShowAttach] = useState(false);
   const [info, setInfo] = useState<string | null>(null);
   const [showGiftPicker, setShowGiftPicker] = useState(false);
-  const [pdfPreview, setPdfPreview] = useState<{ url: string; title: string; filename: string } | null>(null);
+  const [pdfPreview, setPdfPreview] = useState<{
+    url: string; title: string; filename: string;
+    /** Facture seulement : pour afficher le bouton « Envoyer » dans la modale. */
+    invoice?: { id: string; number: string };
+  } | null>(null);
 
   const receiptApiBase = `/api/receipts/by-sale/${s.id}`;
   const receiptPdfUrl = `/api/receipts/by-sale/${s.id}/pdf`;
@@ -1209,6 +1213,7 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
                       url: `/api/invoices/${invoice.id}/pdf`,
                       title: `Facture ${invoice.number}`,
                       filename: `facture-${invoice.number}.pdf`,
+                      invoice,
                     });
                   }}
                   className="btn-soft text-xs whitespace-nowrap">
@@ -1550,6 +1555,13 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
           title={pdfPreview.title}
           filename={pdfPreview.filename}
           onClose={() => setPdfPreview(null)}
+          extraActions={pdfPreview.invoice && (
+            <SendInvoiceButton
+              invoiceId={pdfPreview.invoice.id}
+              invoiceNumber={pdfPreview.invoice.number}
+              onSent={(email) => { setInfo(`Facture envoyée à ${email}`); setPdfPreview(null); }}
+            />
+          )}
         />
       )}
     </div>
