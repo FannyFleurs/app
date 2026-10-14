@@ -18,6 +18,7 @@ import GiftReceiptPickerModal from '@/components/GiftReceiptPickerModal';
 import type { DayReport } from '@/lib/services/day-report';
 import { promptThemed } from '@/lib/ui/dialog';
 import { printReceipt } from '@/lib/pos/receipt-print';
+import { downloadFile } from '@/lib/ui/download-file';
 import { readRoamingChoice } from '@/lib/caisse/roaming';
 
 interface Sale {
@@ -1200,10 +1201,15 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
             </div>
             {detail.invoice ? (
               <div className="flex flex-col items-end gap-1.5">
-                <a href={`/api/invoices/${detail.invoice.id}/pdf`} target="_blank" rel="noreferrer"
-                   className="btn-soft text-xs whitespace-nowrap">
+                <button
+                  onClick={() => {
+                    const invoice = detail.invoice!;
+                    void downloadFile(`/api/invoices/${invoice.id}/pdf`, `facture-${invoice.number}.pdf`)
+                      .then((ok) => { if (!ok) setError('Téléchargement de la facture impossible.'); });
+                  }}
+                  className="btn-soft text-xs whitespace-nowrap">
                   Imprimer facture {detail.invoice.number}
-                </a>
+                </button>
                 <SendInvoiceButton
                   invoiceId={detail.invoice.id}
                   invoiceNumber={detail.invoice.number}
@@ -1407,10 +1413,13 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
               onDone={(msg) => { setInfo(msg); setTimeout(() => setInfo(null), 3000); }}
             />
             {/* Repli : le PDF reste accessible si l'imprimante ticket manque. */}
-            <a href={`/api/credit-notes/${creditNote.id}/pdf`} target="_blank" rel="noreferrer"
-               className="btn-ghost text-xs">
+            <button
+              onClick={() => void downloadFile(
+                `/api/credit-notes/${creditNote.id}/pdf`, `avoir-${creditNote.number}.pdf`,
+              ).then((ok) => { if (!ok) setError('Téléchargement de l’avoir impossible.'); })}
+              className="btn-ghost text-xs">
               PDF
-            </a>
+            </button>
           </div>
         </div>
       )}
@@ -1438,10 +1447,13 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
                     <span className="text-ink-soft ml-2">· {cn.reason}</span>
                   </div>
                 </div>
-                <a href={`/api/credit-notes/${cn.id}/pdf`} target="_blank" rel="noreferrer"
-                   className="text-accent-deep text-xs hover:underline shrink-0">
+                <button
+                  onClick={() => void downloadFile(
+                    `/api/credit-notes/${cn.id}/pdf`, `avoir-${cn.number}.pdf`,
+                  ).then((ok) => { if (!ok) setError('Téléchargement de l’avoir impossible.'); })}
+                  className="text-accent-deep text-xs hover:underline shrink-0">
                   PDF
-                </a>
+                </button>
               </li>
             ))}
           </ul>

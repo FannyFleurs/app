@@ -1,8 +1,11 @@
+import { downloadFile } from '@/lib/ui/download-file';
+
 /**
  * Impression d'un ticket à la demande (client).
  * Envoie le ticket à l'imprimante TICKET CloudPRNT via l'API. Si aucune
- * imprimante n'est configurée (409), repli sur l'ouverture du PDF pour ne pas
- * bloquer l'usage (période de transition avant installation de l'imprimante).
+ * imprimante n'est configurée (409), repli sur le téléchargement du PDF pour
+ * ne pas bloquer l'usage (période de transition avant installation de
+ * l'imprimante).
  */
 export async function printReceipt(opts: {
   /** Base de l'API ticket : `/api/receipts/<id>` ou `/api/receipts/by-sale/<saleId>`. */
@@ -25,8 +28,11 @@ export async function printReceipt(opts: {
       const q = opts.gift
         ? `?gift=1${opts.lines?.length ? `&lines=${opts.lines.join(',')}` : ''}`
         : '';
-      try { window.open(`${opts.pdfUrl}${q}`, '_blank'); } catch { /* popup bloqué */ }
-      return { ok: true, queued: false, message: 'Aucune imprimante ticket configurée — ouverture du PDF.' };
+      // Téléchargement (fetch + blob), pas un lien `target="_blank"` : dans
+      // l'app native (Capacitor), une navigation vers une route authentifiée
+      // bascule sur Safari, qui n'a pas la session de la WebView embarquée.
+      await downloadFile(`${opts.pdfUrl}${q}`, 'ticket.pdf');
+      return { ok: true, queued: false, message: 'Aucune imprimante ticket configurée — PDF téléchargé.' };
     }
     // Échec imprimante (ex. app native : imprimante IP injoignable). On invite
     // à vérifier l'imprimante puis à réimprimer (le bouton relance l'envoi).
