@@ -308,7 +308,11 @@ export default function PaymentModal({ saleId, totalTtc, lines = [], storeId, ha
       const shouldOpenDrawer = payments.some((p) =>
         methods.some((m) => m.kind === p.method && m.opens_drawer === true),
       );
-      if (shouldOpenDrawer) {
+      const isNativeApp =
+        typeof window !== 'undefined' &&
+        Boolean((window as unknown as { Capacitor?: unknown }).Capacitor);
+
+      if (shouldOpenDrawer && isNativeApp) {
         try {
           await fetch('/api/cash-sessions/open-drawer', {
             method: 'POST',
