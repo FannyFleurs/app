@@ -1,11 +1,14 @@
 import 'server-only';
-import { query } from '@/lib/db/client';
 import { mergePlatformDefaults, type PlatformSettings } from './platform';
+import { getPlatformSettingsRaw } from './platform-server';
 
 /**
  * Branding résolu côté serveur, pour les pages de connexion (rendu SSR du
  * logo → aucun flash de monogramme). `caLogoUrl` retombe sur le logo
- * principal si aucun logo CA dédié n'est défini.
+ * principal si aucun logo CA dédié n'est défini. Lecture mise en cache
+ * (voir platform-server.ts) : un écran de connexion rendu à chaque
+ * déconnexion/verrouillage caisse ne doit pas repayer une requête Postgres
+ * à chaque fois.
  */
 export async function getServerBrand(): Promise<{
   brandName: string; logoUrl: string; caLogoUrl: string;
@@ -13,10 +16,7 @@ export async function getServerBrand(): Promise<{
 }> {
   let cfg: PlatformSettings = mergePlatformDefaults(null);
   try {
-    const { rows } = await query<{ value: Partial<PlatformSettings> }>(
-      `SELECT value FROM platform_settings WHERE id = 1`,
-    );
-    cfg = mergePlatformDefaults(rows[0]?.value ?? null);
+    cfg = mergePlatformDefaults(await getPlatformSettingsRaw());
   } catch { /* défauts */ }
   const main = cfg.logo_url || '';
   return {

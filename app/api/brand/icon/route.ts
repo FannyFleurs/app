@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { Readable } from 'node:stream';
 import * as PImage from 'pureimage';
-import { query } from '@/lib/db/client';
 import { mergePlatformDefaults, type PlatformSettings } from '@/lib/settings/platform';
+import { getPlatformSettingsRaw } from '@/lib/settings/platform-server';
 
 export const dynamic = 'force-dynamic';
 
@@ -83,10 +83,7 @@ export async function GET(req: Request) {
 
   let p: PlatformSettings;
   try {
-    const { rows } = await query<{ value: Partial<PlatformSettings> }>(
-      `SELECT value FROM platform_settings WHERE id = 1`,
-    );
-    p = mergePlatformDefaults(rows[0]?.value ?? null);
+    p = mergePlatformDefaults(await getPlatformSettingsRaw());
   } catch {
     p = mergePlatformDefaults(null);
   }

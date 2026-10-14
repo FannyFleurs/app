@@ -8,6 +8,7 @@ import {
   mergePlatformDefaults,
   type PlatformSettings,
 } from '@/lib/settings/platform';
+import { invalidatePlatformSettingsCache } from '@/lib/settings/platform-server';
 
 export const dynamic = 'force-dynamic';
 
@@ -115,6 +116,7 @@ export async function PATCH(req: Request) {
      DO UPDATE SET value = EXCLUDED.value, updated_by = EXCLUDED.updated_by, updated_at = now()`,
     [JSON.stringify(merged), g.user.id],
   );
+  invalidatePlatformSettingsCache();
 
   await audit({
     organizationId: g.user.organizationId, userId: g.user.id,

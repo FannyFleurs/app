@@ -1,21 +1,22 @@
 import { NextResponse } from 'next/server';
-import { query } from '@/lib/db/client';
 import { mergePlatformDefaults, type PlatformSettings } from '@/lib/settings/platform';
+import { getPlatformSettingsRaw } from '@/lib/settings/platform-server';
 
 export const dynamic = 'force-dynamic';
 
 /**
  * Branding public (aucun secret) : nom + logo + montants affichés des
  * offres. Consommé par les écrans de connexion et l'app pour afficher
- * le logo/nom personnalisés partout.
+ * le logo/nom personnalisés partout — appelé avec `cache: 'no-store'` côté
+ * client (BrandMark), donc sur CHAQUE montage. La lecture Postgres elle-même
+ * est mise en cache côté serveur (voir platform-server.ts) ; seule la
+ * réponse HTTP reste non cachée, pour que l'affichage reflète un changement
+ * de logo sans attendre.
  */
 export async function GET() {
   let p: PlatformSettings;
   try {
-    const { rows } = await query<{ value: Partial<PlatformSettings> }>(
-      `SELECT value FROM platform_settings WHERE id = 1`,
-    );
-    p = mergePlatformDefaults(rows[0]?.value ?? null);
+    p = mergePlatformDefaults(await getPlatformSettingsRaw());
   } catch {
     p = mergePlatformDefaults(null);
   }
