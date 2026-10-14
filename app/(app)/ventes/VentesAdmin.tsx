@@ -27,7 +27,7 @@ interface DetailLine {
   unit_price_ttc: string; quantity: string; discount_amount: string;
   tax_rate: string; line_ht: string; line_tva: string; line_ttc: string;
 }
-interface DetailPayment { method: string; amount: string; reference?: string | null }
+interface DetailPayment { method: string; label?: string | null; amount: string; reference?: string | null }
 interface TvaRow { rate: number | string; base_ht: number | string; tva: number | string }
 interface SaleDetail {
   sale: {
@@ -244,9 +244,17 @@ function SaleDetailModal({ row, detail, loading, onClose }: {
   }, [onClose]);
 
   const paymentsByMethod = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const p of detail?.payments ?? []) m.set(p.method, (m.get(p.method) ?? 0) + Number(p.amount));
-    return [...m.entries()];
+    // Groupé par (method, label) : deux modes personnalisés de même
+    // catégorie générique (ex. "Carte Vitrine"/"Paiement Web", tous deux
+    // "other") restent distincts plutôt que de fusionner sous "Autre".
+    const m = new Map<string, { method: string; label: string | null; amount: number }>();
+    for (const p of detail?.payments ?? []) {
+      const key = `${p.method}|${p.label ?? ''}`;
+      const cur = m.get(key) ?? { method: p.method, label: p.label ?? null, amount: 0 };
+      cur.amount += Number(p.amount);
+      m.set(key, cur);
+    }
+    return [...m.values()];
   }, [detail]);
 
   const s = detail?.sale;
@@ -343,10 +351,10 @@ function SaleDetailModal({ row, detail, loading, onClose }: {
                   <p className="text-sm text-ink-soft">Aucun paiement enregistré.</p>
                 ) : (
                   <div className="space-y-1.5">
-                    {paymentsByMethod.map(([method, amount]) => (
-                      <div key={method} className="flex items-center justify-between">
-                        <Badge tone="soft">{PAYMENT_LABELS[method] ?? method}</Badge>
-                        <span className="text-sm font-semibold tabular-nums">{formatEUR(amount)}</span>
+                    {paymentsByMethod.map((p) => (
+                      <div key={`${p.method}|${p.label ?? ''}`} className="flex items-center justify-between">
+                        <Badge tone="soft">{p.label ?? PAYMENT_LABELS[p.method] ?? p.method}</Badge>
+                        <span className="text-sm font-semibold tabular-nums">{formatEUR(p.amount)}</span>
                       </div>
                     ))}
                   </div>

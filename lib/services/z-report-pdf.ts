@@ -136,7 +136,7 @@ function drawReport(doc: PDFKit.PDFDocument, r: DayReport): void {
     doc.moveDown(0.5); hr(doc); doc.moveDown(0.3);
     section(doc, 'Modes de règlement');
     for (const p of r.payments) {
-      const label = PAYMENT_LABELS[p.method] ?? p.method;
+      const label = p.label ?? PAYMENT_LABELS[p.method] ?? p.method;
       kv(doc, `${label} [${p.count}]`, eur(p.amount));
     }
 
@@ -145,7 +145,7 @@ function drawReport(doc: PDFKit.PDFDocument, r: DayReport): void {
       doc.moveDown(0.5); hr(doc); doc.moveDown(0.3);
       section(doc, 'Règlements en compte (hors CA)');
       for (const p of r.settlements) {
-        const label = PAYMENT_LABELS[p.method] ?? p.method;
+        const label = p.label ?? PAYMENT_LABELS[p.method] ?? p.method;
         kv(doc, `${label} [${p.count}]`, eur(p.amount));
       }
     }

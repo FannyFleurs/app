@@ -46,7 +46,7 @@ interface SaleDetail {
     line_ht: string; line_tva: string; line_ttc: string;
     product_purchase_price_ht?: string | null;
   }[];
-  payments: { method: string; amount: string; reference: string | null }[];
+  payments: { method: string; label: string | null; amount: string; reference: string | null }[];
   invoice: { id: string; number: string; period?: boolean } | null;
   returns?: Array<{
     id: string; number: string; amount: string; used_amount: string;
@@ -1121,13 +1121,20 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
   }
 
   const paymentsByMethod = useMemo(() => {
-    const map = new Map<string, number>();
+    // Groupé par (method, label) et non par method seul : deux modes
+    // personnalisés de même catégorie générique (ex. "Carte Vitrine" et
+    // "Paiement Web", tous deux "other") doivent rester distincts plutôt
+    // que fusionner sous "Autre".
+    const map = new Map<string, { method: string; label: string | null; amount: number }>();
     for (const p of detail.payments) {
-      map.set(p.method, (map.get(p.method) ?? 0) + Number(p.amount));
+      const key = `${p.method}|${p.label ?? ''}`;
+      const cur = map.get(key) ?? { method: p.method, label: p.label, amount: 0 };
+      cur.amount += Number(p.amount);
+      map.set(key, cur);
     }
-    return Array.from(map.entries())
-      .filter(([, v]) => Math.abs(v) > 0.005)
-      .map(([method, amount]) => ({ method, amount: Number(amount.toFixed(2)) }));
+    return Array.from(map.values())
+      .filter((v) => Math.abs(v.amount) > 0.005)
+      .map((v) => ({ ...v, amount: Number(v.amount.toFixed(2)) }));
   }, [detail.payments]);
 
   // Vente entièrement retournée ? (statut annulé, ou toutes les quantités
@@ -1382,8 +1389,8 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
           ) : (
             <ul className="space-y-2">
               {paymentsByMethod.map((p) => (
-                <li key={p.method} className="flex items-center justify-between text-sm border-b border-border/60 pb-2 last:border-0">
-                  <Badge tone="soft">{PAYMENT_LABELS[p.method] ?? p.method}</Badge>
+                <li key={`${p.method}|${p.label ?? ''}`} className="flex items-center justify-between text-sm border-b border-border/60 pb-2 last:border-0">
+                  <Badge tone="soft">{p.label ?? PAYMENT_LABELS[p.method] ?? p.method}</Badge>
                   <span className="font-medium">{formatEUR(p.amount)}</span>
                 </li>
               ))}

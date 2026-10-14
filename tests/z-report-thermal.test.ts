@@ -23,7 +23,7 @@ const report: DayReport = {
     offerts_count: 2, offerts_total: 15,
   },
   tva_by_rate: [{ rate: 20, tva: 90, ttc: 540, ht: 450 }, { rate: 10, tva: 23.6, ttc: 259.6, ht: 236 }],
-  payments: [{ method: 'card', count: 20, amount: 800 }, { method: 'cash', count: 17, amount: 434.5 }],
+  payments: [{ method: 'card', label: null, count: 20, amount: 800 }, { method: 'cash', label: null, count: 17, amount: 434.5 }],
   settlements: [],
   cash: {
     fonds_de_caisse: 100, entrees_argent: 0, remise_banque: 0,

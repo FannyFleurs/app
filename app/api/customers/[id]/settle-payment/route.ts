@@ -10,6 +10,9 @@ const schema = z.object({
     amount: z.number().positive(),
     given_amount: z.number().min(0).optional(),
     reference: z.string().max(80).optional(),
+    // Libellé exact du mode de règlement choisi, figé pour ce règlement —
+    // voir migrations/0094_payments_label.sql.
+    label: z.string().max(120).optional(),
   })).min(1),
   store_id: z.string().uuid().optional(),
 });

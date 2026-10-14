@@ -268,13 +268,13 @@ export async function GET(req: Request) {
     dailyRevenue(argsCur), dailyRevenue(argsPrev), dailyMarge(argsCur), dailyMarge(argsPrev),
     hourly(argsCur), hourly(argsPrev), weekday(argsCur), weekday(argsPrev),
     // Moyens de paiement (encaissé, TTC) — période courante.
-    query<{ method: string; amount: string }>(
-      `SELECT pay.method, COALESCE(SUM(pay.amount),0)::text AS amount
+    query<{ method: string; label: string | null; amount: string }>(
+      `SELECT pay.method, pay.label, COALESCE(SUM(pay.amount),0)::text AS amount
          FROM payments pay JOIN sales s ON s.id = pay.sale_id
         WHERE s.organization_id = $1 AND s.status = 'validated'
           AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date ${storeSql}
-        GROUP BY pay.method
-        ORDER BY 2 DESC`,
+        GROUP BY pay.method, pay.label
+        ORDER BY 3 DESC`,
       argsCur,
     ),
     // Détail TVA (courant). Exclut les lignes carte cadeau : sans ça, leur
@@ -442,7 +442,7 @@ export async function GET(req: Request) {
 
   const payments = payRows.rows
     .filter((r) => Number(r.amount) !== 0)
-    .map((r) => ({ method: r.method, label: PAYMENT_LABELS[r.method] ?? r.method, amount: Number(r.amount) }));
+    .map((r) => ({ method: r.method, label: r.label ?? PAYMENT_LABELS[r.method] ?? r.method, amount: Number(r.amount) }));
 
   const tva = tvaRows.rows.map((r) => ({
     rate: Number(r.rate), base_ht: Number(r.base_ht), tva: Number(r.tva), ttc: Number(r.ttc),

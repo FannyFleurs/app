@@ -41,7 +41,7 @@ interface Props {
    *  enregistre la vente en local au lieu d'appeler le serveur. */
   offlineEnabled?: boolean;
   onOfflineFinalize?: (
-    payments: Array<{ method: 'cash'|'card'|'check'|'transfer'|'gift_card'|'credit_note'|'deferred'|'other'|'loyalty'; amount: number; given_amount?: number; reference?: string }>,
+    payments: Array<{ method: 'cash'|'card'|'check'|'transfer'|'gift_card'|'credit_note'|'deferred'|'other'|'loyalty'; amount: number; given_amount?: number; reference?: string; label?: string }>,
     loyaltyUsed: number,
   ) => Promise<void>;
   onClose: () => void;
@@ -230,6 +230,7 @@ export default function PaymentModal({ saleId, totalTtc, lines = [], storeId, ha
           body: JSON.stringify({
             payments: payments.map((p) => ({
               method: p.method, amount: p.amount, given_amount: p.given_amount, reference: p.reference,
+              label: p.label,
             })),
             store_id: storeId,
           }),
@@ -262,7 +263,7 @@ export default function PaymentModal({ saleId, totalTtc, lines = [], storeId, ha
         await onOfflineFinalize(
           payments.map((p) => ({
             method: p.method as 'cash'|'card'|'check'|'transfer'|'gift_card'|'credit_note'|'deferred'|'other'|'loyalty',
-            amount: p.amount, given_amount: p.given_amount, reference: p.reference,
+            amount: p.amount, given_amount: p.given_amount, reference: p.reference, label: p.label,
           })),
           // Fidélité réellement mise au règlement (0 si le tender a été retiré).
           round2(payments.filter((p) => p.method === 'loyalty').reduce((s, p) => s + p.amount, 0)),
@@ -281,6 +282,7 @@ export default function PaymentModal({ saleId, totalTtc, lines = [], storeId, ha
             amount: p.amount,
             given_amount: p.given_amount,
             reference: p.reference,
+            label: p.label,
           })),
           // La fidélité est désormais un paiement (méthode « loyalty ») inclus
           // dans `payments` : le débit du compte est piloté par ce montant côté

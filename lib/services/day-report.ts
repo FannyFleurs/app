@@ -46,9 +46,12 @@ export interface DayReport {
     offerts_total: number;
   };
   tva_by_rate: { rate: number; tva: number; ttc: number; ht: number }[];
-  payments: { method: string; count: number; amount: number }[];
+  /** `label` : libellé exact du mode de règlement figé à l'encaissement, ou
+   *  null pour une ligne antérieure à son introduction (retombe alors sur
+   *  la catégorie générique du `method` à l'affichage). */
+  payments: { method: string; label: string | null; count: number; amount: number }[];
   /** Règlements de soldes « en compte » encaissés en caisse (hors CA). */
-  settlements: { method: string; count: number; amount: number }[];
+  settlements: { method: string; label: string | null; count: number; amount: number }[];
   cash: {
     fonds_de_caisse: number;
     entrees_argent: number;
@@ -122,11 +125,11 @@ export async function computeDayReport(opts: {
           WHERE s.store_id=$2 AND s.organization_id=$1 AND s.status='validated' AND s.validated_at::date=$3::date
             AND COALESCE(sl.metadata->>'gift_card_ca_deferred','') <> 'true'
           GROUP BY sl.tax_rate ORDER BY sl.tax_rate`, [...P]),
-      query<{ method: string; cnt: string; total: string }>(
-        `SELECT p.method, COUNT(*)::text cnt, SUM(p.amount)::text total
+      query<{ method: string; label: string | null; cnt: string; total: string }>(
+        `SELECT p.method, p.label, COUNT(*)::text cnt, SUM(p.amount)::text total
            FROM payments p JOIN sales s ON s.id=p.sale_id
           WHERE s.store_id=$2 AND s.organization_id=$1 AND s.status='validated' AND s.validated_at::date=$3::date
-          GROUP BY p.method ORDER BY SUM(p.amount) DESC`, [...P]),
+          GROUP BY p.method, p.label ORDER BY SUM(p.amount) DESC`, [...P]),
       query<{ name: string; ttc: string }>(
         `SELECT COALESCE(u.full_name,'—') name, SUM(s.total_ttc)::text ttc
            FROM sales s LEFT JOIN users u ON u.id=s.user_id
@@ -167,12 +170,12 @@ export async function computeDayReport(opts: {
       query<{ n: string }>(
         `SELECT COUNT(*)::text n FROM daily_closures WHERE organization_id=$1 AND store_id=$2 AND business_date < $3::date`, [...P]),
       // Règlements de soldes « en compte » encaissés en caisse (par mode).
-      query<{ method: string; cnt: string; total: string }>(
-        `SELECT method, COUNT(*)::text cnt, SUM(amount)::text total
+      query<{ method: string; label: string | null; cnt: string; total: string }>(
+        `SELECT method, label, COUNT(*)::text cnt, SUM(amount)::text total
            FROM account_settlement_payments
           WHERE store_id=$2 AND organization_id=$1 AND created_at::date=$3::date
-          GROUP BY method ORDER BY SUM(amount) DESC`, [...P],
-      ).catch(() => ({ rows: [] as { method: string; cnt: string; total: string }[] })),
+          GROUP BY method, label ORDER BY SUM(amount) DESC`, [...P],
+      ).catch(() => ({ rows: [] as { method: string; label: string | null; cnt: string; total: string }[] })),
       // Carte cadeau/bon d'achat achetée en ligne (Stripe), encaissement
       // rattaché à une session de caisse de cette boutique — voir
       // pending-store-operations.ts. Purement informatif, hors CA.
@@ -258,8 +261,8 @@ export async function computeDayReport(opts: {
     tva_by_rate: tvaR.rows.map((r) => ({
       rate: Number(r.tax_rate), ht: Number(r.ht), tva: Number(r.tva), ttc: Number(r.ttc),
     })),
-    payments: payR.rows.map((r) => ({ method: r.method, count: Number(r.cnt), amount: Number(r.total) })),
-    settlements: settleR.rows.map((r) => ({ method: r.method, count: Number(r.cnt), amount: Number(r.total) })),
+    payments: payR.rows.map((r) => ({ method: r.method, label: r.label, count: Number(r.cnt), amount: Number(r.total) })),
+    settlements: settleR.rows.map((r) => ({ method: r.method, label: r.label, count: Number(r.cnt), amount: Number(r.total) })),
     cash: {
       fonds_de_caisse: openingFloats,
       entrees_argent: cashIns,

@@ -20,7 +20,7 @@ export interface ReceiptSnapshot {
     tax_rate: number;
     line_ttc: number;
   }>;
-  payments: { method: string; amount: number; given_amount?: number | null; reference?: string | null }[];
+  payments: { method: string; amount: number; given_amount?: number | null; reference?: string | null; label?: string | null }[];
   /** Commentaire libre du ticket (imprimé sous l'en-tête). */
   comment?: string | null;
 }
@@ -220,7 +220,7 @@ export async function renderReceiptPdf(
       // Règlements. Espèces avec sur-paiement → montant DONNÉ puis « Rendu ».
       let change = 0;
       for (const p of snapshot.payments) {
-        const label = PAYMENT_LABELS[p.method] ?? p.method;
+        const label = p.label ?? PAYMENT_LABELS[p.method] ?? p.method;
         if (p.method === 'cash' && p.given_amount != null && p.given_amount > p.amount) {
           change = round2(change + (p.given_amount - p.amount));
           row(label, eur(p.given_amount));

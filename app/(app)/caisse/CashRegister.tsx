@@ -1288,7 +1288,7 @@ export default function CashRegister({
    * vers le serveur (qui scellera) à la reprise réseau. Idempotent.
    */
   async function finalizeOffline(
-    payments: Array<{ method: 'cash'|'card'|'check'|'transfer'|'gift_card'|'credit_note'|'deferred'|'other'|'loyalty'; amount: number; given_amount?: number; reference?: string }>,
+    payments: Array<{ method: 'cash'|'card'|'check'|'transfer'|'gift_card'|'credit_note'|'deferred'|'other'|'loyalty'; amount: number; given_amount?: number; reference?: string; label?: string }>,
     loyaltyUsed: number,
   ) {
     const clientRef = (typeof crypto !== 'undefined' && 'randomUUID' in crypto)

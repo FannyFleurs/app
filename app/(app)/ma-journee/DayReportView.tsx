@@ -78,7 +78,8 @@ export default function DayReportView({ report: r }: { report: DayReport }) {
         {r.payments.length === 0
           ? <Row label="—" value={eur(0)} />
           : r.payments.map((p) => (
-              <Row key={p.method} label={`${PAYMENT_LABELS[p.method] ?? p.method} [${p.count}]`} value={eur(p.amount)} />
+              <Row key={`${p.method}|${p.label ?? ''}`}
+                   label={`${p.label ?? PAYMENT_LABELS[p.method] ?? p.method} [${p.count}]`} value={eur(p.amount)} />
             ))}
       </Section>
 

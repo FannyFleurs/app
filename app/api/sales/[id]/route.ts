@@ -31,7 +31,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     [params.id],
   );
   const payments = await query(
-    `SELECT method, amount, given_amount, change_amount, reference
+    `SELECT method, label, amount, given_amount, change_amount, reference
        FROM payments WHERE sale_id = $1 ORDER BY created_at`,
     [params.id],
   );

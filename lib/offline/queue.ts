@@ -30,6 +30,7 @@ export interface QueuedSale {
     amount: number;
     given_amount?: number;
     reference?: string;
+    label?: string;
   }>;
   loyalty_redemption_amount?: number;
   /** Méta locales (affichage). */

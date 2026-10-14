@@ -355,7 +355,7 @@ export async function buildReceiptStarPrnt(
     // Règlements (+ rendu monnaie).
     let change = 0;
     for (const p of snapshot.payments) {
-      const label = PAYMENT_LABELS[p.method] ?? p.method;
+      const label = p.label ?? PAYMENT_LABELS[p.method] ?? p.method;
       if (p.method === 'cash' && p.given_amount != null && p.given_amount > p.amount) {
         change = round2(change + (p.given_amount - p.amount));
         row(label, eur(p.given_amount));
@@ -522,7 +522,7 @@ export async function buildZReportStarPrnt(
   rule();
   center('Modes de reglement', true);
   for (const p of report.payments) {
-    const label = PAYMENT_LABELS[p.method] ?? p.method;
+    const label = p.label ?? PAYMENT_LABELS[p.method] ?? p.method;
     row(`${label} [${p.count}]`, eur2(p.amount));
   }
 
@@ -530,7 +530,7 @@ export async function buildZReportStarPrnt(
     rule();
     center('Reglements compte (hors CA)', true);
     for (const p of report.settlements) {
-      const label = PAYMENT_LABELS[p.method] ?? p.method;
+      const label = p.label ?? PAYMENT_LABELS[p.method] ?? p.method;
       row(`${label} [${p.count}]`, eur2(p.amount));
     }
   }

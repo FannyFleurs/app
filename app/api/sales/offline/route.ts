@@ -26,6 +26,9 @@ const paymentSchema = z.object({
   amount: z.number().positive(),
   given_amount: z.number().min(0).optional(),
   reference: z.string().max(80).optional(),
+  // Libellé exact du mode de règlement choisi (ex. "Paiement Web"), figé
+  // pour cette vente — voir migrations/0094_payments_label.sql.
+  label: z.string().max(120).optional(),
 });
 
 const schema = z.object({

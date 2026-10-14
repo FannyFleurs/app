@@ -50,6 +50,8 @@ export interface SalePaymentInput {
   amount: number;
   given_amount?: number;
   reference?: string;
+  /** Libellé exact du mode de règlement choisi, figé pour cette vente. */
+  label?: string;
 }
 
 export interface CreateDraftArgs {
@@ -386,8 +388,8 @@ export class SaleService {
         const change = p.given_amount != null ? Number((p.given_amount - p.amount).toFixed(2)) : null;
         await client.query(
           `INSERT INTO payments
-             (organization_id, sale_id, method, amount, given_amount, change_amount, reference, user_id)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+             (organization_id, sale_id, method, amount, given_amount, change_amount, reference, user_id, label)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
           [
             args.organizationId,
             sale.id,
@@ -397,6 +399,7 @@ export class SaleService {
             change,
             p.reference ?? null,
             args.userId,
+            p.label ?? null,
           ],
         );
 
@@ -635,6 +638,10 @@ export class SaleService {
           // le ticket. Null si non renseigné (paiement au montant exact).
           given_amount: p.given_amount ?? null,
           reference: p.reference ?? null,
+          // Libellé exact du mode de règlement (ex. "Paiement Web") : le
+          // ticket imprimé l'affiche tel quel plutôt que la catégorie
+          // générique "Autre" partagée par plusieurs modes personnalisés.
+          label: p.label ?? null,
         })),
         // Commentaire du ticket (sales.notes) : imprimé sur le ticket.
         comment: (sale as { notes?: string | null }).notes ?? null,
