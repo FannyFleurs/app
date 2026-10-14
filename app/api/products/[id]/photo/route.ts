@@ -13,6 +13,41 @@ const schema = z.object({
   image_url: z.string().max(1_500_000),
 });
 
+const DATA_URL = /^data:([^;,]+)(;base64)?,([\s\S]*)$/;
+
+/**
+ * GET /api/products/[id]/photo
+ * Sert la photo (décodée depuis la data URL stockée) avec un cache long —
+ * la caisse référence cette route plutôt que d'embarquer la donnée dans
+ * chaque réponse de catalogue (voir lib/products/photo-url.ts : évite de
+ * retransférer la même photo à chaque poll, pour chaque poste ouvert).
+ */
+export async function GET(_req: Request, { params }: { params: { id: string } }) {
+  const g = await requirePermission('products.read');
+  if ('response' in g) return g.response;
+
+  const res = await query<{ image_url: string | null }>(
+    `SELECT image_url FROM products WHERE id = $1 AND organization_id = $2`,
+    [params.id, g.user.organizationId],
+  );
+  const imageUrl = res.rows[0]?.image_url;
+  if (!imageUrl) return jsonError('NOT_FOUND', 404);
+
+  const m = DATA_URL.exec(imageUrl);
+  if (!m) return jsonError('NOT_FOUND', 404);
+  const [, mime, isBase64, payload] = m;
+  const buffer = isBase64 ? Buffer.from(payload!, 'base64') : Buffer.from(decodeURIComponent(payload!), 'utf8');
+
+  return new NextResponse(buffer, {
+    headers: {
+      'Content-Type': mime || 'application/octet-stream',
+      // Immuable : l'URL est versionnée par updated_at (?v=...), une photo
+      // modifiée produit une URL différente — jamais de cache périmé.
+      'Cache-Control': 'public, max-age=31536000, immutable',
+    },
+  });
+}
+
 /**
  * PATCH /api/products/[id]/photo
  * Enregistre la photo (data URL compressée) prise depuis le PDA sur l'article.

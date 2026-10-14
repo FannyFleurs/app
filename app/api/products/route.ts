@@ -4,6 +4,7 @@ import { query } from '@/lib/db/client';
 import { requirePermission } from '@/lib/auth/guards';
 import { parseJson, jsonError } from '@/lib/validation/api';
 import { audit } from '@/lib/audit/log';
+import { photoRefForPos } from '@/lib/products/photo-url';
 
 const productSchema = z.object({
   name: z.string().min(1).max(200),
@@ -265,7 +266,7 @@ export async function GET(req: Request) {
     ? `p.extra_barcodes`
     : `'{}'::text[] AS extra_barcodes`;
 
-  const { rows } = await query(
+  const { rows } = await query<{ id: string; image_url: string | null; updated_at: string }>(
     `SELECT p.id, p.name, p.short_description, p.sku, p.barcode, ${extraBarcodesCol}, p.image_url, p.unit,
             p.sale_price_ttc, p.purchase_price_ht, p.price_is_free,
             p.track_stock,
@@ -280,7 +281,8 @@ export async function GET(req: Request) {
             ${discountCols},
             p.tags, p.is_seasonal, p.is_customizable,
             t.rate AS tax_rate, t.id AS tax_rate_id, t.code AS tax_rate_code, t.label AS tax_rate_label,
-            c.name AS category_name, c.color AS category_color
+            c.name AS category_name, c.color AS category_color,
+            p.updated_at::text AS updated_at
        FROM products p
        JOIN tax_rates t ON t.id = p.tax_rate_id
        LEFT JOIN product_categories c ON c.id = p.category_id
@@ -290,7 +292,16 @@ export async function GET(req: Request) {
       LIMIT 20000`,
     params,
   );
-  return NextResponse.json({ products: rows });
+  // Caisse (pos=1) : une photo prise via PDA (data URL, jusqu'à ~1,5 Mo) ne
+  // doit JAMAIS voyager dans cette liste — relue toutes les 15 s par chaque
+  // poste dès qu'un seul produit change dans l'organisation (voir
+  // /api/products/catalog-version). Remplacée par une référence légère et
+  // mise en cache par le navigateur — voir lib/products/photo-url.ts. Le
+  // back-office garde la donnée brute (la duplication d'article en a besoin).
+  const products = inPos
+    ? rows.map((r) => ({ ...r, image_url: photoRefForPos(r.id, r.image_url, r.updated_at) }))
+    : rows;
+  return NextResponse.json({ products });
 }
 
 export async function POST(req: Request) {
