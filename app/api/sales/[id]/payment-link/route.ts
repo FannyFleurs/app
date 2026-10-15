@@ -4,6 +4,7 @@ import { requirePermission } from '@/lib/auth/guards';
 import { jsonError } from '@/lib/validation/api';
 import { audit } from '@/lib/audit/log';
 import { loadStripeSettings } from '@/lib/settings/stripe-server';
+import { sendOrgEmail } from '@/lib/email/send';
 
 export const dynamic = 'force-dynamic';
 
@@ -123,16 +124,45 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
     // Migration 0020 pas appliquée : on continue, l'URL est juste retournée
   }
 
+  // Envoi réel du lien par email, si le client en a un — auparavant le
+  // caissier voyait « lien créé et envoyé » sans qu'aucun email ne parte
+  // réellement. `emailDelivered` reflète maintenant l'envoi effectif, pas
+  // juste la présence d'une adresse sur la fiche client.
+  let emailDelivered = false;
+  let emailError: string | undefined;
+  if (sale.customer_email) {
+    const amountEur = (amountCents / 100).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const res = await sendOrgEmail({
+      organizationId: g.user.organizationId,
+      storeId: sale.store_id,
+      to: sale.customer_email,
+      toName: sale.customer_name ?? undefined,
+      subject: `Lien de paiement${sale.receipt_number ? ` — ${sale.receipt_number}` : ''}`,
+      html: `<p>Bonjour,</p>`
+        + `<p>Voici le lien pour régler votre achat${sale.receipt_number ? ` (ticket ${sale.receipt_number})` : ''}, `
+        + `d'un montant de <strong>${amountEur} €</strong> :</p>`
+        + `<p><a href="${session.url}">${session.url}</a></p>`
+        + `<p>Merci pour votre confiance.</p>`,
+    });
+    emailDelivered = res.ok;
+    if (!res.ok) emailError = res.error;
+  }
+
   await audit({
     organizationId: g.user.organizationId, userId: g.user.id,
     action: 'sales.payment_link.create',
     entityType: 'sale', entityId: sale.id,
-    payload: { session_id: session.id, amount: amountCents, email: sale.customer_email },
+    payload: {
+      session_id: session.id, amount: amountCents, email: sale.customer_email,
+      email_delivered: emailDelivered, email_error: emailError ?? null,
+    },
   });
 
   return NextResponse.json({
     url: session.url,
     session_id: session.id,
-    email_sent_to: sale.customer_email ?? null,
+    customer_email: sale.customer_email ?? null,
+    email_delivered: emailDelivered,
+    email_error: emailError ?? null,
   });
 }

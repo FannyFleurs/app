@@ -342,13 +342,20 @@ export default function PaymentModal({ saleId, totalTtc, lines = [], storeId, ha
           });
           if (linkRes.ok) {
             const lj = await linkRes.json();
-            // Toast info au commerçant : lien créé (et email envoyé si client a un email)
-            if (lj.email_sent_to) {
-              void alertThemed({ message: `✓ Lien de paiement Stripe créé et envoyé à ${lj.email_sent_to}` });
+            // Toast info au commerçant : reflète l'envoi RÉEL de l'email
+            // (email_delivered), pas seulement la présence d'une adresse sur
+            // la fiche client — sinon le caissier croit le lien transmis
+            // alors qu'il ne l'est pas.
+            if (lj.email_delivered) {
+              void alertThemed({ message: `✓ Lien de paiement envoyé à ${lj.customer_email}` });
             } else if (lj.url) {
-              // Pas d'email : on copie l'URL pour que le commerçant la transmette manuellement
+              // Email absent, ou envoi échoué : on copie l'URL pour que le
+              // commerçant la transmette manuellement.
               try { await navigator.clipboard?.writeText(lj.url); } catch {}
-              void alertThemed({ message: `Lien de paiement créé :\n\n${lj.url}\n\n(Copié dans le presse-papier — aucun email client renseigné.)` });
+              const reason = lj.customer_email
+                ? `l'envoi par email a échoué (${lj.email_error ?? 'erreur'})`
+                : 'aucun email client renseigné';
+              void alertThemed({ message: `Lien de paiement créé :\n\n${lj.url}\n\n(Copié dans le presse-papier — ${reason}.)` });
             }
           } else {
             const lj = await linkRes.json().catch(() => ({}));
