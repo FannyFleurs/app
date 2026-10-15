@@ -152,7 +152,7 @@ export default function OrdersClient({ orgId: _orgId }: { orgId: string }) {
       void alertThemed({ message: `✓ Lien envoyé à ${j.email_sent_to}` });
     } else {
       try { await navigator.clipboard?.writeText(j.url); } catch {}
-      void alertThemed({ message: `Lien créé :\n${j.url}\n\n(Copié dans le presse-papier.)` });
+      void alertThemed({ message: 'Lien créé :', link: j.url });
     }
     void reload();
   }

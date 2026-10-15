@@ -24,6 +24,9 @@ interface DialogReq {
   danger?: boolean;
   defaultValue?: string;
   placeholder?: string;
+  /** Lien long (ex. URL Stripe) affiché à part, dans un encart qui renvoie à
+   *  la ligne plutôt que de déborder de la boîte, avec un bouton Copier. */
+  link?: string;
   resolve: (value: boolean | string | null) => void;
 }
 
@@ -47,7 +50,7 @@ export function confirmThemed(opts: {
 }): Promise<boolean> {
   return new Promise((resolve) => push({ kind: 'confirm', ...opts, resolve: (v) => resolve(v === true) }));
 }
-export function alertThemed(opts: { message: string; title?: string; confirmLabel?: string }): Promise<void> {
+export function alertThemed(opts: { message: string; title?: string; confirmLabel?: string; link?: string }): Promise<void> {
   return new Promise((resolve) => push({ kind: 'alert', ...opts, resolve: () => resolve() }));
 }
 export function promptThemed(opts: {
@@ -66,8 +69,10 @@ export default function DialogHost() {
 
   const d = queue[0];
   const [val, setVal] = useState('');
+  const [copied, setCopied] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => { setVal(d?.kind === 'prompt' ? (d.defaultValue ?? '') : ''); }, [d?.id, d?.kind, d?.defaultValue]);
+  useEffect(() => { setCopied(false); }, [d?.id]);
 
   // Focus + sélection FIABLES du champ de saisie (ex. comptage des espèces
   // ouvert par un appui long sur une pièce). L'attribut autoFocus seul ne
@@ -105,7 +110,24 @@ export default function DialogHost() {
     >
       <div className="card w-full max-w-sm p-5" onClick={(e) => e.stopPropagation()}>
         {d.title && <h2 className="text-base font-semibold mb-1">{d.title}</h2>}
-        <p className="text-sm text-ink whitespace-pre-line">{d.message}</p>
+        <p className="text-sm text-ink whitespace-pre-line break-words">{d.message}</p>
+
+        {d.link && (
+          <div className="mt-3 flex items-center gap-2">
+            <div className="min-w-0 flex-1 max-h-24 overflow-y-auto rounded-lg border border-border bg-gray-50 p-2 text-[11px] font-mono text-ink-soft break-all">
+              {d.link}
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard?.writeText(d.link!).then(() => setCopied(true)).catch(() => {});
+              }}
+              className="btn-soft shrink-0 h-9 px-3 text-xs font-medium"
+            >
+              {copied ? '✓ Copié' : 'Copier'}
+            </button>
+          </div>
+        )}
 
         {d.kind === 'prompt' && (
           <input

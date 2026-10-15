@@ -355,7 +355,7 @@ export default function PaymentModal({ saleId, totalTtc, lines = [], storeId, ha
               const reason = lj.customer_email
                 ? `l'envoi par email a échoué (${lj.email_error ?? 'erreur'})`
                 : 'aucun email client renseigné';
-              void alertThemed({ message: `Lien de paiement créé :\n\n${lj.url}\n\n(Copié dans le presse-papier — ${reason}.)` });
+              void alertThemed({ message: `Lien de paiement créé (${reason}) :`, link: lj.url });
             }
           } else {
             const lj = await linkRes.json().catch(() => ({}));
