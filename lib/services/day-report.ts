@@ -1,6 +1,8 @@
 import { query } from '@/lib/db/client';
 import { loadReceiptSettings } from '@/lib/settings/receipt-server';
 import { depositReasonSql } from '@/lib/services/cash-deposit';
+import { paymentMethodLabel } from '@/lib/services/payment-labels';
+import { loadOpeningFloat } from '@/lib/settings/opening-float-server';
 
 /**
  * Rapport de journée (Z scellé ou X en cours), au format « Récapitulatif ».
@@ -55,6 +57,9 @@ export interface DayReport {
   cash: {
     fonds_de_caisse: number;
     entrees_argent: number;
+    /** Prélèvement réellement enregistré (BankDepositModal) ce jour ; à
+     *  défaut et pour une boutique au fond de caisse FIXE, estimation
+     *  automatique du surplus à prélever (espèces au-delà du fond fixe). */
     remise_banque: number;
     total_espece_fermeture: number;
     tiroir_sans_ticket: number;
@@ -80,6 +85,34 @@ const MODE_LABELS: Record<string, string> = {
   sur_place: 'Sur place',
 };
 
+/**
+ * Regroupe des lignes de règlement par libellé AFFICHÉ (label ?? catégorie
+ * générique du method), pas par la seule valeur brute de `label` en base.
+ * Sans ça, une journée à cheval sur l'introduction de payments.label (ou
+ * tout autre cas où une ligne a label=NULL) scinde "Espèces"/"Carte
+ * bancaire" en deux lignes identiques à l'écran — et, plus grave, fausse le
+ * total espèces attendu en caisse (calculé plus bas via .find() sur une
+ * seule de ces lignes dupliquées).
+ */
+function mergePaymentRows(
+  rows: { method: string; label: string | null; cnt: string; total: string }[],
+): { method: string; label: string | null; count: number; amount: number }[] {
+  const merged = new Map<string, { method: string; label: string | null; count: number; amount: number }>();
+  for (const r of rows) {
+    const effective = r.label ?? paymentMethodLabel(r.method);
+    const key = `${r.method}\u0000${effective}`;
+    const cur = merged.get(key);
+    if (cur) {
+      cur.count += Number(r.cnt);
+      cur.amount += Number(r.total);
+      if (cur.label == null && r.label != null) cur.label = r.label;
+    } else {
+      merged.set(key, { method: r.method, label: r.label, count: Number(r.cnt), amount: Number(r.total) });
+    }
+  }
+  return Array.from(merged.values()).sort((a, b) => b.amount - a.amount);
+}
+
 export async function computeDayReport(opts: {
   organizationId: string;
   storeId: string;
@@ -98,7 +131,7 @@ export async function computeDayReport(opts: {
   const { organizationId: org, storeId: store, businessDate: date } = opts;
   const P = [org, store, date] as const;
 
-  const [ident, totalsR, tvaR, payR, vendorR, catR, modeR, marginR, floatsR, sessR, jnR, settleR, onlineGcR] =
+  const [ident, totalsR, tvaR, payR, vendorR, catR, modeR, marginR, floatsR, sessR, jnR, settleR, onlineGcR, openingFloatSettings] =
     await Promise.all([
       query<{ name: string; legal_name: string | null; siret: string | null; siren: string | null; vat_number: string | null; address: Record<string, string> | null; contact: Record<string, string> | null; store_name: string }>(
         `SELECT o.name, o.legal_name, o.siret, o.siren, o.vat_number, o.address, o.contact,
@@ -187,6 +220,7 @@ export async function computeDayReport(opts: {
               SELECT id FROM cash_sessions WHERE store_id=$2 AND opened_at::date=$3::date
             )`, [...P],
       ).catch(() => ({ rows: [] as { total_cents: string }[] })),
+      loadOpeningFloat(org, store),
     ]);
 
   const idRow = ident.rows[0];
@@ -222,13 +256,31 @@ export async function computeDayReport(opts: {
   const cost = Number(marginR.rows[0]?.cost ?? 0);
   const linesWithCost = Number(marginR.rows[0]?.lines_with_cost ?? 0);
 
+  const payments = mergePaymentRows(payR.rows);
+  const settlements = mergePaymentRows(settleR.rows);
+
   const openingFloats = Number(floatsR.rows[0]?.opening ?? 0);
   const cashIns = Number(floatsR.rows[0]?.ins ?? 0);
   const cashOuts = Number(floatsR.rows[0]?.outs ?? 0);
-  const cashSales = Number(payR.rows.find((p) => p.method === 'cash')?.total ?? 0);
+  const cashSales = payments.find((p) => p.method === 'cash')?.amount ?? 0;
   const cashExpected = opts.sealed?.cash_expected != null
     ? opts.sealed.cash_expected
     : Number((openingFloats + cashSales + cashIns - cashOuts).toFixed(2));
+
+  // Remise en banque : boutiques au fond de caisse FIXE (« toujours le même
+  // montant ») — le surplus par rapport à ce montant est prélevé chaque soir,
+  // sans forcément passer par le mouvement de caisse « Prélèvement » (voir
+  // BankDepositModal). Si aucun prélèvement n'a été réellement enregistré ce
+  // jour, on affiche quand même ce surplus sur la ligne Remise banque, et on
+  // le déduit des espèces de fermeture affichées (qui redeviennent alors le
+  // fond de caisse fixe) — pour que le ticket reste arithmétiquement cohérent.
+  // Un prélèvement réellement enregistré prime toujours sur cette estimation.
+  const recordedDeposits = Number(floatsR.rows[0]?.deposits ?? 0);
+  const impliedDeposit = openingFloatSettings.mode === 'fixed'
+    ? Math.max(0, Number((cashExpected - openingFloats).toFixed(2)))
+    : 0;
+  const remiseBanque = recordedDeposits > 0 ? recordedDeposits : impliedDeposit;
+  const espacesFermeture = recordedDeposits > 0 ? cashExpected : Number((cashExpected - remiseBanque).toFixed(2));
 
   // Modes de vente : regroupe null → sur_place.
   const modeMap = new Map<string, number>();
@@ -261,13 +313,13 @@ export async function computeDayReport(opts: {
     tva_by_rate: tvaR.rows.map((r) => ({
       rate: Number(r.tax_rate), ht: Number(r.ht), tva: Number(r.tva), ttc: Number(r.ttc),
     })),
-    payments: payR.rows.map((r) => ({ method: r.method, label: r.label, count: Number(r.cnt), amount: Number(r.total) })),
-    settlements: settleR.rows.map((r) => ({ method: r.method, label: r.label, count: Number(r.cnt), amount: Number(r.total) })),
+    payments,
+    settlements,
     cash: {
       fonds_de_caisse: openingFloats,
       entrees_argent: cashIns,
-      remise_banque: Number(floatsR.rows[0]?.deposits ?? 0),
-      total_espece_fermeture: cashExpected,
+      remise_banque: remiseBanque,
+      total_espece_fermeture: espacesFermeture,
       tiroir_sans_ticket: 0,
       counted: opts.sealed?.cash_counted ?? null,
       variance: opts.sealed?.cash_variance ?? null,
