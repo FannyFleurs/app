@@ -40,3 +40,31 @@ describe('Textes retirés de la clôture', () => {
     expect(src).not.toMatch(/écarts d.espèces ne sont plus/);
   });
 });
+
+describe('Repli PDF du rapport Z — route correcte, jamais de navigation directe', () => {
+  // L'auto-impression et le bouton manuel pointaient vers
+  // /api/closures/daily/{id}/pdf, une route qui n'existe pas (404) — la
+  // vraie route est /api/closures/{id}/z-pdf (voir app/api/closures/[id]/
+  // z-pdf/route.ts). En plus d'être fausse, l'URL était ouverte via
+  // window.open(...).print(), qui échappe vers Safari et perd la session
+  // dans l'app native (même piège que les factures/avoirs — voir
+  // components/PdfPreviewModal.tsx).
+  it("n'utilise plus la route inexistante /api/closures/daily/{id}/pdf", () => {
+    expect(src).not.toMatch(/closures\/daily\/\$\{[^}]*\}\/pdf/);
+  });
+
+  it('référence la vraie route /api/closures/{id}/z-pdf', () => {
+    expect(src).toMatch(/`\/api\/closures\/\$\{[^}]*\}\/z-pdf`/);
+  });
+
+  it("passe par PdfPreviewModal plutôt que window.open(...).print()", () => {
+    expect(src).toContain("import PdfPreviewModal from '@/components/PdfPreviewModal'");
+    expect(src).toContain('<PdfPreviewModal');
+    expect(src).not.toMatch(/window\.open\([^)]*z-pdf/);
+    expect(src).not.toContain('w.print()');
+  });
+
+  it("ne rouvre pas l'aperçu si une imprimante CloudPRNT a déjà imprimé (z_printed)", () => {
+    expect(src).toMatch(/if \(j\.z_printed\) return;/);
+  });
+});

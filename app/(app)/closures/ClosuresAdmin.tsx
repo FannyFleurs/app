@@ -6,6 +6,7 @@ import { PAYMENT_LABELS } from '@/components/labels';
 import Badge from '@/components/Badge';
 import EmptyState from '@/components/EmptyState';
 import BankDepositModal from './BankDepositModal';
+import PdfPreviewModal from '@/components/PdfPreviewModal';
 import { promptThemed, confirmThemed } from '@/lib/ui/dialog';
 import { readRoamingChoice } from '@/lib/caisse/roaming';
 
@@ -96,6 +97,7 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
   const [showDeposit, setShowDeposit] = useState(false);
   const [drawerToast, setDrawerToast] = useState<string | null>(null);
   const [zToast, setZToast] = useState<string | null>(null);
+  const [zPdfPreview, setZPdfPreview] = useState<{ url: string; title: string; filename: string } | null>(null);
 
   // Impression du Z sur l'imprimante ticket ; repli PDF si aucune imprimante.
   async function printZ(closureId: string) {
@@ -107,7 +109,17 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
         setTimeout(() => setZToast(null), 4000);
         return;
       }
-      if (r.status === 409) { window.open(`/api/closures/${closureId}/z-pdf`, '_blank'); return; }
+      if (r.status === 409) {
+        // Aucune imprimante CloudPRNT : repli sur l'aperçu PDF (jamais un
+        // lien target="_blank" — dans l'app native, ça échapperait vers
+        // Safari et perdrait la session, voir PdfPreviewModal).
+        setZPdfPreview({
+          url: `/api/closures/${closureId}/z-pdf`,
+          title: 'Rapport Z',
+          filename: `Z-${closureId}.pdf`,
+        });
+        return;
+      }
       setError('Impression du Z impossible.');
     } catch {
       setError('Impression du Z impossible.');
@@ -389,9 +401,12 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
     if (storageKey && typeof window !== 'undefined') {
       try { localStorage.removeItem(storageKey); } catch { /* ignore */ }
     }
-    // Auto-impression du Z si configurée.
+    // Auto-impression du Z si configurée. Repli navigateur uniquement — si
+    // une imprimante CloudPRNT a déjà pris en charge l'impression côté
+    // serveur (j.z_printed), inutile de rouvrir aussi l'aperçu ici.
     void (async () => {
       try {
+        if (j.z_printed) return;
         const [rR, rP] = await Promise.all([
           fetch(`/api/settings/receipt${storeId ? `?store_id=${encodeURIComponent(storeId)}` : ''}`),
           fetch(`/api/settings/printer${storeId ? `?store_id=${encodeURIComponent(storeId)}` : ''}`),
@@ -400,13 +415,16 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
         const recv = (await rR.json()).settings;
         const printer = (await rP.json()).settings;
         if (recv?.auto_print_z && printer?.enabled) {
-          const url = `/api/closures/daily/${j.daily_closure_id}/pdf`;
-          const w = window.open(url, '_blank');
-          if (w) {
-            w.addEventListener('load', () => {
-              try { w.print(); } catch { /* iOS bloque souvent print() */ }
-            });
-          }
+          // Jamais un lien target="_blank" / window.open : dans l'app
+          // native, ça échapperait vers Safari et perdrait la session (voir
+          // PdfPreviewModal). La modale s'ouvre directement, en page — le
+          // commerçant presse ensuite "Imprimer" lui-même (l'impression via
+          // l'API de partage natif exige un vrai clic).
+          setZPdfPreview({
+            url: `/api/closures/${j.daily_closure_id}/z-pdf`,
+            title: 'Rapport Z',
+            filename: `Z-${j.daily_closure_id}.pdf`,
+          });
         }
       } catch { /* ignore */ }
     })();
@@ -519,6 +537,18 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
             </button>
           </div>
         </div>
+        {/* Retour d'écran distinct du return principal plus bas : l'aperçu
+            auto-ouvert à la clôture (zPdfPreview) doit aussi s'afficher ICI,
+            sinon il est ouvert puis aussitôt perdu dès que `preview.sealed`
+            fait basculer le rendu sur cet écran de succès. */}
+        {zPdfPreview && (
+          <PdfPreviewModal
+            url={zPdfPreview.url}
+            title={zPdfPreview.title}
+            filename={zPdfPreview.filename}
+            onClose={() => setZPdfPreview(null)}
+          />
+        )}
       </div>
     );
   }
@@ -873,6 +903,14 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
           maxAmount={Math.max(0, preview?.cash_breakdown.expected ?? 0)}
           onClose={() => setShowDeposit(false)}
           onSaved={() => { setShowDeposit(false); void loadPreview(); }}
+        />
+      )}
+      {zPdfPreview && (
+        <PdfPreviewModal
+          url={zPdfPreview.url}
+          title={zPdfPreview.title}
+          filename={zPdfPreview.filename}
+          onClose={() => setZPdfPreview(null)}
         />
       )}
     </div>
