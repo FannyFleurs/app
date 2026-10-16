@@ -33,7 +33,7 @@ export default function IpPrinterSection({ stores, canWrite, lockStoreId = null 
   const [enabled, setEnabled] = useState(false);
   const [host, setHost] = useState('');
   const [port, setPort] = useState(9100);
-  const [width, setWidth] = useState<384 | 576>(576);
+  const [width, setWidth] = useState<384 | 512 | 576>(576);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -108,7 +108,7 @@ export default function IpPrinterSection({ stores, canWrite, lockStoreId = null 
       setEnabled(!!s.enabled);
       setHost(s.host ?? '');
       setPort(s.port ?? 9100);
-      setWidth(s.width_dots === 384 ? 384 : 576);
+      setWidth(s.width_dots === 384 || s.width_dots === 512 ? s.width_dots : 576);
     }
     setLoading(false);
   }, [storeId]);
@@ -196,9 +196,10 @@ export default function IpPrinterSection({ stores, canWrite, lockStoreId = null 
         <label className="block text-sm">
           <span className="text-ink-soft">Largeur papier</span>
           <select className="input h-10 w-full mt-1" value={width}
-                  onChange={(e) => setWidth(Number(e.target.value) as 384 | 576)}
+                  onChange={(e) => setWidth(Number(e.target.value) as 384 | 512 | 576)}
                   disabled={!canWrite || loading}>
-            <option value={576}>80 mm (576 points)</option>
+            <option value={576}>80 mm standard (576 points)</option>
+            <option value={512}>80 mm largeur réduite (512 points)</option>
             <option value={384}>58 mm (384 points)</option>
           </select>
         </label>
