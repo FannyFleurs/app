@@ -20,7 +20,7 @@ export interface IpPrinterSettings {
   host: string;
   /** Port RAW (9100 par défaut). */
   port: number;
-  /** Largeur d'impression en points : 576 (80 mm) ou 384 (58 mm). */
+  /** Largeur d'impression en points : 576 (80 mm standard), 512 (80 mm largeur réduite) ou 384 (58 mm). */
   width_dots: number;
 }
 
@@ -42,6 +42,6 @@ export function mergeIpPrinterDefaults(
     enabled: p.enabled === true,
     host: typeof p.host === 'string' ? p.host.trim() : '',
     port,
-    width_dots: p.width_dots === 384 ? 384 : 576,
+    width_dots: p.width_dots === 384 || p.width_dots === 512 ? p.width_dots : 576,
   };
 }

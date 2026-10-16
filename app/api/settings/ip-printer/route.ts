@@ -15,7 +15,7 @@ const schema = z.object({
   enabled: z.boolean().optional(),
   host: z.string().max(120).optional(),
   port: z.number().int().min(1).max(65535).optional(),
-  width_dots: z.union([z.literal(384), z.literal(576)]).optional(),
+  width_dots: z.union([z.literal(384), z.literal(512), z.literal(576)]).optional(),
 });
 
 async function assertStoreInOrg(storeId: string, organizationId: string): Promise<boolean> {
