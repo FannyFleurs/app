@@ -26,6 +26,7 @@ export async function POST(req: Request) {
   if (!(file instanceof File)) {
     return NextResponse.json({ error: 'NO_FILE', message: 'Sélectionnez un fichier Excel (.xlsx).' }, { status: 400 });
   }
+  const correctionMode = form.get('correction_mode') === 'true';
 
   const uiRes = await query<{ value: Partial<PosUiSettings> }>(
     `SELECT value FROM settings WHERE organization_id = $1 AND key = $2`,
@@ -35,18 +36,18 @@ export async function POST(req: Request) {
   const loyRate = ui.loyalty.per_euros_spent > 0
     ? ui.loyalty.euros_earned / ui.loyalty.per_euros_spent : 0.05;
 
-  const { headerError, rows } = await parseCustomerWorkbook(Buffer.from(await file.arrayBuffer()), loyRate);
+  const { headerError, rows } = await parseCustomerWorkbook(Buffer.from(await file.arrayBuffer()), loyRate, correctionMode);
   if (headerError) return NextResponse.json({ error: 'BAD_FILE', message: headerError }, { status: 400 });
 
   const existing = await query<ExistingCustomer>(
-    `SELECT id, email, phone, first_name, last_name, company_name
+    `SELECT id, email, phone, first_name, last_name, company_name, loyalty_code
        FROM customers
       WHERE organization_id = $1 AND is_anonymized = FALSE AND archived_at IS NULL`,
     [g.user.organizationId],
   );
   const idx = buildIndex(existing.rows);
 
-  const summary = { total: 0, create: 0, update: 0, ambiguous: 0, invalid: 0, with_points: 0, with_balance_due: 0, by_email: 0, by_phone: 0, by_name: 0 };
+  const summary = { total: 0, create: 0, update: 0, ambiguous: 0, invalid: 0, with_points: 0, with_balance_due: 0, by_code: 0, by_email: 0, by_phone: 0, by_name: 0 };
   const items: {
     row: number; label: string; action: string; matched_by?: string; points: number; balance_due: number; error?: string;
   }[] = [];
@@ -61,7 +62,8 @@ export async function POST(req: Request) {
     const m = matchRow(row, idx);
     if (m.action === 'update') {
       summary.update++;
-      if (m.matchedBy === 'email') summary.by_email++;
+      if (m.matchedBy === 'code fidélité') summary.by_code++;
+      else if (m.matchedBy === 'email') summary.by_email++;
       else if (m.matchedBy === 'téléphone') summary.by_phone++;
       else if (m.matchedBy === 'nom') summary.by_name++;
     } else if (m.action === 'ambiguous') summary.ambiguous++;

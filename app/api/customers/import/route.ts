@@ -27,6 +27,11 @@ export async function POST(req: Request) {
   if (!(file instanceof File)) {
     return NextResponse.json({ error: 'NO_FILE', message: 'Sélectionnez un fichier Excel (.xlsx).' }, { status: 400 });
   }
+  // Mode correction (fichier réexporté depuis HelloPos puis corrigé à la
+  // main) : les colonnes points/solde sont des CIBLES déjà en points/euros
+  // (pas des montants à cumuler) — seul l'écart avec la valeur actuelle est
+  // appliqué, une cellule inchangée ne produit donc aucune écriture.
+  const correctionMode = form.get('correction_mode') === 'true';
   let storeIds: string[] = [];
   try { storeIds = JSON.parse(String(form.get('store_ids') ?? '[]')); } catch { /* ignore */ }
   storeIds = Array.isArray(storeIds) ? storeIds.filter((s) => typeof s === 'string' && UUID_RE.test(s)) : [];
@@ -53,17 +58,20 @@ export async function POST(req: Request) {
   const loyRate = ui.loyalty.per_euros_spent > 0
     ? ui.loyalty.euros_earned / ui.loyalty.per_euros_spent : 0.05;
 
-  const { headerError, rows } = await parseCustomerWorkbook(Buffer.from(await file.arrayBuffer()), loyRate);
+  const { headerError, rows } = await parseCustomerWorkbook(Buffer.from(await file.arrayBuffer()), loyRate, correctionMode);
   if (headerError) return NextResponse.json({ error: 'BAD_FILE', message: headerError }, { status: 400 });
 
-  // Fiches existantes -> index de rapprochement (e-mail / téléphone / nom).
-  const existing = await query<ExistingCustomer>(
-    `SELECT id, email, phone, first_name, last_name, company_name
+  // Fiches existantes -> index de rapprochement (code fidélité / e-mail /
+  // téléphone / nom) + solde actuel (nécessaire en mode correction, pour
+  // calculer l'écart plutôt que d'additionner aveuglément).
+  const existing = await query<ExistingCustomer & { account_balance: string }>(
+    `SELECT id, email, phone, first_name, last_name, company_name, loyalty_code, account_balance::text
        FROM customers
       WHERE organization_id = $1 AND is_anonymized = FALSE AND archived_at IS NULL`,
     [g.user.organizationId],
   );
   const idx = buildIndex(existing.rows);
+  const existingById = new Map(existing.rows.map((r) => [r.id, r]));
 
   const result = { created: 0, updated: 0, ambiguous: 0, loyalty_updated: 0, balance_updated: 0, skipped: 0, errors: [] as { row: number; message: string }[] };
 
@@ -77,12 +85,17 @@ export async function POST(req: Request) {
           customerId = m.matchId;
           // Fusion : on met à jour la fiche existante. L'e-mail n'est PAS écrasé
           // (clé possible d'unicité) ; les autres champs sont complétés.
-          // Solde dû (account_balance) : CUMULÉ (comme les points), jamais
-          // remplacé — un client peut déjà avoir un encours réel accumulé en
-          // caisse (ventes "Différé client" sur plusieurs boutiques, le solde
-          // n'est pas scindé par boutique) ; écraser ce solde avec la seule
-          // valeur du fichier effacerait silencieusement une vraie dette.
-          // Colonne vide = +0 (aucun effet).
+          // Solde dû (account_balance) : par défaut CUMULÉ (comme les points)
+          // — un client peut déjà avoir un encours réel accumulé en caisse
+          // (ventes "Différé client" sur plusieurs boutiques, le solde n'est
+          // pas scindé par boutique) ; écraser ce solde avec la seule valeur
+          // du fichier effacerait silencieusement une vraie dette. Colonne
+          // vide = aucun effet. En mode correction, la colonne est la cible
+          // exacte à atteindre (fichier réexporté puis corrigé à la main).
+          const prevBalance = Number(existingById.get(customerId)?.account_balance ?? 0);
+          const finalBalance = !row.hasBalanceDue
+            ? prevBalance
+            : correctionMode ? round2(-row.balanceDue) : round2(prevBalance - row.balanceDue);
           await client.query(
             `UPDATE customers SET
                type = $2, first_name = initcap($3), last_name = initcap($4), company_name = $5,
@@ -93,7 +106,7 @@ export async function POST(req: Request) {
                consent_email = $10, consent_sms = $11,
                internal_notes = COALESCE(NULLIF($12,''), internal_notes),
                loyalty_code = COALESCE(NULLIF($13,''), loyalty_code),
-               account_balance = COALESCE(account_balance, 0) - $15::numeric,
+               account_balance = $15::numeric,
                updated_at = now(), updated_by = $14
              WHERE id = $1`,
             [customerId, row.type, row.first || null, row.last || null, row.company || null,
@@ -101,10 +114,10 @@ export async function POST(req: Request) {
              JSON.stringify(cleanAddr(row.address)),
              row.consent_email, row.consent_sms,
              row.internal_notes, row.loyalty_code, g.user.id,
-             row.hasBalanceDue ? row.balanceDue : 0],
+             finalBalance],
           );
           result.updated++;
-          if (row.hasBalanceDue && row.balanceDue !== 0) result.balance_updated++;
+          if (finalBalance !== prevBalance) result.balance_updated++;
         } else {
           const ins = await client.query<{ id: string }>(
             `INSERT INTO customers
@@ -128,40 +141,50 @@ export async function POST(req: Request) {
           addToIndex(idx, {
             id: customerId, email: row.email || null, phone: row.phone || null,
             first_name: row.first || null, last_name: row.last || null, company_name: row.company || null,
+            loyalty_code: row.loyalty_code || null,
           });
         }
 
-        // Points de fidélité : CUMULÉS sur le solde du (des) groupe(s) choisi(s).
-        // « Rapatriement » = on ajoute au solde existant plutôt que de l'écraser,
-        // pour ne jamais perdre les points d'une autre boutique.
-        if (row.hasPoints && row.points !== 0) {
+        // Points de fidélité : par défaut CUMULÉS sur le solde du (des)
+        // groupe(s) choisi(s) — « rapatriement », on ajoute au solde existant
+        // plutôt que de l'écraser, pour ne jamais perdre les points d'une
+        // autre boutique. En mode correction, la colonne du fichier est la
+        // cible exacte : seul l'ÉCART avec le solde actuel est appliqué —
+        // une cellule inchangée depuis l'export ne produit aucune écriture.
+        if (row.hasPoints && (correctionMode || row.points !== 0)) {
+          let anyChange = false;
           for (const gk of groupKeys) {
             const acc = await client.query<{ id: string; points_balance: string }>(
               `SELECT id, points_balance::text FROM loyalty_accounts
                 WHERE customer_id = $1 AND group_key = $2 FOR UPDATE`,
               [customerId, gk],
             );
-            let accId: string; let prev = 0;
+            const prev = acc.rows[0] ? Number(acc.rows[0].points_balance) : 0;
+            const delta = round2(correctionMode ? row.points - prev : row.points);
+            if (delta === 0) continue;
+            anyChange = true;
+            const next = round2(prev + delta);
+            let accId: string;
             if (acc.rows[0]) {
-              accId = acc.rows[0].id; prev = Number(acc.rows[0].points_balance);
-              const next = round2(prev + row.points);
+              accId = acc.rows[0].id;
               await client.query(`UPDATE loyalty_accounts SET points_balance = $2, updated_at = now() WHERE id = $1`, [accId, next]);
             } else {
               const insAcc = await client.query<{ id: string }>(
                 `INSERT INTO loyalty_accounts (organization_id, customer_id, points_balance, group_key)
                  VALUES ($1,$2,$3,$4) RETURNING id`,
-                [g.user.organizationId, customerId, round2(row.points), gk],
+                [g.user.organizationId, customerId, next, gk],
               );
               accId = insAcc.rows[0]!.id;
             }
             await client.query(
               `INSERT INTO loyalty_movements
                  (organization_id, account_id, movement_type, points_delta, balance_after, reason, source_type, user_id)
-               VALUES ($1,$2,'adjust',$3,$4,'Import fichier clients (rapatriement)','import',$5)`,
-              [g.user.organizationId, accId, round2(row.points), round2(prev + row.points), g.user.id],
+               VALUES ($1,$2,'adjust',$3,$4,$6,'import',$5)`,
+              [g.user.organizationId, accId, delta, next, g.user.id,
+               correctionMode ? 'Import fichier clients (correction)' : 'Import fichier clients (rapatriement)'],
             );
           }
-          result.loyalty_updated++;
+          if (anyChange) result.loyalty_updated++;
         }
       });
     } catch (err) {
@@ -173,7 +196,7 @@ export async function POST(req: Request) {
   await audit({
     organizationId: g.user.organizationId, userId: g.user.id,
     action: 'customers.import', entityType: 'customer', entityId: null,
-    payload: { created: result.created, updated: result.updated, ambiguous: result.ambiguous, loyalty_updated: result.loyalty_updated, balance_updated: result.balance_updated, stores: validStoreIds, errors: result.errors.length },
+    payload: { created: result.created, updated: result.updated, ambiguous: result.ambiguous, loyalty_updated: result.loyalty_updated, balance_updated: result.balance_updated, stores: validStoreIds, errors: result.errors.length, correction_mode: correctionMode },
   });
 
   return NextResponse.json(result);

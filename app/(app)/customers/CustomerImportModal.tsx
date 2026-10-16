@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { downloadFile } from '@/lib/ui/download-file';
 
 interface Store { id: string; name: string; is_active?: boolean }
 interface ImportResult {
@@ -9,7 +10,8 @@ interface ImportResult {
 }
 interface PreviewSummary {
   total: number; create: number; update: number; ambiguous: number; invalid: number;
-  with_points: number; with_balance_due: number; by_email: number; by_phone: number; by_name: number;
+  with_points: number; with_balance_due: number;
+  by_code: number; by_email: number; by_phone: number; by_name: number;
 }
 interface PreviewItem { row: number; label: string; action: string; matched_by?: string; points: number; balance_due: number; error?: string }
 interface Preview { summary: PreviewSummary; items: PreviewItem[] }
@@ -35,6 +37,17 @@ export default function CustomerImportModal({ onClose, onDone }: {
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
+  const [correctionMode, setCorrectionMode] = useState(false);
+  const [downloading, setDownloading] = useState<'template' | 'export' | null>(null);
+
+  async function doDownload(kind: 'template' | 'export') {
+    setDownloading(kind); setError(null);
+    const ok = kind === 'template'
+      ? await downloadFile('/api/customers/import/template', 'modele-clients-hellopos.xlsx')
+      : await downloadFile('/api/customers/export', `clients-hellopos-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    if (!ok) setError('Téléchargement impossible — réessayez.');
+    setDownloading(null);
+  }
 
   useEffect(() => {
     void fetch('/api/stores')
@@ -60,6 +73,7 @@ export default function CustomerImportModal({ onClose, onDone }: {
     setPreviewing(true); setError(null); setPreview(null);
     const fd = new FormData();
     fd.append('file', file);
+    if (correctionMode) fd.append('correction_mode', 'true');
     try {
       const r = await fetch('/api/customers/import/preview', { method: 'POST', body: fd });
       const j = await r.json().catch(() => null);
@@ -79,6 +93,7 @@ export default function CustomerImportModal({ onClose, onDone }: {
     const fd = new FormData();
     fd.append('file', file);
     fd.append('store_ids', JSON.stringify([...selected]));
+    if (correctionMode) fd.append('correction_mode', 'true');
     try {
       const r = await fetch('/api/customers/import', { method: 'POST', body: fd });
       const j = await r.json().catch(() => null);
@@ -119,16 +134,29 @@ export default function CustomerImportModal({ onClose, onDone }: {
               </div>
             </div>
 
-            {/* Étape 2 : modèle */}
+            {/* Étape 2 : modèle, ou export des clients existants pour les corriger */}
             <div>
-              <div className="text-sm font-medium mb-1">2. Télécharger le modèle et le remplir</div>
-              <a href="/api/customers/import/template" className="btn-soft h-10 px-3.5 inline-flex items-center gap-2 text-sm">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 21h16"/></svg>
-                Modèle Excel (.xlsx)
-              </a>
+              <div className="text-sm font-medium mb-1">2. Télécharger un fichier à remplir</div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button" onClick={() => void doDownload('template')} disabled={downloading !== null}
+                  className="btn-soft h-10 px-3.5 inline-flex items-center gap-2 text-sm disabled:opacity-60"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 21h16"/></svg>
+                  {downloading === 'template' ? 'Téléchargement…' : 'Modèle vierge'}
+                </button>
+                <button
+                  type="button" onClick={() => void doDownload('export')} disabled={downloading !== null}
+                  className="btn-soft h-10 px-3.5 inline-flex items-center gap-2 text-sm disabled:opacity-60"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                  {downloading === 'export' ? 'Téléchargement…' : 'Exporter les clients existants'}
+                </button>
+              </div>
               <p className="text-xs text-ink-soft mt-1">
                 Une ligne par client. Colonne « Points fidélité » = nombre entier.
                 Colonne « Solde dû (en compte) € » = montant positif que le client doit (reprise d&apos;un ancien système) ; cumulé à l&apos;encours déjà existant, vide = rien n&apos;est ajouté.
+                Pour corriger des fiches déjà en place, partez de l&apos;export (ci-dessus), modifiez les cellules nécessaires, et cochez « Mode correction » ci-dessous avant de réimporter.
               </p>
             </div>
 
@@ -141,6 +169,19 @@ export default function CustomerImportModal({ onClose, onDone }: {
                 onChange={(e) => { setFile(e.target.files?.[0] ?? null); setError(null); setPreview(null); }}
                 className="block w-full text-sm text-ink-soft file:mr-3 file:rounded-lg file:border-0 file:bg-accent-soft file:text-accent-deep file:px-3 file:py-2 file:text-sm file:font-medium"
               />
+              <label className="mt-2 flex items-start gap-2 text-sm cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={correctionMode}
+                  onChange={(e) => { setCorrectionMode(e.target.checked); setPreview(null); }}
+                />
+                <span>
+                  <span className="font-medium">Mode correction</span> (fichier issu d&apos;un export HelloPos) : les colonnes
+                  Points fidélité et Solde dû sont la valeur finale voulue — seul l&apos;écart avec l&apos;existant est appliqué,
+                  une cellule non modifiée ne change rien. Sans cette case, ces colonnes s&apos;additionnent au solde existant.
+                </span>
+              </label>
             </div>
 
             {/* Aperçu (simulation) */}
@@ -150,17 +191,18 @@ export default function CustomerImportModal({ onClose, onDone }: {
                 <div className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-0.5 text-ink-soft">
                   <span>Nouveaux clients</span><span className="text-right font-semibold text-ink tabular-nums">{s.create}</span>
                   <span>Fusions (fiches mises à jour)</span><span className="text-right font-semibold text-ink tabular-nums">{s.update}</span>
-                  <span className="pl-3 text-xs">· par e-mail / téléphone / nom</span>
-                  <span className="text-right text-xs tabular-nums">{s.by_email} / {s.by_phone} / {s.by_name}</span>
+                  <span className="pl-3 text-xs">· par code fidélité / e-mail / téléphone / nom</span>
+                  <span className="text-right text-xs tabular-nums">{s.by_code} / {s.by_email} / {s.by_phone} / {s.by_name}</span>
                   {s.ambiguous > 0 && (<><span className="text-warning">Ambigus (créés, à vérifier)</span><span className="text-right text-warning tabular-nums">{s.ambiguous}</span></>)}
                   {s.invalid > 0 && (<><span className="text-danger">Invalides (ignorés)</span><span className="text-right text-danger tabular-nums">{s.invalid}</span></>)}
                   <span>Lignes avec points fidélité</span><span className="text-right tabular-nums">{s.with_points}</span>
                   {s.with_balance_due > 0 && (<><span>Lignes avec solde dû</span><span className="text-right tabular-nums">{s.with_balance_due}</span></>)}
                 </div>
                 <p className="text-[11px] text-ink-soft">
-                  Les points et le solde dû sont <strong>cumulés</strong> aux soldes déjà existants (rapatriement) — jamais remplacés,
-                  pour ne jamais écraser un encours déjà accumulé en caisse.
-                  L&apos;e-mail d&apos;une fiche fusionnée n&apos;est jamais écrasé.
+                  {correctionMode
+                    ? <>Mode correction actif : les points et le solde dû seront <strong>ajustés à la valeur du fichier</strong> (seul l&apos;écart est appliqué).</>
+                    : <>Les points et le solde dû sont <strong>cumulés</strong> aux soldes déjà existants (rapatriement) — jamais remplacés, pour ne jamais écraser un encours déjà accumulé en caisse.</>}
+                  {' '}L&apos;e-mail d&apos;une fiche fusionnée n&apos;est jamais écrasé.
                 </p>
                 <details className="text-xs">
                   <summary className="cursor-pointer text-ink-soft">Voir le détail par ligne</summary>

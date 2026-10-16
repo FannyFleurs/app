@@ -5,10 +5,12 @@
  * (`/api/customers/import`), pour que les deux prennent EXACTEMENT les mêmes
  * décisions.
  *
- * Rapprochement, par ordre de priorité : e-mail, puis téléphone (comparé
- * chiffre à chiffre), puis nom (particulier) / société (pro). Une ligne n'est
- * fusionnée que si elle correspond à UNE SEULE fiche existante ; si plusieurs
- * correspondent, elle est marquée « ambiguë » (jamais de fusion hasardeuse).
+ * Rapprochement, par ordre de priorité : code fidélité (le plus fiable —
+ * identifiant stable d'un système externe, utile pour les fiches sans email
+ * ni téléphone), e-mail, puis téléphone (comparé chiffre à chiffre), puis nom
+ * (particulier) / société (pro). Une ligne n'est fusionnée que si elle
+ * correspond à UNE SEULE fiche existante ; si plusieurs correspondent, elle
+ * est marquée « ambiguë » (jamais de fusion hasardeuse).
  */
 import ExcelJS from 'exceljs';
 import { CUSTOMER_IMPORT_COLUMNS, CUSTOMER_TYPES, parseBool } from './import-columns';
@@ -27,7 +29,13 @@ export interface ParsedRow {
   address: { line1: string; zip: string; city: string };
   consent_email: boolean; consent_sms: boolean;
   internal_notes: string; loyalty_code: string;
-  hasPoints: boolean; points: number; // en euros de fidélité (déjà converti)
+  /**
+   * `points` : en euros de fidélité (déjà converti au taux de l'organisation),
+   * SAUF en mode correction (voir `correctionMode` de `parseCustomerWorkbook`)
+   * où la colonne du fichier est le solde CIBLE déjà en points — typiquement
+   * un fichier réexporté depuis HelloPos puis corrigé à la main.
+   */
+  hasPoints: boolean; points: number;
   /**
    * Solde "en compte" (règlement différé) repris d'un ancien système, en
    * EUROS DUS (toujours positif ou nul dans le fichier — ex. 250 = le client
@@ -65,6 +73,13 @@ export function cellStr(v: unknown): string {
 
 export async function parseCustomerWorkbook(
   buffer: Buffer, loyRate: number,
+  /**
+   * Mode correction (fichier réexporté depuis HelloPos puis corrigé) : la
+   * colonne « Points fidélité » est déjà en points — pas de conversion au
+   * taux de l'organisation, et le solde est une CIBLE à atteindre (delta
+   * appliqué), pas un montant à ajouter. Voir app/api/customers/import/route.ts.
+   */
+  correctionMode = false,
 ): Promise<{ headerError?: string; rows: ParsedRow[] }> {
   const wb = new ExcelJS.Workbook();
   try {
@@ -140,7 +155,9 @@ export async function parseCustomerWorkbook(
       rows.push(base);
       continue;
     }
-    base.points = hasPoints ? Math.round(rawPoints * loyRate * 100) / 100 : 0;
+    base.points = hasPoints
+      ? Math.round(rawPoints * (correctionMode ? 1 : loyRate) * 100) / 100
+      : 0;
     // Toujours en valeur absolue : le fichier exprime un montant DÛ (toujours
     // positif), qu'un -250 collé depuis un ancien export reste équivalent à 250.
     base.balanceDue = hasBalanceDue ? Math.round(Math.abs(rawBalanceDue) * 100) / 100 : 0;
@@ -158,9 +175,11 @@ export interface ExistingCustomer {
   first_name: string | null;
   last_name: string | null;
   company_name: string | null;
+  loyalty_code?: string | null;
 }
 
 export interface CustomerIndex {
+  byLoyaltyCode: Map<string, string[]>;
   byEmail: Map<string, string[]>;
   byPhone: Map<string, string[]>;
   byName: Map<string, string[]>;
@@ -173,7 +192,7 @@ function push(map: Map<string, string[]>, key: string, id: string) {
 }
 
 export function buildIndex(list: ExistingCustomer[]): CustomerIndex {
-  const idx: CustomerIndex = { byEmail: new Map(), byPhone: new Map(), byName: new Map() };
+  const idx: CustomerIndex = { byLoyaltyCode: new Map(), byEmail: new Map(), byPhone: new Map(), byName: new Map() };
   for (const c of list) addToIndex(idx, c);
   return idx;
 }
@@ -181,6 +200,7 @@ export function buildIndex(list: ExistingCustomer[]): CustomerIndex {
 /** Ajoute une fiche à l'index (utilisé aussi pour les créations en cours
  *  d'import, afin de dédoublonner deux lignes identiques du MÊME fichier). */
 export function addToIndex(idx: CustomerIndex, c: ExistingCustomer) {
+  if (c.loyalty_code) push(idx.byLoyaltyCode, c.loyalty_code.trim().toLowerCase(), c.id);
   if (c.email) push(idx.byEmail, c.email.trim().toLowerCase(), c.id);
   const ph = normPhone(c.phone ?? '');
   if (ph.length >= MIN_PHONE_DIGITS) push(idx.byPhone, ph, c.id);
@@ -189,7 +209,7 @@ export function addToIndex(idx: CustomerIndex, c: ExistingCustomer) {
 }
 
 export type MatchAction = 'create' | 'update' | 'ambiguous';
-export type MatchedBy = 'email' | 'téléphone' | 'nom';
+export type MatchedBy = 'code fidélité' | 'email' | 'téléphone' | 'nom';
 export interface MatchResult { action: MatchAction; matchId?: string; matchedBy?: MatchedBy }
 
 /** Décide de l'action pour une ligne, selon l'index des fiches existantes. */
@@ -200,6 +220,10 @@ export function matchRow(row: ParsedRow, idx: CustomerIndex): MatchResult {
     return { action: 'ambiguous', matchedBy: by };
   };
 
+  if (row.loyalty_code) {
+    const res = consider(idx.byLoyaltyCode.get(row.loyalty_code.trim().toLowerCase()), 'code fidélité');
+    if (res) return res;
+  }
   if (row.email) {
     const res = consider(idx.byEmail.get(row.email.trim().toLowerCase()), 'email');
     if (res) return res;
