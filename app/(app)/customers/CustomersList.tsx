@@ -9,6 +9,7 @@ import Badge from '@/components/Badge';
 import EmptyState from '@/components/EmptyState';
 import CustomerFormModal, { type CustomerLike } from '@/components/CustomerFormModal';
 import CustomerImportModal from './CustomerImportModal';
+import CustomerLoyaltyRevertModal from './CustomerLoyaltyRevertModal';
 import PageHeader from '@/components/PageHeader';
 import { formatEUR } from '@/lib/services/money';
 import WalletActions from './[id]/WalletActions';
@@ -95,6 +96,7 @@ export default function CustomersList({ customers: initialCustomers, total, canW
   const searchParams = useSearchParams();
   const [customers, setCustomers] = useState(initialCustomers);
   const [importOpen, setImportOpen] = useState(false);
+  const [loyaltyRevertOpen, setLoyaltyRevertOpen] = useState(false);
   useEffect(() => { setCustomers(initialCustomers); }, [initialCustomers]);
   const [q, setQ] = useState('');
   const [serverResults, setServerResults] = useState<Customer[] | null>(null);
@@ -206,6 +208,15 @@ export default function CustomersList({ customers: initialCustomers, total, canW
                   >
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 15V3m0 12 4-4m-4 4-4-4M4 21h16"/></svg>
                     Importer
+                  </button>
+                )}
+                {canWrite && (
+                  <button
+                    onClick={() => setLoyaltyRevertOpen(true)}
+                    className="text-xs text-ink-soft hover:text-ink underline whitespace-nowrap"
+                    title="Annuler les points de fidélité d'un import fait avec la mauvaise colonne"
+                  >
+                    Corriger un import fidélité
                   </button>
                 )}
                 <span className="text-sm text-ink-soft whitespace-nowrap">{total} clients</span>
@@ -359,6 +370,13 @@ export default function CustomersList({ customers: initialCustomers, total, canW
       {importOpen && (
         <CustomerImportModal
           onClose={() => setImportOpen(false)}
+          onDone={() => router.refresh()}
+        />
+      )}
+
+      {loyaltyRevertOpen && (
+        <CustomerLoyaltyRevertModal
+          onClose={() => setLoyaltyRevertOpen(false)}
           onDone={() => router.refresh()}
         />
       )}
