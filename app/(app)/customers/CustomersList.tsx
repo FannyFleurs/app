@@ -121,9 +121,9 @@ export default function CustomersList({ customers: initialCustomers, total, canW
   const [tab, setTab] = useState<Tab>('dashboard');
 
   // Recherche serveur : au-delà de 2 caractères, on interroge l'API pour
-  // couvrir TOUS les clients. La liste initiale est plafonnée aux 200 plus
-  // récents (par activité) : les clients importés sans vente n'y figurent pas
-  // forcément, d'où l'impossibilité de les retrouver sans cette recherche.
+  // couvrir TOUS les clients (la liste initiale n'est plus plafonnée, mais
+  // les clients importés sans vente triés par activité peuvent quand même
+  // être loin dans la liste — la recherche les retrouve immédiatement).
   useEffect(() => {
     const needle = q.trim();
     // Vue « Archivés » : la liste initiale rendue par le serveur ne contient
@@ -133,7 +133,7 @@ export default function CustomersList({ customers: initialCustomers, total, canW
     let cancelled = false;
     setSearching(true);
     const t = setTimeout(() => {
-      const p = new URLSearchParams({ limit: '200' });
+      const p = new URLSearchParams({ limit: '100000' });
       if (needle.length >= 2) p.set('q', needle);
       if (showArchived) p.set('archived', 'only');
       void fetch(`/api/customers?${p.toString()}`)

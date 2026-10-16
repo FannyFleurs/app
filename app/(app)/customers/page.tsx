@@ -47,8 +47,7 @@ export default async function CustomersPage() {
       WHERE c.organization_id = $1 AND c.is_anonymized = FALSE
         AND c.archived_at IS NULL
       GROUP BY c.id
-      ORDER BY MAX(s.validated_at) DESC NULLS LAST, c.created_at DESC
-      LIMIT 200`,
+      ORDER BY MAX(s.validated_at) DESC NULLS LAST, c.created_at DESC`,
     [user.organizationId],
   );
 

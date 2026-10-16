@@ -85,7 +85,7 @@ export async function POST(req: Request) {
           // Colonne vide = +0 (aucun effet).
           await client.query(
             `UPDATE customers SET
-               type = $2, first_name = $3, last_name = $4, company_name = $5,
+               type = $2, first_name = initcap($3), last_name = initcap($4), company_name = $5,
                phone = COALESCE(NULLIF($6,''), phone),
                siret = COALESCE(NULLIF($7,''), siret),
                vat_number = COALESCE(NULLIF($8,''), vat_number),
@@ -112,7 +112,7 @@ export async function POST(req: Request) {
                 email, phone, siret, vat_number, address,
                 consent_email, consent_sms, internal_notes, loyalty_code,
                 account_balance, created_by, updated_by)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$16)
+             VALUES ($1,$2,initcap($3),initcap($4),$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$16)
              RETURNING id`,
             [g.user.organizationId, row.type, row.first || null, row.last || null, row.company || null,
              row.email || null, row.phone || null, row.siret || null, row.vat_number || null,

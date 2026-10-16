@@ -10,7 +10,12 @@ export async function GET(req: Request) {
   if ('response' in g) return g.response;
   const url = new URL(req.url);
   const q = url.searchParams.get('q')?.trim().toLowerCase();
-  const limit = Math.min(Number(url.searchParams.get('limit') ?? 50), 200);
+  // Plafond de sûreté large (pas une limite fonctionnelle) : la liste
+  // clients du back-office demande explicitement tout, sans pagination —
+  // voir CustomersList.tsx. Les pickers caisse n'envoient pas `limit` et
+  // restent sur le défaut (50), pensé pour l'auto-complétion.
+  const requestedLimit = Number(url.searchParams.get('limit') ?? 50);
+  const limit = Math.min(Number.isFinite(requestedLimit) && requestedLimit > 0 ? requestedLimit : 50, 100000);
 
   // Fiches archivées : hors de TOUTES les recherches (back-office comme
   // caisse). Elles ne redeviennent visibles que sur demande explicite —
@@ -79,7 +84,7 @@ export async function POST(req: Request) {
         consent_email, consent_sms, internal_notes, loyalty_code,
         default_discount_pct, loyalty_enabled, payment_terms, billing_frequency,
         created_by, updated_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$22)
+     VALUES ($1,$2,initcap($3),initcap($4),$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$22)
      RETURNING id`,
     [
       g.user.organizationId, c.type,

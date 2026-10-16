@@ -51,7 +51,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   const email = c.email && c.email.length > 0 ? c.email : null;
   const res = await query(
     `UPDATE customers SET
-       type = $3, first_name = $4, last_name = $5, company_name = $6,
+       type = $3, first_name = initcap($4), last_name = initcap($5), company_name = $6,
        email = $7, phone = $8, siret = $9, siren = $10, vat_number = $11,
        public_service_code = $12, commitment_number = $13,
        address = $14, consent_email = $15, consent_sms = $16,
