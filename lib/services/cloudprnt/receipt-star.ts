@@ -15,8 +15,13 @@ import { round2 } from '@/lib/services/money';
 
 export const STARPRNT_CONTENT_TYPE = 'application/vnd.star.starprnt';
 
-/** Colonnes selon la largeur papier (police A) : 80 mm ≈ 48, 58 mm ≈ 32. */
-function columns(paperWidthMm?: number): number {
+/**
+ * Colonnes selon la largeur papier (police A) : 80 mm ≈ 48, 58 mm ≈ 32.
+ * `widthDots` force une largeur réduite (512 points) sur un papier 80 mm,
+ * sans changer le papier physique — voir `headDots`.
+ */
+function columns(paperWidthMm?: number, widthDots?: number | null): number {
+  if (paperWidthMm !== 58 && widthDots === 512) return 42;
   return paperWidthMm === 58 ? 32 : 48;
 }
 
@@ -51,7 +56,8 @@ interface StarEnc {
 }
 
 /** Dots imprimables selon la largeur papier (têtes Star 203 dpi). */
-function headDots(paperWidthMm?: number): number {
+function headDots(paperWidthMm?: number, widthDots?: number | null): number {
+  if (paperWidthMm !== 58 && widthDots === 512) return 512;
   return paperWidthMm === 58 ? 384 : 576;
 }
 
@@ -200,6 +206,8 @@ export interface ReceiptStarOptions {
   loyalty?: { earned: number; balance: number; redeemed: number } | null;
   /** Largeur papier en mm (58 ou 80). Par défaut 80. */
   paperWidthMm?: number;
+  /** Largeur d'impression réduite (512 points) sur un papier 80 mm. */
+  widthDots?: number | null;
 }
 
 /**
@@ -215,7 +223,7 @@ export async function buildReceiptStarPrnt(
 ): Promise<Buffer> {
   const rs = options.receipt ?? null;
   const gift = options.giftReceipt === true;
-  const W = columns(options.paperWidthMm);
+  const W = columns(options.paperWidthMm, options.widthDots);
   const wide = W >= 48;
   const enc = await newEncoder(W);
 
@@ -246,7 +254,7 @@ export async function buildReceiptStarPrnt(
   const hasLogo = !!(rs?.logo_data_url && rs.logo_data_url.startsWith('data:image'));
   if (hasLogo && rs) {
     try {
-      const logo = await renderLogoBitmap(rs.logo_data_url, headDots(options.paperWidthMm));
+      const logo = await renderLogoBitmap(rs.logo_data_url, headDots(options.paperWidthMm, options.widthDots));
       if (logo) {
         enc.align('center');
         enc.image(logo, logo.width, logo.height, 'threshold');
@@ -263,7 +271,7 @@ export async function buildReceiptStarPrnt(
     // si le rendu image échoue.
     let done = false;
     try {
-      const bmp = await renderShopNameBitmap(ascii(shopName), headDots(options.paperWidthMm));
+      const bmp = await renderShopNameBitmap(ascii(shopName), headDots(options.paperWidthMm, options.widthDots));
       if (bmp) {
         enc.align('center');
         enc.image(bmp, bmp.width, bmp.height, 'threshold');
@@ -452,11 +460,13 @@ function layout(enc: StarEnc, W: number) {
 }
 
 /** Imprime le nom de la boutique (image centrée ; repli texte centré). */
-async function printShopName(enc: StarEnc, shopName: string | null | undefined, paperWidthMm?: number) {
+async function printShopName(
+  enc: StarEnc, shopName: string | null | undefined, paperWidthMm?: number, widthDots?: number | null,
+) {
   const name = shopName?.trim();
   if (!name) return;
   try {
-    const bmp = await renderShopNameBitmap(ascii(name), headDots(paperWidthMm));
+    const bmp = await renderShopNameBitmap(ascii(name), headDots(paperWidthMm, widthDots));
     if (bmp) {
       enc.align('center');
       enc.image(bmp, bmp.width, bmp.height, 'threshold');
@@ -466,7 +476,7 @@ async function printShopName(enc: StarEnc, shopName: string | null | undefined, 
     }
   } catch { /* repli texte */ }
   enc.newline();
-  layout(enc, columns(paperWidthMm)).center(name, true);
+  layout(enc, columns(paperWidthMm, widthDots)).center(name, true);
 }
 
 /**
@@ -476,13 +486,14 @@ export async function buildZReportStarPrnt(
   report: DayReport,
   settings: ReceiptSettings | null,
   paperWidthMm?: number,
+  widthDots?: number | null,
 ): Promise<Buffer> {
-  const W = columns(paperWidthMm);
+  const W = columns(paperWidthMm, widthDots);
   const enc = await newEncoder(W);
   const { center, left, rule, row } = layout(enc, W);
   const id = report.identity;
 
-  await printShopName(enc, settings?.shop_name?.trim() || id.name || report.store_name, paperWidthMm);
+  await printShopName(enc, settings?.shop_name?.trim() || id.name || report.store_name, paperWidthMm, widthDots);
   if (id.line1) center(id.line1);
   if (id.line2) center(id.line2);
   const zc = [id.zip, id.city, id.country].filter(Boolean).join(' ');
@@ -539,6 +550,8 @@ export async function buildZReportStarPrnt(
   center("Entrees d'argent / especes", true);
   if (report.cash.entrees_argent > 0) row("Entrees d'argent", eur2(report.cash.entrees_argent));
   row('Fonds de caisse', eur2(report.cash.fonds_de_caisse));
+  if (report.cash.remboursements_especes > 0) row('Remboursements especes', `-${eur2(report.cash.remboursements_especes)}`);
+  if (report.cash.remise_banque > 0) row('Prelevement', `-${eur2(report.cash.remise_banque)}`);
   row('Total espece a la fermeture', eur2(report.cash.total_espece_fermeture));
   if (report.cash.counted != null) {
     row('Especes comptees', eur2(report.cash.counted));
@@ -557,7 +570,9 @@ export async function buildZReportStarPrnt(
     center('CA TTC Familles', true);
     for (const c of report.by_category) row(c.name, eur2(c.ca_ttc));
   }
-  if (report.by_mode.length > 0) {
+  // Masqué si une seule modalité (toujours "Sur place" par défaut pour une
+  // boutique sans livraison/à emporter) : aucune information apportée.
+  if (report.by_mode.length > 1) {
     rule();
     center('CA TTC Modes de ventes', true);
     for (const m of report.by_mode) row(m.mode, eur2(m.ca_ttc));
@@ -602,12 +617,13 @@ export async function buildCreditNoteStarPrnt(
   cn: CreditNoteReceiptData,
   settings: ReceiptSettings | null,
   paperWidthMm?: number,
+  widthDots?: number | null,
 ): Promise<Buffer> {
-  const W = columns(paperWidthMm);
+  const W = columns(paperWidthMm, widthDots);
   const enc = await newEncoder(W);
   const { center, left, rule, row } = layout(enc, W);
 
-  await printShopName(enc, settings?.shop_name?.trim() || cn.org_name, paperWidthMm);
+  await printShopName(enc, settings?.shop_name?.trim() || cn.org_name, paperWidthMm, widthDots);
   if (settings?.address_line1) center(settings.address_line1);
   if (settings?.address_zip_city) center(settings.address_zip_city);
   if (settings?.siret) center(`SIRET ${settings.siret}`);
@@ -662,12 +678,13 @@ export async function buildGiftCardStarPrnt(
   gc: GiftCardReceiptData,
   settings: ReceiptSettings | null,
   paperWidthMm?: number,
+  widthDots?: number | null,
 ): Promise<Buffer> {
-  const W = columns(paperWidthMm);
+  const W = columns(paperWidthMm, widthDots);
   const enc = await newEncoder(W);
   const { center, rule, row } = layout(enc, W);
 
-  await printShopName(enc, settings?.shop_name?.trim() || gc.org_name, paperWidthMm);
+  await printShopName(enc, settings?.shop_name?.trim() || gc.org_name, paperWidthMm, widthDots);
   if (settings?.address_line1) center(settings.address_line1);
   if (settings?.address_zip_city) center(settings.address_zip_city);
   if (settings?.siret) center(`SIRET ${settings.siret}`);
@@ -711,13 +728,14 @@ export async function buildBankDepositStarPrnt(
   m: BankDepositData,
   settings: ReceiptSettings | null,
   paperWidthMm?: number,
+  widthDots?: number | null,
 ): Promise<Buffer> {
-  const W = columns(paperWidthMm);
+  const W = columns(paperWidthMm, widthDots);
   const enc = await newEncoder(W);
   const { center, left, rule, row } = layout(enc, W);
   const isBankDeposit = m.movement_type === 'out' && isDepositReason(m.reason);
 
-  await printShopName(enc, settings?.shop_name?.trim() || m.org_name, paperWidthMm);
+  await printShopName(enc, settings?.shop_name?.trim() || m.org_name, paperWidthMm, widthDots);
   if (settings?.address_line1) center(settings.address_line1);
   if (settings?.address_zip_city) center(settings.address_zip_city);
   if (settings?.siret) center(`SIRET ${settings.siret}`);

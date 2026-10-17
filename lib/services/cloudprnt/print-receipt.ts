@@ -78,6 +78,7 @@ export async function enqueueReceiptPrint(args: {
     customerName: extras.customerName,
     loyalty: extras.loyalty,
     paperWidthMm: printer.paper_width,
+    widthDots: printer.print_width_dots,
   });
 
   await enqueueJob({

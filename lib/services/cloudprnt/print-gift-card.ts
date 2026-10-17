@@ -57,7 +57,7 @@ export async function enqueueGiftCardPrint(args: {
     org_name: r.org_name,
     store_name: r.store_name ?? r.org_name,
   };
-  const payload = await buildGiftCardStarPrnt(data, settings, printer.paper_width);
+  const payload = await buildGiftCardStarPrnt(data, settings, printer.paper_width, printer.print_width_dots);
 
   for (let i = 0; i < copies; i++) {
     await enqueueJob({

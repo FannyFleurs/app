@@ -60,7 +60,7 @@ export async function POST(req: Request) {
     printedAt: new Date().toISOString(),
   });
 
-  const payload = await buildZReportStarPrnt(report, settings, printer.paper_width);
+  const payload = await buildZReportStarPrnt(report, settings, printer.paper_width, printer.print_width_dots);
   await enqueueJob({
     organizationId: g.user.organizationId,
     printerId: printer.id,

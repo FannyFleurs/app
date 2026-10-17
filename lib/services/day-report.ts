@@ -57,6 +57,11 @@ export interface DayReport {
   cash: {
     fonds_de_caisse: number;
     entrees_argent: number;
+    /** Remboursements espèces (retours) sortis du tiroir ce jour — montant
+     *  déjà déduit du total espèces de fermeture ci-dessous, mais jamais des
+     *  ventes espèces (CA, toujours brut) : cette ligne rend l'écart visible
+     *  plutôt que de le laisser invisible dans le calcul. */
+    remboursements_especes: number;
     /** Prélèvement réellement enregistré (BankDepositModal) ce jour ; à
      *  défaut et pour une boutique au fond de caisse FIXE, estimation
      *  automatique du surplus à prélever (espèces au-delà du fond fixe). */
@@ -188,14 +193,18 @@ export async function computeDayReport(opts: {
            FROM sale_lines sl JOIN sales s ON s.id=sl.sale_id
            LEFT JOIN products p ON p.id=sl.product_id
           WHERE s.store_id=$2 AND s.organization_id=$1 AND s.status='validated' AND s.validated_at::date=$3::date`, [...P]),
-      query<{ opening: string; ins: string; outs: string; deposits: string }>(
+      query<{ opening: string; ins: string; outs: string; deposits: string; refunds: string }>(
         `SELECT COALESCE(SUM(cs.opening_float),0)::text opening,
                 COALESCE((SELECT SUM(cm.amount) FROM cash_movements cm WHERE cm.cash_session_id IN
                           (SELECT id FROM cash_sessions WHERE store_id=$2 AND opened_at::date=$3::date) AND cm.movement_type='in'),0)::text ins,
                 COALESCE((SELECT SUM(cm.amount) FROM cash_movements cm WHERE cm.cash_session_id IN
                           (SELECT id FROM cash_sessions WHERE store_id=$2 AND opened_at::date=$3::date) AND cm.movement_type='out'),0)::text outs,
                 COALESCE((SELECT SUM(cm.amount) FROM cash_movements cm WHERE cm.cash_session_id IN
-                          (SELECT id FROM cash_sessions WHERE store_id=$2 AND opened_at::date=$3::date) AND cm.movement_type='out' AND ${depositReasonSql('cm.reason')}),0)::text deposits
+                          (SELECT id FROM cash_sessions WHERE store_id=$2 AND opened_at::date=$3::date) AND cm.movement_type='out' AND ${depositReasonSql('cm.reason')}),0)::text deposits,
+                -- Remboursements espèces (retours) : même règle que Ma Journée
+                -- (sales/today/route.ts) pour que les deux écrans s'accordent.
+                COALESCE((SELECT SUM(cm.amount) FROM cash_movements cm WHERE cm.cash_session_id IN
+                          (SELECT id FROM cash_sessions WHERE store_id=$2 AND opened_at::date=$3::date) AND cm.movement_type='out' AND cm.reason ILIKE 'Remboursement%'),0)::text refunds
            FROM cash_sessions cs WHERE cs.organization_id=$1 AND cs.store_id=$2 AND cs.opened_at::date=$3::date`, [...P]),
       query<{ opened_at: string | null; closed_at: string | null }>(
         `SELECT MIN(opened_at)::text opened_at, MAX(closed_at)::text closed_at
@@ -318,6 +327,7 @@ export async function computeDayReport(opts: {
     cash: {
       fonds_de_caisse: openingFloats,
       entrees_argent: cashIns,
+      remboursements_especes: Number(floatsR.rows[0]?.refunds ?? 0),
       remise_banque: remiseBanque,
       total_espece_fermeture: espacesFermeture,
       tiroir_sans_ticket: 0,

@@ -98,7 +98,7 @@ export async function POST(req: Request) {
                 user_name: cc.user_name, store_name: cc.store_name,
                 register_code: cc.register_code, org_name: cc.org_name,
               },
-              rs, printer.paper_width,
+              rs, printer.paper_width, printer.print_width_dots,
             );
             await enqueueJob({
               organizationId: g.user.organizationId, printerId: printer.id,

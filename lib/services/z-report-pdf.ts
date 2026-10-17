@@ -155,6 +155,8 @@ function drawReport(doc: PDFKit.PDFDocument, r: DayReport): void {
     section(doc, "Entrées d'argent");
     if (r.cash.entrees_argent > 0) kv(doc, "Entrées d'argent", eur(r.cash.entrees_argent));
     kv(doc, 'Fonds de caisse', eur(r.cash.fonds_de_caisse));
+    if (r.cash.remboursements_especes > 0) kv(doc, 'Remboursements espèces', `-${eur(r.cash.remboursements_especes)}`);
+    if (r.cash.remise_banque > 0) kv(doc, 'Prélèvement', `-${eur(r.cash.remise_banque)}`);
     kv(doc, 'Total espèce caisse à la fermeture', eur(r.cash.total_espece_fermeture));
     if (r.cash.counted != null) {
       kv(doc, 'Espèces comptées', eur(r.cash.counted));
@@ -177,8 +179,9 @@ function drawReport(doc: PDFKit.PDFDocument, r: DayReport): void {
       for (const c of r.by_category) kv(doc, c.name, eur(c.ca_ttc));
     }
 
-    // --- CA TTC Modes de ventes ---
-    if (r.by_mode.length > 0) {
+    // --- CA TTC Modes de ventes --- masqué si une seule modalité (toujours
+    // "Sur place" par défaut pour une boutique sans livraison/à emporter).
+    if (r.by_mode.length > 1) {
       doc.moveDown(0.5); hr(doc); doc.moveDown(0.3);
       section(doc, 'CA TTC Modes de ventes');
       for (const m of r.by_mode) kv(doc, m.mode, eur(m.ca_ttc));

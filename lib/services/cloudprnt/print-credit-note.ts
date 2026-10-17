@@ -114,7 +114,7 @@ export async function enqueueCreditNotePrint(args: {
     org_name: r.org_name, store_name: r.store_name ?? r.org_name,
     user_name: r.user_name, customer_name: r.customer_name, lines,
   };
-  const payload = await buildCreditNoteStarPrnt(data, settings, printer.paper_width);
+  const payload = await buildCreditNoteStarPrnt(data, settings, printer.paper_width, printer.print_width_dots);
 
   // Un job par exemplaire : l'imprimante coupe entre chaque, on obtient N
   // tickets distincts.

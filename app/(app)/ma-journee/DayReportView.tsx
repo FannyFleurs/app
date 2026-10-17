@@ -86,6 +86,7 @@ export default function DayReportView({ report: r }: { report: DayReport }) {
       <Section title="Entrées d'argent">
         {r.cash.entrees_argent > 0 && <Row label="Entrées d'argent" value={eur(r.cash.entrees_argent)} />}
         <Row label="Fonds de caisse" value={eur(r.cash.fonds_de_caisse)} />
+        {r.cash.remboursements_especes > 0 && <Row label="Remboursements espèces" value={`-${eur(r.cash.remboursements_especes)}`} />}
         {r.cash.remise_banque > 0 && <Row label="Prélèvement" value={`-${eur(r.cash.remise_banque)}`} />}
         <Row label="Total espèce caisse à la fermeture" value={eur(r.cash.total_espece_fermeture)} />
         {r.cash.counted != null && <Row label="Espèces comptées" value={eur(r.cash.counted)} />}
@@ -104,7 +105,10 @@ export default function DayReportView({ report: r }: { report: DayReport }) {
         </Section>
       )}
 
-      {r.by_mode.length > 0 && (
+      {/* Masqué si une seule modalité est utilisée (ex. boutique sans
+          livraison/à emporter) : la section n'apporterait aucune information,
+          toujours 100% "Sur place" par défaut. */}
+      {r.by_mode.length > 1 && (
         <Section title="CA TTC Modes de ventes">
           {r.by_mode.map((m) => <Row key={m.mode} label={m.mode} value={eur(m.ca_ttc)} />)}
         </Section>

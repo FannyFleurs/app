@@ -15,6 +15,7 @@ interface Printer {
   poll_token: string | null;
   poll_interval: number;
   paper_width: number;
+  print_width_dots: number | null;
   enabled: boolean;
   last_seen_at: string | null;
   last_status: string | null;
@@ -91,7 +92,17 @@ export default function ReceiptPrinterForm({ stores, canWrite, lockStoreId = nul
   async function setWidth(p: Printer, width: 58 | 80) {
     await fetch(`/api/cloudprnt/printers/${p.id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ paper_width: width }),
+      // 512 points n'a de sens que pour un papier 80 mm ; on l'efface en
+      // repassant à 58 mm pour ne pas garder une valeur incohérente.
+      body: JSON.stringify({ paper_width: width, print_width_dots: width === 58 ? null : p.print_width_dots }),
+    });
+    await load();
+  }
+
+  async function setPrintWidthDots(p: Printer, dots: 512 | null) {
+    await fetch(`/api/cloudprnt/printers/${p.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ print_width_dots: dots }),
     });
     await load();
   }
@@ -211,6 +222,19 @@ export default function ReceiptPrinterForm({ stores, canWrite, lockStoreId = nul
                         <option value={58}>58 mm</option>
                       </select>
                     </label>
+                    {p.paper_width === 80 && (
+                      <label className="text-xs text-ink-soft inline-flex items-center gap-1">
+                        Densité
+                        <select
+                          className="input h-8 text-xs py-0"
+                          value={p.print_width_dots === 512 ? 512 : 576}
+                          onChange={(e) => void setPrintWidthDots(p, Number(e.target.value) === 512 ? 512 : null)}
+                        >
+                          <option value={576}>576 points (standard)</option>
+                          <option value={512}>512 points (réduite)</option>
+                        </select>
+                      </label>
+                    )}
                     <button className="btn-soft text-xs" onClick={() => void testPrint(p)}>Test ticket + tiroir</button>
                     <button className="btn-soft text-xs" onClick={() => void toggle(p)}>
                       {p.enabled ? 'Désactiver' : 'Activer'}

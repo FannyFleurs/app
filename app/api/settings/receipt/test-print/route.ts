@@ -85,6 +85,7 @@ export async function POST(req: Request) {
     customerName: 'Client Exemple',
     loyalty: { earned: 4, balance: 40, redeemed: 0 },
     paperWidthMm: printer.paper_width,
+    widthDots: printer.print_width_dots,
   });
   await enqueueJob({
     organizationId: g.user.organizationId,
