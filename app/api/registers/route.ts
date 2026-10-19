@@ -47,7 +47,7 @@ export async function GET() {
   const g = await requirePermission('settings.read');
   if ('response' in g) return g.response;
   const { rows } = await query(
-    `SELECT r.id, r.code, r.name, r.store_id, r.is_active,
+    `SELECT r.id, r.code, r.name, r.store_id, r.is_active, r.is_virtual,
             r.device_id, r.device_name, r.bound_at,
             s.name AS store_name
        FROM registers r

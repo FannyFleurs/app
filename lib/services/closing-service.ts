@@ -310,19 +310,26 @@ export class ClosingService {
       // 7. Ferme automatiquement les sessions caisse encore ouvertes pour
       //    cette boutique sur ce jour. Le caissier devra ROUVRIR la caisse
       //    (avec un nouveau fonds) pour reprendre la vente — pas de
-      //    réutilisation accidentelle d'une session déjà clôturée.
+      //    réutilisation accidentelle d'une session déjà clôturée. La caisse
+      //    VIRTUELLE (commandes WEB/OGF auto-encaissées, voir
+      //    virtual-register.ts) reste explicitement hors de ce balayage :
+      //    sa session doit rester ouverte en permanence, y compris après
+      //    cette clôture, pour continuer à encaisser boutique fermée.
       await client.query(
-        `UPDATE cash_sessions
+        `UPDATE cash_sessions cs
             SET status = 'closed',
                 closed_by = $3,
                 closed_at = now(),
                 counted_cash = COALESCE(counted_cash, $4),
                 expected_cash = COALESCE(expected_cash, $5),
                 cash_variance = COALESCE(cash_variance, $6)
-          WHERE organization_id = $1
-            AND store_id = $2
-            AND status = 'open'
-            AND opened_at::date <= $7::date`,
+           FROM registers r
+          WHERE r.id = cs.register_id
+            AND cs.organization_id = $1
+            AND cs.store_id = $2
+            AND cs.status = 'open'
+            AND cs.opened_at::date <= $7::date
+            AND r.is_virtual = FALSE`,
         [
           args.organizationId, args.storeId, args.userId,
           args.countedCash ?? null,

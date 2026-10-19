@@ -26,10 +26,17 @@ export class CashSessionService {
     shared: boolean;
     client?: PoolClient;
   }): Promise<string | null> {
+    // Fonds commun : exclut la caisse virtuelle (commandes WEB/OGF
+    // auto-encaissées) — en permanence ouverte, elle serait sinon la session
+    // "la plus ancienne ouverte" et récupérerait à tort les ventes comptant
+    // réelles. Un appel qui vise explicitement cette caisse (fonds
+    // individuel, registerId = la caisse virtuelle) passe par l'autre
+    // branche, non concernée par cette exclusion.
     const sql = args.shared
-      ? `SELECT id FROM cash_sessions
-           WHERE store_id = $1 AND status = 'open'
-           ORDER BY opened_at ASC LIMIT 1`
+      ? `SELECT cs.id FROM cash_sessions cs
+           JOIN registers r ON r.id = cs.register_id
+          WHERE cs.store_id = $1 AND cs.status = 'open' AND r.is_virtual = FALSE
+          ORDER BY cs.opened_at ASC LIMIT 1`
       : `SELECT id FROM cash_sessions
            WHERE register_id = $1 AND status = 'open'
            ORDER BY opened_at DESC LIMIT 1`;
@@ -64,6 +71,7 @@ export class CashSessionService {
          LEFT JOIN registers r ON r.id = cs.register_id
          LEFT JOIN users u ON u.id = cs.opened_by
         WHERE cs.store_id = $1 AND cs.status = 'open'
+          AND COALESCE(r.is_virtual, FALSE) = FALSE
         ORDER BY cs.opened_at ASC LIMIT 1`,
       [storeId],
     );
@@ -100,10 +108,14 @@ export class CashSessionService {
       // depuis un autre poste — est REJOINTE, pas refusée : le second poste
       // n'a rien à ouvrir, il encaisse sur le fonds déjà déclaré.
       if (args.shared) {
+        // Exclut la caisse virtuelle (voir resolveOpenSessionId) : sinon un
+        // poste en fonds commun "rejoindrait" sa session, en permanence
+        // ouverte, au lieu d'ouvrir le vrai fonds de la boutique.
         const shared = await client.query<{ id: string }>(
-          `SELECT id FROM cash_sessions
-            WHERE store_id = $1 AND status = 'open'
-            ORDER BY opened_at ASC LIMIT 1`,
+          `SELECT cs.id FROM cash_sessions cs
+             JOIN registers r ON r.id = cs.register_id
+            WHERE cs.store_id = $1 AND cs.status = 'open' AND r.is_virtual = FALSE
+            ORDER BY cs.opened_at ASC LIMIT 1`,
           [args.storeId],
         );
         const joined = shared.rows[0];

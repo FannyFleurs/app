@@ -64,7 +64,7 @@ export default async function CaissePage() {
       device_id: string | null; device_name: string | null;
     }>(
       `SELECT id, store_id, code, name, device_id, device_name FROM registers
-        WHERE organization_id = $1 AND is_active = TRUE ORDER BY name`,
+        WHERE organization_id = $1 AND is_active = TRUE AND is_virtual = FALSE ORDER BY name`,
       [user.organizationId],
     ),
     query<{ id: string; code: string; rate: string; is_default: boolean }>(

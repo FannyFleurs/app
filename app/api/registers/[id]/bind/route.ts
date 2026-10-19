@@ -28,16 +28,19 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   if ('response' in parsed) return parsed.response;
   const { device_id, device_name } = parsed.data;
 
-  // 1) la caisse existe dans l'org
+  // 1) la caisse existe dans l'org, et n'est pas la caisse virtuelle
+  //    (commandes WEB/OGF auto-encaissées, voir virtual-register.ts) : elle
+  //    n'est jamais liée à un appareil.
   const target = await query<{
-    id: string; device_id: string | null; device_name: string | null; name: string;
+    id: string; device_id: string | null; device_name: string | null; name: string; is_virtual: boolean;
   }>(
-    `SELECT id, device_id, device_name, name FROM registers
+    `SELECT id, device_id, device_name, name, is_virtual FROM registers
       WHERE id = $1 AND organization_id = $2 AND is_active = TRUE`,
     [params.id, g.user.organizationId],
   );
   if (target.rowCount === 0) return jsonError('NOT_FOUND', 404);
   const tgt = target.rows[0]!;
+  if (tgt.is_virtual) return jsonError('VIRTUAL_REGISTER', 403);
 
   // 2) deja lie a cet appareil : idempotent, on met a jour le nom au passage
   if (tgt.device_id === device_id) {

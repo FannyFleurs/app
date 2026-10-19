@@ -1,5 +1,10 @@
 import { withTransaction } from '@/lib/db/client';
 import { computeLine, computeTotals, round2 } from './money';
+import { loadOrderAutoCheckout } from '@/lib/settings/order-auto-checkout-server';
+import { paymentMethodFieldForSource } from '@/lib/settings/order-auto-checkout';
+import { ensureVirtualRegisterSession } from './virtual-register';
+import { validateSaleAndNotify } from './sale-validate-and-notify';
+import type { SalePaymentInput } from './sale-service';
 
 export interface IncomingOrderLine {
   label: string;
@@ -81,26 +86,70 @@ function resolvePickupOrDelivery(type: string | null | undefined, hasDelivery: b
  * et l'encaisse.
  */
 export async function createIncomingOrder(input: IncomingOrderInput): Promise<IncomingOrderResult> {
-  return withTransaction(async (client) => {
+  const orderSource = normalizeSource(input.source);
+
+  const created = await withTransaction(async (client) => {
     // 1. Idempotence : commande déjà reçue ?
     const existing = await client.query<{ id: string; status: string }>(
       `SELECT id, status FROM sales WHERE organization_id = $1 AND client_ref = $2 LIMIT 1`,
       [input.organizationId, input.externalRef],
     );
     if (existing.rows[0]) {
-      return { id: existing.rows[0].id, status: existing.rows[0].status, duplicate: true };
+      return { duplicate: true as const, id: existing.rows[0].id, status: existing.rows[0].status };
     }
 
-    // 2. Poste porteur (placeholder) : une caisse active de la boutique. Le poste
-    //    réel + la session seront fixés au rappel/à l'encaissement.
-    const reg = await client.query<{ id: string }>(
-      `SELECT id FROM registers
-        WHERE store_id = $1 AND organization_id = $2 AND is_active = TRUE
-        ORDER BY created_at ASC LIMIT 1`,
-      [input.storeId, input.organizationId],
+    // 2. Utilisateur porteur (avant le choix du poste : nécessaire pour
+    //    ouvrir la session de la caisse virtuelle le cas échéant). Le
+    //    propriétaire (ou le plus ancien). L'attribution fiscale réelle se
+    //    fait au caissier lors de l'encaissement — sauf encaissement
+    //    automatique ci-dessous, où elle reste ce même "utilisateur porteur".
+    const usr = await client.query<{ id: string }>(
+      `SELECT id FROM users WHERE organization_id = $1
+        ORDER BY (role = 'owner') DESC, created_at ASC LIMIT 1`,
+      [input.organizationId],
     );
-    if (!reg.rows[0]) throw new Error('NO_ACTIVE_REGISTER');
-   
+    if (!usr.rows[0]) throw new Error('NO_USER');
+
+    // Encaissement automatique (WEB/OGF) : réglage actif pour cette boutique
+    // ET un mode de règlement par défaut configuré pour CETTE source — voir
+    // Paramètres → Modes de règlement. Sinon, comportement inchangé (vente
+    // en attente, poste réel choisi au rappel).
+    let autoPaymentMethod: { id: string; kind: string; label: string } | null = null;
+    if (orderSource) {
+      const autoSettings = await loadOrderAutoCheckout(input.organizationId, input.storeId);
+      const pmId = autoSettings.enabled ? autoSettings[paymentMethodFieldForSource(orderSource)] : null;
+      if (pmId) {
+        const pm = await client.query<{ id: string; kind: string; label: string }>(
+          `SELECT id, kind, label FROM payment_methods
+            WHERE id = $1 AND organization_id = $2 AND is_active = TRUE`,
+          [pmId, input.organizationId],
+        );
+        autoPaymentMethod = pm.rows[0] ?? null;
+      }
+    }
+
+    // 3. Poste porteur. Encaissement automatique : la caisse VIRTUELLE
+    //    (toujours ouverte, voir virtual-register.ts) — la vente est scellée
+    //    plus bas, pas besoin d'un poste physique actif. Sinon (comportement
+    //    inchangé) : un placeholder (une caisse active de la boutique), le
+    //    poste réel + la session étant fixés au rappel/à l'encaissement.
+    let registerId: string;
+    let virtualSessionId: string | null = null;
+    if (autoPaymentMethod) {
+      const vr = await ensureVirtualRegisterSession(input.organizationId, input.storeId, usr.rows[0].id, client);
+      registerId = vr.registerId;
+      virtualSessionId = vr.sessionId;
+    } else {
+      const reg = await client.query<{ id: string }>(
+        `SELECT id FROM registers
+          WHERE store_id = $1 AND organization_id = $2 AND is_active = TRUE AND is_virtual = FALSE
+          ORDER BY created_at ASC LIMIT 1`,
+        [input.storeId, input.organizationId],
+      );
+      if (!reg.rows[0]) throw new Error('NO_ACTIVE_REGISTER');
+      registerId = reg.rows[0].id;
+    }
+
     // Compte client imposé pour les commandes OGF.
     let customerId: string | null = null;
     // Remise systématique de ce client (fiche client, ex. OGF Services
@@ -124,15 +173,6 @@ export async function createIncomingOrder(input: IncomingOrderInput): Promise<In
       const pct = customerRes.rows[0]?.default_discount_pct;
       customerDiscountPct = pct != null && Number(pct) > 0 ? Number(pct) : null;
     }
-
-    // 3. Utilisateur porteur : le propriétaire (ou le plus ancien). L'attribution
-    //    fiscale réelle se fait au caissier lors de l'encaissement.
-    const usr = await client.query<{ id: string }>(
-      `SELECT id FROM users WHERE organization_id = $1
-        ORDER BY (role = 'owner') DESC, created_at ASC LIMIT 1`,
-      [input.organizationId],
-    );
-    if (!usr.rows[0]) throw new Error('NO_USER');
 
     // 4. Taux de TVA : table des taux de l'org (map taux -> code) + défaut boutique.
     const ratesRes = await client.query<{ code: string; rate: string; is_default: boolean }>(
@@ -257,7 +297,7 @@ export async function createIncomingOrder(input: IncomingOrderInput): Promise<In
       source: 'commande' as const,
       // Canal d'origine (OGF / WEB / null) : clé distincte de `source` (qui
       // marque « commande entrante ») pour ne pas casser la détection en caisse.
-      order_source: normalizeSource(input.source),
+      order_source: orderSource,
       external_ref: input.externalRef,
       boutique: input.boutiqueLabel,
       pickup_or_delivery: kind,
@@ -280,13 +320,13 @@ export async function createIncomingOrder(input: IncomingOrderInput): Promise<In
     try {
       const ins = await client.query<{ id: string }>(
         `INSERT INTO sales
-   (organization_id, store_id, register_id, user_id, customer_id, status,
+   (organization_id, store_id, register_id, cash_session_id, user_id, customer_id, status,
     total_ht, total_tva, total_ttc, total_discount, tva_breakdown,
     notes, held_label, client_ref, delivery_info)
- VALUES ($1,$2,$3,$4,$5,'on_hold',$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb)
+ VALUES ($1,$2,$3,$4,$5,$6,'on_hold',$7,$8,$9,$10,$11,$12,$13,$14,$15::jsonb)
  RETURNING id`,
         [
-  input.organizationId, input.storeId, reg.rows[0].id, usr.rows[0].id,
+  input.organizationId, input.storeId, registerId, virtualSessionId, usr.rows[0].id,
   customerId,
   totals.total_ht, totals.total_tva, totals.total_ttc, totals.total_discount,
   JSON.stringify(totals.tva_breakdown),
@@ -302,7 +342,7 @@ export async function createIncomingOrder(input: IncomingOrderInput): Promise<In
           `SELECT id, status FROM sales WHERE organization_id = $1 AND client_ref = $2 LIMIT 1`,
           [input.organizationId, input.externalRef],
         );
-        if (again.rows[0]) return { id: again.rows[0].id, status: again.rows[0].status, duplicate: true };
+        if (again.rows[0]) return { duplicate: true as const, id: again.rows[0].id, status: again.rows[0].status };
       }
       throw e;
     }
@@ -332,8 +372,42 @@ export async function createIncomingOrder(input: IncomingOrderInput): Promise<In
       );
     }
 
-    return { id: saleId, status: 'on_hold', duplicate: false };
+    return {
+      duplicate: false as const, id: saleId,
+      autoPaymentMethod, totalTtc: totals.total_ttc, userId: usr.rows[0].id,
+    };
   });
+
+  if (created.duplicate) {
+    return { id: created.id, status: created.status, duplicate: true };
+  }
+
+  // Encaissement automatique : hors transaction (la vente doit être commitée
+  // avant que SaleService.validate() ne la verrouille/la lise). Best-effort —
+  // un échec (ex. mode de règlement désactivé entre-temps) laisse la vente
+  // "en attente", comportement normal : jamais fatal à la réception de la
+  // commande, déjà enregistrée avec succès.
+  if (created.autoPaymentMethod) {
+    try {
+      await validateSaleAndNotify({
+        saleId: created.id,
+        organizationId: input.organizationId,
+        userId: created.userId,
+        payments: [{
+          method: created.autoPaymentMethod.kind as SalePaymentInput['method'],
+          amount: created.totalTtc,
+          label: created.autoPaymentMethod.label,
+        }],
+        skipDrawerKick: true,
+      });
+      return { id: created.id, status: 'validated', duplicate: false };
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[order_intake.auto_checkout]', err);
+    }
+  }
+
+  return { id: created.id, status: 'on_hold', duplicate: false };
 }
 
 /** Canal normalisé : on ne retient que "OGF" ou "WEB", sinon null. */

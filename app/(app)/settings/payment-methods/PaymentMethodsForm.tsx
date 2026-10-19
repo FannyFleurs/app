@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import OrderAutoCheckoutSection from './OrderAutoCheckoutSection';
 
 interface PaymentMethod {
   id: string;
@@ -240,6 +241,8 @@ export default function PaymentMethodsForm({ canWrite, stores }: {
       </div>
 
       {stripeEnabled && <StripeConfig canWrite={canWrite} stores={stores} />}
+
+      <OrderAutoCheckoutSection canWrite={canWrite} stores={stores} methods={items} />
     </div>
   );
 }

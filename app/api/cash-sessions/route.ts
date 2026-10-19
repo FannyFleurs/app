@@ -69,9 +69,13 @@ export async function POST(req: Request) {
     // Journée déjà ROUVERTE (une session est de nouveau ouverte sur la boutique) :
     // n'importe qui peut ouvrir/rejoindre. Sinon, la première réouverture après
     // le scellé est réservée aux responsables (closures.daily).
+    // Exclut la caisse virtuelle (en permanence ouverte) : elle ne doit
+    // jamais faire croire que la journée a déjà été rouverte par un vrai poste.
     const reopened = await query(
-      `SELECT 1 FROM cash_sessions
-        WHERE organization_id = $1 AND store_id = $2 AND status = 'open'
+      `SELECT 1 FROM cash_sessions cs
+         JOIN registers r ON r.id = cs.register_id
+        WHERE cs.organization_id = $1 AND cs.store_id = $2 AND cs.status = 'open'
+          AND r.is_virtual = FALSE
         LIMIT 1`,
       [g.user.organizationId, parsed.data.store_id],
     );
