@@ -6,6 +6,7 @@ import Badge from '@/components/Badge';
 import StoreScopeSelect from '@/components/StoreScopeSelect';
 import { formatEUR } from '@/lib/services/money';
 import { PAYMENT_LABELS } from '@/components/labels';
+import SaleNotesEditor from '@/components/SaleNotesEditor';
 
 interface Store { id: string; name: string }
 
@@ -31,9 +32,11 @@ interface DetailPayment { method: string; label?: string | null; amount: string;
 interface TvaRow { rate: number | string; base_ht: number | string; tva: number | string }
 interface SaleDetail {
   sale: {
+    id: string;
     receipt_number: string; total_ttc: string; total_ht: string; total_tva: string;
     total_discount: string; validated_at: string; status: string; fiscal_hash?: string;
     tva_breakdown?: TvaRow[] | null;
+    notes: string | null;
   };
   lines: DetailLine[];
   payments: DetailPayment[];
@@ -225,17 +228,19 @@ export default function VentesAdmin({ stores }: { stores: Store[] }) {
           detail={detail}
           loading={detailLoading}
           onClose={closeSale}
+          onNotesUpdated={(notes) => setDetail((prev) => (prev ? { ...prev, sale: { ...prev.sale, notes } } : prev))}
         />
       )}
     </div>
   );
 }
 
-function SaleDetailModal({ row, detail, loading, onClose }: {
+function SaleDetailModal({ row, detail, loading, onClose, onNotesUpdated }: {
   row: SaleRow | null;
   detail: SaleDetail | null;
   loading: boolean;
   onClose: () => void;
+  onNotesUpdated: (notes: string | null) => void;
 }) {
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose(); }
@@ -282,6 +287,12 @@ function SaleDetailModal({ row, detail, loading, onClose }: {
           </div>
           <button onClick={onClose} className="text-ink-soft hover:text-ink text-xl leading-none" aria-label="Fermer">✕</button>
         </div>
+
+        {detail && (
+          <div className="mt-3">
+            <SaleNotesEditor saleId={detail.sale.id} notes={detail.sale.notes} onUpdated={onNotesUpdated} />
+          </div>
+        )}
 
         {loading || !detail ? (
           <div className="py-10 text-center text-sm text-ink-soft">Chargement du détail…</div>

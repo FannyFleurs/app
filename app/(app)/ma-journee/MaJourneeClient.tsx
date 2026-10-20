@@ -20,6 +20,7 @@ import { promptThemed } from '@/lib/ui/dialog';
 import { printReceipt } from '@/lib/pos/receipt-print';
 import PdfPreviewModal from '@/components/PdfPreviewModal';
 import { readRoamingChoice } from '@/lib/caisse/roaming';
+import SaleNotesEditor from '@/components/SaleNotesEditor';
 
 interface Sale {
   id: string; receipt_number: string;
@@ -37,6 +38,7 @@ interface Sale {
 interface SaleDetail {
   sale: Sale & {
     customer_id: string | null;
+    notes: string | null;
     tva_breakdown: { rate: number; base_ht: number; tva: number; ttc: number }[];
   };
   lines: {
@@ -498,6 +500,7 @@ export default function MaJourneeClient() {
                     void pickSale(detail.sale.id);
                     reloadDay(false); // rafraîchit CA / badges sans fermer le détail
                   }}
+                  onNotesUpdated={(notes) => setDetail((prev) => (prev ? { ...prev, sale: { ...prev.sale, notes } } : prev))}
                 />
               ) : (
                 <EmptyState icon="⚠" title="Erreur de chargement" />
@@ -1082,9 +1085,10 @@ function KpiRow({ label, value, tone }: {
   );
 }
 
-function SaleDetailPanel({ detail, onInvoiceGenerated }: {
+function SaleDetailPanel({ detail, onInvoiceGenerated, onNotesUpdated }: {
   detail: SaleDetail;
   onInvoiceGenerated: () => void;
+  onNotesUpdated: (notes: string | null) => void;
 }) {
   const s = detail.sale;
   const [generating, setGenerating] = useState(false);
@@ -1247,6 +1251,10 @@ function SaleDetailPanel({ detail, onInvoiceGenerated }: {
         )}
         {error && <div className="mt-2 text-xs text-danger">{error}</div>}
         {info && <div className="mt-2 rounded-xl bg-success/10 px-3 py-2 text-xs text-success">{info}</div>}
+
+        <div className="mt-3">
+          <SaleNotesEditor saleId={s.id} notes={s.notes} onUpdated={onNotesUpdated} />
+        </div>
 
         <div className="mt-4 flex flex-wrap gap-2">
           <button onClick={() => setShowCorrection(true)} className="btn-soft text-sm">
