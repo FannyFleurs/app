@@ -76,7 +76,7 @@ export class ClosingService {
            JOIN sales s ON s.id = sl.sale_id
           WHERE s.store_id = $1
             AND s.status = 'validated'
-            AND s.validated_at::date = $2::date
+            AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date = $2::date
             AND ($3::timestamptz IS NULL OR s.validated_at > $3)`,
         [args.storeId, args.businessDate, periodStart],
       );
@@ -105,7 +105,7 @@ export class ClosingService {
            JOIN sales s ON s.id = sl.sale_id
           WHERE s.store_id = $1
             AND s.status = 'validated'
-            AND s.validated_at::date = $2::date
+            AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date = $2::date
             AND ($3::timestamptz IS NULL OR s.validated_at > $3)
             AND COALESCE(sl.metadata->>'gift_card_ca_deferred','') <> 'true'
           GROUP BY sl.tax_rate
@@ -129,7 +129,7 @@ export class ClosingService {
            JOIN sales s ON s.id = p.sale_id
           WHERE s.store_id = $1
             AND s.status = 'validated'
-            AND s.validated_at::date = $2::date
+            AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date = $2::date
             AND ($3::timestamptz IS NULL OR s.validated_at > $3)
           GROUP BY p.method
           ORDER BY p.method`,
@@ -153,17 +153,17 @@ export class ClosingService {
             COALESCE((SELECT SUM(cm.amount) FROM cash_movements cm
                        WHERE cm.cash_session_id IN (
                          SELECT id FROM cash_sessions
-                          WHERE store_id = $1 AND opened_at::date = $2::date
+                          WHERE store_id = $1 AND (opened_at AT TIME ZONE 'Europe/Paris')::date = $2::date
                             AND ($3::timestamptz IS NULL OR opened_at > $3)
                        ) AND cm.movement_type = 'in'), 0)::text AS ins,
             COALESCE((SELECT SUM(cm.amount) FROM cash_movements cm
                        WHERE cm.cash_session_id IN (
                          SELECT id FROM cash_sessions
-                          WHERE store_id = $1 AND opened_at::date = $2::date
+                          WHERE store_id = $1 AND (opened_at AT TIME ZONE 'Europe/Paris')::date = $2::date
                             AND ($3::timestamptz IS NULL OR opened_at > $3)
                        ) AND cm.movement_type = 'out'), 0)::text AS outs
            FROM cash_sessions cs
-          WHERE cs.store_id = $1 AND cs.opened_at::date = $2::date
+          WHERE cs.store_id = $1 AND (cs.opened_at AT TIME ZONE 'Europe/Paris')::date = $2::date
             AND ($3::timestamptz IS NULL OR cs.opened_at > $3)`,
         [args.storeId, args.businessDate, periodStart],
       );
@@ -184,7 +184,7 @@ export class ClosingService {
           WHERE pso.kind = 'online_gift_card'
             AND pso.cash_session_id IN (
               SELECT id FROM cash_sessions
-               WHERE store_id = $1 AND opened_at::date = $2::date
+               WHERE store_id = $1 AND (opened_at AT TIME ZONE 'Europe/Paris')::date = $2::date
                  AND ($3::timestamptz IS NULL OR opened_at > $3)
             )`,
         [args.storeId, args.businessDate, periodStart],
@@ -328,7 +328,7 @@ export class ClosingService {
             AND cs.organization_id = $1
             AND cs.store_id = $2
             AND cs.status = 'open'
-            AND cs.opened_at::date <= $7::date
+            AND (cs.opened_at AT TIME ZONE 'Europe/Paris')::date <= $7::date
             AND r.is_virtual = FALSE`,
         [
           args.organizationId, args.storeId, args.userId,

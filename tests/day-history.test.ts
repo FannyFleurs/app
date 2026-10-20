@@ -63,8 +63,10 @@ describe('Contenu du journal', () => {
 
   it('ne compte une session que le jour du geste', () => {
     // Une caisse ouverte hier et fermée aujourd'hui ne doit pas réapparaître
-    // comme « ouverte » aujourd'hui : le tri est fait en SQL.
-    expect(service).toMatch(/opened_at::date = \$3::date\) AS opened_today/);
+    // comme « ouverte » aujourd'hui : le tri est fait en SQL, en heure de
+    // Paris (pas UTC — sinon une session ouverte juste après minuit local
+    // basculait sur la mauvaise journée).
+    expect(service).toMatch(/Europe\/Paris'\)::date = \$3::date\) AS opened_today/);
     expect(service).toMatch(/if \(s\.opened_today\)/);
     expect(service).toMatch(/if \(s\.closed_at && s\.closed_today\)/);
   });

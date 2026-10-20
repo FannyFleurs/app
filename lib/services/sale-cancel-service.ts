@@ -46,7 +46,7 @@ export class SaleCancelService {
         `SELECT id, status, store_id, register_id, cash_session_id, receipt_number,
                 customer_id, total_ht::text, total_tva::text, total_ttc::text,
                 tva_breakdown, account_invoice_id,
-                (validated_at::date = now()::date) AS validated_today
+                ((validated_at AT TIME ZONE 'Europe/Paris')::date = (now() AT TIME ZONE 'Europe/Paris')::date) AS validated_today
            FROM sales WHERE id = $1 AND organization_id = $2 FOR UPDATE`,
         [args.saleId, args.organizationId],
       );

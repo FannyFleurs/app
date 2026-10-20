@@ -100,8 +100,8 @@ export async function computeDayHistory(opts: {
       // Le « ce jour-là » est tranché en SQL : une session ouverte hier et
       // fermée aujourd'hui ne doit apparaître que par sa fermeture.
       `SELECT cs.id, cs.opened_at, cs.closed_at,
-              (cs.opened_at::date = $3::date) AS opened_today,
-              (cs.closed_at::date = $3::date) AS closed_today,
+              ((cs.opened_at AT TIME ZONE 'Europe/Paris')::date = $3::date) AS opened_today,
+              ((cs.closed_at AT TIME ZONE 'Europe/Paris')::date = $3::date) AS closed_today,
               cs.opening_float::text, cs.counted_cash::text,
               cs.expected_cash::text, cs.cash_variance::text,
               uo.full_name AS opened_by_name, uc.full_name AS closed_by_name
@@ -109,7 +109,7 @@ export async function computeDayHistory(opts: {
          LEFT JOIN users uo ON uo.id = cs.opened_by
          LEFT JOIN users uc ON uc.id = cs.closed_by
         WHERE cs.organization_id = $1 AND cs.store_id = $2
-          AND (cs.opened_at::date = $3::date OR cs.closed_at::date = $3::date)
+          AND ((cs.opened_at AT TIME ZONE 'Europe/Paris')::date = $3::date OR (cs.closed_at AT TIME ZONE 'Europe/Paris')::date = $3::date)
         ORDER BY cs.opened_at`,
       [...P],
     ),
@@ -124,7 +124,7 @@ export async function computeDayHistory(opts: {
          JOIN cash_sessions cs ON cs.id = cm.cash_session_id
          LEFT JOIN users u ON u.id = cm.user_id
         WHERE cs.organization_id = $1 AND cs.store_id = $2
-          AND cm.created_at::date = $3::date
+          AND (cm.created_at AT TIME ZONE 'Europe/Paris')::date = $3::date
         ORDER BY cm.created_at`,
       [...P],
     ),
@@ -156,7 +156,7 @@ export async function computeDayHistory(opts: {
          FROM audit_logs a
          LEFT JOIN users u ON u.id = a.user_id
         WHERE a.organization_id = $1
-          AND a.created_at::date = $3::date
+          AND (a.created_at AT TIME ZONE 'Europe/Paris')::date = $3::date
           AND a.action = ANY($4::text[])
           AND a.payload->>'store_id' = $2
         ORDER BY a.created_at`,

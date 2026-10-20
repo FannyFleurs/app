@@ -156,35 +156,35 @@ export async function computeDayReport(opts: {
                 COALESCE(SUM(sl.line_ttc) FILTER (WHERE COALESCE(sl.metadata->>'gift_card_ca_deferred','') = 'true'),0)::text gift_card_issuance_ttc
            FROM sale_lines sl JOIN sales s ON s.id=sl.sale_id
           WHERE s.store_id=$2 AND s.organization_id=$1
-            AND s.status='validated' AND s.validated_at::date=$3::date`, [...P]),
+            AND s.status='validated' AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date=$3::date`, [...P]),
       query<{ tax_rate: string; ht: string; tva: string; ttc: string }>(
         `SELECT sl.tax_rate::text, SUM(sl.line_ht)::text ht, SUM(sl.line_tva)::text tva, SUM(sl.line_ttc)::text ttc
            FROM sale_lines sl JOIN sales s ON s.id=sl.sale_id
-          WHERE s.store_id=$2 AND s.organization_id=$1 AND s.status='validated' AND s.validated_at::date=$3::date
+          WHERE s.store_id=$2 AND s.organization_id=$1 AND s.status='validated' AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date=$3::date
             AND COALESCE(sl.metadata->>'gift_card_ca_deferred','') <> 'true'
           GROUP BY sl.tax_rate ORDER BY sl.tax_rate`, [...P]),
       query<{ method: string; label: string | null; cnt: string; total: string }>(
         `SELECT p.method, p.label, COUNT(*)::text cnt, SUM(p.amount)::text total
            FROM payments p JOIN sales s ON s.id=p.sale_id
-          WHERE s.store_id=$2 AND s.organization_id=$1 AND s.status='validated' AND s.validated_at::date=$3::date
+          WHERE s.store_id=$2 AND s.organization_id=$1 AND s.status='validated' AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date=$3::date
           GROUP BY p.method, p.label ORDER BY SUM(p.amount) DESC`, [...P]),
       query<{ name: string; ttc: string }>(
         `SELECT COALESCE(u.full_name,'—') name, SUM(s.total_ttc)::text ttc
            FROM sales s LEFT JOIN users u ON u.id=s.user_id
-          WHERE s.store_id=$2 AND s.organization_id=$1 AND s.status='validated' AND s.validated_at::date=$3::date
+          WHERE s.store_id=$2 AND s.organization_id=$1 AND s.status='validated' AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date=$3::date
           GROUP BY u.full_name ORDER BY SUM(s.total_ttc) DESC`, [...P]),
       query<{ name: string; ttc: string }>(
         `SELECT COALESCE(c.name,'Sans catégorie') name, SUM(sl.line_ttc)::text ttc
            FROM sale_lines sl JOIN sales s ON s.id=sl.sale_id
            LEFT JOIN products p ON p.id=sl.product_id
            LEFT JOIN product_categories c ON c.id=p.category_id
-          WHERE s.store_id=$2 AND s.organization_id=$1 AND s.status='validated' AND s.validated_at::date=$3::date
+          WHERE s.store_id=$2 AND s.organization_id=$1 AND s.status='validated' AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date=$3::date
             AND COALESCE(sl.metadata->>'gift_card_ca_deferred','') <> 'true'
           GROUP BY COALESCE(c.name,'Sans catégorie') ORDER BY name`, [...P]),
       query<{ mode: string | null; ttc: string }>(
         `SELECT s.delivery_info->>'pickup_or_delivery' mode, SUM(s.total_ttc)::text ttc
            FROM sales s
-          WHERE s.store_id=$2 AND s.organization_id=$1 AND s.status='validated' AND s.validated_at::date=$3::date
+          WHERE s.store_id=$2 AND s.organization_id=$1 AND s.status='validated' AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date=$3::date
           GROUP BY s.delivery_info->>'pickup_or_delivery'`, [...P]),
       query<{ revenue: string; cost: string; lines_with_cost: string }>(
         `SELECT COALESCE(SUM(CASE WHEN p.purchase_price_ht>0 THEN sl.line_ht ELSE 0 END),0)::text revenue,
@@ -192,30 +192,30 @@ export async function computeDayReport(opts: {
                 COUNT(*) FILTER (WHERE p.purchase_price_ht>0)::text lines_with_cost
            FROM sale_lines sl JOIN sales s ON s.id=sl.sale_id
            LEFT JOIN products p ON p.id=sl.product_id
-          WHERE s.store_id=$2 AND s.organization_id=$1 AND s.status='validated' AND s.validated_at::date=$3::date`, [...P]),
+          WHERE s.store_id=$2 AND s.organization_id=$1 AND s.status='validated' AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date=$3::date`, [...P]),
       query<{ opening: string; ins: string; outs: string; deposits: string; refunds: string }>(
         `SELECT COALESCE(SUM(cs.opening_float),0)::text opening,
                 COALESCE((SELECT SUM(cm.amount) FROM cash_movements cm WHERE cm.cash_session_id IN
-                          (SELECT id FROM cash_sessions WHERE store_id=$2 AND opened_at::date=$3::date) AND cm.movement_type='in'),0)::text ins,
+                          (SELECT id FROM cash_sessions WHERE store_id=$2 AND (opened_at AT TIME ZONE 'Europe/Paris')::date=$3::date) AND cm.movement_type='in'),0)::text ins,
                 COALESCE((SELECT SUM(cm.amount) FROM cash_movements cm WHERE cm.cash_session_id IN
-                          (SELECT id FROM cash_sessions WHERE store_id=$2 AND opened_at::date=$3::date) AND cm.movement_type='out'),0)::text outs,
+                          (SELECT id FROM cash_sessions WHERE store_id=$2 AND (opened_at AT TIME ZONE 'Europe/Paris')::date=$3::date) AND cm.movement_type='out'),0)::text outs,
                 COALESCE((SELECT SUM(cm.amount) FROM cash_movements cm WHERE cm.cash_session_id IN
-                          (SELECT id FROM cash_sessions WHERE store_id=$2 AND opened_at::date=$3::date) AND cm.movement_type='out' AND ${depositReasonSql('cm.reason')}),0)::text deposits,
+                          (SELECT id FROM cash_sessions WHERE store_id=$2 AND (opened_at AT TIME ZONE 'Europe/Paris')::date=$3::date) AND cm.movement_type='out' AND ${depositReasonSql('cm.reason')}),0)::text deposits,
                 -- Remboursements espèces (retours) : même règle que Ma Journée
                 -- (sales/today/route.ts) pour que les deux écrans s'accordent.
                 COALESCE((SELECT SUM(cm.amount) FROM cash_movements cm WHERE cm.cash_session_id IN
-                          (SELECT id FROM cash_sessions WHERE store_id=$2 AND opened_at::date=$3::date) AND cm.movement_type='out' AND cm.reason ILIKE 'Remboursement%'),0)::text refunds
-           FROM cash_sessions cs WHERE cs.organization_id=$1 AND cs.store_id=$2 AND cs.opened_at::date=$3::date`, [...P]),
+                          (SELECT id FROM cash_sessions WHERE store_id=$2 AND (opened_at AT TIME ZONE 'Europe/Paris')::date=$3::date) AND cm.movement_type='out' AND cm.reason ILIKE 'Remboursement%'),0)::text refunds
+           FROM cash_sessions cs WHERE cs.organization_id=$1 AND cs.store_id=$2 AND (cs.opened_at AT TIME ZONE 'Europe/Paris')::date=$3::date`, [...P]),
       query<{ opened_at: string | null; closed_at: string | null }>(
         `SELECT MIN(opened_at)::text opened_at, MAX(closed_at)::text closed_at
-           FROM cash_sessions WHERE organization_id=$1 AND store_id=$2 AND opened_at::date=$3::date`, [...P]),
+           FROM cash_sessions WHERE organization_id=$1 AND store_id=$2 AND (opened_at AT TIME ZONE 'Europe/Paris')::date=$3::date`, [...P]),
       query<{ n: string }>(
         `SELECT COUNT(*)::text n FROM daily_closures WHERE organization_id=$1 AND store_id=$2 AND business_date < $3::date`, [...P]),
       // Règlements de soldes « en compte » encaissés en caisse (par mode).
       query<{ method: string; label: string | null; cnt: string; total: string }>(
         `SELECT method, label, COUNT(*)::text cnt, SUM(amount)::text total
            FROM account_settlement_payments
-          WHERE store_id=$2 AND organization_id=$1 AND created_at::date=$3::date
+          WHERE store_id=$2 AND organization_id=$1 AND (created_at AT TIME ZONE 'Europe/Paris')::date=$3::date
           GROUP BY method, label ORDER BY SUM(amount) DESC`, [...P],
       ).catch(() => ({ rows: [] as { method: string; label: string | null; cnt: string; total: string }[] })),
       // Carte cadeau/bon d'achat achetée en ligne (Stripe), encaissement
@@ -226,7 +226,7 @@ export async function computeDayReport(opts: {
            FROM pending_store_operations pso
           WHERE pso.organization_id=$1 AND pso.store_id=$2 AND pso.kind='online_gift_card'
             AND pso.cash_session_id IN (
-              SELECT id FROM cash_sessions WHERE store_id=$2 AND opened_at::date=$3::date
+              SELECT id FROM cash_sessions WHERE store_id=$2 AND (opened_at AT TIME ZONE 'Europe/Paris')::date=$3::date
             )`, [...P],
       ).catch(() => ({ rows: [] as { total_cents: string }[] })),
       loadOpeningFloat(org, store),

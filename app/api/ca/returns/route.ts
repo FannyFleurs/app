@@ -44,7 +44,7 @@ export async function GET(req: Request) {
          LEFT JOIN sales s ON s.id = cn.sale_id
         WHERE cn.organization_id = $1
           AND cn.status <> 'cancelled'
-          AND cn.created_at::date BETWEEN $2::date AND $3::date
+          AND (cn.created_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date
           ${storeFilter}`,
       args,
     );
@@ -62,7 +62,7 @@ export async function GET(req: Request) {
          LEFT JOIN stores st ON st.id = s.store_id
         WHERE cn.organization_id = $1
           AND cn.status <> 'cancelled'
-          AND cn.created_at::date BETWEEN $2::date AND $3::date
+          AND (cn.created_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date
           ${storeFilter}
         ORDER BY cn.created_at DESC
         LIMIT 50`,

@@ -28,8 +28,10 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const storeId = url.searchParams.get('store_id') || null;
 
-  // Fenêtre : hier (en retard) → aujourd'hui + 5 jours.
-  const windowSql = `BETWEEN (CURRENT_DATE - 1) AND (CURRENT_DATE + 5)`;
+  // Fenêtre : hier (en retard) → aujourd'hui + 5 jours. Bornes calculées en
+  // Europe/Paris (pas CURRENT_DATE, qui tombe en UTC) : sinon une commande
+  // demandée tôt le matin (avant le décalage horaire) sortait de la fenêtre.
+  const windowSql = `BETWEEN ((now() AT TIME ZONE 'Europe/Paris')::date - 1) AND ((now() AT TIME ZONE 'Europe/Paris')::date + 5)`;
 
   // 1) Commandes différées
   const storeFilterO = storeId ? 'AND o.store_id = $2' : '';
@@ -54,7 +56,7 @@ export async function GET(req: Request) {
        LEFT JOIN stores st ON st.id = o.store_id
       WHERE o.organization_id = $1
         AND o.status IN ('confirmed','in_preparation','ready')
-        AND o.requested_at::date ${windowSql}
+        AND (o.requested_at AT TIME ZONE 'Europe/Paris')::date ${windowSql}
         ${storeFilterO}
       ORDER BY o.requested_at ASC NULLS LAST
       LIMIT 200`,
@@ -115,7 +117,7 @@ export async function GET(req: Request) {
         WHERE s.organization_id = $1
           AND s.delivery_info IS NOT NULL
           AND COALESCE(s.prep_status, 'confirmed') IN ('confirmed','in_preparation','ready')
-          AND ((s.delivery_info->>'requested_at')::timestamptz)::date ${windowSql}
+          AND ((s.delivery_info->>'requested_at')::timestamptz AT TIME ZONE 'Europe/Paris')::date ${windowSql}
           ${storeFilterS}
         ORDER BY (s.delivery_info->>'requested_at')::timestamptz ASC
         LIMIT 200`,

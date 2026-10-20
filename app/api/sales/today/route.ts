@@ -63,7 +63,7 @@ export async function GET(req: Request) {
        LEFT JOIN customers c ON c.id = s.customer_id
       WHERE s.organization_id = $1
         AND s.status IN ('validated', 'cancelled_by_credit_note')
-        AND s.validated_at::date = COALESCE($2::date, CURRENT_DATE)
+        AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date = COALESCE($2::date, (now() AT TIME ZONE 'Europe/Paris')::date)
         AND ($3::uuid IS NULL OR s.store_id = $3)
       ORDER BY s.validated_at DESC`,
     [g.user.organizationId, date, storeId],
@@ -77,7 +77,7 @@ export async function GET(req: Request) {
        FROM credit_notes cn
       WHERE cn.organization_id = $1
         AND cn.status <> 'cancelled'
-        AND cn.created_at::date = COALESCE($2::date, CURRENT_DATE)
+        AND (cn.created_at AT TIME ZONE 'Europe/Paris')::date = COALESCE($2::date, (now() AT TIME ZONE 'Europe/Paris')::date)
         AND ($3::uuid IS NULL OR cn.sale_id IN (
               SELECT id FROM sales WHERE store_id = $3))`,
     [g.user.organizationId, date, storeId],
@@ -90,7 +90,7 @@ export async function GET(req: Request) {
        JOIN sales s ON s.id = p.sale_id
       WHERE s.organization_id = $1
         AND s.status = 'validated'
-        AND s.validated_at::date = COALESCE($2::date, CURRENT_DATE)
+        AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date = COALESCE($2::date, (now() AT TIME ZONE 'Europe/Paris')::date)
         AND ($3::uuid IS NULL OR s.store_id = $3)
         AND p.method = 'cash'`,
     [g.user.organizationId, date, storeId],
@@ -100,7 +100,7 @@ export async function GET(req: Request) {
        FROM cash_movements cm
        JOIN cash_sessions cs ON cs.id = cm.cash_session_id
       WHERE cs.organization_id = $1
-        AND cs.opened_at::date = COALESCE($2::date, CURRENT_DATE)
+        AND (cs.opened_at AT TIME ZONE 'Europe/Paris')::date = COALESCE($2::date, (now() AT TIME ZONE 'Europe/Paris')::date)
         AND ($3::uuid IS NULL OR cs.store_id = $3)
         AND cm.movement_type = 'out'
         AND ${depositReasonSql('cm.reason')}`,
@@ -112,7 +112,7 @@ export async function GET(req: Request) {
        FROM cash_movements cm
        JOIN cash_sessions cs ON cs.id = cm.cash_session_id
       WHERE cs.organization_id = $1
-        AND cs.opened_at::date = COALESCE($2::date, CURRENT_DATE)
+        AND (cs.opened_at AT TIME ZONE 'Europe/Paris')::date = COALESCE($2::date, (now() AT TIME ZONE 'Europe/Paris')::date)
         AND ($3::uuid IS NULL OR cs.store_id = $3)
         AND cm.movement_type = 'out'
         AND cm.reason ILIKE 'Remboursement%'`,
@@ -127,18 +127,18 @@ export async function GET(req: Request) {
             COALESCE((SELECT SUM(cm.amount) FROM cash_movements cm
                        WHERE cm.cash_session_id IN (SELECT id FROM cash_sessions
                               WHERE organization_id = $1
-                                AND opened_at::date = COALESCE($2::date, CURRENT_DATE)
+                                AND (opened_at AT TIME ZONE 'Europe/Paris')::date = COALESCE($2::date, (now() AT TIME ZONE 'Europe/Paris')::date)
                                 AND ($3::uuid IS NULL OR store_id = $3))
                          AND cm.movement_type = 'in'), 0)::text AS ins,
             COALESCE((SELECT SUM(cm.amount) FROM cash_movements cm
                        WHERE cm.cash_session_id IN (SELECT id FROM cash_sessions
                               WHERE organization_id = $1
-                                AND opened_at::date = COALESCE($2::date, CURRENT_DATE)
+                                AND (opened_at AT TIME ZONE 'Europe/Paris')::date = COALESCE($2::date, (now() AT TIME ZONE 'Europe/Paris')::date)
                                 AND ($3::uuid IS NULL OR store_id = $3))
                          AND cm.movement_type = 'out'), 0)::text AS outs
        FROM cash_sessions cs
       WHERE cs.organization_id = $1
-        AND cs.opened_at::date = COALESCE($2::date, CURRENT_DATE)
+        AND (cs.opened_at AT TIME ZONE 'Europe/Paris')::date = COALESCE($2::date, (now() AT TIME ZONE 'Europe/Paris')::date)
         AND ($3::uuid IS NULL OR cs.store_id = $3)`,
     [g.user.organizationId, date, storeId],
   ).catch(() => ({ rows: [{ opening: '0', ins: '0', outs: '0' }] }));
@@ -160,11 +160,11 @@ export async function GET(req: Request) {
     `SELECT COALESCE(
         (SELECT MIN(opened_at) FROM cash_sessions
           WHERE organization_id = $1
-            AND opened_at::date = COALESCE($2::date, CURRENT_DATE)
+            AND (opened_at AT TIME ZONE 'Europe/Paris')::date = COALESCE($2::date, (now() AT TIME ZONE 'Europe/Paris')::date)
             AND ($3::uuid IS NULL OR store_id = $3)),
         (SELECT opened_at FROM cash_sessions
           WHERE organization_id = $1 AND status = 'open'
-            AND opened_at::date <= COALESCE($2::date, CURRENT_DATE)
+            AND (opened_at AT TIME ZONE 'Europe/Paris')::date <= COALESCE($2::date, (now() AT TIME ZONE 'Europe/Paris')::date)
             AND ($3::uuid IS NULL OR store_id = $3)
           ORDER BY opened_at DESC LIMIT 1)
       ) AS opened_at`,

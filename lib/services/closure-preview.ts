@@ -71,7 +71,7 @@ export async function computeClosurePreview(storeId: string, date: string): Prom
             COALESCE(SUM(sl.discount_amount) FILTER (WHERE ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}), 0)::text AS discount
        FROM sales s
        LEFT JOIN sale_lines sl ON sl.sale_id = s.id
-      WHERE s.store_id = $1 AND s.status='validated' AND s.validated_at::date = $2::date
+      WHERE s.store_id = $1 AND s.status='validated' AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date = $2::date
         AND ($3::timestamptz IS NULL OR s.validated_at > $3)`,
     [storeId, date, periodStart],
   );
@@ -83,7 +83,7 @@ export async function computeClosurePreview(storeId: string, date: string): Prom
             SUM(sl.line_ttc)::text AS ttc
        FROM sale_lines sl
        JOIN sales s ON s.id = sl.sale_id
-      WHERE s.store_id = $1 AND s.status='validated' AND s.validated_at::date = $2::date
+      WHERE s.store_id = $1 AND s.status='validated' AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date = $2::date
         AND ($3::timestamptz IS NULL OR s.validated_at > $3)
         AND ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}
       GROUP BY sl.tax_rate ORDER BY sl.tax_rate DESC`,
@@ -94,7 +94,7 @@ export async function computeClosurePreview(storeId: string, date: string): Prom
     `SELECT p.method, SUM(p.amount)::text AS total
        FROM payments p
        JOIN sales s ON s.id = p.sale_id
-      WHERE s.store_id = $1 AND s.status='validated' AND s.validated_at::date = $2::date
+      WHERE s.store_id = $1 AND s.status='validated' AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date = $2::date
         AND ($3::timestamptz IS NULL OR s.validated_at > $3)
       GROUP BY p.method ORDER BY p.method`,
     [storeId, date, periodStart],
@@ -107,7 +107,7 @@ export async function computeClosurePreview(storeId: string, date: string): Prom
           SELECT SUM(cm.amount) FROM cash_movements cm
            JOIN cash_sessions cs2 ON cs2.id = cm.cash_session_id
           WHERE cs2.store_id = $1
-            AND cm.created_at::date = $2::date
+            AND (cm.created_at AT TIME ZONE 'Europe/Paris')::date = $2::date
             AND ($3::timestamptz IS NULL OR cm.created_at > $3)
             AND cm.movement_type = 'in'
         ), 0)::text AS ins,
@@ -115,12 +115,12 @@ export async function computeClosurePreview(storeId: string, date: string): Prom
           SELECT SUM(cm.amount) FROM cash_movements cm
            JOIN cash_sessions cs2 ON cs2.id = cm.cash_session_id
           WHERE cs2.store_id = $1
-            AND cm.created_at::date = $2::date
+            AND (cm.created_at AT TIME ZONE 'Europe/Paris')::date = $2::date
             AND ($3::timestamptz IS NULL OR cm.created_at > $3)
             AND cm.movement_type = 'out'
         ), 0)::text AS outs
        FROM cash_sessions cs
-      WHERE cs.store_id = $1 AND cs.opened_at::date = $2::date
+      WHERE cs.store_id = $1 AND (cs.opened_at AT TIME ZONE 'Europe/Paris')::date = $2::date
         AND ($3::timestamptz IS NULL OR cs.opened_at > $3)`,
     [storeId, date, periodStart],
   );
@@ -143,7 +143,7 @@ export async function computeClosurePreview(storeId: string, date: string): Prom
       WHERE s.store_id = $1
         AND p.method = 'cash'
         AND s.status IN ('validated', 'cancelled_by_credit_note')
-        AND s.validated_at::date = $2::date
+        AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date = $2::date
         AND ($3::timestamptz IS NULL OR s.validated_at > $3)`,
     [storeId, date, periodStart],
   );
@@ -154,7 +154,7 @@ export async function computeClosurePreview(storeId: string, date: string): Prom
        FROM cash_movements cm
        JOIN cash_sessions cs ON cs.id = cm.cash_session_id
       WHERE cs.store_id = $1
-        AND cm.created_at::date = $2::date
+        AND (cm.created_at AT TIME ZONE 'Europe/Paris')::date = $2::date
         AND ($3::timestamptz IS NULL OR cm.created_at > $3)
         AND cm.movement_type = 'out'
         AND ${depositReasonSql('cm.reason')}`,
@@ -169,7 +169,7 @@ export async function computeClosurePreview(storeId: string, date: string): Prom
     `SELECT cm.id, cm.movement_type, cm.amount::text, cm.reason, cm.created_at
        FROM cash_movements cm
        JOIN cash_sessions cs ON cs.id = cm.cash_session_id
-      WHERE cs.store_id = $1 AND cs.opened_at::date = $2::date
+      WHERE cs.store_id = $1 AND (cs.opened_at AT TIME ZONE 'Europe/Paris')::date = $2::date
         AND ($3::timestamptz IS NULL OR cs.opened_at > $3)
       ORDER BY cm.created_at DESC`,
     [storeId, date, periodStart],
