@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatEUR } from '@/lib/services/money';
+import SaleDetailModal, { type SaleDetail } from '@/components/SaleDetailModal';
 
 interface Store { id: string; name: string }
 interface StoreSummary {
@@ -805,12 +806,14 @@ function formatShort(n: number): string {
 /* Tickets view (lecture seule)                                       */
 /* ------------------------------------------------------------------ */
 
+interface TicketRow {
+  id: string; receipt_number: string; validated_at: string;
+  total_ttc: string; user_full_name: string; customer_name: string | null;
+  account_created_at_sale?: boolean;
+}
+
 function TicketsView({ storeId, range }: { storeId: string; range: { from: string; to: string } }) {
-  const [items, setItems] = useState<Array<{
-    id: string; receipt_number: string; validated_at: string;
-    total_ttc: string; user_full_name: string; customer_name: string | null;
-    account_created_at_sale?: boolean;
-  }>>([]);
+  const [items, setItems] = useState<TicketRow[]>([]);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     void (async () => {
@@ -823,6 +826,25 @@ function TicketsView({ storeId, range }: { storeId: string; range: { from: strin
     })();
   }, [storeId, range.from, range.to]);
 
+  // Détail d'une vente en modale (mêmes articles/récap/modes de règlement
+  // que la modale du BO Ventes) — au clic sur une ligne de ticket.
+  const [openRow, setOpenRow] = useState<TicketRow | null>(null);
+  const [detail, setDetail] = useState<SaleDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+
+  async function openSale(t: TicketRow) {
+    setOpenRow(t);
+    setDetail(null);
+    setDetailLoading(true);
+    try {
+      const r = await fetch(`/api/sales/${t.id}`);
+      if (r.ok) setDetail(await r.json() as SaleDetail);
+    } finally {
+      setDetailLoading(false);
+    }
+  }
+  function closeSale() { setOpenRow(null); setDetail(null); }
+
   return (
     <div className="px-4 py-4 space-y-3">
       <h2 className="text-lg font-semibold">Tickets</h2>
@@ -834,7 +856,9 @@ function TicketsView({ storeId, range }: { storeId: string; range: { from: strin
         <div className="rounded-2xl bg-white border border-border overflow-hidden">
           <ul className="divide-y divide-border">
             {items.map((t) => (
-              <li key={t.id} className="p-3 flex items-center gap-3">
+              <li key={t.id}
+                  onClick={() => void openSale(t)}
+                  className="p-3 flex items-center gap-3 cursor-pointer hover:bg-gray-50">
                 <div className="flex-1 min-w-0">
                   <div className="font-mono text-sm">{t.receipt_number}</div>
                   <div className="text-xs text-ink-soft truncate">
@@ -861,6 +885,21 @@ function TicketsView({ storeId, range }: { storeId: string; range: { from: strin
             ))}
           </ul>
         </div>
+      )}
+
+      {openRow && (
+        <SaleDetailModal
+          row={{
+            receipt_number: openRow.receipt_number,
+            validated_at: openRow.validated_at,
+            cashier: openRow.user_full_name,
+            customer: openRow.customer_name,
+          }}
+          detail={detail}
+          loading={detailLoading}
+          onClose={closeSale}
+          onNotesUpdated={(notes) => setDetail((prev) => (prev ? { ...prev, sale: { ...prev.sale, notes } } : prev))}
+        />
       )}
     </div>
   );
