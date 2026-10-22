@@ -68,6 +68,49 @@ export function buildGiftCardNotificationEmailHtml(args: GiftCardNotificationEma
   `);
 }
 
+export interface GiftCardRecipientEmailArgs {
+  organizationName: string;
+  recipientName: string;
+  buyerName: string;
+  amountLabel: string;
+  message?: string | null;
+}
+
+/**
+ * Email destiné au bénéficiaire lorsque l'acheteur choisit explicitement
+ * « Envoyer au bénéficiaire ». Le ton est celui d'un cadeau reçu : aucune
+ * formulation de confirmation d'achat n'est affichée au bénéficiaire.
+ */
+export function buildGiftCardRecipientEmailHtml(args: GiftCardRecipientEmailArgs): string {
+  const { organizationName, recipientName, buyerName, amountLabel, message } = args;
+  const messageBlock = message
+    ? `<tr><td style="padding:0 32px 20px;">`
+      + `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F3F7F4;border-radius:10px;">`
+      + `<tr><td style="padding:16px 20px;">`
+      + `<p style="margin:0 0 6px;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#5A625E;">Un petit mot de ${escapeHtml(buyerName)}</p>`
+      + `<p style="margin:0;font-size:14px;line-height:1.6;color:#333333;font-style:italic;">« ${escapeHtml(message)} »</p>`
+      + `</td></tr></table></td></tr>`
+    : '';
+  return renderEmailShell(organizationName, `
+    <tr><td style="padding:32px 32px 4px;">
+      <h1 style="margin:0;font-size:20px;color:#14211D;">Une carte cadeau pour vous</h1>
+    </td></tr>
+    <tr><td style="padding:8px 32px 20px;">
+      <p style="margin:0;font-size:14px;line-height:1.6;color:#333333;">
+        Bonjour ${escapeHtml(recipientName)}, <strong>${escapeHtml(buyerName)}</strong> a le plaisir de vous offrir
+        une carte cadeau ${escapeHtml(organizationName)} d'une valeur de <strong>${escapeHtml(amountLabel)}</strong>.
+      </p>
+    </td></tr>
+    ${messageBlock}
+    <tr><td style="padding:0 32px 24px;">
+      <p style="margin:0;font-size:13px;line-height:1.6;color:#5A625E;">
+        Votre carte cadeau est disponible en pièce jointe au format PDF. Conservez-la sur votre téléphone
+        ou imprimez-la : elle contient le code et toutes les informations utiles pour l'utiliser.
+      </p>
+    </td></tr>
+  `);
+}
+
 export interface BuyerConfirmationArgs {
   organizationName: string;
   amountLabel: string;
