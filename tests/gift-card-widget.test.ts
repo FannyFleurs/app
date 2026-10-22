@@ -152,9 +152,10 @@ describe('Config', () => {
     expect(buttons[0]!.textContent).toContain('25');
   });
 
-  it("affiche le nom de l'organisation renvoyé par l'API", async () => {
+  it("n'affiche plus le nom de la boutique/organisation (retiré du widget — reste dans la config)", async () => {
     const el = await mountReady();
-    expect(q(el, '#hp-org-name').textContent).toBe('Organisation A');
+    expect(q(el, '#hp-org-name')).toBeNull();
+    expect(shadow(el).textContent).not.toContain('Organisation A');
   });
 
   it('affiche le champ montant libre seulement si allow_custom_amount=true', async () => {
@@ -423,8 +424,6 @@ describe('Multi-tenant', () => {
   it("widget A et widget B affichent chacun leur propre configuration, sans mélange", async () => {
     const elA = await mountReady({ 'data-key': 'hp_gc_AAAA' });
     const elB = await mountReady({ 'data-key': 'hp_gc_BBBB' });
-    expect(q(elA, '#hp-org-name').textContent).toBe('Organisation A');
-    expect(q(elB, '#hp-org-name').textContent).toBe('Organisation B');
     expect(shadow(elA).querySelectorAll('.hp-preset').length).toBe(4);
     expect(shadow(elB).querySelectorAll('.hp-preset').length).toBe(2);
   });
@@ -442,13 +441,15 @@ describe('Multi-tenant', () => {
 });
 
 describe('XSS — aucune injection HTML depuis des données serveur/utilisateur', () => {
-  it("organization.name contenant du HTML n'est jamais interprété", async () => {
+  it("organization.name contenant du HTML n'est jamais interprété (n'est plus affiché du tout)", async () => {
     configByKey.hp_gc_AAAA = {
       status: 200,
       body: { ...CONFIG_A, organization: { name: '<img src=x onerror="window.__xss=1">' } },
     };
     const el = await mountReady();
-    expect(q(el, '#hp-org-name').textContent).toBe('<img src=x onerror="window.__xss=1">');
+    // Le widget ne rend plus organization.name nulle part : rien à
+    // interpréter comme HTML, par construction.
+    expect(q(el, '#hp-org-name')).toBeNull();
     expect(shadow(el).innerHTML).not.toContain('<img');
     expect((window as unknown as { __xss?: number }).__xss).toBeUndefined();
   });
@@ -555,7 +556,6 @@ describe('Mise en page — largeur et centrage (correctif décalage à gauche)',
 
   it('aucun changement fonctionnel : le parcours complet (config -> formulaire -> checkout) reste inchangé', async () => {
     const el = await mountReady();
-    expect(q(el, '#hp-org-name').textContent).toBe('Organisation A');
     await fillValidForm(el);
     q(el, '#hp-form').dispatchEvent(new Event('submit', { cancelable: true }));
     await flush();

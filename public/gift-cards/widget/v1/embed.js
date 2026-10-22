@@ -169,7 +169,6 @@
     + '.hp-section:first-child{margin-top:0;}'
     + '.hp-h{font-size:14px;font-weight:700;margin-bottom:6px;color:var(--hp-text);}'
     + '.hp-sub{font-size:13px;color:#5A625E;margin-top:-4px;margin-bottom:10px;}'
-    + '.hp-org{font-size:13px;font-weight:600;letter-spacing:.02em;text-transform:uppercase;color:var(--hp-primary);margin-bottom:4px;}'
     + '.hp-title{font-size:19px;font-weight:700;margin-bottom:16px;}'
     // Grille 2x2 par défaut (mobile ET tablette étroite) ; 4 colonnes sur
     // une seule ligne dès que le widget dispose d'assez d'espace (voir la
@@ -283,7 +282,6 @@
     + '  </div>'
     + '  <form id="hp-form" class="hp-panel hp-hidden" novalidate>'
     + '    <div id="hp-recovered-banner" class="hp-banner hp-banner-cancel hp-hidden">Le paiement n’a pas été finalisé. Vos informations ont été conservées — vous pouvez réessayer.</div>'
-    + '    <div class="hp-org" id="hp-org-name"></div>'
     + '    <div class="hp-title">Carte cadeau</div>'
     + '    <div id="hp-form-error" class="hp-banner hp-banner-cancel hp-hidden" role="alert"></div>'
 
@@ -507,11 +505,9 @@
     this._fetchConfig().then(function (cfg) {
       if (!cfg) return; // _fetchConfig a déjà affiché l'état indisponible
       self._state.config = cfg;
-      // Identité affichée : la BOUTIQUE si la configuration en connaît une
-      // (cfg.store, ajouté par la résolution multi-boutiques), sinon repli
-      // sur l'organisation (intégrations non encore rattachées à une
-      // boutique précise) — jamais l'inverse. textContent -> jamais de HTML injecté.
-      self._el('hp-org-name').textContent = (cfg.store && cfg.store.name) || cfg.organization.name;
+      // Le nom de la boutique/organisation (cfg.store / cfg.organization)
+      // reste dans la configuration résolue mais n'est plus affiché dans le
+      // widget — modification purement visuelle, voir commit associé.
       self._renderPresets(cfg.gift_cards);
       self._el('hp-custom-wrap').classList.toggle('hp-hidden', !cfg.gift_cards.allow_custom_amount);
 
