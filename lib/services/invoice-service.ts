@@ -105,7 +105,16 @@ export class InvoiceService {
         ? joinPaymentMethods(payMethods.rows.map((p) => p.method))
         : null;
 
-      // Insertion de la facture (status=paid car la vente est encaissée)
+      // Statut initial : « payée » seulement si la vente est RÉELLEMENT
+      // encaissée (aucun règlement « en compte »). Une vente mise en compte,
+      // même facturée à l'unité (hors facture de période), reste une dette :
+      // la facture part « envoyée », comme pour createFromAccountSales — sans
+      // quoi elle s'affichait « FACTURE ACQUITTÉE » alors que le client doit
+      // encore régler.
+      const hasDeferredPayment = payMethods.rows.some((p) => p.method === 'deferred');
+      const invoiceStatus = hasDeferredPayment ? 'sent' : 'paid';
+      const invoicePaidAt = hasDeferredPayment ? null : paidAt;
+
       const inv = await client.query<{ id: string }>(
         `INSERT INTO invoices
            (organization_id, store_id, customer_id, sale_id, invoice_type,
@@ -114,7 +123,7 @@ export class InvoiceService {
             total_ht, total_tva, total_ttc, tva_breakdown,
             payment_terms, payment_method, paid_at, notes, validated_at)
          VALUES ($1,$2,$3,$4,'standard',
-                 $5,$6,'paid',
+                 $5,$6,$18,
                  $7,$8,$9,
                  $10,$11,$12,$13,
                  $14,$15,$16,$17, now())
@@ -124,7 +133,8 @@ export class InvoiceService {
           number, seq.toString(),
           issueDate, serviceDate, dueDate,
           s.total_ht, s.total_tva, s.total_ttc, JSON.stringify(s.tva_breakdown),
-          paymentTermsText, paymentMethod, paidAt, s.notes ?? null,
+          paymentTermsText, paymentMethod, invoicePaidAt, s.notes ?? null,
+          invoiceStatus,
         ],
       );
 
