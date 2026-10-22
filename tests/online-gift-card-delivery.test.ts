@@ -37,7 +37,10 @@ interface FakeEmail {
 }
 
 const organizations = [{ id: 'org-a-uuid', name: 'Atelier Sauge' }, { id: 'org-b-uuid', name: 'Fanny Fleurs' }];
-const stores = [{ id: 'store-pv-uuid', organization_id: 'org-a-uuid', name: 'Plante Verte' }];
+const stores = [
+  { id: 'store-pv-uuid', organization_id: 'org-a-uuid', name: 'Plante Verte' },
+  { id: 'store-ff-uuid', organization_id: 'org-a-uuid', name: 'Fanny Fleurs' },
+];
 const giftCards = [{
   id: 'gift-card-1', organization_id: 'org-a-uuid', code: '2900000000015',
   issued_at: '2026-01-10T00:00:00.000Z', expires_at: '2027-01-10T00:00:00.000Z',
@@ -90,6 +93,11 @@ const queryMock = vi.fn(async (text: string, params: unknown[] = []) => {
     const storeId = params[0] as string;
     const store = stores.find((s) => s.id === storeId);
     return { rows: store ? [{ name: store.name }] : [], rowCount: store ? 1 : 0 };
+  }
+  if (text.includes('SELECT DISTINCT name FROM stores')) {
+    const organizationId = params[0] as string;
+    const names = [...new Set(stores.filter((s) => s.organization_id === organizationId).map((s) => s.name))].sort();
+    return { rows: names.map((name) => ({ name })), rowCount: names.length };
   }
   if (text.includes("SET delivery_status = 'sent'")) {
     const [orderId] = params as [string];
@@ -360,7 +368,19 @@ describe('multi-tenant', () => {
     expect(sentEmails[0]!.html).toContain('Plante Verte');
     expect(sentEmails[0]!.html).not.toContain('Atelier Sauge');
     const pdfText = extractPdfTextCompact(sentEmails[0]!.attachments![0]!.content);
-    expect(pdfText).toContain('PLANTEVERTE');
+    expect(pdfText).toContain('PlanteVerte');
     expect(sentEmails[0]!.attachments![0]!.name).toContain('plante-verte');
+  });
+
+  it("le PDF liste TOUTES les boutiques ACTIVES de l'organisation (calculé à chaque envoi, jamais codé en dur) — une carte achetée dans l'une est valable dans toutes", async () => {
+    order().store_id = 'store-pv-uuid'; // vendue chez Plante Verte…
+    await deliverOnlineGiftCardOrder('order-1');
+    // …mais la phrase de validité du PDF liste bien les DEUX boutiques de
+    // l'organisation (Plante Verte ET Fanny Fleurs — voir le fixture
+    // `stores`), pas seulement celle où la vente a eu lieu.
+    const text = extractPdfText(sentEmails[0]!.attachments![0]!.content).toLowerCase();
+    expect(text).toContain('plante verte');
+    expect(text).toContain('fanny fleurs');
+    expect(text).toMatch(/utilisable dans nos boutiques/);
   });
 });

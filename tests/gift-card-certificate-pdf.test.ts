@@ -34,7 +34,7 @@ describe('Génération PDF — cas nominal', () => {
 
   it("contient le nom de l'organisation", async () => {
     const buf = await renderGiftCardCertificatePdf(validArgs({ organizationName: 'Plante Verte' }));
-    expect(extractPdfText(buf)).toContain('PLANTE VERTE'); // affiché en majuscules dans le bandeau
+    expect(extractPdfText(buf)).toContain('Plante Verte'); // casse normale dans le panneau, comme la carte physique
   });
 
   it('contient le montant', async () => {
@@ -72,10 +72,11 @@ describe('Génération PDF — cas nominal', () => {
   it("affiche la date d'expiration UNIQUEMENT si elle est fournie (jamais inventée)", async () => {
     const withExpiry = extractPdfText(await renderGiftCardCertificatePdf(validArgs({ expiresAt: '2027-06-01T00:00:00.000Z' })));
     expect(withExpiry).toContain('01/06/2027');
-    expect(withExpiry).toMatch(/valable/i);
+    expect(withExpiry).toMatch(/expire/i);
 
     const withoutExpiry = extractPdfText(await renderGiftCardCertificatePdf(validArgs({ expiresAt: null })));
-    expect(withoutExpiry).not.toMatch(/valable/i);
+    expect(withoutExpiry).not.toContain('2027');
+    expect(withoutExpiry).not.toMatch(/expire le/i);
   });
 
   it("mentionne l'utilisation en boutique sans jamais citer de store_id ou de boutique spécifique", async () => {
@@ -134,9 +135,58 @@ describe('Multi-tenant', () => {
   it("le PDF ne code en dur aucune enseigne : le nom affiché est TOUJOURS celui fourni en argument", async () => {
     const orgA = extractPdfText(await renderGiftCardCertificatePdf(validArgs({ organizationName: 'Plante Verte' })));
     const orgB = extractPdfText(await renderGiftCardCertificatePdf(validArgs({ organizationName: 'Fanny Fleurs' })));
-    expect(orgA).toContain('PLANTE VERTE');
-    expect(orgA).not.toContain('FANNY FLEURS');
-    expect(orgB).toContain('FANNY FLEURS');
-    expect(orgB).not.toContain('PLANTE VERTE');
+    expect(orgA).toContain('Plante Verte');
+    expect(orgA).not.toContain('Fanny Fleurs');
+    expect(orgB).toContain('Fanny Fleurs');
+    expect(orgB).not.toContain('Plante Verte');
+  });
+
+  it("une longue raison sociale tient quand même sur une seule ligne (taille réduite automatiquement)", async () => {
+    const buf = await renderGiftCardCertificatePdf(validArgs({ organizationName: 'Atelier Floral des Trois Rivières & Jardineries Associées' }));
+    expect(extractPdfText(buf)).toContain('Atelier Floral des Trois Rivières & Jardineries Associées');
+  });
+});
+
+describe('Acheteur (« De la part de »)', () => {
+  it('affiche le nom de l’acheteur quand il est fourni', async () => {
+    const buf = await renderGiftCardCertificatePdf(validArgs({ buyerName: 'Camille Dupont' }));
+    const text = extractPdfText(buf);
+    expect(text).toContain('Camille Dupont');
+    expect(text.toLowerCase()).toContain('de la part de');
+  });
+
+  it('omet proprement le champ quand l’acheteur est absent (carte émise avant cette évolution)', async () => {
+    const buf = await renderGiftCardCertificatePdf(validArgs({ buyerName: null }));
+    expect(extractPdfText(buf).toLowerCase()).not.toContain('de la part de');
+  });
+});
+
+describe('Boutiques où la carte est utilisable (calculé dynamiquement par l’appelant)', () => {
+  it('une seule boutique : phrase au singulier, jamais "boutiques" au pluriel pour un seul nom', async () => {
+    const buf = await renderGiftCardCertificatePdf(validArgs({ storeNames: ['Plante Verte'] }));
+    const text = extractPdfText(buf).toLowerCase();
+    expect(text).toContain('en boutique plante verte');
+  });
+
+  it('plusieurs boutiques : toutes listées, jointes par une virgule puis "et"', async () => {
+    const buf = await renderGiftCardCertificatePdf(validArgs({
+      organizationName: 'Fanny Fleurs',
+      storeNames: ['Fanny Fleurs', 'Plante Verte'],
+    }));
+    const text = extractPdfText(buf).toLowerCase();
+    expect(text).toContain('fanny fleurs et plante verte');
+  });
+
+  it('trois boutiques ou plus : toutes listées (dédupliquées en amont par l’appelant)', async () => {
+    const buf = await renderGiftCardCertificatePdf(validArgs({
+      storeNames: ['Fanny Fleurs', 'Plante Verte', 'Fanny Fleurs Centre'],
+    }));
+    const text = extractPdfText(buf).toLowerCase();
+    expect(text).toContain('fanny fleurs, plante verte et fanny fleurs centre');
+  });
+
+  it('aucune liste fournie : repli sur le nom d’organisation seul (comportement historique)', async () => {
+    const buf = await renderGiftCardCertificatePdf(validArgs({ organizationName: 'Plante Verte', storeNames: undefined }));
+    expect(extractPdfText(buf).toLowerCase()).toContain('boutiques plante verte');
   });
 });

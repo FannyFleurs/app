@@ -119,6 +119,21 @@ export async function deliverOnlineGiftCardOrder(orderId: string): Promise<void>
       if (storeRes.rows[0]) displayName = storeRes.rows[0].name;
     }
 
+    // Boutiques où la carte est utilisable (PDF uniquement, phrase « Cette
+    // carte cadeau est utilisable dans… ») : TOUTES les boutiques actives
+    // de l'ORGANISATION — une carte achetée dans l'une est utilisable dans
+    // toutes —, calculées à chaque génération, jamais codées en dur.
+    // `DISTINCT` déduplique les boutiques homonymes (ex. deux « Fanny
+    // Fleurs ») : la phrase liste des ENSEIGNES, pas un nombre de points de
+    // vente.
+    const storesRes = await query<{ name: string }>(
+      `SELECT DISTINCT name FROM stores
+        WHERE organization_id = $1 AND is_active = TRUE
+        ORDER BY name`,
+      [order.organization_id],
+    );
+    const storeNames = storesRes.rows.map((r) => r.name);
+
     const amountLabel = formatEUR(order.amount_cents / 100);
     const buyerEmail = normalizeEmail(order.buyer_email);
     const recipientEmail = order.recipient_email ? normalizeEmail(order.recipient_email) : null;
@@ -135,10 +150,12 @@ export async function deliverOnlineGiftCardOrder(orderId: string): Promise<void>
       organizationName: displayName,
       amountCents: order.amount_cents,
       holderName: order.recipient_name,
+      buyerName: order.buyer_name,
       code: gc.code,
       message: order.message,
       issuedAt: gc.issued_at,
       expiresAt: gc.expires_at,
+      storeNames,
     });
     const pdfAttachment: EmailAttachment = { name: attachmentFileName(displayName, gc.code), content: pdfBuffer };
 

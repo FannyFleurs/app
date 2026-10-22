@@ -181,6 +181,11 @@ const queryMock = vi.fn(async (text: string, params: unknown[] = []) => {
       rowCount: 1,
     };
   }
+  if (text.includes('SELECT DISTINCT name FROM stores')) {
+    // Aucune boutique simulée dans ce fichier (les commandes n'ont pas de
+    // store_id) : repli attendu sur le nom d'organisation seul côté PDF.
+    return { rows: [], rowCount: 0 };
+  }
   if (text.includes("SET delivery_status = 'sent'")) {
     const [orderId] = params as [string];
     const row = orders.find((o) => o.id === orderId);
