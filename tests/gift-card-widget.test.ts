@@ -128,18 +128,21 @@ async function mountReady(attrs: Record<string, string> = { 'data-key': 'hp_gc_A
   return el;
 }
 
+function setValue(el: HTMLElement, selector: string, value: string) {
+  (q(el, selector) as HTMLInputElement).value = value;
+  q(el, selector).dispatchEvent(new Event('input'));
+}
+
 async function fillValidForm(el: HTMLElement, overrides: Record<string, string> = {}) {
   const presetBtn = q(el, '.hp-preset') as HTMLButtonElement;
   presetBtn.click();
-  (q(el, '#hp-recipient-name') as HTMLInputElement).value = overrides.recipientName ?? 'Guillaume Dupont';
-  q(el, '#hp-recipient-name').dispatchEvent(new Event('input'));
-  (q(el, '#hp-buyer-name') as HTMLInputElement).value = overrides.buyerName ?? 'Jonathan Frissong';
-  q(el, '#hp-buyer-name').dispatchEvent(new Event('input'));
-  (q(el, '#hp-buyer-email') as HTMLInputElement).value = overrides.buyerEmail ?? 'jonathan@example.com';
-  q(el, '#hp-buyer-email').dispatchEvent(new Event('input'));
+  setValue(el, '#hp-recipient-firstname', overrides.recipientFirstName ?? 'Guillaume');
+  setValue(el, '#hp-recipient-lastname', overrides.recipientLastName ?? 'Dupont');
+  setValue(el, '#hp-buyer-firstname', overrides.buyerFirstName ?? 'Jonathan');
+  setValue(el, '#hp-buyer-lastname', overrides.buyerLastName ?? 'Frissong');
+  setValue(el, '#hp-buyer-email', overrides.buyerEmail ?? 'jonathan@example.com');
   if (overrides.recipientEmail !== undefined) {
-    (q(el, '#hp-recipient-email') as HTMLInputElement).value = overrides.recipientEmail;
-    q(el, '#hp-recipient-email').dispatchEvent(new Event('input'));
+    setValue(el, '#hp-recipient-email', overrides.recipientEmail);
   }
 }
 
@@ -172,8 +175,10 @@ describe('Config', () => {
     custom.dispatchEvent(new Event('input'));
     // Renseigne les autres champs SANS cliquer de preset (cela effacerait le
     // montant libre saisi ci-dessus — voir _selectPreset dans embed.js).
-    (q(el, '#hp-recipient-name') as HTMLInputElement).value = 'Guillaume Dupont';
-    (q(el, '#hp-buyer-name') as HTMLInputElement).value = 'Jonathan Frissong';
+    (q(el, '#hp-recipient-firstname') as HTMLInputElement).value = 'Guillaume';
+    (q(el, '#hp-recipient-lastname') as HTMLInputElement).value = 'Dupont';
+    (q(el, '#hp-buyer-firstname') as HTMLInputElement).value = 'Jonathan';
+    (q(el, '#hp-buyer-lastname') as HTMLInputElement).value = 'Frissong';
     (q(el, '#hp-buyer-email') as HTMLInputElement).value = 'jonathan@example.com';
     q(el, '#hp-form').dispatchEvent(new Event('submit', { cancelable: true }));
     await flush();
@@ -190,10 +195,11 @@ describe('Config', () => {
 });
 
 describe('Formulaire — validations', () => {
-  it('recipient.name obligatoire', async () => {
+  it('recipient.name (prénom + nom) obligatoire', async () => {
     const el = await mountReady();
     (q(el, '.hp-preset') as HTMLButtonElement).click();
-    (q(el, '#hp-buyer-name') as HTMLInputElement).value = 'Jonathan';
+    (q(el, '#hp-buyer-firstname') as HTMLInputElement).value = 'Jonathan';
+    (q(el, '#hp-buyer-lastname') as HTMLInputElement).value = 'Frissong';
     (q(el, '#hp-buyer-email') as HTMLInputElement).value = 'jonathan@example.com';
     q(el, '#hp-form').dispatchEvent(new Event('submit', { cancelable: true }));
     await flush();
@@ -201,10 +207,24 @@ describe('Formulaire — validations', () => {
     expect(fetchCalls.some((c) => c.url.includes('/checkout'))).toBe(false);
   });
 
-  it('buyer.name et buyer.email obligatoires', async () => {
+  it('un prénom seul (sans nom) ne suffit pas pour le bénéficiaire', async () => {
     const el = await mountReady();
     (q(el, '.hp-preset') as HTMLButtonElement).click();
-    (q(el, '#hp-recipient-name') as HTMLInputElement).value = 'Guillaume';
+    (q(el, '#hp-recipient-firstname') as HTMLInputElement).value = 'Guillaume';
+    (q(el, '#hp-buyer-firstname') as HTMLInputElement).value = 'Jonathan';
+    (q(el, '#hp-buyer-lastname') as HTMLInputElement).value = 'Frissong';
+    (q(el, '#hp-buyer-email') as HTMLInputElement).value = 'jonathan@example.com';
+    q(el, '#hp-form').dispatchEvent(new Event('submit', { cancelable: true }));
+    await flush();
+    expect(q(el, '#hp-recipient-name-err').textContent).toBeTruthy();
+    expect(fetchCalls.some((c) => c.url.includes('/checkout'))).toBe(false);
+  });
+
+  it('buyer.name (prénom + nom) et buyer.email obligatoires', async () => {
+    const el = await mountReady();
+    (q(el, '.hp-preset') as HTMLButtonElement).click();
+    (q(el, '#hp-recipient-firstname') as HTMLInputElement).value = 'Guillaume';
+    (q(el, '#hp-recipient-lastname') as HTMLInputElement).value = 'Dupont';
     q(el, '#hp-form').dispatchEvent(new Event('submit', { cancelable: true }));
     await flush();
     expect(q(el, '#hp-buyer-name-err').textContent).toBeTruthy();
@@ -456,7 +476,10 @@ describe('XSS — aucune injection HTML depuis des données serveur/utilisateur'
 
   it("recipient.name contenant du HTML n'est jamais interprété (récapitulatif)", async () => {
     const el = await mountReady();
-    await fillValidForm(el, { recipientName: '<script>window.__xss2=1</script>' });
+    // Prénom vide + charge utile dans le nom : _fullName() recompose un nom
+    // complet strictement égal à la charge, sans espace parasite (voir
+    // _fullName dans embed.js), pour une comparaison exacte ci-dessous.
+    await fillValidForm(el, { recipientFirstName: '', recipientLastName: '<script>window.__xss2=1</script>' });
     expect(q(el, '#hp-recap-recipient').textContent).toBe('<script>window.__xss2=1</script>');
     expect(shadow(el).innerHTML).not.toContain('<script>window.__xss2');
     expect((window as unknown as { __xss2?: number }).__xss2).toBeUndefined();
@@ -624,10 +647,12 @@ describe('Disposition horizontale desktop/tablette (refonte largeur)', () => {
     const el = await mountReady();
     const grids = shadow(el).querySelectorAll('.hp-grid-2');
     expect(grids.length).toBe(2); // bénéficiaire + acheteur
-    // Chaque conteneur contient bien les deux champs attendus, dans l'ordre.
-    expect(grids[0]!.querySelector('#hp-recipient-name')).not.toBeNull();
+    // Chaque conteneur contient bien le duo prénom/nom et l'email attendus.
+    expect(grids[0]!.querySelector('#hp-recipient-firstname')).not.toBeNull();
+    expect(grids[0]!.querySelector('#hp-recipient-lastname')).not.toBeNull();
     expect(grids[0]!.querySelector('#hp-recipient-email')).not.toBeNull();
-    expect(grids[1]!.querySelector('#hp-buyer-name')).not.toBeNull();
+    expect(grids[1]!.querySelector('#hp-buyer-firstname')).not.toBeNull();
+    expect(grids[1]!.querySelector('#hp-buyer-lastname')).not.toBeNull();
     expect(grids[1]!.querySelector('#hp-buyer-email')).not.toBeNull();
 
     const wide = cssRuleInContainer(el, 560, '.hp-grid-2');
@@ -716,7 +741,8 @@ describe('Retour Stripe — annulation', () => {
     window.history.pushState({}, '', '/carte-cadeau');
     const el2 = await mountReady();
     expect(q(el2, '#hp-recovered-banner').classList.contains('hp-hidden')).toBe(false);
-    expect(q<HTMLInputElement>(el2, '#hp-recipient-name').value).toBe('Guillaume Dupont');
+    expect(q<HTMLInputElement>(el2, '#hp-recipient-firstname').value).toBe('Guillaume');
+    expect(q<HTMLInputElement>(el2, '#hp-recipient-lastname').value).toBe('Dupont');
     expect(q<HTMLInputElement>(el2, '#hp-buyer-email').value).toBe('jonathan@example.com');
     expect(q<HTMLTextAreaElement>(el2, '#hp-message').value).toBe('Petit mot');
   });
@@ -733,7 +759,7 @@ describe('Retour Stripe — annulation', () => {
   it('sans brouillon récent, le formulaire démarre vierge (pas de bandeau)', async () => {
     const el = await mountReady();
     expect(q(el, '#hp-recovered-banner').classList.contains('hp-hidden')).toBe(true);
-    expect(q<HTMLInputElement>(el, '#hp-recipient-name').value).toBe('');
+    expect(q<HTMLInputElement>(el, '#hp-recipient-firstname').value).toBe('');
   });
 });
 

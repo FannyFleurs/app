@@ -183,6 +183,11 @@
     + '.hp-preset[aria-pressed="true"]{border-color:var(--hp-primary);background:color-mix(in srgb, var(--hp-primary) 10%, white);}'
     + '.hp-field{margin-top:10px;}'
     + '.hp-field:first-child{margin-top:0;}'
+    // Prénom/Nom toujours côte à côte, y compris sur mobile (deux champs
+    // courts tiennent sans mal dès 320px) — contrairement à .hp-grid-2
+    // (Email), qui a besoin de toute la largeur sur mobile.
+    + '.hp-name-pair{display:flex;gap:8px;}'
+    + '.hp-name-pair>div{flex:1 1 0;min-width:0;}'
     // .hp-grid-2 : empilé par défaut (les .hp-field internes se comportent
     // exactement comme avant, marge du haut comprise) — devient une grille
     // à deux colonnes de même largeur dès que l'espace le permet, voir la
@@ -299,8 +304,16 @@
     + '      <div class="hp-h">2. Pour qui est la carte ?</div>'
     + '      <div class="hp-grid-2">'
     + '      <div class="hp-field">'
-    + '        <label for="hp-recipient-name">Nom du bénéficiaire *</label>'
-    + '        <input type="text" id="hp-recipient-name" autocomplete="off" maxlength="160" required aria-describedby="hp-recipient-name-err">'
+    + '        <div class="hp-name-pair">'
+    + '          <div>'
+    + '            <label for="hp-recipient-firstname">Prénom *</label>'
+    + '            <input type="text" id="hp-recipient-firstname" autocomplete="off" maxlength="70" required aria-describedby="hp-recipient-name-err">'
+    + '          </div>'
+    + '          <div>'
+    + '            <label for="hp-recipient-lastname">Nom *</label>'
+    + '            <input type="text" id="hp-recipient-lastname" autocomplete="off" maxlength="70" required aria-describedby="hp-recipient-name-err">'
+    + '          </div>'
+    + '        </div>'
     + '        <p id="hp-recipient-name-err" class="hp-err" role="alert"></p>'
     + '      </div>'
     + '      <div class="hp-field">'
@@ -315,8 +328,16 @@
     + '      <div class="hp-h">3. Vos informations</div>'
     + '      <div class="hp-grid-2">'
     + '      <div class="hp-field">'
-    + '        <label for="hp-buyer-name">Nom *</label>'
-    + '        <input type="text" id="hp-buyer-name" autocomplete="name" maxlength="160" required aria-describedby="hp-buyer-name-err">'
+    + '        <div class="hp-name-pair">'
+    + '          <div>'
+    + '            <label for="hp-buyer-firstname">Prénom *</label>'
+    + '            <input type="text" id="hp-buyer-firstname" autocomplete="given-name" maxlength="70" required aria-describedby="hp-buyer-name-err">'
+    + '          </div>'
+    + '          <div>'
+    + '            <label for="hp-buyer-lastname">Nom *</label>'
+    + '            <input type="text" id="hp-buyer-lastname" autocomplete="family-name" maxlength="70" required aria-describedby="hp-buyer-name-err">'
+    + '          </div>'
+    + '        </div>'
     + '        <p id="hp-buyer-name-err" class="hp-err" role="alert"></p>'
     + '      </div>'
     + '      <div class="hp-field">'
@@ -416,6 +437,15 @@
 
   proto._el = function (id) { return this._root.getElementById(id); };
 
+  /** Nom complet recomposé depuis les champs Prénom + Nom (jamais stocké
+   *  séparément côté serveur : le contrat API attend un seul champ `name`,
+   *  voir docs/api-public-gift-cards.md — inchangé par ce découpage). */
+  proto._fullName = function (prefix) {
+    var first = this._el('hp-' + prefix + '-firstname').value.trim();
+    var last = this._el('hp-' + prefix + '-lastname').value.trim();
+    return (first + ' ' + last).trim();
+  };
+
   proto._showPanel = function (name) {
     var panels = ['hp-loading', 'hp-unavailable', 'hp-success', 'hp-form'];
     for (var i = 0; i < panels.length; i++) {
@@ -442,9 +472,11 @@
       var d = {
         ts: Date.now(),
         amount: this._currentAmount(),
-        recipientName: this._el('hp-recipient-name').value,
+        recipientFirstName: this._el('hp-recipient-firstname').value,
+        recipientLastName: this._el('hp-recipient-lastname').value,
         recipientEmail: this._el('hp-recipient-email').value,
-        buyerName: this._el('hp-buyer-name').value,
+        buyerFirstName: this._el('hp-buyer-firstname').value,
+        buyerLastName: this._el('hp-buyer-lastname').value,
         buyerEmail: this._el('hp-buyer-email').value,
         message: this._el('hp-message').value,
         deliveryMode: this._state.deliveryMode,
@@ -474,7 +506,7 @@
     try {
       window.sessionStorage.setItem(this._intentKey(), JSON.stringify({
         deliveryMode: this._state.deliveryMode,
-        recipientName: this._el('hp-recipient-name').value,
+        recipientName: this._fullName('recipient'),
       }));
     } catch (e) { /* ignore */ }
   };
@@ -619,7 +651,7 @@
   proto._updateRecap = function () {
     var amount = this._currentAmount();
     this._el('hp-recap-amount').textContent = amount ? formatEUR(amount) : '—';
-    this._el('hp-recap-recipient').textContent = this._el('hp-recipient-name').value.trim() || '—';
+    this._el('hp-recap-recipient').textContent = this._fullName('recipient') || '—';
     this._el('hp-recap-delivery').textContent = this._state.deliveryMode === 'recipient' ? 'Envoyé au bénéficiaire' : 'Envoyé à moi-même';
     var msg = this._el('hp-message').value.trim();
     this._el('hp-recap-message-row').classList.toggle('hp-hidden', !msg);
@@ -635,9 +667,11 @@
   };
 
   proto._applyDraft = function (d) {
-    this._el('hp-recipient-name').value = d.recipientName || '';
+    this._el('hp-recipient-firstname').value = d.recipientFirstName || '';
+    this._el('hp-recipient-lastname').value = d.recipientLastName || '';
     this._el('hp-recipient-email').value = d.recipientEmail || '';
-    this._el('hp-buyer-name').value = d.buyerName || '';
+    this._el('hp-buyer-firstname').value = d.buyerFirstName || '';
+    this._el('hp-buyer-lastname').value = d.buyerLastName || '';
     this._el('hp-buyer-email').value = d.buyerEmail || '';
     this._el('hp-message').value = d.message || '';
     if (d.deliveryMode === 'recipient') this._el('hp-mode-recipient').checked = true; else this._el('hp-mode-buyer').checked = true;
@@ -665,8 +699,11 @@
     var el = this._el(id);
     el.textContent = '';
     el.classList.remove('hp-show');
-    var input = this._root.querySelector('[aria-describedby~="' + id + '"]');
-    if (input) input.removeAttribute('aria-invalid');
+    // querySelectorAll, pas querySelector : le même message d'erreur peut
+    // être partagé par PLUSIEURS champs (ex. Prénom + Nom), qui doivent
+    // tous les deux perdre leur état invalide une fois corrigés.
+    var inputs = this._root.querySelectorAll('[aria-describedby~="' + id + '"]');
+    for (var i = 0; i < inputs.length; i++) inputs[i].removeAttribute('aria-invalid');
   };
 
   proto._setFieldError = function (id, message, inputId) {
@@ -684,7 +721,7 @@
       self._clearFieldError('hp-amount-err');
       self._updateRecap();
     });
-    ['hp-recipient-name', 'hp-recipient-email', 'hp-buyer-name', 'hp-buyer-email', 'hp-message'].forEach(function (id) {
+    ['hp-recipient-firstname', 'hp-recipient-lastname', 'hp-recipient-email', 'hp-buyer-firstname', 'hp-buyer-lastname', 'hp-buyer-email', 'hp-message'].forEach(function (id) {
       self._el(id).addEventListener('input', function () { self._updateRecap(); });
     });
     this._el('hp-mode-buyer').addEventListener('change', function () { self._updateDeliveryModeUI(); self._updateRecap(); });
@@ -701,9 +738,14 @@
     var amountErr = this._validateAmount();
     if (amountErr) { this._setFieldError('hp-amount-err', amountErr); ok = false; } else this._clearFieldError('hp-amount-err');
 
-    var recipientName = this._el('hp-recipient-name').value.trim();
-    if (!recipientName) { this._setFieldError('hp-recipient-name-err', 'Le nom du bénéficiaire est obligatoire.', 'hp-recipient-name'); ok = false; }
-    else this._clearFieldError('hp-recipient-name-err');
+    var recipientFirst = this._el('hp-recipient-firstname').value.trim();
+    var recipientLast = this._el('hp-recipient-lastname').value.trim();
+    if (!recipientFirst || !recipientLast) {
+      this._setFieldError('hp-recipient-name-err', 'Le prénom et le nom du bénéficiaire sont obligatoires.');
+      if (!recipientFirst) this._el('hp-recipient-firstname').setAttribute('aria-invalid', 'true');
+      if (!recipientLast) this._el('hp-recipient-lastname').setAttribute('aria-invalid', 'true');
+      ok = false;
+    } else this._clearFieldError('hp-recipient-name-err');
 
     var recipientEmail = this._el('hp-recipient-email').value.trim();
     if (this._state.deliveryMode === 'recipient' && !recipientEmail) {
@@ -714,9 +756,14 @@
       ok = false;
     } else this._clearFieldError('hp-recipient-email-err');
 
-    var buyerName = this._el('hp-buyer-name').value.trim();
-    if (!buyerName) { this._setFieldError('hp-buyer-name-err', 'Votre nom est obligatoire.', 'hp-buyer-name'); ok = false; }
-    else this._clearFieldError('hp-buyer-name-err');
+    var buyerFirst = this._el('hp-buyer-firstname').value.trim();
+    var buyerLast = this._el('hp-buyer-lastname').value.trim();
+    if (!buyerFirst || !buyerLast) {
+      this._setFieldError('hp-buyer-name-err', 'Votre prénom et votre nom sont obligatoires.');
+      if (!buyerFirst) this._el('hp-buyer-firstname').setAttribute('aria-invalid', 'true');
+      if (!buyerLast) this._el('hp-buyer-lastname').setAttribute('aria-invalid', 'true');
+      ok = false;
+    } else this._clearFieldError('hp-buyer-name-err');
 
     var buyerEmail = this._el('hp-buyer-email').value.trim();
     if (!buyerEmail) { this._setFieldError('hp-buyer-email-err', 'Votre email est obligatoire.', 'hp-buyer-email'); ok = false; }
@@ -732,9 +779,11 @@
   proto._fingerprint = function () {
     return JSON.stringify([
       this._currentAmount(),
-      this._el('hp-buyer-name').value.trim(),
+      this._el('hp-buyer-firstname').value.trim(),
+      this._el('hp-buyer-lastname').value.trim(),
       this._el('hp-buyer-email').value.trim(),
-      this._el('hp-recipient-name').value.trim(),
+      this._el('hp-recipient-firstname').value.trim(),
+      this._el('hp-recipient-lastname').value.trim(),
       this._el('hp-recipient-email').value.trim(),
       this._el('hp-message').value.trim(),
       this._state.deliveryMode,
@@ -764,8 +813,8 @@
     var payload = {
       key: this._key,
       amount: this._currentAmount(),
-      buyer: { name: this._el('hp-buyer-name').value.trim(), email: this._el('hp-buyer-email').value.trim() },
-      recipient: { name: this._el('hp-recipient-name').value.trim() },
+      buyer: { name: this._fullName('buyer'), email: this._el('hp-buyer-email').value.trim() },
+      recipient: { name: this._fullName('recipient') },
       delivery_mode: this._state.deliveryMode,
       idempotency_key: this._idempotencyKey(),
     };
