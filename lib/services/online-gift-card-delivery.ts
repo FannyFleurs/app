@@ -4,7 +4,7 @@ import { sendOrgEmail, type EmailAttachment } from '@/lib/email/send';
 import { formatEUR } from './money';
 import { renderGiftCardCertificatePdf } from './gift-card-certificate-pdf';
 import {
-  buildGiftCardNotificationEmailHtml, buildBuyerConfirmationOnlyEmailHtml,
+  buildGiftCardNotificationEmailHtml, buildGiftCardRecipientEmailHtml, buildBuyerConfirmationOnlyEmailHtml,
 } from '@/lib/email/gift-card-template';
 
 /**
@@ -203,13 +203,13 @@ export async function deliverOnlineGiftCardOrder(orderId: string): Promise<void>
         storeId: order.store_id,
         to: order.recipient_email!,
         toName: order.recipient_name,
-        subject: `${displayName} vous offre une carte cadeau !`,
-        html: buildGiftCardNotificationEmailHtml({
+        subject: `${order.buyer_name} vous offre une carte cadeau`,
+        html: buildGiftCardRecipientEmailHtml({
           organizationName: displayName,
           amountLabel,
-          holderName: order.recipient_name,
+          recipientName: order.recipient_name,
+          buyerName: order.buyer_name,
           message: order.message,
-          greetingName: order.recipient_name,
         }),
         attachments: [pdfAttachment],
       }));
