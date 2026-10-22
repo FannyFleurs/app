@@ -462,6 +462,33 @@ describe('Distribution (étape 5) — déclenchée après émission', () => {
     expect(orders[0]!.delivery_status).toBe('sent');
   });
 
+  it("mode recipient => le bénéficiaire reçoit un email cadeau au nom de l'acheteur, distinct de la confirmation acheteur", async () => {
+    seedOrder({
+      delivery_mode: 'recipient',
+      buyer_name: 'Jonathan Frissong',
+      buyer_email: 'jonathan@example.com',
+      recipient_name: 'Guillaume Dupont',
+      recipient_email: 'guillaume@example.com',
+      message: 'Joyeux anniversaire !',
+    });
+    const outcome = await fulfillOnlineGiftCardCheckout(validArgs());
+    expect(outcome).toBe('issued');
+    expect(sendOrgEmailMock).toHaveBeenCalledTimes(2);
+
+    const buyerEmail = sentEmails.find((email) => email.to === 'jonathan@example.com');
+    const recipientEmail = sentEmails.find((email) => email.to === 'guillaume@example.com');
+
+    expect(buyerEmail?.subject).toBe("Confirmation d'achat — carte cadeau Plante Verte");
+    expect(buyerEmail?.attachments).toBeUndefined();
+
+    expect(recipientEmail?.subject).toBe('Jonathan Frissong vous offre une carte cadeau');
+    expect(recipientEmail?.html).toContain('Jonathan Frissong');
+    expect(recipientEmail?.html).toContain('a le plaisir de vous offrir');
+    expect(recipientEmail?.html).toContain('Joyeux anniversaire !');
+    expect(recipientEmail?.html).not.toContain('merci pour cet achat');
+    expect(recipientEmail?.attachments).toHaveLength(1);
+  });
+
   it("échec d'envoi email => la carte reste créée, la commande reste 'issued', l'échec est enregistré (aucun rollback)", async () => {
     seedOrder({ delivery_mode: 'buyer' });
     sendShouldFail = true;
