@@ -1,6 +1,12 @@
+import path from 'node:path';
 import PDFDocument from 'pdfkit';
 import { formatEUR } from './money';
 import type { InvoiceSaleGroup } from './invoice-lines';
+
+// Arimo (métriques compatibles Arial), déjà utilisée pour l'impression des
+// étiquettes et des tickets thermiques — remplace la police de base de
+// pdfkit (Helvetica), rendue grossièrement par la plupart des lecteurs PDF.
+const FONTS_DIR = path.join(process.cwd(), 'assets', 'fonts');
 
 /** Formate une date (string 'YYYY-MM-DD', ISO ou Date) en jj/mm/aaaa. '—' si vide. */
 function fmtDate(d: string | null | undefined): string {
@@ -118,21 +124,23 @@ export async function renderInvoicePdf(
 ): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: 'A4', margin: 48 });
+    doc.registerFont('Arimo', path.join(FONTS_DIR, 'Arimo-Regular.ttf'));
+    doc.registerFont('Arimo-Bold', path.join(FONTS_DIR, 'Arimo-Bold.ttf'));
     const chunks: Buffer[] = [];
     doc.on('data', (b: Buffer) => chunks.push(b));
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
 
     // Bandeau
-    doc.font('Helvetica-Bold').fontSize(22).text('FACTURE', 48, 48);
-    doc.font('Helvetica').fontSize(10).fillColor('#666');
+    doc.font('Arimo-Bold').fontSize(22).text('FACTURE', 48, 48);
+    doc.font('Arimo').fontSize(10).fillColor('#666');
     doc.text(invoice.number, 48, 75);
     doc.fillColor('#000');
 
     // Bloc émetteur (gauche)
     const blockY = 110;
-    doc.font('Helvetica-Bold').fontSize(11).text(emitter.name, 48, blockY);
-    doc.font('Helvetica').fontSize(9);
+    doc.font('Arimo-Bold').fontSize(11).text(emitter.name, 48, blockY);
+    doc.font('Arimo').fontSize(9);
     if (emitter.legal_name && emitter.legal_name !== emitter.name) doc.text(emitter.legal_name);
     if (emitter.address?.line1) doc.text(emitter.address.line1);
     if (emitter.address?.zip || emitter.address?.city) doc.text(`${emitter.address?.zip ?? ''} ${emitter.address?.city ?? ''}`.trim());
@@ -143,9 +151,9 @@ export async function renderInvoicePdf(
     if (emitter.vat_number) doc.text(`TVA intra. ${emitter.vat_number}`);
 
     // Bloc client (droite)
-    doc.font('Helvetica-Bold').fontSize(9).fillColor('#666').text('FACTURÉ À', 340, blockY);
-    doc.fillColor('#000').font('Helvetica-Bold').fontSize(11).text(customer.name, 340, blockY + 14);
-    doc.font('Helvetica').fontSize(9);
+    doc.font('Arimo-Bold').fontSize(9).fillColor('#666').text('FACTURÉ À', 340, blockY);
+    doc.fillColor('#000').font('Arimo-Bold').fontSize(11).text(customer.name, 340, blockY + 14);
+    doc.font('Arimo').fontSize(9);
     if (customer.email) doc.text(customer.email, 340, doc.y);
     if (customer.address?.line1) doc.text(customer.address.line1, 340, doc.y);
     if (customer.address?.zip || customer.address?.city) doc.text(`${customer.address?.zip ?? ''} ${customer.address?.city ?? ''}`.trim(), 340, doc.y);
@@ -154,11 +162,11 @@ export async function renderInvoicePdf(
 
     // Méta facture (dates) — largeurs fixées pour éviter tout chevauchement.
     const metaY = 220;
-    doc.font('Helvetica').fontSize(9).fillColor('#666');
+    doc.font('Arimo').fontSize(9).fillColor('#666');
     doc.text('Date d\'émission', 48, metaY, { width: 140 });
     doc.text('Date de prestation', 200, metaY, { width: 140 });
     if (invoice.due_date) doc.text('Échéance', 350, metaY, { width: 140 });
-    doc.fillColor('#000').font('Helvetica-Bold');
+    doc.fillColor('#000').font('Arimo-Bold');
     doc.text(fmtDate(invoice.issue_date), 48, metaY + 12, { width: 140 });
     doc.text(fmtDate(invoice.service_date), 200, metaY + 12, { width: 140 });
     if (invoice.due_date) doc.text(fmtDate(invoice.due_date), 350, metaY + 12, { width: 140 });
@@ -167,17 +175,17 @@ export async function renderInvoicePdf(
     const meta2Y = metaY + 30;
     const paid = invoice.status === 'paid';
     if (invoice.payment_method || (paid && invoice.paid_at)) {
-      doc.font('Helvetica').fontSize(9).fillColor('#666');
+      doc.font('Arimo').fontSize(9).fillColor('#666');
       if (invoice.payment_method) doc.text('Mode de règlement', 48, meta2Y, { width: 140 });
       if (paid && invoice.paid_at) doc.text('Date de règlement', 200, meta2Y, { width: 140 });
-      doc.fillColor('#000').font('Helvetica-Bold');
+      doc.fillColor('#000').font('Arimo-Bold');
       if (invoice.payment_method) doc.text(invoice.payment_method, 48, meta2Y + 12, { width: 140 });
       if (paid && invoice.paid_at) doc.text(fmtDate(invoice.paid_at), 200, meta2Y + 12, { width: 140 });
     }
 
     // Table des lignes (décalée pour laisser la place à la 2ᵉ ligne méta).
     const tableTop = 300;
-    doc.font('Helvetica-Bold').fontSize(9).fillColor('#666');
+    doc.font('Arimo-Bold').fontSize(9).fillColor('#666');
     doc.text('DÉSIGNATION', 48, tableTop);
     doc.text('QTÉ', 340, tableTop, { width: 30, align: 'right' });
     doc.text('PU HT', 375, tableTop, { width: 50, align: 'right' });
@@ -196,21 +204,21 @@ export async function renderInvoicePdf(
     // ventes (facture de période).
     const grouped = groups.length > 1;
 
-    doc.fillColor('#000').font('Helvetica').fontSize(9);
+    doc.fillColor('#000').font('Arimo').fontSize(9);
     let y = tableTop + 22;
     let gi = 0;
     for (const g of groups) {
       // Mesure la hauteur du groupe (en-tête + lignes + commentaire) pour
       // tracer le fond d'un seul tenant et gérer un saut de page propre.
       const headerH = grouped && g.receipt ? 15 : 0;
-      doc.font('Helvetica').fontSize(9);
+      doc.font('Arimo').fontSize(9);
       const lineHeights = g.lines.map(
         (l) => Math.max(doc.heightOfString(l.label, { width: 280 }), 12) + 4,
       );
       const bodyH = lineHeights.reduce((a, b) => a + b, 0);
       let commentH = 0;
       if (g.notes) {
-        doc.font('Helvetica-Oblique').fontSize(8.5);
+        doc.font('Arimo').fontSize(8.5);
         commentH = doc.heightOfString(`Commentaire : ${g.notes}`, { width: 470 }) + 4;
       }
       const groupH = headerH + bodyH + commentH + (grouped ? 6 : 0);
@@ -229,7 +237,7 @@ export async function renderInvoicePdf(
 
       // En-tête de groupe : numéro de ticket de la vente.
       if (grouped && g.receipt) {
-        doc.font('Helvetica-Bold').fontSize(8).fillColor('#555')
+        doc.font('Arimo-Bold').fontSize(8).fillColor('#555')
           .text(`Ticket ${g.receipt}`, 48, y, { width: 490 });
         doc.fillColor('#000');
         y += headerH;
@@ -239,7 +247,7 @@ export async function renderInvoicePdf(
       for (let i = 0; i < g.lines.length; i++) {
         const l = g.lines[i]!;
         const startY = y;
-        doc.font('Helvetica').fontSize(9).fillColor('#000');
+        doc.font('Arimo').fontSize(9).fillColor('#000');
         doc.text(l.label, 48, startY, { width: 280 });
         doc.text(String(l.quantity), 340, startY, { width: 30, align: 'right' });
         doc.text(formatEUR(l.unit_price_ht), 375, startY, { width: 50, align: 'right' });
@@ -250,9 +258,9 @@ export async function renderInvoicePdf(
 
       // Commentaire de la vente, imprimé au sein de ses lignes.
       if (g.notes) {
-        doc.font('Helvetica-Oblique').fontSize(8.5).fillColor('#444')
+        doc.font('Arimo').fontSize(8.5).fillColor('#444')
           .text(`Commentaire : ${g.notes}`, 56, y, { width: 470 });
-        doc.fillColor('#000').font('Helvetica');
+        doc.fillColor('#000').font('Arimo');
         y += commentH;
       }
 
@@ -264,7 +272,7 @@ export async function renderInvoicePdf(
     y += 12;
 
     // Totaux à droite
-    doc.font('Helvetica').fontSize(10);
+    doc.font('Arimo').fontSize(10);
     const totalsX = 340;
     const labelW = 100;
     const valueX = 460;
@@ -287,7 +295,7 @@ export async function renderInvoicePdf(
     drawHr(doc, y);
     y += 8;
 
-    doc.font('Helvetica-Bold').fontSize(13);
+    doc.font('Arimo-Bold').fontSize(13);
     doc.text('TOTAL TTC', totalsX, y, { width: labelW });
     doc.text(formatEUR(invoice.total_ttc), valueX, y, { width: valueW, align: 'right' });
     y += 28;
@@ -297,13 +305,13 @@ export async function renderInvoicePdf(
 
     // Conditions
     if (invoice.payment_terms) {
-      doc.font('Helvetica-Bold').fontSize(9).fillColor('#666').text('CONDITIONS DE RÈGLEMENT', 48, y);
-      doc.fillColor('#000').font('Helvetica').fontSize(9).text(invoice.payment_terms, 48, y + 12, { width: 480 });
+      doc.font('Arimo-Bold').fontSize(9).fillColor('#666').text('CONDITIONS DE RÈGLEMENT', 48, y);
+      doc.fillColor('#000').font('Arimo').fontSize(9).text(invoice.payment_terms, 48, y + 12, { width: 480 });
       y = doc.y + 10;
     }
 
     if (paid) {
-      doc.font('Helvetica-Bold').fontSize(10).fillColor('#2F6B3F')
+      doc.font('Arimo-Bold').fontSize(10).fillColor('#2F6B3F')
          .text(
            invoice.paid_at ? `FACTURE ACQUITTÉE le ${fmtDate(invoice.paid_at)}` : 'FACTURE ACQUITTÉE',
            48, y,
@@ -312,24 +320,46 @@ export async function renderInvoicePdf(
       y += 16;
     }
 
-    // Coordonnées bancaires (RIB) — si activé pour la boutique.
+    // Coordonnées bancaires (RIB) — si activé pour la boutique. Bloc centré,
+    // encadré ; le cadre est dessiné APRÈS le texte, sa hauteur dérivée du
+    // point d'arrivée réel (jamais d'une formule devinée à l'avance, qui
+    // avait déjà fait tomber le bord du cadre entre l'IBAN et le BIC).
     const bank = emitter.bank;
     if (bank?.show && (bank.iban || bank.holder || bank.name)) {
-      doc.font('Helvetica-Bold').fontSize(9).fillColor('#666').text('COORDONNÉES BANCAIRES', 48, y);
-      doc.fillColor('#000').font('Helvetica').fontSize(9);
-      y += 12;
-      const parts: string[] = [];
-      if (bank.holder) parts.push(`Titulaire : ${bank.holder}`);
-      if (bank.name) parts.push(`Banque : ${bank.name}`);
-      for (const p of parts) { doc.text(p, 48, y, { width: 480 }); y = doc.y; }
-      if (bank.iban) { doc.font('Helvetica-Bold').text(`IBAN : ${bank.iban}`, 48, y, { width: 480 }); y = doc.y; doc.font('Helvetica'); }
-      if (bank.bic) { doc.text(`BIC : ${bank.bic}`, 48, y, { width: 480 }); y = doc.y; }
-      y += 10;
+      y += 18; // espace avant le bloc, détaché de la mention « FACTURE ACQUITTÉE ».
+      const boxW = 300;
+      const boxX = 48 + (480 - boxW) / 2;
+      const topPad = 16;
+      const bottomPad = 16;
+      const fields: [string, string][] = [];
+      if (bank.holder) fields.push(['Titulaire', bank.holder]);
+      if (bank.name) fields.push(['Banque', bank.name]);
+      if (bank.iban) fields.push(['IBAN', bank.iban]);
+      if (bank.bic) fields.push(['BIC', bank.bic]);
+
+      const boxTop = y;
+      let ty = boxTop + topPad;
+      doc.font('Arimo-Bold').fontSize(8).fillColor('#888')
+         .text('COORDONNÉES BANCAIRES', boxX, ty, { width: boxW, align: 'center', characterSpacing: 0.6 });
+      ty += 18;
+      for (const [label, value] of fields) {
+        doc.font('Arimo').fontSize(7.5).fillColor('#999')
+           .text(label.toUpperCase(), boxX, ty, { width: boxW, align: 'center', characterSpacing: 0.4 });
+        ty += 10;
+        doc.font(label === 'IBAN' ? 'Arimo-Bold' : 'Arimo').fontSize(label === 'IBAN' ? 10 : 9.5).fillColor('#111')
+           .text(value, boxX, ty, { width: boxW, align: 'center' });
+        ty += 16;
+      }
+      doc.fillColor('#000');
+      const boxH = (ty - boxTop) - 2 + bottomPad;
+      doc.roundedRect(boxX, boxTop, boxW, boxH, 8).strokeColor('#E2E2E2').lineWidth(1).stroke();
+      doc.strokeColor('#000');
+      y = boxTop + boxH + 10;
     }
 
     // Mentions légales
     if (invoice.legal_mentions) {
-      doc.font('Helvetica-Oblique').fontSize(8).fillColor('#666')
+      doc.font('Arimo').fontSize(8).fillColor('#666')
          .text(invoice.legal_mentions, 48, y, { width: 480, align: 'justify' });
       doc.fillColor('#000');
     }
@@ -343,7 +373,7 @@ export async function renderInvoicePdf(
     if (emitter.ape_code) legalBits.push(`APE ${emitter.ape_code}`);
     if (emitter.vat_number) legalBits.push(`TVA intra. ${emitter.vat_number}`);
     if (legalBits.length > 0) {
-      doc.font('Helvetica').fontSize(7.5).fillColor('#888').text(
+      doc.font('Arimo').fontSize(7.5).fillColor('#888').text(
         legalBits.join(' · '),
         48, 780, { width: 500, align: 'center' },
       );
