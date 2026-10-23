@@ -14,6 +14,7 @@ import Icon from '@/components/Icon';
 import CategoryIcon, { categoryIconDef } from '@/lib/category-icons';
 import { useSchoolMode, isSchoolCustomerId } from '@/lib/school-mode';
 import { tileMetrics, type PosUiSettings, type PosTileSize } from '@/lib/settings/pos-ui';
+import { type DiscountReasonsSettings } from '@/lib/settings/discount-reasons';
 import { confirmThemed } from '@/lib/ui/dialog';
 import { readRoamingChoice, writeRoamingChoice, clearRoamingChoice } from '@/lib/caisse/roaming';
 
@@ -109,6 +110,10 @@ interface Props {
   storeTileSizes?: Record<string, PosTileSize>;
   currentUser: { id: string; name: string; role: string };
   posUi: PosUiSettings;
+  /** Motifs de remise (ligne/panier) et obligation de justification — voir
+   *  Paramètres → Motifs de remise. Ne concerne pas le retrait d'un article,
+   *  qui garde sa propre liste fixe (JustificationModal, kind "remove"). */
+  discountReasons: DiscountReasonsSettings;
   /** Si false, le bouton "Commande differee (retrait a date)" est masque. */
   deferredOrdersEnabled: boolean;
   /** Droit `pos.roaming_device` (Paramètres → Permissions par rôle) : ce
@@ -169,7 +174,7 @@ function matchProductByCode(products: PosProduct[], code: string): PosProduct | 
 }
 
 export default function CashRegister({
-  stores, registers, taxRates, storeTaxDefaults, storeTileSizes, currentUser, posUi, deferredOrdersEnabled, initial, canRoam,
+  stores, registers, taxRates, storeTaxDefaults, storeTileSizes, currentUser, posUi, discountReasons, deferredOrdersEnabled, initial, canRoam,
 }: Props) {
   // Mode école : quand actif, on ne fait AUCUN appel mutant côté serveur.
   // La caisse a une session fictive auto-ouverte, les lignes restent en
@@ -2463,8 +2468,11 @@ export default function CashRegister({
             }
             description={
               a.kind === 'remove' ? 'Indiquez la raison du retrait de l\'article du panier.'
-              : 'Toute remise manuelle doit être justifiée.'
+              : discountReasons.justification_required ? 'Toute remise manuelle doit être justifiée.'
+              : 'Vous pouvez préciser la raison de cette remise manuelle.'
             }
+            presets={a.kind === 'remove' ? undefined : discountReasons.reasons}
+            required={a.kind === 'remove' ? true : discountReasons.justification_required}
             onClose={() => setJustifyAction(null)}
             onConfirm={(reason) => {
               if (a.kind === 'remove') {

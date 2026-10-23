@@ -7,6 +7,8 @@ interface Props {
   description: string;
   defaultReason?: string;
   presets?: string[];
+  /** Si false, le motif devient facultatif (réglage « Motifs de remise »). Défaut : obligatoire. */
+  required?: boolean;
   onClose: () => void;
   onConfirm: (reason: string) => void;
 }
@@ -20,12 +22,12 @@ const DEFAULT_PRESETS = [
 ];
 
 export default function JustificationModal({
-  title, description, defaultReason = '', presets = DEFAULT_PRESETS, onClose, onConfirm,
+  title, description, defaultReason = '', presets = DEFAULT_PRESETS, required = true, onClose, onConfirm,
 }: Props) {
   const [reason, setReason] = useState(defaultReason);
 
   function confirm() {
-    if (!reason.trim()) return;
+    if (required && !reason.trim()) return;
     onConfirm(reason.trim());
   }
 
@@ -56,7 +58,9 @@ export default function JustificationModal({
           ))}
         </div>
 
-        <label className="text-sm font-medium text-ink-soft mt-3 block">Motif (obligatoire)</label>
+        <label className="text-sm font-medium text-ink-soft mt-3 block">
+          Motif {required ? '(obligatoire)' : '(facultatif)'}
+        </label>
         <textarea
           autoFocus
           className="input mt-1 h-24 text-base py-2"
@@ -67,7 +71,7 @@ export default function JustificationModal({
 
         <div className="mt-4 flex justify-end gap-2">
           <button onClick={onClose} className="btn-ghost h-12 text-base px-5">Annuler</button>
-          <button onClick={confirm} disabled={!reason.trim()} className="btn-primary h-12 text-base font-semibold px-6">
+          <button onClick={confirm} disabled={required && !reason.trim()} className="btn-primary h-12 text-base font-semibold px-6">
             Valider
           </button>
         </div>

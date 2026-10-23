@@ -18,6 +18,11 @@ import {
   mergeScreenDeliveryDefaults,
   type ScreenDeliverySettings,
 } from '@/lib/settings/screen-delivery';
+import {
+  DISCOUNT_REASONS_KEY,
+  mergeDiscountReasonsDefaults,
+  type DiscountReasonsSettings,
+} from '@/lib/settings/discount-reasons';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,7 +51,7 @@ export default async function CaissePage() {
   //   comptes vendeur / caisse creees sans configuration explicite.
   // Les 5 requêtes ci-dessous sont indépendantes → on les lance en parallèle
   // (un seul aller-retour groupé au lieu de 5 séquentiels).
-  const [stores, registers, taxRates, posSettingsRows, screenDeliveryRows, storeTaxRows, storeTileSizes] = await Promise.all([
+  const [stores, registers, taxRates, posSettingsRows, screenDeliveryRows, discountReasonsRows, storeTaxRows, storeTileSizes] = await Promise.all([
     query<{ id: string; code: string; name: string }>(
       `SELECT s.id, s.code, s.name FROM stores s
         WHERE s.organization_id = $2 AND s.is_active
@@ -80,6 +85,10 @@ export default async function CaissePage() {
       `SELECT value FROM settings WHERE organization_id = $1 AND key = $2`,
       [user.organizationId, SCREEN_DELIVERY_KEY],
     ),
+    query<{ value: Partial<DiscountReasonsSettings> }>(
+      `SELECT value FROM settings WHERE organization_id = $1 AND key = $2`,
+      [user.organizationId, DISCOUNT_REASONS_KEY],
+    ),
     // Taux TVA par défaut spécifiques à chaque boutique (clé 'tax:<storeId>').
     query<{ key: string; value: { default_code?: string | null } }>(
       `SELECT key, value FROM settings
@@ -99,6 +108,7 @@ export default async function CaissePage() {
   }
   const posSettings = mergeWithDefaults(posSettingsRows.rows[0]?.value ?? null);
   const screenDelivery = mergeScreenDeliveryDefaults(screenDeliveryRows.rows[0]?.value ?? null);
+  const discountReasons = mergeDiscountReasonsDefaults(discountReasonsRows.rows[0]?.value ?? null);
 
   if (stores.rows.length === 0 || registers.rows.length === 0) {
     return (
@@ -155,6 +165,7 @@ export default async function CaissePage() {
       storeTileSizes={storeTileSizes}
       currentUser={{ id: user.id, name: user.fullName, role: user.role }}
       posUi={posSettings}
+      discountReasons={discountReasons}
       deferredOrdersEnabled={deferredSeed}
       initial={initial}
       canRoam={canRoam}
