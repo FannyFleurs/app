@@ -1,6 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import {
+  STOCK_MOVEMENT_REASONS_DEFAULTS,
+  mergeStockMovementReasonsDefaults,
+  type StockMovementReasonsSettings,
+} from '@/lib/settings/stock-movement-reasons';
 
 /**
  * Saisie d'un mouvement de stock : quantité, puis type et motif.
@@ -133,12 +138,29 @@ export function TypeAndReasonModal({ product, delta, storeId, onClose, onSaved }
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Motif obligatoire seulement pour les sorties (delta négatif).
-  const reasonRequired = delta < 0;
+  // Motifs proposés et obligation de justification (Paramètres → Motifs de
+  // mouvement de stock), propres à l'organisation. Par défaut (le temps du
+  // chargement), on garde le comportement historique : motif obligatoire en
+  // sortie.
+  const [reasonSettings, setReasonSettings] = useState<StockMovementReasonsSettings>(STOCK_MOVEMENT_REASONS_DEFAULTS);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const r = await fetch('/api/settings/stock-movement-reasons');
+      if (!r.ok || cancelled) return;
+      const j = await r.json();
+      if (!cancelled) setReasonSettings(mergeStockMovementReasonsDefaults(j.settings));
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Motif obligatoire seulement pour les sorties (delta négatif), et
+  // seulement si l'organisation ne l'a pas rendu facultatif.
+  const reasonRequired = delta < 0 && reasonSettings.justification_required;
 
   async function submit() {
     if (reasonRequired && !reason.trim()) {
-      setError('Un motif est requis pour une sortie.'); return;
+      setError('Un motif est requis pour cette sortie.'); return;
     }
     setSaving(true); setError(null);
     const finalReason = reason.trim()
@@ -196,10 +218,26 @@ export function TypeAndReasonModal({ product, delta, storeId, onClose, onSaved }
         <label className="block mt-4 text-sm font-medium text-ink-soft">
           Motif {reasonRequired
             ? <span className="text-danger">*</span>
-            : <span className="text-ink-soft/60">(optionnel pour entrée)</span>}
+            : <span className="text-ink-soft/60">(facultatif)</span>}
         </label>
+        {reasonSettings.reasons.length > 0 && (
+          <div className="mt-2 flex gap-1.5 flex-wrap">
+            {reasonSettings.reasons.map((r) => (
+              <button
+                key={r}
+                type="button"
+                onClick={() => setReason(r)}
+                className={`rounded-full px-3 h-9 text-sm font-medium border ${
+                  reason === r ? 'accent-bar text-white border-transparent' : 'bg-white text-ink border-border'
+                }`}
+              >
+                {r}
+              </button>
+            ))}
+          </div>
+        )}
         <input
-          className="input mt-1"
+          className="input mt-2"
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           placeholder={reasonRequired

@@ -44,6 +44,7 @@ export default async function SettingsLayout({ children }: { children: React.Rea
     { href: '/settings/payment-methods',  label: 'Modes de règlement',    icon: 'invoices' as const,     perm: 'settings.write' as const,   boOnly: false, proOnly: false },
     { href: '/settings/tva',              label: 'TVA (par boutique)',    icon: 'invoices' as const,     perm: 'settings.read' as const,    boOnly: true,  proOnly: false },
     { href: '/settings/discount-reasons', label: 'Motifs de remise',      icon: 'discount' as const,     perm: 'settings.read' as const,    boOnly: true,  proOnly: false },
+    { href: '/settings/stock-movement-reasons', label: 'Motifs de mouvement de stock', icon: 'stock' as const, perm: 'settings.read' as const, boOnly: true,  proOnly: false },
     { href: '/settings/screen-delivery',  label: 'Écran & Livraison',     icon: 'truck' as const,        perm: 'settings.write' as const,   boOnly: false, proOnly: true },
     { href: '/settings/loyalty',          label: 'Fidélité',              icon: 'loyalty' as const,      perm: 'settings.write' as const,   boOnly: false, proOnly: false },
     { href: '/settings/online-gift-cards', label: 'Cartes cadeaux en ligne', icon: 'gift' as const,       perm: 'settings.read' as const,    boOnly: true,  proOnly: false },
