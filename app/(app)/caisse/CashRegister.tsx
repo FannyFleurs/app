@@ -2468,11 +2468,9 @@ export default function CashRegister({
             }
             description={
               a.kind === 'remove' ? 'Indiquez la raison du retrait de l\'article du panier.'
-              : discountReasons.justification_required ? 'Toute remise manuelle doit être justifiée.'
-              : 'Vous pouvez préciser la raison de cette remise manuelle.'
+              : 'Choisissez un motif ou décrivez la raison de cette remise manuelle.'
             }
             presets={a.kind === 'remove' ? undefined : discountReasons.reasons}
-            required={a.kind === 'remove' ? true : discountReasons.justification_required}
             onClose={() => setJustifyAction(null)}
             onConfirm={(reason) => {
               if (a.kind === 'remove') {

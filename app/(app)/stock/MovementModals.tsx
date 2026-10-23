@@ -135,13 +135,14 @@ export function TypeAndReasonModal({ product, delta, storeId, onClose, onSaved }
 
   const [type, setType] = useState<typeof types[number]['key']>(types[0].key);
   const [reason, setReason] = useState('');
+  const [selectedLabel, setSelectedLabel] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Motifs proposés et obligation de justification (Paramètres → Motifs de
-  // mouvement de stock), propres à l'organisation. Par défaut (le temps du
-  // chargement), on garde le comportement historique : motif obligatoire en
-  // sortie.
+  // Motifs proposés (Paramètres → Motifs de mouvement de stock), propres à
+  // l'organisation ; chaque motif porte sa propre case « justification
+  // obligatoire », qui ne s'applique qu'en sortie — une entrée reste
+  // toujours facultative.
   const [reasonSettings, setReasonSettings] = useState<StockMovementReasonsSettings>(STOCK_MOVEMENT_REASONS_DEFAULTS);
   useEffect(() => {
     let cancelled = false;
@@ -154,9 +155,17 @@ export function TypeAndReasonModal({ product, delta, storeId, onClose, onSaved }
     return () => { cancelled = true; };
   }, []);
 
-  // Motif obligatoire seulement pour les sorties (delta négatif), et
-  // seulement si l'organisation ne l'a pas rendu facultatif.
-  const reasonRequired = delta < 0 && reasonSettings.justification_required;
+  // Motif libre (aucun motif ci-dessous cliqué), en sortie : obligatoire par
+  // défaut. Une entrée n'est jamais obligatoire, quel que soit le motif.
+  const [requiredNow, setRequiredNow] = useState(delta < 0);
+  const reasonRequired = delta < 0 && requiredNow;
+
+  function pickReason(r: { label: string; justification_required: boolean }) {
+    setSelectedLabel(r.label);
+    const mustType = delta < 0 && r.justification_required;
+    setRequiredNow(mustType);
+    setReason(mustType ? '' : r.label);
+  }
 
   async function submit() {
     if (reasonRequired && !reason.trim()) {
@@ -224,14 +233,14 @@ export function TypeAndReasonModal({ product, delta, storeId, onClose, onSaved }
           <div className="mt-2 flex gap-1.5 flex-wrap">
             {reasonSettings.reasons.map((r) => (
               <button
-                key={r}
+                key={r.label}
                 type="button"
-                onClick={() => setReason(r)}
+                onClick={() => pickReason(r)}
                 className={`rounded-full px-3 h-9 text-sm font-medium border ${
-                  reason === r ? 'accent-bar text-white border-transparent' : 'bg-white text-ink border-border'
+                  selectedLabel === r.label ? 'accent-bar text-white border-transparent' : 'bg-white text-ink border-border'
                 }`}
               >
-                {r}
+                {r.label}
               </button>
             ))}
           </div>

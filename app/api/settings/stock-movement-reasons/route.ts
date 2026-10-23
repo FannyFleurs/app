@@ -11,8 +11,10 @@ import {
 } from '@/lib/settings/stock-movement-reasons';
 
 const schema = z.object({
-  reasons: z.array(z.string().trim().min(1).max(80)).max(30).optional(),
-  justification_required: z.boolean().optional(),
+  reasons: z.array(z.object({
+    label: z.string().trim().min(1).max(80),
+    justification_required: z.boolean(),
+  })).max(30).optional(),
 });
 
 async function load(organizationId: string) {

@@ -2,29 +2,45 @@
 
 import { useState } from 'react';
 
+export interface ReasonPreset {
+  label: string;
+  /** Si true, choisir ce motif exige que le vendeur tape une explication en
+   *  plus (le champ ne se pré-remplit pas) ; sinon un clic suffit. */
+  justification_required: boolean;
+}
+
 interface Props {
   title: string;
   description: string;
   defaultReason?: string;
-  presets?: string[];
-  /** Si false, le motif devient facultatif (réglage « Motifs de remise »). Défaut : obligatoire. */
-  required?: boolean;
+  presets?: ReasonPreset[];
   onClose: () => void;
   onConfirm: (reason: string) => void;
 }
 
-const DEFAULT_PRESETS = [
-  'Geste commercial',
-  'Erreur de saisie',
-  'Produit abîmé',
-  'Promotion en cours',
-  'Demande client',
+const DEFAULT_PRESETS: ReasonPreset[] = [
+  { label: 'Geste commercial', justification_required: true },
+  { label: 'Erreur de saisie', justification_required: true },
+  { label: 'Produit abîmé', justification_required: true },
+  { label: 'Promotion en cours', justification_required: true },
+  { label: 'Demande client', justification_required: true },
 ];
 
 export default function JustificationModal({
-  title, description, defaultReason = '', presets = DEFAULT_PRESETS, required = true, onClose, onConfirm,
+  title, description, defaultReason = '', presets = DEFAULT_PRESETS, onClose, onConfirm,
 }: Props) {
   const [reason, setReason] = useState(defaultReason);
+  const [selectedLabel, setSelectedLabel] = useState<string | null>(null);
+  // Motif libre (aucun des motifs ci-dessous n'a été cliqué) : obligatoire par défaut.
+  const [required, setRequired] = useState(true);
+
+  function pickPreset(p: ReasonPreset) {
+    setSelectedLabel(p.label);
+    setRequired(p.justification_required);
+    // Motif qui n'exige rien de plus : un clic suffit, le libellé fait office de motif.
+    // Motif qui exige une justification : le champ se vide, le vendeur doit l'écrire lui-même.
+    setReason(p.justification_required ? '' : p.label);
+  }
 
   function confirm() {
     if (required && !reason.trim()) return;
@@ -47,13 +63,13 @@ export default function JustificationModal({
         <div className="mt-3 flex gap-1.5 flex-wrap">
           {presets.map((p) => (
             <button
-              key={p}
-              onClick={() => setReason(p)}
+              key={p.label}
+              onClick={() => pickPreset(p)}
               className={`rounded-full px-4 h-10 text-sm font-medium border ${
-                reason === p ? 'accent-bar text-white border-transparent' : 'bg-white text-ink border-border'
+                selectedLabel === p.label ? 'accent-bar text-white border-transparent' : 'bg-white text-ink border-border'
               }`}
             >
-              {p}
+              {p.label}
             </button>
           ))}
         </div>

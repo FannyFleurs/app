@@ -6,30 +6,49 @@ import { mergeDiscountReasonsDefaults, DEFAULT_DISCOUNT_REASONS } from '@/lib/se
 
 /**
  * Réglage "Motifs de remise" (Paramètres → Motifs de remise) : liste des
- * motifs proposés en caisse pour une remise manuelle (ligne ou panier), et
- * obligation ou non de les justifier. Réglage au niveau organisation,
- * sans portée boutique.
+ * motifs proposés en caisse pour une remise manuelle (ligne ou panier).
+ * Chaque motif porte sa PROPRE case "justification obligatoire" — ce n'est
+ * plus un réglage unique pour toute la liste.
  */
 describe('mergeDiscountReasonsDefaults', () => {
   it('sans valeur stockée, renvoie les défauts (motifs obligatoires)', () => {
-    expect(mergeDiscountReasonsDefaults(null)).toEqual({
-      reasons: DEFAULT_DISCOUNT_REASONS,
-      justification_required: true,
-    });
-  });
-
-  it('un partiel ne redéfinissant que justification_required garde les motifs par défaut', () => {
-    expect(mergeDiscountReasonsDefaults({ justification_required: false })).toEqual({
-      reasons: DEFAULT_DISCOUNT_REASONS,
-      justification_required: false,
-    });
+    expect(mergeDiscountReasonsDefaults(null)).toEqual({ reasons: DEFAULT_DISCOUNT_REASONS });
   });
 
   it('une liste de motifs vide est respectée (pas de repli sur les défauts)', () => {
-    expect(mergeDiscountReasonsDefaults({ reasons: [] })).toEqual({
-      reasons: [],
-      justification_required: true,
+    expect(mergeDiscountReasonsDefaults({ reasons: [] })).toEqual({ reasons: [] });
+  });
+
+  it('chaque motif garde sa propre case, indépendamment des autres', () => {
+    expect(mergeDiscountReasonsDefaults({
+      reasons: [
+        { label: 'Geste commercial', justification_required: true },
+        { label: 'Promotion en cours', justification_required: false },
+      ],
+    })).toEqual({
+      reasons: [
+        { label: 'Geste commercial', justification_required: true },
+        { label: 'Promotion en cours', justification_required: false },
+      ],
     });
+  });
+
+  it('migre l\'ancienne forme (reasons: string[] + justification_required global)', () => {
+    expect(mergeDiscountReasonsDefaults({
+      reasons: ['Geste commercial', 'Promotion en cours'],
+      justification_required: false,
+    } as never)).toEqual({
+      reasons: [
+        { label: 'Geste commercial', justification_required: false },
+        { label: 'Promotion en cours', justification_required: false },
+      ],
+    });
+  });
+
+  it('un motif vide (ancienne ou nouvelle forme) est filtré', () => {
+    expect(mergeDiscountReasonsDefaults({
+      reasons: ['', { label: '  ', justification_required: true }, { label: 'OK', justification_required: true }],
+    } as never)).toEqual({ reasons: [{ label: 'OK', justification_required: true }] });
   });
 });
 
@@ -69,11 +88,14 @@ describe('GET/PATCH /api/settings/discount-reasons — intégration DB', () => {
   it('sans réglage enregistré, GET renvoie les motifs par défaut, obligatoires', async () => {
     const res = await GET();
     const { settings } = await res.json();
-    expect(settings).toEqual({ reasons: DEFAULT_DISCOUNT_REASONS, justification_required: true });
+    expect(settings).toEqual({ reasons: DEFAULT_DISCOUNT_REASONS });
   });
 
-  it('ajoute des motifs personnalisés et les persiste', async () => {
-    const reasons = ['Carte fidélité à activer', 'Lot dégradé'];
+  it('ajoute des motifs personnalisés avec leur propre case, et les persiste', async () => {
+    const reasons = [
+      { label: 'Carte fidélité à activer', justification_required: false },
+      { label: 'Lot dégradé', justification_required: true },
+    ];
     const res = await patchReq({ reasons });
     expect(res.status).toBe(200);
     const { settings } = await res.json();
@@ -83,19 +105,31 @@ describe('GET/PATCH /api/settings/discount-reasons — intégration DB', () => {
     expect((await after.json()).settings.reasons).toEqual(reasons);
   });
 
-  it('décocher "justification obligatoire" se persiste sans effacer les motifs', async () => {
-    const res = await patchReq({ justification_required: false });
+  it('bascule la case d\'un seul motif sans affecter les autres', async () => {
+    const res = await patchReq({
+      reasons: [
+        { label: 'Carte fidélité à activer', justification_required: true },
+        { label: 'Lot dégradé', justification_required: true },
+      ],
+    });
     expect(res.status).toBe(200);
     const { settings } = await res.json();
-    expect(settings.justification_required).toBe(false);
-    expect(settings.reasons).toEqual(['Carte fidélité à activer', 'Lot dégradé']);
+    expect(settings.reasons).toEqual([
+      { label: 'Carte fidélité à activer', justification_required: true },
+      { label: 'Lot dégradé', justification_required: true },
+    ]);
   });
 
   it('un motif vide ou trop long est rejeté (422)', async () => {
-    const res = await patchReq({ reasons: ['  '] });
+    const res = await patchReq({ reasons: [{ label: '  ', justification_required: true }] });
     expect(res.status).toBe(422);
-    const tooLong = await patchReq({ reasons: ['x'.repeat(81)] });
+    const tooLong = await patchReq({ reasons: [{ label: 'x'.repeat(81), justification_required: true }] });
     expect(tooLong.status).toBe(422);
+  });
+
+  it('un motif sans justification_required est rejeté (422)', async () => {
+    const res = await patchReq({ reasons: [{ label: 'Sans case' }] });
+    expect(res.status).toBe(422);
   });
 
   it('une liste de motifs vide est acceptée (plus aucun motif proposé)', async () => {
