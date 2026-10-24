@@ -61,6 +61,10 @@ export interface PosProduct {
   /** Couleur de fond #RRGGBB pour la tuile caisse (migration 0018). */
   color?: string | null;
   tags: string[];
+  /** Suivi de stock activé sur la fiche article. */
+  track_stock?: boolean;
+  /** Stock de la boutique courante (toutes variantes), null si non calculé. */
+  stock_qty?: number | null;
 }
 
 export interface Category {
@@ -1903,6 +1907,7 @@ export default function CashRegister({
                     showImage={posUi.show_product_image}
                     showPrice={posUi.show_price}
                     showTaxBadge={posUi.show_tax_badge}
+                    showStock={posUi.show_stock}
                   />
                 ))}
               </div>
@@ -1918,6 +1923,7 @@ export default function CashRegister({
               metrics={metrics}
               showImage={posUi.show_product_image}
               showPrice={posUi.show_price}
+              showStock={posUi.show_stock}
             />
           )}
         </div>
@@ -2503,7 +2509,7 @@ export default function CashRegister({
 }
 
 function CategoryGrid({
-  categories, uncategorizedCount, topProducts, onPick, onPickProduct, metrics, showImage, showPrice,
+  categories, uncategorizedCount, topProducts, onPick, onPickProduct, metrics, showImage, showPrice, showStock,
 }: {
   categories: (Category & { count: number })[];
   uncategorizedCount: number;
@@ -2513,6 +2519,7 @@ function CategoryGrid({
   metrics: ReturnType<typeof tileMetrics>;
   showImage: boolean;
   showPrice: boolean;
+  showStock: boolean;
 }) {
   if (categories.length === 0 && uncategorizedCount === 0 && topProducts.length === 0) {
     return (
@@ -2531,6 +2538,7 @@ function CategoryGrid({
           metrics={metrics}
           showImage={showImage}
           showPrice={showPrice}
+          showStock={showStock}
         />
       ))}
       {categories.map((c) => (
@@ -2552,21 +2560,44 @@ function CategoryGrid({
   );
 }
 
+/** Formatte une quantité de stock (NUMERIC, parfois fractionnaire pour un
+ *  article au poids) : entier si rond, sinon un seul chiffre après la virgule. */
+function formatStockQty(n: number): string {
+  const r = Math.round(n * 10) / 10;
+  return Number.isInteger(r) ? String(r) : r.toFixed(1).replace('.', ',');
+}
+
+/** Bulle de stock : nichée dans le coin bas-droit de la tuile (parent en
+ *  `relative`), au ras des deux bords — elle se fond dans le coin de la
+ *  tuile plutôt que de « flotter » au milieu d'une marge. */
+function StockBubble({ qty }: { qty: number }) {
+  return (
+    <span
+      className="absolute right-1.5 bottom-1.5 min-w-[22px] h-[22px] px-1 rounded-full bg-white border border-border grid place-items-center text-[10px] font-bold text-accent-deep shadow-sm leading-none"
+      title={`Stock : ${formatStockQty(qty)}`}
+    >
+      {formatStockQty(qty)}
+    </span>
+  );
+}
+
 function TopProductTile({
-  product: p, onPick, metrics, showImage, showPrice,
+  product: p, onPick, metrics, showImage, showPrice, showStock,
 }: {
   product: PosProduct;
   onPick: () => void;
   metrics: ReturnType<typeof tileMetrics>;
   showImage: boolean;
   showPrice: boolean;
+  showStock: boolean;
 }) {
+  const stockQty = p.track_stock && p.stock_qty !== null && p.stock_qty !== undefined ? p.stock_qty : null;
   // Même apparence que les tuiles catégorie : tuile pleine couleur claire,
   // nom du produit centré, prix optionnel en bas.
   return (
     <button
       onClick={onPick}
-      className="rounded-2xl border border-border overflow-hidden hover:shadow-md hover:border-gray-300 transition-all active:scale-[0.98] aspect-[5/3] grid place-items-center px-3 bg-accent-soft"
+      className="relative rounded-2xl border border-border overflow-hidden hover:shadow-md hover:border-gray-300 transition-all active:scale-[0.98] aspect-[5/3] grid place-items-center px-3 bg-accent-soft"
       title="Top produit"
     >
       <div className="flex flex-col items-center justify-center gap-1 text-center">
@@ -2580,6 +2611,7 @@ function TopProductTile({
           <span className="text-xs text-ink-soft">{formatEUR(p.sale_price_ttc)}</span>
         )}
       </div>
+      {showStock && stockQty !== null && <StockBubble qty={stockQty} />}
     </button>
   );
 }
@@ -2684,7 +2716,7 @@ function distributeProrata(target: number, weights: number[]): number[] {
  * tuiles) à chaque modification du panier.
  */
 const ProductTile = memo(function ProductTile({
-  product, onPick, padding, titleFontSize, showImage, showPrice, showTaxBadge,
+  product, onPick, padding, titleFontSize, showImage, showPrice, showTaxBadge, showStock,
 }: {
   product: PosProduct;
   onPick: (p: PosProduct) => void;
@@ -2693,11 +2725,14 @@ const ProductTile = memo(function ProductTile({
   showImage: boolean;
   showPrice: boolean;
   showTaxBadge: boolean;
+  showStock: boolean;
 }) {
+  const stockQty = product.track_stock && product.stock_qty !== null && product.stock_qty !== undefined
+    ? product.stock_qty : null;
   return (
     <button
       onClick={() => onPick(product)}
-      className={`card ${padding} hover:shadow-md hover:border-gray-300 transition-all active:scale-[0.98] aspect-[5/3] grid place-items-center text-center`}
+      className={`card ${padding} hover:shadow-md hover:border-gray-300 transition-all active:scale-[0.98] aspect-[5/3] grid place-items-center text-center relative`}
       style={product.color ? { backgroundColor: product.color } : undefined}
     >
       <div className="flex flex-col items-center justify-center gap-1.5 max-w-full">
@@ -2717,6 +2752,7 @@ const ProductTile = memo(function ProductTile({
           <span className="chip text-[10px] px-1.5 py-0">{product.tax_rate}%</span>
         )}
       </div>
+      {showStock && stockQty !== null && <StockBubble qty={stockQty} />}
     </button>
   );
 });

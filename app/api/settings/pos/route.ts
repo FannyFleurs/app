@@ -49,6 +49,7 @@ const schema = z.object({
   show_category_badge: z.boolean().optional(),
   show_price: z.boolean().optional(),
   show_tax_badge: z.boolean().optional(),
+  show_stock: z.boolean().optional(),
   opening_float_mode: z.enum(OPENING_FLOAT_MODES).optional(),
   opening_float_amount: z.number().min(0).max(100000).optional(),
   loyalty: loyaltySchema.optional(),

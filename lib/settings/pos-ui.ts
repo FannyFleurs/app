@@ -107,6 +107,8 @@ export interface PosUiSettings {
   show_category_badge: boolean;
   show_price: boolean;
   show_tax_badge: boolean;
+  /** Bulle de stock dans le coin bas-droit de la tuile (si l'article suit son stock). */
+  show_stock: boolean;
   opening_float_mode: OpeningFloatMode;
   opening_float_amount: number;
   loyalty: LoyaltySettings;
@@ -156,6 +158,7 @@ export const POS_UI_DEFAULTS: PosUiSettings = {
   show_category_badge: true,
   show_price: true,
   show_tax_badge: true,
+  show_stock: true,
   opening_float_mode: 'manual',
   opening_float_amount: 0,
   loyalty: {

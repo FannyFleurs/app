@@ -266,10 +266,22 @@ export async function GET(req: Request) {
     ? `p.extra_barcodes`
     : `'{}'::text[] AS extra_barcodes`;
 
-  const { rows } = await query<{ id: string; image_url: string | null; updated_at: string }>(
+  // Stock de la boutique courante (toutes variantes confondues) : affiché en
+  // caisse dans la bulle de la tuile (réglage « Afficher le stock »). Calculé
+  // uniquement quand une boutique est précisée — inutile (et coûteux) sinon.
+  let stockCol = 'NULL AS stock_qty';
+  if (storeId) {
+    params.push(storeId);
+    const stockParamIdx = params.length;
+    stockCol = `(SELECT SUM(sl.quantity) FROM stock_levels sl
+                  WHERE sl.store_id = $${stockParamIdx} AND sl.product_id = p.id) AS stock_qty`;
+  }
+
+  const { rows } = await query<{ id: string; image_url: string | null; updated_at: string; stock_qty: string | null }>(
     `SELECT p.id, p.name, p.short_description, p.sku, p.barcode, ${extraBarcodesCol}, p.image_url, p.unit,
             p.sale_price_ttc, p.purchase_price_ht, p.price_is_free,
             p.track_stock,
+            ${stockCol},
             p.category_id, p.visible_in_pos, p.is_active,
             COALESCE(p.is_pack, FALSE) AS is_pack,
             ${topCol},
@@ -298,9 +310,10 @@ export async function GET(req: Request) {
   // /api/products/catalog-version). Remplacée par une référence légère et
   // mise en cache par le navigateur — voir lib/products/photo-url.ts. Le
   // back-office garde la donnée brute (la duplication d'article en a besoin).
+  const withStock = rows.map((r) => ({ ...r, stock_qty: r.stock_qty !== null ? Number(r.stock_qty) : null }));
   const products = inPos
-    ? rows.map((r) => ({ ...r, image_url: photoRefForPos(r.id, r.image_url, r.updated_at) }))
-    : rows;
+    ? withStock.map((r) => ({ ...r, image_url: photoRefForPos(r.id, r.image_url, r.updated_at) }))
+    : withStock;
   return NextResponse.json({ products });
 }
 

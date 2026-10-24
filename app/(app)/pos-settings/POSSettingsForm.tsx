@@ -370,6 +370,12 @@ export default function POSSettingsForm({
               onChange={(v) => patch('show_product_image', v)}
               disabled={!canWrite}
             />
+            <Toggle
+              label="Afficher le stock sur la tuile (si l'article suit son stock)"
+              checked={settings.show_stock}
+              onChange={(v) => patch('show_stock', v)}
+              disabled={!canWrite}
+            />
           </div>
         </Section>
 
@@ -558,10 +564,10 @@ function SizeIcon({ size }: { size: PosTileSize }) {
 }
 
 const PREVIEW_PRODUCTS = [
-  { name: 'Bouquet rond du jour', price: 28, tax: 10, category: 'Bouquets' },
-  { name: 'Composition piquée', price: 55, tax: 10, category: 'Compositions' },
-  { name: 'Cache-pot émaillé Ø17', price: 24, tax: 20, category: 'Cache-pots' },
-  { name: 'Bougie soja vanille', price: 18, tax: 20, category: 'Bougies' },
+  { name: 'Bouquet rond du jour', price: 28, tax: 10, category: 'Bouquets', stock: 7 },
+  { name: 'Composition piquée', price: 55, tax: 10, category: 'Compositions', stock: null },
+  { name: 'Cache-pot émaillé Ø17', price: 24, tax: 20, category: 'Cache-pots', stock: 14 },
+  { name: 'Bougie soja vanille', price: 18, tax: 20, category: 'Bougies', stock: null },
 ];
 
 function PreviewGrid({ settings }: { settings: PosUiSettings }) {
@@ -572,7 +578,7 @@ function PreviewGrid({ settings }: { settings: PosUiSettings }) {
         {PREVIEW_PRODUCTS.map((p) => (
           <div
             key={p.name}
-            className={`card ${m.padding} text-left`}
+            className={`card ${m.padding} text-left relative`}
           >
             {settings.show_product_image && (
               <div className="mb-2 h-14 w-full rounded-lg bg-sage-soft grid place-items-center text-sage-deep">
@@ -592,6 +598,14 @@ function PreviewGrid({ settings }: { settings: PosUiSettings }) {
             </div>
             {settings.show_category_badge && (
               <div className="mt-1 text-[11px] text-ink-soft truncate">{p.category}</div>
+            )}
+            {settings.show_stock && p.stock !== null && (
+              <span
+                className="absolute right-1.5 bottom-1.5 min-w-[22px] h-[22px] px-1 rounded-full bg-white border border-border grid place-items-center text-[10px] font-bold text-accent-deep shadow-sm leading-none"
+                title={`Stock : ${p.stock}`}
+              >
+                {p.stock}
+              </span>
             )}
           </div>
         ))}
