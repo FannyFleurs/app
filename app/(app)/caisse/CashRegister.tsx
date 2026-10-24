@@ -2570,11 +2570,15 @@ function formatStockQty(n: number): string {
 /** Bulle de stock : un quart de cercle creusé dans le coin bas-droit de la
  *  tuile (parent en `relative`) — ses bords droit et bas se confondent avec
  *  ceux de la tuile (flush, pas de translation), seul l'arc haut-gauche est
- *  une ligne visible. Le chiffre est poussé vers le coin (loin de l'arc). */
-function StockBubble({ qty }: { qty: number }) {
+ *  une ligne visible. Le chiffre est poussé vers le coin (loin de l'arc).
+ *  `tileRadius` doit reprendre EXACTEMENT le rayon d'angle de la tuile
+ *  hôte (ex. 18 pour `.card`) : sinon le coin bas-droit de la bulle, carré
+ *  par défaut, « carre » visuellement l'angle arrondi de la tuile. */
+function StockBubble({ qty, tileRadius = 18 }: { qty: number; tileRadius?: number }) {
   return (
     <span
       className="absolute right-0 bottom-0 h-11 w-11 rounded-tl-full bg-danger text-white grid place-items-end pb-1.5 pr-2 text-base font-bold leading-none"
+      style={{ borderBottomRightRadius: tileRadius }}
       title={`Stock : ${formatStockQty(qty)}`}
     >
       {formatStockQty(qty)}
@@ -2612,7 +2616,7 @@ function TopProductTile({
           <span className="text-xs text-ink-soft">{formatEUR(p.sale_price_ttc)}</span>
         )}
       </div>
-      {showStock && stockQty !== null && <StockBubble qty={stockQty} />}
+      {showStock && stockQty !== null && <StockBubble qty={stockQty} tileRadius={16} />}
     </button>
   );
 }

@@ -602,6 +602,7 @@ function PreviewGrid({ settings }: { settings: PosUiSettings }) {
             {settings.show_stock && p.stock !== null && (
               <span
                 className="absolute right-0 bottom-0 h-11 w-11 rounded-tl-full bg-danger text-white grid place-items-end pb-1.5 pr-2 text-base font-bold leading-none"
+                style={{ borderBottomRightRadius: 18 }}
                 title={`Stock : ${p.stock}`}
               >
                 {p.stock}
