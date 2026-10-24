@@ -41,13 +41,16 @@ interface Props {
    *  organisation) pour storeId = lockStoreId ?? '' au 1er rendu. */
   initialAutoLogoutMode: AutoLogoutMode;
   initialAutoLogoutMinutes: number;
+  /** Affichage du stock effectif (override boutique, sinon défaut
+   *  organisation) pour storeId = lockStoreId ?? '' au 1er rendu. */
+  initialShowStock: boolean;
 }
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
 export default function POSSettingsForm({
   initial, canWrite, stores, lockStoreId, initialTileSize,
-  initialAutoLogoutMode, initialAutoLogoutMinutes,
+  initialAutoLogoutMode, initialAutoLogoutMinutes, initialShowStock,
 }: Props) {
   const router = useRouter();
   const [settings, setSettings] = useState<PosUiSettings>(initial);
@@ -174,6 +177,50 @@ export default function POSSettingsForm({
     }, 400);
     return () => clearTimeout(t);
   }, [autoLogoutMode, autoLogoutMinutes, autoLogoutStoreId, canWrite, router]);
+
+  // Affichage du stock : réglage PAR BOUTIQUE, géré séparément du reste
+  // (même motif que la taille des tuiles / déconnexion automatique).
+  const [showStockStoreId, setShowStockStoreId] = useState<string>(lockStoreId ?? '');
+  const [showStock, setShowStock] = useState<boolean>(initialShowStock);
+  const [showStockLoading, setShowStockLoading] = useState(false);
+  const showStockFirstRender = useRef(true);
+  const showStockLastSaved = useRef<{ storeId: string; value: boolean }>({ storeId: lockStoreId ?? '', value: initialShowStock });
+
+  useEffect(() => {
+    if (lockStoreId) return;
+    if (showStockFirstRender.current) { showStockFirstRender.current = false; return; }
+    let cancelled = false;
+    setShowStockLoading(true);
+    void fetch(`/api/settings/pos/show-stock${showStockStoreId ? `?store_id=${showStockStoreId}` : ''}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (cancelled || !j) return;
+        setShowStock(j.show_stock);
+        showStockLastSaved.current = { storeId: showStockStoreId, value: j.show_stock };
+      })
+      .finally(() => { if (!cancelled) setShowStockLoading(false); });
+    return () => { cancelled = true; };
+  }, [showStockStoreId, lockStoreId]);
+
+  // Auto-save (debounce 400ms), indépendant du reste.
+  useEffect(() => {
+    if (!canWrite) return;
+    if (showStockLastSaved.current.storeId === showStockStoreId && showStockLastSaved.current.value === showStock) return;
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch('/api/settings/pos/show-stock', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ store_id: showStockStoreId || null, show_stock: showStock }),
+        });
+        if (res.ok) {
+          showStockLastSaved.current = { storeId: showStockStoreId, value: showStock };
+          router.refresh();
+        }
+      } catch { /* tant pis, l'utilisateur peut recliquer */ }
+    }, 400);
+    return () => clearTimeout(t);
+  }, [showStock, showStockStoreId, canWrite, router]);
 
   // Échelle de l'interface : réglage PROPRE À CET ÉCRAN (localStorage), pas au
   // niveau organisation — chaque poste a sa taille d'écran. Indépendant de
@@ -370,11 +417,41 @@ export default function POSSettingsForm({
               onChange={(v) => patch('show_product_image', v)}
               disabled={!canWrite}
             />
+          </div>
+        </Section>
+
+        <Section
+          title="Affichage du stock"
+          description="Bulle de stock sur la tuile produit (si l'article suit son stock). Réglage PROPRE À CHAQUE BOUTIQUE — contrairement au reste de cette page, changer ce réglage ici n'affecte que la boutique sélectionnée."
+        >
+          {lockStoreId ? (
+            <p className="mb-3 text-xs text-ink-soft">
+              Poste de caisse : réglage de{' '}
+              <strong>{stores.find((s) => s.id === lockStoreId)?.name ?? 'cette boutique'}</strong> uniquement.
+            </p>
+          ) : stores.length > 1 ? (
+            <label className="mb-3 block text-sm">
+              <span className="text-ink-soft">Boutique</span>
+              <select
+                className="input h-10 w-full mt-1 max-w-sm"
+                value={showStockStoreId}
+                onChange={(e) => setShowStockStoreId(e.target.value)}
+                disabled={!canWrite}
+              >
+                <option value="">Toutes les boutiques (réglage par défaut)</option>
+                {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+              <span className="mt-1 block text-xs text-ink-soft">
+                « Toutes les boutiques » ne sert que de valeur par défaut, reprise par une boutique sans réglage propre.
+              </span>
+            </label>
+          ) : null}
+          <div className={showStockLoading ? 'opacity-50' : ''}>
             <Toggle
-              label="Afficher le stock sur la tuile (si l'article suit son stock)"
-              checked={settings.show_stock}
-              onChange={(v) => patch('show_stock', v)}
-              disabled={!canWrite}
+              label="Afficher le stock sur la tuile"
+              checked={showStock}
+              onChange={setShowStock}
+              disabled={!canWrite || showStockLoading}
             />
           </div>
         </Section>
@@ -499,7 +576,7 @@ export default function POSSettingsForm({
           <div className="text-xs uppercase tracking-wider text-ink-soft font-semibold px-1">
             Aperçu en direct
           </div>
-          <PreviewGrid settings={{ ...settings, tile_size: tileSize }} />
+          <PreviewGrid settings={{ ...settings, tile_size: tileSize }} showStock={showStock} />
           <p className="text-xs text-ink-soft px-1">
             L&apos;aperçu reflète vos choix. La grille s&apos;adapte automatiquement à la
             largeur de l&apos;écran sur la vraie caisse.
@@ -570,7 +647,7 @@ const PREVIEW_PRODUCTS = [
   { name: 'Bougie soja vanille', price: 18, tax: 20, category: 'Bougies', stock: null },
 ];
 
-function PreviewGrid({ settings }: { settings: PosUiSettings }) {
+function PreviewGrid({ settings, showStock }: { settings: PosUiSettings; showStock: boolean }) {
   const m = tileMetrics(settings.tile_size);
   return (
     <div className="rounded-2xl border border-border bg-bg p-4">
@@ -599,7 +676,7 @@ function PreviewGrid({ settings }: { settings: PosUiSettings }) {
             {settings.show_category_badge && (
               <div className="mt-1 text-[11px] text-ink-soft truncate">{p.category}</div>
             )}
-            {settings.show_stock && p.stock !== null && (
+            {showStock && p.stock !== null && (
               <div className="absolute right-0 bottom-0" style={{ width: 44, height: 44 }}>
                 <svg width={44} height={44} viewBox="0 0 44 44" className="absolute inset-0">
                   <path d="M 44 0 A 44 44 0 0 0 0 44 L 26 44 A 18 18 0 0 0 44 26 Z" fill="#B42318" />

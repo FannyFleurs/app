@@ -13,6 +13,7 @@ import {
   type PosUiSettings,
 } from '@/lib/settings/pos-ui';
 import { loadAllTileSizeOverrides } from '@/lib/settings/tile-size-server';
+import { loadAllShowStockOverrides } from '@/lib/settings/show-stock-server';
 import {
   SCREEN_DELIVERY_KEY,
   mergeScreenDeliveryDefaults,
@@ -51,7 +52,7 @@ export default async function CaissePage() {
   //   comptes vendeur / caisse creees sans configuration explicite.
   // Les 5 requêtes ci-dessous sont indépendantes → on les lance en parallèle
   // (un seul aller-retour groupé au lieu de 5 séquentiels).
-  const [stores, registers, taxRates, posSettingsRows, screenDeliveryRows, discountReasonsRows, storeTaxRows, storeTileSizes] = await Promise.all([
+  const [stores, registers, taxRates, posSettingsRows, screenDeliveryRows, discountReasonsRows, storeTaxRows, storeTileSizes, storeShowStock] = await Promise.all([
     query<{ id: string; code: string; name: string }>(
       `SELECT s.id, s.code, s.name FROM stores s
         WHERE s.organization_id = $2 AND s.is_active
@@ -100,6 +101,9 @@ export default async function CaissePage() {
     // storeTaxDefaults) : le storeId du poste n'est résolu que côté client
     // (poste itinérant compris), impossible de savoir lequel interroger ici.
     loadAllTileSizeOverrides(user.organizationId),
+    // Affichage du stock par boutique (clé 'pos_show_stock:<storeId>') —
+    // voir show-stock-server.ts. Même motif que storeTileSizes ci-dessus.
+    loadAllShowStockOverrides(user.organizationId),
   ]);
   const storeTaxDefaults: Record<string, string> = {};
   for (const row of storeTaxRows.rows) {
@@ -163,6 +167,7 @@ export default async function CaissePage() {
       taxRates={taxRates.rows.map((t) => ({ ...t, rate: Number(t.rate) }))}
       storeTaxDefaults={storeTaxDefaults}
       storeTileSizes={storeTileSizes}
+      storeShowStock={storeShowStock}
       currentUser={{ id: user.id, name: user.fullName, role: user.role }}
       posUi={posSettings}
       discountReasons={discountReasons}

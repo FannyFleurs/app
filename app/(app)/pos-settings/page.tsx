@@ -11,6 +11,7 @@ import {
 } from '@/lib/settings/pos-ui';
 import { loadTileSizeOverride } from '@/lib/settings/tile-size-server';
 import { loadAutoLogoutOverride } from '@/lib/settings/auto-logout-server';
+import { loadShowStockOverride } from '@/lib/settings/show-stock-server';
 import PageHeader from '@/components/PageHeader';
 import POSSettingsForm from './POSSettingsForm';
 import PosteRefCard from '@/components/PosteRefCard';
@@ -47,11 +48,16 @@ export default async function POSSettingsPage() {
   const initialAutoLogoutMinutes = autoLogoutOverride?.auto_logout_minutes
     ?? initial.auto_logout_minutes ?? POS_UI_DEFAULTS.auto_logout_minutes;
 
+  // Affichage du stock : réglage PAR BOUTIQUE (voir show-stock-server.ts) —
+  // même motif que la taille des tuiles ci-dessus.
+  const initialShowStock = (await loadShowStockOverride(user.organizationId, lockStoreId))
+    ?? initial.show_stock ?? POS_UI_DEFAULTS.show_stock;
+
   return (
     <div className="p-6 md:p-8 space-y-5">
       <PageHeader
         title="Paramètres caisse"
-        subtitle="Personnalisez l'interface de vente. Vos réglages sont enregistrés au niveau de votre organisation et appliqués sur toutes les caisses, à l'exception de la taille des tuiles et de la déconnexion automatique (réglables par boutique)."
+        subtitle="Personnalisez l'interface de vente. Vos réglages sont enregistrés au niveau de votre organisation et appliqués sur toutes les caisses, à l'exception de la taille des tuiles, de la déconnexion automatique et de l'affichage du stock (réglables par boutique)."
         badge={!canWrite ? { label: 'Lecture seule pour votre rôle', tone: 'soft' } : undefined}
       />
       <PosteRefCard />
@@ -63,6 +69,7 @@ export default async function POSSettingsPage() {
         initialTileSize={initialTileSize}
         initialAutoLogoutMode={initialAutoLogoutMode}
         initialAutoLogoutMinutes={initialAutoLogoutMinutes}
+        initialShowStock={initialShowStock}
       />
     </div>
   );

@@ -112,6 +112,9 @@ interface Props {
   /** Taille des tuiles produit par boutique (voir tile-size-server.ts),
    *  sinon défaut organisation (posUi.tile_size). */
   storeTileSizes?: Record<string, PosTileSize>;
+  /** Affichage de la bulle de stock par boutique (voir show-stock-server.ts),
+   *  sinon défaut organisation (posUi.show_stock). */
+  storeShowStock?: Record<string, boolean>;
   currentUser: { id: string; name: string; role: string };
   posUi: PosUiSettings;
   /** Motifs de remise (ligne/panier) et obligation de justification — voir
@@ -178,7 +181,7 @@ function matchProductByCode(products: PosProduct[], code: string): PosProduct | 
 }
 
 export default function CashRegister({
-  stores, registers, taxRates, storeTaxDefaults, storeTileSizes, currentUser, posUi, discountReasons, deferredOrdersEnabled, initial, canRoam,
+  stores, registers, taxRates, storeTaxDefaults, storeTileSizes, storeShowStock, currentUser, posUi, discountReasons, deferredOrdersEnabled, initial, canRoam,
 }: Props) {
   // Mode école : quand actif, on ne fait AUCUN appel mutant côté serveur.
   // La caisse a une session fictive auto-ouverte, les lignes restent en
@@ -206,6 +209,7 @@ export default function CashRegister({
   // app/(app)/pos-settings — réglage par boutique), sinon défaut organisation.
   const effectiveTileSize: PosTileSize = storeTileSizes?.[storeId] ?? posUi.tile_size;
   const metrics = useMemo(() => tileMetrics(effectiveTileSize), [effectiveTileSize]);
+  const effectiveShowStock: boolean = storeShowStock?.[storeId] ?? posUi.show_stock;
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -1907,7 +1911,7 @@ export default function CashRegister({
                     showImage={posUi.show_product_image}
                     showPrice={posUi.show_price}
                     showTaxBadge={posUi.show_tax_badge}
-                    showStock={posUi.show_stock}
+                    showStock={effectiveShowStock}
                   />
                 ))}
               </div>
@@ -1923,7 +1927,7 @@ export default function CashRegister({
               metrics={metrics}
               showImage={posUi.show_product_image}
               showPrice={posUi.show_price}
-              showStock={posUi.show_stock}
+              showStock={effectiveShowStock}
             />
           )}
         </div>
