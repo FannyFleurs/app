@@ -2569,20 +2569,33 @@ function formatStockQty(n: number): string {
 
 /** Bulle de stock : un quart de cercle creusé dans le coin bas-droit de la
  *  tuile (parent en `relative`) — ses bords droit et bas se confondent avec
- *  ceux de la tuile (flush, pas de translation), seul l'arc haut-gauche est
- *  une ligne visible. Le chiffre est poussé vers le coin (loin de l'arc).
- *  `tileRadius` doit reprendre EXACTEMENT le rayon d'angle de la tuile
- *  hôte (ex. 18 pour `.card`) : sinon le coin bas-droit de la bulle, carré
- *  par défaut, « carre » visuellement l'angle arrondi de la tuile. */
+ *  ceux de la tuile, seul l'arc haut-gauche est une ligne visible.
+ *
+ *  Dessinée en SVG (chemin vectoriel) plutôt qu'avec un coin de
+ *  `border-radius` CSS : un rayon par coin différent sur une petite boîte
+ *  (haut-gauche "plein", bas-droit = rayon de la tuile) s'est avéré ne pas
+ *  se peindre correctement partout (coin bas-droit resté carré en PWA sur
+ *  certains appareils) — un chemin SVG se peint à l'identique partout.
+ *  `tileRadius` doit reprendre le rayon d'angle de la tuile hôte (18 pour
+ *  `.card`) pour que le coin bas-droit de la bulle suive celui de la tuile. */
 function StockBubble({ qty, tileRadius = 18 }: { qty: number; tileRadius?: number }) {
+  const size = 44;
+  const r = tileRadius;
   return (
-    <span
-      className="absolute right-0 bottom-0 h-11 w-11 rounded-tl-full bg-danger text-white grid place-items-end pb-1.5 pr-2 text-base font-bold leading-none"
-      style={{ borderBottomRightRadius: tileRadius }}
-      title={`Stock : ${formatStockQty(qty)}`}
-    >
-      {formatStockQty(qty)}
-    </span>
+    <div className="absolute right-0 bottom-0" style={{ width: size, height: size }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="absolute inset-0">
+        <path
+          d={`M ${size} 0 A ${size} ${size} 0 0 0 0 ${size} L ${size - r} ${size} A ${r} ${r} 0 0 0 ${size} ${size - r} Z`}
+          fill="#B42318"
+        />
+      </svg>
+      <span
+        className="absolute right-2 bottom-1.5 text-base font-bold text-white leading-none"
+        title={`Stock : ${formatStockQty(qty)}`}
+      >
+        {formatStockQty(qty)}
+      </span>
+    </div>
   );
 }
 

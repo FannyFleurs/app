@@ -600,13 +600,17 @@ function PreviewGrid({ settings }: { settings: PosUiSettings }) {
               <div className="mt-1 text-[11px] text-ink-soft truncate">{p.category}</div>
             )}
             {settings.show_stock && p.stock !== null && (
-              <span
-                className="absolute right-0 bottom-0 h-11 w-11 rounded-tl-full bg-danger text-white grid place-items-end pb-1.5 pr-2 text-base font-bold leading-none"
-                style={{ borderBottomRightRadius: 18 }}
-                title={`Stock : ${p.stock}`}
-              >
-                {p.stock}
-              </span>
+              <div className="absolute right-0 bottom-0" style={{ width: 44, height: 44 }}>
+                <svg width={44} height={44} viewBox="0 0 44 44" className="absolute inset-0">
+                  <path d="M 44 0 A 44 44 0 0 0 0 44 L 26 44 A 18 18 0 0 0 44 26 Z" fill="#B42318" />
+                </svg>
+                <span
+                  className="absolute right-2 bottom-1.5 text-base font-bold text-white leading-none"
+                  title={`Stock : ${p.stock}`}
+                >
+                  {p.stock}
+                </span>
+              </div>
             )}
           </div>
         ))}
