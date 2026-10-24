@@ -2567,13 +2567,14 @@ function formatStockQty(n: number): string {
   return Number.isInteger(r) ? String(r) : r.toFixed(1).replace('.', ',');
 }
 
-/** Bulle de stock : nichée dans le coin bas-droit de la tuile (parent en
- *  `relative`), au ras des deux bords — elle se fond dans le coin de la
- *  tuile plutôt que de « flotter » au milieu d'une marge. */
+/** Bulle de stock : un quart de cercle creusé dans le coin bas-droit de la
+ *  tuile (parent en `relative`) — ses bords droit et bas se confondent avec
+ *  ceux de la tuile (flush, pas de translation), seul l'arc haut-gauche est
+ *  une ligne visible. Le chiffre est poussé vers le coin (loin de l'arc). */
 function StockBubble({ qty }: { qty: number }) {
   return (
     <span
-      className="absolute right-1.5 bottom-1.5 min-w-[22px] h-[22px] px-1 rounded-full bg-white border border-border grid place-items-center text-[10px] font-bold text-accent-deep shadow-sm leading-none"
+      className="absolute right-0 bottom-0 h-11 w-11 rounded-tl-full bg-danger text-white grid place-items-end pb-1.5 pr-2 text-base font-bold leading-none"
       title={`Stock : ${formatStockQty(qty)}`}
     >
       {formatStockQty(qty)}
