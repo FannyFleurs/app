@@ -22,6 +22,6 @@ export async function GET(req: Request) {
     buyer_name: card.buyer_name,
     buyer_phone: card.buyer_phone,
     expires_at: card.expires_at,
-    usable: !expired && card.status === 'active' && remaining > 0,
+    usable: !expired && (card.status === 'active' || card.status === 'partially_used') && remaining > 0,
   });
 }
