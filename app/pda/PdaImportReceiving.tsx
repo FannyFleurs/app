@@ -13,7 +13,7 @@ import {
  * Réception d'import : réceptionner, un par un, les articles d'un import
  * produits (Produits → Importer → « Envoyer cet import au PDA »).
  *
- *  1. « Réception d'import » : liste des imports envoyés au PDA pour CETTE
+ *  1. « Nouvelle réception » : liste des imports envoyés au PDA pour CETTE
  *     boutique, avec leur progression.
  *  2. Articles de l'import choisi : les restants à réceptionner, puis ceux
  *     déjà faits.
@@ -173,7 +173,7 @@ export default function PdaImportReceiving({
   if (view === 'batches') {
     return (
       <Screen>
-        <Header title="Réception d'import" onBack={onHome} onHome={onHome} />
+        <Header title="Nouvelle réception" onBack={onHome} onHome={onHome} />
         <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2.5">
           {loading ? (
             <p className="pt-10 text-center text-sm text-ink-soft">Chargement…</p>

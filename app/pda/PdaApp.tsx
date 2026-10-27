@@ -366,7 +366,7 @@ const onUnknownCode = useCallback((code: string) => {
         <MenuCard
           tone="receiving"
           icon={<IconImport />}
-          title="Réception d'import"
+          title="Nouvelle réception"
           subtitle="Réceptionner un import et imprimer les étiquettes"
           onClick={() => setScreen('import-receiving')}
         />

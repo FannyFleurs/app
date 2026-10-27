@@ -424,7 +424,7 @@ function SendToPdaToggle({ batchId, count }: { batchId: string; count: number })
         </p>
         {on && (
           <p className="mt-1.5 text-xs font-semibold text-accent-deep">
-            ✓ Visible sur le PDA, dans « Réception d&apos;import ».
+            ✓ Visible sur le PDA, dans « Nouvelle réception ».
           </p>
         )}
       </div>
