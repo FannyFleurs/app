@@ -9,10 +9,11 @@ import type { LabelProduct } from '@/lib/services/label-print';
 import PdaStock from './PdaStock';
 import PdaLabels from './PdaLabels';
 import PdaInventory from './PdaInventory';
+import PdaImportReceiving from './PdaImportReceiving';
 import PdaDiagnostic from './PdaDiagnostic';
 import {
   Screen, Header, MenuCard, Toast,
-  IconScanIn, IconTag, IconClipboard, IconGear,
+  IconScanIn, IconTag, IconClipboard, IconGear, IconImport,
 } from './ui';
 
 /* ------------------------------------------------------------------- types */
@@ -67,7 +68,7 @@ function toEditable(r: Record<string, unknown>): EditableProduct {
   };
 }
 
-type ScreenName = 'home' | 'stock' | 'labels' | 'inventory' | 'settings' | 'diagnostic';
+type ScreenName = 'home' | 'stock' | 'labels' | 'inventory' | 'import-receiving' | 'settings' | 'diagnostic';
 
 /* --------------------------------------------------------------------- app */
 
@@ -278,6 +279,18 @@ const onUnknownCode = useCallback((code: string) => {
   if (screen === 'inventory') {
     return <PdaInventory station={station} onHome={home} notify={notify} />;
   }
+  if (screen === 'import-receiving') {
+    return (
+      <PdaImportReceiving
+        station={station}
+        products={products}
+        settings={settings}
+        cloudPrinter={cloudPrinter}
+        onHome={home}
+        notify={notify}
+      />
+    );
+  }
   if (screen === 'diagnostic') {
     return <PdaDiagnostic onBack={() => setScreen('settings')} onHome={home} />;
   }
@@ -349,6 +362,13 @@ const onUnknownCode = useCallback((code: string) => {
           title="Entrée de marchandise"
           subtitle="Scanner pour ajouter du stock"
           onClick={() => setScreen('stock')}
+        />
+        <MenuCard
+          tone="receiving"
+          icon={<IconImport />}
+          title="Réception d'import"
+          subtitle="Réceptionner un import et imprimer les étiquettes"
+          onClick={() => setScreen('import-receiving')}
         />
         <MenuCard
           tone="labels"

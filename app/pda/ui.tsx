@@ -22,6 +22,7 @@ export const MODULE_TONES = {
   labels:    { bg: '#E6F1E9', fg: '#2F6B3F' },
   inventory: { bg: '#EFE9F6', fg: '#5B4A86' },
   settings:  { bg: '#FBEEE2', fg: '#96581B' },
+  receiving: { bg: '#E6F4F1', fg: '#0E6B5C' },
 } as const;
 export type ModuleTone = keyof typeof MODULE_TONES;
 
@@ -408,6 +409,10 @@ export function IconBox() {
 }
 export function IconScanIn() {
   return <svg width="24" height="24" viewBox="0 0 24 24" {...S}><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><path d="M14 14h3v3" /><path d="M21 21h-4" /><path d="M21 17v4" /></svg>;
+}
+/** Réception d'un import : flèche descendant dans un bac. */
+export function IconImport() {
+  return <svg width="24" height="24" viewBox="0 0 24 24" {...S}><path d="M12 3v10" /><path d="m8 9 4 4 4-4" /><path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4" /></svg>;
 }
 export function IconTag() {
   return <svg width="24" height="24" viewBox="0 0 24 24" {...S}><path d="M4 7v10M7 7v10M10 7v10M13.5 7v10M17 7v10M20 7v10" /></svg>;

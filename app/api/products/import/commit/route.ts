@@ -24,6 +24,9 @@ const bodySchema = z.object({
   rows: z.array(rowSchema).min(1).max(20000),
   // Boutique(s) cible de l'import. Vide/absent = toutes les boutiques.
   store_ids: z.array(z.string().uuid()).optional(),
+  // Nom du fichier source (affiché tel quel dans « Réception d'import » PDA
+  // si l'import est envoyé au PDA — voir /pda route PATCH).
+  filename: z.string().max(200).nullable().optional(),
 });
 
 /**
@@ -44,6 +47,7 @@ export async function POST(req: Request) {
   const storeIds = parsed.data.store_ids ?? [];
 
   let inserted = 0;
+  const insertedProductIds: string[] = [];
   const failures: Array<{ line?: number; name: string; reason: string }> = [];
 
   // Pré-charge taux TVA + catégories EN DEHORS de toute transaction.
@@ -150,10 +154,11 @@ export async function POST(req: Request) {
       }
 
       const placeholders = cols.map((_, i) => `$${i + 1}`).join(',');
-      await query(
-        `INSERT INTO products (${cols.join(',')}) VALUES (${placeholders})`,
+      const insProduct = await query<{ id: string }>(
+        `INSERT INTO products (${cols.join(',')}) VALUES (${placeholders}) RETURNING id`,
         values,
       );
+      insertedProductIds.push(insProduct.rows[0]!.id);
       inserted++;
     } catch (err) {
       failures.push({ name: r.name, reason: (err as Error).message });
@@ -167,9 +172,39 @@ export async function POST(req: Request) {
     payload: { inserted, failures: failures.length },
   });
 
+  // Lot d'import : trace des articles créés par CET import, pour la
+  // réception + impression d'étiquettes depuis le PDA (voir
+  // app/api/products/import/[id]/pda/route.ts). Best-effort — un échec ici
+  // ne doit jamais faire perdre les produits déjà importés avec succès.
+  let batchId: string | null = null;
+  if (insertedProductIds.length > 0) {
+    try {
+      const batch = await query<{ id: string }>(
+        `INSERT INTO import_batches (organization_id, filename, store_ids, product_count, created_by)
+         VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+        [g.user.organizationId, parsed.data.filename ?? null, targetStores, insertedProductIds.length, g.user.id],
+      );
+      batchId = batch.rows[0]!.id;
+      const values2: string[] = [];
+      const params2: unknown[] = [];
+      insertedProductIds.forEach((pid, i) => {
+        values2.push(`($${i * 2 + 1}, $${i * 2 + 2})`);
+        params2.push(batchId, pid);
+      });
+      await query(
+        `INSERT INTO import_batch_items (import_batch_id, product_id) VALUES ${values2.join(',')}`,
+        params2,
+      );
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[products.import.batch]', err);
+    }
+  }
+
   return NextResponse.json({
     inserted,
     failures,
     failure_count: failures.length,
+    batch_id: batchId,
   });
 }

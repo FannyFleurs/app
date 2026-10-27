@@ -44,11 +44,13 @@ export default function ProductImportModal({
   const [preview, setPreview] = useState<PreviewResp | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<{ inserted: number; failures: Array<{ name: string; reason: string }> } | null>(null);
+  const [result, setResult] = useState<{ inserted: number; failures: Array<{ name: string; reason: string }>; batchId: string | null } | null>(null);
+  const [filename, setFilename] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   async function onFile(f: File) {
     setLoading(true); setError(null);
+    setFilename(f.name);
     try {
       // Envoi en binaire : Excel (.xlsx) ou CSV, détecté côté serveur.
       const bytes = await f.arrayBuffer();
@@ -94,6 +96,7 @@ export default function ProductImportModal({
           is_active: row.is_active,
         })),
         store_ids: targetStores,
+        filename,
       }),
     });
     setLoading(false);
@@ -103,7 +106,7 @@ export default function ProductImportModal({
       return;
     }
     const j = await r.json();
-    setResult({ inserted: j.inserted, failures: j.failures ?? [] });
+    setResult({ inserted: j.inserted, failures: j.failures ?? [], batchId: j.batch_id ?? null });
     setStep('done');
   }
 
@@ -366,16 +369,18 @@ function PreviewStep({ preview, error }: { preview: PreviewResp; error: string |
 function DoneStep({
   result,
 }: {
-  result: { inserted: number; failures: Array<{ name: string; reason: string }> };
+  result: { inserted: number; failures: Array<{ name: string; reason: string }>; batchId: string | null };
 }) {
   return (
-    <div className="space-y-3 text-center py-6">
-      <div className="text-4xl">✓</div>
-      <div className="text-lg font-semibold">
-        {result.inserted} produit(s) importé(s)
+    <div className="space-y-4 py-4">
+      <div className="text-center space-y-1">
+        <div className="text-4xl">✓</div>
+        <div className="text-lg font-semibold">
+          {result.inserted} produit(s) importé(s)
+        </div>
       </div>
       {result.failures.length > 0 && (
-        <div className="text-sm text-ink-soft">
+        <div className="text-sm text-ink-soft text-center">
           {result.failures.length} échec(s) :
           <ul className="mt-2 text-left max-w-md mx-auto rounded-xl border border-border p-3 space-y-1">
             {result.failures.map((f, i) => (
@@ -386,6 +391,55 @@ function DoneStep({
           </ul>
         </div>
       )}
+      {result.batchId && <SendToPdaToggle batchId={result.batchId} count={result.inserted} />}
+    </div>
+  );
+}
+
+function SendToPdaToggle({ batchId, count }: { batchId: string; count: number }) {
+  const [on, setOn] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  async function toggle() {
+    const next = !on;
+    setOn(next); // optimiste
+    setSaving(true);
+    const r = await fetch(`/api/products/import/${batchId}/pda`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sent_to_pda: next }),
+    });
+    setSaving(false);
+    if (!r.ok) setOn(!next); // repli si l'enregistrement échoue
+  }
+
+  return (
+    <div className="max-w-md mx-auto rounded-2xl border border-border p-4 flex items-start gap-3">
+      <span className="h-10 w-10 shrink-0 rounded-xl bg-accent-soft text-accent-deep grid place-items-center">
+        📦
+      </span>
+      <div className="flex-1 min-w-0">
+        <div className="font-semibold text-sm">Envoyer cet import au PDA</div>
+        <p className="mt-0.5 text-xs text-ink-soft leading-relaxed">
+          Réceptionnez les {count} article{count > 1 ? 's' : ''} et imprimez leurs étiquettes directement depuis le PDA, boutique par boutique.
+        </p>
+        {on && (
+          <p className="mt-1.5 text-xs font-semibold text-accent-deep">
+            ✓ Visible sur le PDA, dans « Réception d&apos;import ».
+          </p>
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={() => void toggle()}
+        disabled={saving}
+        aria-pressed={on}
+        aria-label="Envoyer cet import au PDA"
+        className={`shrink-0 relative h-7 w-12 rounded-full transition-colors disabled:opacity-60 ${on ? 'accent-bar' : 'bg-border'}`}
+      >
+        <span
+          className={`absolute top-0.5 left-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${on ? 'translate-x-5' : ''}`}
+        />
+      </button>
     </div>
   );
 }
