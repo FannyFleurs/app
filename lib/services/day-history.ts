@@ -58,6 +58,8 @@ const AUDIT_ACTIONS: Record<string, { group: HistoryGroup; label: string; attent
   'sales.correct_payment':            { group: 'ventes',     label: 'Mode de règlement corrigé', attention: true },
   'sales.attach_customer_after':      { group: 'ventes',     label: 'Client rattaché après la vente' },
   'inventory.finalize':               { group: 'ventes',     label: 'Inventaire validé' },
+  'order_intake.rejected':            { group: 'ventes',     label: 'Commande externe rejetée', attention: true },
+  'order_intake.auto_checkout_failed': { group: 'ventes',    label: 'Commande reçue, encaissement auto échoué', attention: true },
   'auth.login.failed':                { group: 'acces',      label: 'Connexion refusée', attention: true },
   'auth.pin_login.failed':            { group: 'acces',      label: 'Code PIN refusé', attention: true },
   'admin.session.revoke':             { group: 'acces',      label: 'Session révoquée', attention: true },
@@ -314,6 +316,10 @@ function detailDePayload(action: string, p: Record<string, unknown>): string | n
           : null,
         texte('reason'),
       );
+    case 'order_intake.rejected':
+      return morceaux(texte('boutique'), texte('reason'), texte('external_ref'));
+    case 'order_intake.auto_checkout_failed':
+      return morceaux(texte('boutique'), texte('reason'), texte('external_ref'));
     case 'auth.login.failed':
       return morceaux(texte('email'), texte('reason'));
     case 'auth.pin_login.failed':

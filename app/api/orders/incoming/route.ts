@@ -4,6 +4,7 @@ import { query } from '@/lib/db/client';
 import { parseJson, jsonError } from '@/lib/validation/api';
 import { resolveOrgByOrderToken } from '@/lib/settings/order-integration-server';
 import { createIncomingOrder } from '@/lib/services/order-intake';
+import { audit } from '@/lib/audit/log';
 
 export const dynamic = 'force-dynamic';
 
@@ -57,21 +58,62 @@ function readToken(req: Request): string | null {
  * Crée une VENTE EN ATTENTE dans la boutique correspondante ; le caissier
  * l'encaisse ensuite normalement.
  */
+/**
+ * Journalise un échec de réception de commande externe — AUCUNE autre trace
+ * n'existe sinon : avant ce journal, une commande rejetée ici disparaissait
+ * silencieusement (l'app commande ne vérifie pas la réponse et confirme
+ * toujours au client). Visible organisation par organisation sur
+ * /commandes-rejetees (quand `organizationId` est connu — un jeton
+ * invalide/absent ne peut être rattaché à aucune organisation).
+ */
+async function logRejection(
+  organizationId: string | null,
+  reason: string,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  try {
+    await audit({
+      organizationId,
+      userId: null,
+      action: 'order_intake.rejected',
+      entityType: 'order_intake',
+      payload: { reason, ...payload },
+      severity: 'error',
+    });
+  } catch {
+    // Le rejet lui-même doit toujours être renvoyé à l'appelant, même si la
+    // journalisation échoue (ex. base indisponible) — jamais fatal ici.
+  }
+}
+
 export async function POST(req: Request) {
   const token = readToken(req);
-  if (!token) return jsonError('MISSING_TOKEN', 401);
+  if (!token) {
+    await logRejection(null, 'MISSING_TOKEN', {});
+    return jsonError('MISSING_TOKEN', 401);
+  }
 
   const resolved = await resolveOrgByOrderToken(token);
-  if (!resolved) return jsonError('INVALID_TOKEN', 401);
+  if (!resolved) {
+    await logRejection(null, 'INVALID_TOKEN', { token_hint: token.slice(-6) });
+    return jsonError('INVALID_TOKEN', 401);
+  }
   const { organizationId, settings } = resolved;
 
   const parsed = await parseJson(req, schema);
-  if ('response' in parsed) return parsed.response;
+  if ('response' in parsed) {
+    await logRejection(organizationId, 'VALIDATION_ERROR', {});
+    return parsed.response;
+  }
   const d = parsed.data;
 
   // Boutique -> store, via le mapping configuré dans l'admin.
   const storeId = settings.boutique_map[d.boutique];
   if (!storeId) {
+    await logRejection(organizationId, 'UNKNOWN_BOUTIQUE', {
+      boutique: d.boutique, external_ref: d.external_ref, source: d.source ?? null,
+      known_boutiques: Object.keys(settings.boutique_map),
+    });
     return jsonError('UNKNOWN_BOUTIQUE', 422, {
       message: `Boutique « ${d.boutique} » non mappée. Boutiques connues : ${Object.keys(settings.boutique_map).join(', ') || '(aucune)'}.`,
     });
@@ -80,7 +122,12 @@ export async function POST(req: Request) {
     `SELECT 1 FROM stores WHERE id = $1 AND organization_id = $2 AND is_active = TRUE`,
     [storeId, organizationId],
   );
-  if (own.rowCount === 0) return jsonError('STORE_NOT_FOUND', 422);
+  if (own.rowCount === 0) {
+    await logRejection(organizationId, 'STORE_NOT_FOUND', {
+      boutique: d.boutique, external_ref: d.external_ref, source: d.source ?? null, store_id: storeId,
+    });
+    return jsonError('STORE_NOT_FOUND', 422);
+  }
 
   try {
     const out = await createIncomingOrder({
@@ -102,6 +149,9 @@ export async function POST(req: Request) {
   } catch (e) {
     const msg = (e as Error).message || 'INTERNAL_ERROR';
     const status = msg === 'NO_ACTIVE_REGISTER' || msg === 'NO_USER' ? 422 : 500;
+    await logRejection(organizationId, msg, {
+      boutique: d.boutique, external_ref: d.external_ref, source: d.source ?? null, store_id: storeId,
+    });
     return jsonError(msg, status);
   }
 }

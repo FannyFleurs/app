@@ -5,6 +5,7 @@ import { paymentMethodFieldForSource } from '@/lib/settings/order-auto-checkout'
 import { ensureVirtualRegisterSession } from './virtual-register';
 import { validateSaleAndNotify } from './sale-validate-and-notify';
 import type { SalePaymentInput } from './sale-service';
+import { audit } from '@/lib/audit/log';
 
 export interface IncomingOrderLine {
   label: string;
@@ -404,6 +405,26 @@ export async function createIncomingOrder(input: IncomingOrderInput): Promise<In
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error('[order_intake.auto_checkout]', err);
+      // La vente EXISTE (déjà commitée, visible dans « En attente ») mais
+      // reste on_hold au lieu de l'encaissement automatique attendu — sans
+      // ce journal, c'est invisible ailleurs qu'ici : voir /commandes-rejetees.
+      try {
+        await audit({
+          organizationId: input.organizationId,
+          userId: null,
+          action: 'order_intake.auto_checkout_failed',
+          entityType: 'sale',
+          entityId: created.id,
+          payload: {
+            reason: (err as Error).message || 'AUTO_CHECKOUT_ERROR',
+            boutique: input.boutiqueLabel,
+            external_ref: input.externalRef,
+            source: orderSource,
+            store_id: input.storeId,
+          },
+          severity: 'error',
+        });
+      } catch { /* jamais fatal à la réception de la commande */ }
     }
   }
 

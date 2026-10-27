@@ -60,6 +60,7 @@ export const SIDEBAR_ITEMS: SidebarItem[] = [
   { href: '/reports',      label: 'Rapports',             icon: 'exports',      group: 'Pilotage', perm: 'settings.read', boOnly: true },
   { href: '/reports/objectifs', label: 'Objectifs',       icon: 'star',         group: 'Pilotage', perm: 'settings.read' },
   { href: '/remises',      label: 'Remises',              icon: 'discount',     group: 'Pilotage', perm: 'settings.read', boOnly: true },
+  { href: '/commandes-rejetees', label: 'Commandes rejetées', icon: 'warning', group: 'Pilotage', perm: 'settings.read', boOnly: true },
   // Journal des espèces et des gestes sensibles. Sous `closures.daily` : c'est
   // le registre de qui ouvre le tiroir et annule une vente — il regarde le
   // travail de l'équipe, il ne s'adresse pas à elle.
