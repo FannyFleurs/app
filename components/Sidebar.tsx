@@ -55,6 +55,7 @@ export const SIDEBAR_ITEMS: SidebarItem[] = [
   { href: '/stock',        label: 'Stock',                icon: 'stock',        group: 'Catalogue',perm: 'products.read' },
   { href: '/stock/transfer', label: 'Transfert stock',    icon: 'transfer',     group: 'Catalogue',perm: 'stock.adjust' },
   { href: '/inventory',    label: 'Inventaire',           icon: 'closures',     group: 'Catalogue',perm: 'stock.adjust' },
+  { href: '/receptions',   label: 'Réceptions',           icon: 'package',      group: 'Catalogue',perm: 'stock.adjust' },
   // Pilotage (en bas — pas en haut)
   { href: '/dashboard',    label: 'Tableau de bord',      icon: 'dashboard',    group: 'Pilotage', perm: 'settings.read' },
   { href: '/reports',      label: 'Rapports',             icon: 'exports',      group: 'Pilotage', perm: 'settings.read', boOnly: true },

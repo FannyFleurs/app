@@ -172,32 +172,32 @@ export async function POST(req: Request) {
     payload: { inserted, failures: failures.length },
   });
 
-  // Lot d'import : trace des articles créés par CET import, pour la
-  // réception + impression d'étiquettes depuis le PDA (voir
-  // app/api/products/import/[id]/pda/route.ts). Best-effort — un échec ici
-  // ne doit jamais faire perdre les produits déjà importés avec succès.
-  let batchId: string | null = null;
+  // Réception : trace des articles créés par CET import, pour la réception
+  // + impression d'étiquettes depuis le PDA (voir app/api/receptions/).
+  // Best-effort — un échec ici ne doit jamais faire perdre les produits
+  // déjà importés avec succès.
+  let receptionId: string | null = null;
   if (insertedProductIds.length > 0) {
     try {
-      const batch = await query<{ id: string }>(
-        `INSERT INTO import_batches (organization_id, filename, store_ids, product_count, created_by)
+      const reception = await query<{ id: string }>(
+        `INSERT INTO receptions (organization_id, filename, store_ids, product_count, created_by)
          VALUES ($1, $2, $3, $4, $5) RETURNING id`,
         [g.user.organizationId, parsed.data.filename ?? null, targetStores, insertedProductIds.length, g.user.id],
       );
-      batchId = batch.rows[0]!.id;
+      receptionId = reception.rows[0]!.id;
       const values2: string[] = [];
       const params2: unknown[] = [];
       insertedProductIds.forEach((pid, i) => {
         values2.push(`($${i * 2 + 1}, $${i * 2 + 2})`);
-        params2.push(batchId, pid);
+        params2.push(receptionId, pid);
       });
       await query(
-        `INSERT INTO import_batch_items (import_batch_id, product_id) VALUES ${values2.join(',')}`,
+        `INSERT INTO reception_items (reception_id, product_id) VALUES ${values2.join(',')}`,
         params2,
       );
     } catch (err) {
       // eslint-disable-next-line no-console
-      console.error('[products.import.batch]', err);
+      console.error('[products.import.reception]', err);
     }
   }
 
@@ -205,6 +205,6 @@ export async function POST(req: Request) {
     inserted,
     failures,
     failure_count: failures.length,
-    batch_id: batchId,
+    reception_id: receptionId,
   });
 }

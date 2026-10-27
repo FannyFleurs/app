@@ -9,7 +9,7 @@ import type { LabelProduct } from '@/lib/services/label-print';
 import PdaStock from './PdaStock';
 import PdaLabels from './PdaLabels';
 import PdaInventory from './PdaInventory';
-import PdaImportReceiving from './PdaImportReceiving';
+import PdaReceiving from './PdaReceiving';
 import PdaDiagnostic from './PdaDiagnostic';
 import {
   Screen, Header, MenuCard, Toast,
@@ -68,7 +68,7 @@ function toEditable(r: Record<string, unknown>): EditableProduct {
   };
 }
 
-type ScreenName = 'home' | 'stock' | 'labels' | 'inventory' | 'import-receiving' | 'settings' | 'diagnostic';
+type ScreenName = 'home' | 'stock' | 'labels' | 'inventory' | 'receiving' | 'settings' | 'diagnostic';
 
 /* --------------------------------------------------------------------- app */
 
@@ -279,9 +279,9 @@ const onUnknownCode = useCallback((code: string) => {
   if (screen === 'inventory') {
     return <PdaInventory station={station} onHome={home} notify={notify} />;
   }
-  if (screen === 'import-receiving') {
+  if (screen === 'receiving') {
     return (
-      <PdaImportReceiving
+      <PdaReceiving
         station={station}
         products={products}
         settings={settings}
@@ -367,8 +367,8 @@ const onUnknownCode = useCallback((code: string) => {
           tone="receiving"
           icon={<IconImport />}
           title="Nouvelle réception"
-          subtitle="Réceptionner un import et imprimer les étiquettes"
-          onClick={() => setScreen('import-receiving')}
+          subtitle="Réceptionner des articles et imprimer les étiquettes"
+          onClick={() => setScreen('receiving')}
         />
         <MenuCard
           tone="labels"

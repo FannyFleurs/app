@@ -6,10 +6,10 @@ import { jsonError } from '@/lib/validation/api';
 export const dynamic = 'force-dynamic';
 
 /**
- * Imports envoyés au PDA (« Réception d'import ») pour LA boutique du poste,
- * avec au moins un article restant à réceptionner. Un import dont
- * store_ids est vide cible toutes les boutiques ; sinon, seulement celles
- * listées — même convention que products.store_ids.
+ * Réceptions envoyées au PDA (« Nouvelle réception ») pour LA boutique du
+ * poste, avec au moins un article restant à réceptionner. Une réception
+ * dont store_ids est vide cible toutes les boutiques ; sinon, seulement
+ * celles listées — même convention que products.store_ids.
  */
 export async function GET(req: Request) {
   const g = await requirePermission('products.read');
@@ -21,23 +21,23 @@ export async function GET(req: Request) {
     id: string; filename: string | null; created_at: string;
     total: string; received: string;
   }>(
-    `SELECT ib.id, ib.filename, ib.created_at::text,
-            COUNT(ibi.id)::text AS total,
-            COUNT(ibi.id) FILTER (WHERE ibi.received_qty IS NOT NULL)::text AS received
-       FROM import_batches ib
-       JOIN import_batch_items ibi ON ibi.import_batch_id = ib.id
-      WHERE ib.organization_id = $1
-        AND ib.sent_to_pda = TRUE
-        AND (COALESCE(array_length(ib.store_ids, 1), 0) = 0 OR ib.store_ids @> ARRAY[$2]::uuid[])
-      GROUP BY ib.id
-     HAVING COUNT(ibi.id) FILTER (WHERE ibi.received_qty IS NULL) > 0
-      ORDER BY ib.created_at DESC
+    `SELECT r.id, r.filename, r.created_at::text,
+            COUNT(ri.id)::text AS total,
+            COUNT(ri.id) FILTER (WHERE ri.received_qty IS NOT NULL)::text AS received
+       FROM receptions r
+       JOIN reception_items ri ON ri.reception_id = r.id
+      WHERE r.organization_id = $1
+        AND r.sent_to_pda = TRUE
+        AND (COALESCE(array_length(r.store_ids, 1), 0) = 0 OR r.store_ids @> ARRAY[$2]::uuid[])
+      GROUP BY r.id
+     HAVING COUNT(ri.id) FILTER (WHERE ri.received_qty IS NULL) > 0
+      ORDER BY r.created_at DESC
       LIMIT 50`,
     [g.user.organizationId, storeId],
   );
 
   return NextResponse.json({
-    batches: rows.map((r) => ({
+    receptions: rows.map((r) => ({
       id: r.id,
       filename: r.filename,
       created_at: r.created_at,

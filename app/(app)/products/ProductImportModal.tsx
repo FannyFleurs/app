@@ -44,7 +44,7 @@ export default function ProductImportModal({
   const [preview, setPreview] = useState<PreviewResp | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<{ inserted: number; failures: Array<{ name: string; reason: string }>; batchId: string | null } | null>(null);
+  const [result, setResult] = useState<{ inserted: number; failures: Array<{ name: string; reason: string }>; receptionId: string | null } | null>(null);
   const [filename, setFilename] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -106,7 +106,7 @@ export default function ProductImportModal({
       return;
     }
     const j = await r.json();
-    setResult({ inserted: j.inserted, failures: j.failures ?? [], batchId: j.batch_id ?? null });
+    setResult({ inserted: j.inserted, failures: j.failures ?? [], receptionId: j.reception_id ?? null });
     setStep('done');
   }
 
@@ -369,7 +369,7 @@ function PreviewStep({ preview, error }: { preview: PreviewResp; error: string |
 function DoneStep({
   result,
 }: {
-  result: { inserted: number; failures: Array<{ name: string; reason: string }>; batchId: string | null };
+  result: { inserted: number; failures: Array<{ name: string; reason: string }>; receptionId: string | null };
 }) {
   return (
     <div className="space-y-4 py-4">
@@ -391,12 +391,12 @@ function DoneStep({
           </ul>
         </div>
       )}
-      {result.batchId && <SendToPdaToggle batchId={result.batchId} count={result.inserted} />}
+      {result.receptionId && <SendToPdaToggle receptionId={result.receptionId} count={result.inserted} />}
     </div>
   );
 }
 
-function SendToPdaToggle({ batchId, count }: { batchId: string; count: number }) {
+function SendToPdaToggle({ receptionId, count }: { receptionId: string; count: number }) {
   const [on, setOn] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -404,7 +404,7 @@ function SendToPdaToggle({ batchId, count }: { batchId: string; count: number })
     const next = !on;
     setOn(next); // optimiste
     setSaving(true);
-    const r = await fetch(`/api/products/import/${batchId}/pda`, {
+    const r = await fetch(`/api/receptions/${receptionId}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sent_to_pda: next }),
     });
