@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { formatEUR, round2 } from '@/lib/services/money';
 import { MAX_PACK_ITEMS } from '@/lib/products/pack';
 import { confirmThemed } from '@/lib/ui/dialog';
+import LabelPrintModal from './LabelPrintModal';
 
 interface PackItem { product_id: string; name: string; price: number; quantity: number }
 
@@ -34,9 +35,11 @@ export default function PackFormModal({
   const [isActive, setIsActive] = useState(true);
   const [items, setItems] = useState<PackItem[]>([]);
   const [discount, setDiscount] = useState('');
+  const [barcode, setBarcode] = useState<string | null>(null);
   const [loading, setLoading] = useState(!!packId);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [showLabel, setShowLabel] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Recherche de composants
@@ -57,6 +60,7 @@ export default function PackFormModal({
           setVisibleInPos(!!pack.visible_in_pos);
           setIsActive(!!pack.is_active);
           setDiscount(pack.pack_discount_ttc ? String(pack.pack_discount_ttc) : '');
+          setBarcode(pack.barcode ?? null);
           setItems((pack.items ?? []).map((i: { product_id: string; name: string; sale_price_ttc: number; quantity: number }) => ({
             product_id: i.product_id, name: i.name, price: i.sale_price_ttc, quantity: i.quantity,
           })));
@@ -253,22 +257,45 @@ export default function PackFormModal({
           </div>
         )}
 
-        <div className="border-t border-border px-5 py-3 flex items-center justify-end gap-2 shrink-0">
-          {packId && (
-            <button
-              className="mr-auto text-sm font-medium text-danger hover:underline disabled:opacity-50"
-              disabled={saving || loading || deleting}
-              onClick={() => void remove()}
-            >
-              {deleting ? 'Suppression…' : 'Supprimer le pack'}
+        <div className="border-t border-border px-5 py-3 flex items-center justify-between gap-2 shrink-0 flex-wrap">
+          <div className="flex gap-2">
+            {packId && barcode && (
+              <button type="button" onClick={() => setShowLabel(true)}
+                      className="btn-soft text-sm" title="Imprimer une étiquette avec code-barres et prix">
+                Imprimer étiquette
+              </button>
+            )}
+            {packId && (
+              <button
+                className="text-sm font-medium text-danger hover:underline disabled:opacity-50"
+                disabled={saving || loading || deleting}
+                onClick={() => void remove()}
+              >
+                {deleting ? 'Suppression…' : 'Supprimer le pack'}
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <button className="btn-ghost" onClick={onClose}>Annuler</button>
+            <button className="btn-primary" disabled={saving || loading || deleting} onClick={() => void save()}>
+              {saving ? 'Enregistrement…' : packId ? 'Enregistrer' : 'Créer le pack'}
             </button>
-          )}
-          <button className="btn-ghost" onClick={onClose}>Annuler</button>
-          <button className="btn-primary" disabled={saving || loading || deleting} onClick={() => void save()}>
-            {saving ? 'Enregistrement…' : packId ? 'Enregistrer' : 'Créer le pack'}
-          </button>
+          </div>
         </div>
       </div>
+
+      {showLabel && barcode && (
+        <LabelPrintModal
+          product={{
+            name: name.trim() || 'Pack',
+            barcode,
+            sale_price_ttc: finalPrice,
+            discount_type: null,
+            discount_value: null,
+          }}
+          onClose={() => setShowLabel(false)}
+        />
+      )}
     </div>
   );
 }

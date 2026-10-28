@@ -17,9 +17,10 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   const prod = await query<{
     id: string; name: string; category_id: string | null; tax_rate_id: string;
     sale_price_ttc: string; pack_discount_ttc: string; visible_in_pos: boolean; is_active: boolean;
+    barcode: string | null;
   }>(
     `SELECT id, name, category_id, tax_rate_id, sale_price_ttc,
-            COALESCE(pack_discount_ttc, 0) AS pack_discount_ttc, visible_in_pos, is_active
+            COALESCE(pack_discount_ttc, 0) AS pack_discount_ttc, visible_in_pos, is_active, barcode
        FROM products
       WHERE id = $1 AND organization_id = $2 AND COALESCE(is_pack, FALSE) = TRUE`,
     [params.id, g.user.organizationId],

@@ -4,7 +4,7 @@ import { requirePermission } from '@/lib/auth/guards';
 import { parseJson, jsonError } from '@/lib/validation/api';
 import { audit } from '@/lib/audit/log';
 import { computePackPrice } from '@/lib/products/pack';
-import { packSchema, productColumnExists, loadPackComponents, defaultTaxRateId } from '@/lib/products/pack-server';
+import { packSchema, productColumnExists, loadPackComponents, defaultTaxRateId, generatePackBarcode } from '@/lib/products/pack-server';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -46,11 +46,15 @@ export async function POST(req: Request) {
       )
     ).rows[0]!.id;
 
+    // Code-barres interne : permet le scan en caisse (éclate en composants,
+    // voir addPack) et l'impression d'étiquette, comme un produit classique.
+    const barcode = await generatePackBarcode(client, g.user.organizationId);
+
     const cols = ['organization_id', 'name', 'category_id', 'tax_rate_id', 'sale_price_ttc',
-      'track_stock', 'is_pack', 'pack_discount_ttc', 'visible_in_pos', 'is_active'];
+      'track_stock', 'is_pack', 'pack_discount_ttc', 'visible_in_pos', 'is_active', 'barcode'];
     const vals: unknown[] = [
       g.user.organizationId, p.name, categoryId, taxRateId, price,
-      false, true, p.discount_ttc, p.visible_in_pos, p.is_active,
+      false, true, p.discount_ttc, p.visible_in_pos, p.is_active, barcode,
     ];
     if (hasStoreIds) {
       let storeIds: string[];

@@ -24,6 +24,7 @@
     "revoke:sessions": "tsx scripts/revoke-sessions.ts",
     "fiscal:verify": "tsx scripts/verify-fiscal-chain.ts",
     "stock:backfill": "tsx scripts/backfill-stock-movements.ts",
+    "packs:backfill-barcodes": "tsx scripts/backfill-pack-barcodes.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },

@@ -1,6 +1,8 @@
 import 'server-only';
+import type { PoolClient } from 'pg';
 import { z } from 'zod';
 import { query } from '@/lib/db/client';
+import { generateEan13 } from '@/lib/services/ean';
 import { MAX_PACK_ITEMS } from './pack';
 
 export const packSchema = z.object({
@@ -32,6 +34,24 @@ export async function defaultTaxRateId(organizationId: string): Promise<string |
     [organizationId],
   );
   return r.rows[0]?.id ?? null;
+}
+
+/**
+ * Génère un EAN-13 interne (préfixe 28, réservé) pour un pack qui n'en a pas
+ * encore. Scanné en caisse, il résout vers le pack comme n'importe quel
+ * produit (buildCodeIndex) et permet d'imprimer son étiquette — même gabarit
+ * que les produits classiques, sans la liste des composants.
+ */
+export async function generatePackBarcode(client: PoolClient, organizationId: string): Promise<string> {
+  for (let i = 0; i < 5; i++) {
+    const candidate = generateEan13('28');
+    const exists = await client.query(
+      `SELECT 1 FROM products WHERE organization_id = $1 AND barcode = $2`,
+      [organizationId, candidate],
+    );
+    if (exists.rowCount === 0) return candidate;
+  }
+  throw new Error('BARCODE_GENERATION_FAILED');
 }
 
 export async function productColumnExists(col: string): Promise<boolean> {
