@@ -24,15 +24,15 @@
 :root {
   color-scheme: light;
   /* ------------------------------------------------------------------ */
-  /* Palette HelloPos : vert profond #013E37 + jaune doux #FFEFB3.       */
+  /* Palette HelloPos : vert profond #335355 + jaune doux #F9E3B0.       */
   /* Le vert porte les surfaces pleines (rail, boutons, en-têtes) ; le   */
   /* jaune signale ce qui est actif ou mis en avant. Un thème choisi     */
   /* dans les réglages (data-theme) ne redéfinit QUE ces trois           */
   /* variables — les neutres ci-dessous restent la base de la marque.    */
   /* ------------------------------------------------------------------ */
-  --primary: #013E37;
-  --primary-deep: #012B26;
-  --primary-soft: #FFEFB3;
+  --primary: #335355;
+  --primary-deep: #335355;
+  --primary-soft: #F9E3B0;
 
   /* Neutres chauds. Le fond tire très légèrement vers l'ivoire pour que les
      cartes blanches se détachent sans qu'on ait besoin d'ombres. */
@@ -45,7 +45,7 @@
   --border: #E7E3D8;
   /* Vert dédié au TEXTE. Identique à --primary : à #013E37 il dépasse déjà
      largement le 4.5:1 sur fond clair, inutile de le foncer davantage. */
-  --accent-text: #013E37;
+  --accent-text: #335355;
 
   /* Barre de navigation supérieure : le vert de marque, pleine surface. */
   --topbar-bg: #013E37;
@@ -99,7 +99,7 @@
    ne l'atteint. */
 .hellopos-mac .pos-catalog { zoom: 1; }
 
-body[data-theme="hellopos"]   { --primary: #013E37; --primary-deep: #012B26; --primary-soft: #FFEFB3; }
+body[data-theme="hellopos"]   { --primary: #335355; --primary-deep: #335355; --primary-soft: #F9E3B0; }
 body[data-theme="sage"]       { --primary: #5C6F5D; --primary-deep: #45543F; --primary-soft: #EDF1ED; }
 body[data-theme="charcoal"]   { --primary: #2A2F33; --primary-deep: #15191C; --primary-soft: #EEEEF0; }
 body[data-theme="navy"]       { --primary: #1F3A5F; --primary-deep: #15294A; --primary-soft: #E6EDF6; }
