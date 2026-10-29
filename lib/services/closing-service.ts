@@ -1,5 +1,6 @@
 import { withTransaction } from '@/lib/db/client';
 import { FiscalCore } from '@/lib/fiscal/core';
+import { SETTLEMENT_PAYMENTS_UNION_SQL } from '@/lib/analytics/account-settlements';
 
 /**
  * Service de clôture journalière.
@@ -119,20 +120,26 @@ export class ClosingService {
         ttc: Number(r.ttc),
       }));
 
-      // 3. Répartition paiements
+      // 3. Répartition paiements — ventes du jour + règlements de solde « en
+      //    compte » encaissés le même jour (hors espèces, déjà comptées via
+      //    cash_movements plus bas) — voir lib/analytics/account-settlements.ts.
       const payRes = await client.query<{
         method: string;
         total: string;
       }>(
-        `SELECT p.method, SUM(p.amount)::text AS total
-           FROM payments p
-           JOIN sales s ON s.id = p.sale_id
-          WHERE s.store_id = $1
-            AND s.status = 'validated'
-            AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date = $2::date
-            AND ($3::timestamptz IS NULL OR s.validated_at > $3)
-          GROUP BY p.method
-          ORDER BY p.method`,
+        `SELECT method, SUM(amount)::text AS total FROM (
+           SELECT p.method AS method, p.amount AS amount
+             FROM payments p
+             JOIN sales s ON s.id = p.sale_id
+            WHERE s.store_id = $1
+              AND s.status = 'validated'
+              AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date = $2::date
+              AND ($3::timestamptz IS NULL OR s.validated_at > $3)
+           UNION ALL
+           ${SETTLEMENT_PAYMENTS_UNION_SQL}
+         ) combined
+         GROUP BY method
+         ORDER BY method`,
         [args.storeId, args.businessDate, periodStart],
       );
       const paymentsBreakdown = payRes.rows.map((r) => ({

@@ -1,6 +1,7 @@
 import { query } from '@/lib/db/client';
 import { depositReasonSql } from '@/lib/services/cash-deposit';
 import { EXCLUDE_GIFT_CARD_ISSUANCE_SQL } from '@/lib/analytics/gift-card-ca';
+import { SETTLEMENT_PAYMENTS_UNION_SQL } from '@/lib/analytics/account-settlements';
 
 export interface ClosurePreview {
   totals: { sales: number; ht: number; tva: number; ttc: number; discount: number };
@@ -90,13 +91,20 @@ export async function computeClosurePreview(storeId: string, date: string): Prom
     [storeId, date, periodStart],
   );
 
+  // Paiements de vente DU JOUR + règlements de solde « en compte » encaissés
+  // le même jour (hors espèces, déjà comptées via cash_movements ci-dessous)
+  // — voir lib/analytics/account-settlements.ts.
   const payments = await query<{ method: string; total: string }>(
-    `SELECT p.method, SUM(p.amount)::text AS total
-       FROM payments p
-       JOIN sales s ON s.id = p.sale_id
-      WHERE s.store_id = $1 AND s.status='validated' AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date = $2::date
-        AND ($3::timestamptz IS NULL OR s.validated_at > $3)
-      GROUP BY p.method ORDER BY p.method`,
+    `SELECT method, SUM(amount)::text AS total FROM (
+       SELECT p.method AS method, p.amount AS amount
+         FROM payments p
+         JOIN sales s ON s.id = p.sale_id
+        WHERE s.store_id = $1 AND s.status='validated' AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date = $2::date
+          AND ($3::timestamptz IS NULL OR s.validated_at > $3)
+       UNION ALL
+       ${SETTLEMENT_PAYMENTS_UNION_SQL}
+     ) combined
+     GROUP BY method ORDER BY method`,
     [storeId, date, periodStart],
   );
 

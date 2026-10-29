@@ -75,6 +75,7 @@ export default function BillingManager({ canInvoice }: { canInvoice: boolean }) 
   // Modale de règlement de facture.
   const [settling, setSettling] = useState<InvoiceRow | null>(null);
   const [settleAmount, setSettleAmount] = useState('');
+  const [settleMethod, setSettleMethod] = useState('');
 
   // Génération manuelle des factures mensuelles.
   const [monthlyBusy, setMonthlyBusy] = useState(false);
@@ -171,6 +172,7 @@ export default function BillingManager({ canInvoice }: { canInvoice: boolean }) 
   function openSettle(inv: InvoiceRow) {
     setSettling(inv);
     setSettleAmount(inv.total_ttc.toFixed(2));
+    setSettleMethod('');
     setError(null);
   }
 
@@ -178,10 +180,11 @@ export default function BillingManager({ canInvoice }: { canInvoice: boolean }) 
     if (!settling || !detail) return;
     const amount = Number(settleAmount.replace(',', '.'));
     if (!(amount > 0)) { setError('Montant invalide.'); return; }
+    if (!settleMethod) { setError('Choisissez le mode de règlement.'); return; }
     setBusy(true); setError(null);
     const r = await fetch(`/api/invoices/${settling.id}/settle`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ amount }),
+      body: JSON.stringify({ amount, method: settleMethod }),
     });
     setBusy(false);
     if (r.ok) {
@@ -431,10 +434,28 @@ export default function BillingManager({ canInvoice }: { canInvoice: boolean }) 
                 onChange={(e) => setSettleAmount(e.target.value)}
               />
             </label>
+            <label className="block text-sm">
+              <span className="text-ink-soft">Mode de règlement</span>
+              <select
+                className="input h-11 w-full mt-1"
+                value={settleMethod}
+                onChange={(e) => setSettleMethod(e.target.value)}
+              >
+                <option value="">— Choisir —</option>
+                <option value="cash">Espèces</option>
+                <option value="card">Carte bancaire</option>
+                <option value="check">Chèque</option>
+                <option value="transfer">Virement</option>
+                <option value="other">Autre</option>
+              </select>
+              <p className="mt-1 text-xs text-ink-soft">
+                Nécessaire pour que ce règlement soit bien compté à la clôture de caisse du jour.
+              </p>
+            </label>
             {error && <p className="text-sm text-danger">{error}</p>}
             <div className="flex justify-end gap-2">
               <button className="btn-secondary h-10 px-4" disabled={busy} onClick={() => setSettling(null)}>Annuler</button>
-              <button className="btn-primary h-10 px-4" disabled={busy} onClick={() => void confirmSettle()}>
+              <button className="btn-primary h-10 px-4" disabled={busy || !settleMethod} onClick={() => void confirmSettle()}>
                 {busy ? '…' : 'Marquer comme payé'}
               </button>
             </div>

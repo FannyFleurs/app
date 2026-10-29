@@ -5,7 +5,9 @@ import { InvoiceService } from '@/lib/services/invoice-service';
 
 const schema = z.object({
   amount: z.number().positive(),
-  method: z.string().max(40).optional(),
+  // Requis : sert à la fois à tracer le règlement (account_settlement_payments,
+  // réconciliation de clôture) et, en espèces, à l'entrée de caisse.
+  method: z.enum(['cash', 'card', 'check', 'transfer', 'other']),
 });
 
 const ERR: Record<string, { status: number; message: string }> = {
@@ -13,6 +15,7 @@ const ERR: Record<string, { status: number; message: string }> = {
   INVOICE_ALREADY_PAID: { status: 409, message: 'Facture déjà réglée.' },
   INVOICE_CANCELLED: { status: 409, message: 'Facture annulée.' },
   INVALID_AMOUNT: { status: 400, message: 'Montant invalide.' },
+  NO_OPEN_SESSION: { status: 409, message: 'Aucune caisse ouverte : ouvrez la caisse avant d’encaisser en espèces.' },
 };
 
 /**

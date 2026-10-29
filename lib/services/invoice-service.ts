@@ -335,19 +335,28 @@ export class InvoiceService {
   }
 
   /**
-   * Solde une facture « en compte » : passe la facture en `paid` et crédite le
-   * solde en compte du client du montant réglé (le solde était négatif car la
-   * vente différée l'avait débité ; le règlement le ramène vers zéro). Le
-   * montant peut différer du total de la facture (règlement partiel/arrondi).
-   * Trace un événement fiscal PAYMENT_REGISTERED (amountTtcDelta = 0 : la vente
-   * a déjà cumulé le CA).
+   * Solde une facture « en compte » (Facturation → « Solder la facture ») :
+   * passe la facture en `paid` et crédite le solde en compte du client du
+   * montant réglé (le solde était négatif car la vente différée l'avait
+   * débité ; le règlement le ramène vers zéro). Le montant peut différer du
+   * total de la facture (règlement partiel/arrondi). Trace un événement
+   * fiscal PAYMENT_REGISTERED (amountTtcDelta = 0 : la vente a déjà cumulé le
+   * CA).
+   *
+   * Comme les autres chemins de règlement de solde (settleAccount,
+   * settleAccountWithPayments), le règlement est aussi tracé dans
+   * account_settlement_payments (réconciliation de clôture + ligne « Règlements
+   * en compte » du Z) et, en espèces, dans cash_movements (argent réellement
+   * entré dans le tiroir) — sans quoi une facture soldée en carte ou en
+   * espèces restait invisible de la clôture du jour, l'argent étant pourtant
+   * bien encaissé.
    */
   static async settleInvoice(args: {
     organizationId: string;
     userId: string;
     invoiceId: string;
     amount: number;
-    method?: string;
+    method: string;
   }): Promise<{ invoice_id: string; number: string | null; new_balance: number }> {
     return withTransaction(async (client) => {
       const invRes = await client.query<{
@@ -366,6 +375,20 @@ export class InvoiceService {
       const amount = round2(args.amount);
       if (!(amount > 0)) throw new Error('INVALID_AMOUNT');
 
+      // ESPÈCES = opération de caisse : interdite si aucune caisse n'est
+      // ouverte pour la boutique de la facture (même garde que settleAccount).
+      let cashSessionId: string | null = null;
+      if (args.method === 'cash') {
+        const sess = await client.query<{ id: string }>(
+          `SELECT id FROM cash_sessions
+            WHERE store_id = $1 AND organization_id = $2 AND status = 'open'
+            ORDER BY opened_at DESC LIMIT 1`,
+          [inv.store_id, args.organizationId],
+        );
+        cashSessionId = sess.rows[0]?.id ?? null;
+        if (!cashSessionId) throw new Error('NO_OPEN_SESSION');
+      }
+
       await client.query(
         `UPDATE invoices SET status = 'paid', paid_at = now(), updated_at = now() WHERE id = $1`,
         [inv.id],
@@ -382,6 +405,24 @@ export class InvoiceService {
       );
       const newBalance = Number(balRes.rows[0]?.account_balance ?? 0);
 
+      await client.query(
+        `INSERT INTO account_settlement_payments
+           (organization_id, customer_id, store_id, cash_session_id, user_id, method, amount, reference)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [args.organizationId, inv.customer_id, inv.store_id, cashSessionId, args.userId, args.method, amount, inv.number],
+      );
+
+      // Règlement EN ESPÈCES : l'argent entre dans le tiroir → entrée de caisse
+      // ('in') sur la session ouverte, pour être compté à la clôture et au X.
+      if (cashSessionId) {
+        await client.query(
+          `INSERT INTO cash_movements
+             (organization_id, cash_session_id, movement_type, amount, reason, user_id)
+           VALUES ($1, $2, 'in', $3, $4, $5)`,
+          [args.organizationId, cashSessionId, amount, 'Règlement facture', args.userId],
+        );
+      }
+
       const fiscal = new FiscalCore(client);
       const event = await fiscal.recordEvent({
         organizationId: args.organizationId,
@@ -395,7 +436,7 @@ export class InvoiceService {
           invoice_number: inv.number,
           customer_id: inv.customer_id,
           amount,
-          method: args.method ?? 'account_settlement',
+          method: args.method,
           invoice_total_ttc: Number(inv.total_ttc),
           new_account_balance: newBalance,
         },
