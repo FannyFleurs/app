@@ -37,8 +37,8 @@ export async function runMonthlyBillingForOrg(
     const name = c.name || 'Client';
     // Tickets « en compte » validés non facturés (mêmes critères que la
     // facturation manuelle).
-    const sales = await query<{ id: string }>(
-      `SELECT s.id
+    const sales = await query<{ id: string; store_id: string }>(
+      `SELECT s.id, s.store_id
          FROM sales s
         WHERE s.customer_id = $1
           AND s.organization_id = $2
@@ -49,22 +49,32 @@ export async function runMonthlyBillingForOrg(
         ORDER BY s.validated_at ASC`,
       [c.id, organizationId],
     );
-    const saleIds = sales.rows.map((s) => s.id);
-    if (saleIds.length === 0) {
+    if (sales.rows.length === 0) {
       result.skipped.push({ customer_id: c.id, customer_name: name, reason: 'Aucun ticket à facturer' });
       continue;
     }
-    try {
-      const out = await InvoiceService.createFromAccountSales({
-        organizationId, userId, customerId: c.id, saleIds,
-      });
-      result.generated.push({
-        customer_id: c.id, customer_name: name,
-        invoice_id: out.invoice_id, number: out.number, total_ttc: out.total_ttc,
-        sale_count: saleIds.length,
-      });
-    } catch (e) {
-      result.skipped.push({ customer_id: c.id, customer_name: name, reason: (e as Error).message });
+    // Une facture de période ne mélange pas les boutiques (en-tête + RIB
+    // propres à chacune — voir createFromAccountSales) : un client ayant des
+    // tickets non facturés dans plusieurs boutiques reçoit UNE facture par
+    // boutique, pas une facture unique à l'identité arbitraire.
+    const byStore = new Map<string, string[]>();
+    for (const s of sales.rows) {
+      const arr = byStore.get(s.store_id);
+      if (arr) arr.push(s.id); else byStore.set(s.store_id, [s.id]);
+    }
+    for (const saleIds of byStore.values()) {
+      try {
+        const out = await InvoiceService.createFromAccountSales({
+          organizationId, userId, customerId: c.id, saleIds,
+        });
+        result.generated.push({
+          customer_id: c.id, customer_name: name,
+          invoice_id: out.invoice_id, number: out.number, total_ttc: out.total_ttc,
+          sale_count: saleIds.length,
+        });
+      } catch (e) {
+        result.skipped.push({ customer_id: c.id, customer_name: name, reason: (e as Error).message });
+      }
     }
   }
 

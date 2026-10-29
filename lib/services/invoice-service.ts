@@ -232,6 +232,13 @@ export class InvoiceService {
         if (s.account_invoice_id) throw new Error('SALE_ALREADY_INVOICED');
       }
       const storeId = sales[0]!.store_id;
+      // Une facture de période porte l'en-tête et le RIB d'UNE boutique
+      // (paramétrage par boutique — voir loadInvoiceSettings) : mélanger des
+      // tickets de boutiques différentes ferait porter à la facture l'identité
+      // et les coordonnées bancaires d'une boutique arbitraire (la première du
+      // tableau), potentiellement sans RIB si cette boutique-là n'en a pas
+      // configuré. Refusé explicitement plutôt que silencieusement incohérent.
+      if (sales.some((s) => s.store_id !== storeId)) throw new Error('STORE_MISMATCH');
       const totalHt = round4(sales.reduce((a, s) => a + Number(s.total_ht), 0));
       const totalTva = round4(sales.reduce((a, s) => a + Number(s.total_tva), 0));
       const totalTtc = round4(sales.reduce((a, s) => a + Number(s.total_ttc), 0));

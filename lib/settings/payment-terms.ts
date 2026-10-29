@@ -18,6 +18,11 @@ export const PAYMENT_TERMS: PaymentTerm[] = [
   { code: 'net_45', label: '45 jours', days: 45 },
   { code: 'net_60', label: '60 jours', days: 60 },
   { code: 'eom_30', label: '30 jours fin de mois', days: 'eom' },
+  // Clients secteur public (collectivités, hôpitaux…) : facture déposée sur la
+  // plateforme Chorus Pro, obligatoire pour ces organismes. Même échéance
+  // légale que net_30, mais un code distinct pour que le libellé sur la
+  // facture et la fiche client restent explicites sur le circuit emprunté.
+  { code: 'chorus_pro', label: 'Chorus Pro (secteur public) — 30 jours', days: 30 },
 ];
 
 export const DEFAULT_PAYMENT_TERM = 'on_receipt';
