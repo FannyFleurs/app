@@ -8,6 +8,7 @@ interface PreviewRow {
   sku: string | null;
   barcode: string | null;
   category: string | null;
+  supplier: string | null;
   sale_price_ttc: number | null;
   purchase_price_ht: number | null;
   tax_rate_code: string;
@@ -87,6 +88,7 @@ export default function ProductImportModal({
           sku: row.sku,
           barcode: row.barcode,
           category: row.category,
+          supplier: row.supplier,
           sale_price_ttc: row.sale_price_ttc,
           purchase_price_ht: row.purchase_price_ht,
           tax_rate_code: row.tax_rate_code,
@@ -251,6 +253,7 @@ function PickStep({
           <div><strong>Référence (SKU)</strong> — Référence interne</div>
           <div><strong>Code-barres</strong> — EAN / UPC</div>
           <div><strong>Catégorie</strong> — Nom de la catégorie (créée si absente)</div>
+          <div><strong>Fournisseur</strong> — Nom du fournisseur (créé si absent)</div>
           <div><strong>Prix d&apos;achat HT (€)</strong> — ex. 7,50</div>
           <div><strong>Couleur (#RRGGBB)</strong> — Couleur de la tuile</div>
           <div><strong>Produit favori</strong> — oui / non</div>
@@ -313,6 +316,7 @@ function PreviewStep({ preview, error }: { preview: PreviewResp; error: string |
                 <th className="text-left px-2 py-2">SKU</th>
                 <th className="text-left px-2 py-2">Code-barres</th>
                 <th className="text-left px-2 py-2">Catégorie</th>
+                <th className="text-left px-2 py-2">Fournisseur</th>
                 <th className="text-right px-2 py-2">Prix TTC</th>
                 <th className="text-left px-2 py-2">TVA</th>
                 <th className="text-left px-2 py-2">Erreurs / Notes</th>
@@ -333,6 +337,7 @@ function PreviewStep({ preview, error }: { preview: PreviewResp; error: string |
                     <td className="px-2 py-1.5 text-ink-soft font-mono text-[10px]">{r.sku ?? '—'}</td>
                     <td className="px-2 py-1.5 text-ink-soft font-mono text-[10px]">{r.barcode ?? '—'}</td>
                     <td className="px-2 py-1.5 text-ink-soft">{r.category ?? '—'}</td>
+                    <td className="px-2 py-1.5 text-ink-soft">{r.supplier ?? '—'}</td>
                     <td className="px-2 py-1.5 text-right tabular-nums">
                       {r.sale_price_ttc != null && !Number.isNaN(r.sale_price_ttc)
                         ? r.sale_price_ttc.toFixed(2) + ' €'

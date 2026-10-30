@@ -12,6 +12,7 @@ interface ParsedRow {
   sku: string | null;
   barcode: string | null;
   category: string | null;
+  supplier: string | null;
   sale_price_ttc: number | null;
   purchase_price_ht: number | null;
   tax_rate_code: string;
@@ -46,10 +47,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ rows: [], errors: 0, total: 0 });
   }
 
-  // Catégories existantes (par nom, insensible à la casse) + taux de TVA
-  const [catRes, taxRes, existingBarcodes, existingSkus] = await Promise.all([
+  // Catégories + fournisseurs existants (par nom, insensible à la casse) + taux de TVA
+  const [catRes, supRes, taxRes, existingBarcodes, existingSkus] = await Promise.all([
     query<{ id: string; name: string }>(
       `SELECT id, name FROM product_categories WHERE organization_id = $1`,
+      [g.user.organizationId],
+    ),
+    query<{ id: string; name: string }>(
+      `SELECT id, name FROM suppliers WHERE organization_id = $1`,
       [g.user.organizationId],
     ),
     query<{ id: string; code: string }>(
@@ -67,6 +72,9 @@ export async function POST(req: Request) {
   ]);
   const categoriesByName = new Map(
     catRes.rows.map((c) => [c.name.trim().toLowerCase(), c.id]),
+  );
+  const suppliersByName = new Map(
+    supRes.rows.map((s) => [s.name.trim().toLowerCase(), s.id]),
   );
   const taxByCode = new Map(taxRes.rows.map((t) => [t.code.toUpperCase(), t.id]));
   const barcodesInDb = new Set(existingBarcodes.rows.map((r) => r.barcode));
@@ -127,6 +135,12 @@ export async function POST(req: Request) {
     }
     if (r.category && !categoriesByName.has(r.category.trim().toLowerCase())) {
       warnings.push(`Catégorie « ${r.category} » sera créée automatiquement`);
+    }
+    if (r.supplier && r.supplier.length > 200) {
+      errors.push(`Fournisseur trop long (${r.supplier.length} caractères, max 200)`);
+    }
+    if (r.supplier && !suppliersByName.has(r.supplier.trim().toLowerCase())) {
+      warnings.push(`Fournisseur « ${r.supplier} » sera créé automatiquement`);
     }
     if (r.barcode && barcodesInDb.has(r.barcode)) {
       errors.push(`Code-barres déjà utilisé en base : ${r.barcode}`);

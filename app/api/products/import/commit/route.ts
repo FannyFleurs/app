@@ -12,6 +12,7 @@ const rowSchema = z.object({
   sku: z.string().max(200).nullable().optional(),
   barcode: z.string().max(100).nullable().optional(),
   category: z.string().max(200).nullable().optional(),
+  supplier: z.string().max(200).nullable().optional(),
   sale_price_ttc: z.number().min(0),
   purchase_price_ht: z.number().min(0).nullable().optional(),
   tax_rate_code: z.string().min(1).max(40),
@@ -69,16 +70,25 @@ export async function POST(req: Request) {
     catRes.rows.map((c) => [c.name.trim().toLowerCase(), c.id]),
   );
 
+  const supRes = await query<{ id: string; name: string }>(
+    `SELECT id, name FROM suppliers WHERE organization_id = $1`,
+    [g.user.organizationId],
+  );
+  const supByName = new Map(
+    supRes.rows.map((s) => [s.name.trim().toLowerCase(), s.id]),
+  );
+
   // Détecte si les colonnes optionnelles existent (migrations 0008,
-  // 0012, 0018).
+  // 0012, 0018, 0038).
   const colCheck = await query<{ column_name: string }>(
     `SELECT column_name FROM information_schema.columns
       WHERE table_name = 'products'
-        AND column_name IN ('is_top_product','color','store_ids')`,
+        AND column_name IN ('is_top_product','color','store_ids','supplier_id')`,
   );
   const hasTop = colCheck.rows.some((r) => r.column_name === 'is_top_product');
   const hasColor = colCheck.rows.some((r) => r.column_name === 'color');
   const hasStoreIds = colCheck.rows.some((r) => r.column_name === 'store_ids');
+  const hasSupplier = colCheck.rows.some((r) => r.column_name === 'supplier_id');
   // Boutiques ciblées (seulement si la colonne existe). Vide = toutes.
   const targetStores = hasStoreIds ? storeIds : [];
 
@@ -126,6 +136,28 @@ export async function POST(req: Request) {
         }
       }
 
+      // Crée le fournisseur si nécessaire (même principe que la catégorie).
+      let supplierId: string | null = null;
+      if (hasSupplier && r.supplier && r.supplier.trim()) {
+        const key = r.supplier.trim().toLowerCase();
+        const existing = supByName.get(key);
+        if (existing) {
+          supplierId = existing;
+        } else {
+          try {
+            const insSup = await query<{ id: string }>(
+              `INSERT INTO suppliers (organization_id, name) VALUES ($1, $2) RETURNING id`,
+              [g.user.organizationId, r.supplier.trim()],
+            );
+            supplierId = insSup.rows[0]!.id;
+            supByName.set(key, supplierId);
+          } catch (supErr) {
+            failures.push({ name: r.name, reason: `Création fournisseur « ${r.supplier} » : ${(supErr as Error).message}` });
+            continue;
+          }
+        }
+      }
+
       const cols = [
         'organization_id', 'name', 'tax_rate_id', 'sale_price_ttc',
         'purchase_price_ht', 'sku', 'barcode', 'category_id',
@@ -151,6 +183,10 @@ export async function POST(req: Request) {
       if (hasStoreIds) {
         cols.push('store_ids');
         values.push(targetStores);
+      }
+      if (hasSupplier) {
+        cols.push('supplier_id');
+        values.push(supplierId);
       }
 
       const placeholders = cols.map((_, i) => `$${i + 1}`).join(',');

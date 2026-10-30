@@ -6,6 +6,7 @@ export interface RawImportRow {
   sku: string | null;
   barcode: string | null;
   category: string | null;
+  supplier: string | null;
   sale_price_ttc: number | null;
   purchase_price_ht: number | null;
   tax_rate_code: string;
@@ -16,7 +17,7 @@ export interface RawImportRow {
 }
 
 type ColKey =
-  | 'name' | 'sku' | 'barcode' | 'category'
+  | 'name' | 'sku' | 'barcode' | 'category' | 'supplier'
   | 'sale_price_ttc' | 'purchase_price_ht' | 'tax_rate_code'
   | 'color' | 'is_top_product' | 'visible_in_pos' | 'is_active';
 
@@ -31,6 +32,7 @@ export const IMPORT_COLUMNS: Array<{
   { key: 'sku',               header: 'Référence (SKU)',              width: 16, examples: ['DECO-001', 'MODE-002', 'CAD-003'] },
   { key: 'barcode',           header: 'Code-barres',                  width: 18, examples: ['3760000000011', '3760000000028', ''] },
   { key: 'category',          header: 'Catégorie',                    width: 22, examples: ['Décoration', 'Accessoires de mode', 'Cadeaux'] },
+  { key: 'supplier',          header: 'Fournisseur',                  width: 22, examples: ['', '', ''] },
   { key: 'sale_price_ttc',    header: 'Prix de vente TTC (€)',        width: 18, examples: ['18,90', '45,00', '39,00'] },
   { key: 'purchase_price_ht', header: "Prix d'achat HT (€)",          width: 18, examples: ['7,50', '18,00', '16,00'] },
   { key: 'tax_rate_code',     header: 'Code TVA',                     width: 12, examples: ['TVA20', 'TVA20', 'TVA20'] },
@@ -56,6 +58,7 @@ const HEADER_ALIASES: Record<ColKey, string[]> = {
   sku: ['reference', 'reference sku', 'sku', 'ref'],
   barcode: ['code barres', 'code barre', 'barcode', 'ean', 'gencod', 'code_barres'],
   category: ['categorie', 'category', 'famille', 'rayon'],
+  supplier: ['fournisseur', 'supplier', 'fabricant'],
   sale_price_ttc: ['prix de vente ttc', 'prix ttc', 'prix vente ttc', 'prix de vente', 'sale price ttc', 'prix_vente_ttc'],
   purchase_price_ht: ["prix d achat ht", 'prix achat ht', 'prix ht', 'cout', 'purchase price ht', 'prix_achat_ht'],
   tax_rate_code: ['code tva', 'taux de tva', 'taux tva', 'tva', 'tax rate code', 'tax_rate_code'],
@@ -91,6 +94,7 @@ function buildRow(get: (k: ColKey) => string): RawImportRow {
     sku: get('sku') || null,
     barcode: get('barcode') || null,
     category: get('category') || null,
+    supplier: get('supplier') || null,
     sale_price_ttc: toNum(get('sale_price_ttc')),
     purchase_price_ht: toNum(get('purchase_price_ht')),
     tax_rate_code: get('tax_rate_code') || 'TVA20',
