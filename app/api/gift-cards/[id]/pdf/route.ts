@@ -3,6 +3,7 @@ import { query } from '@/lib/db/client';
 import { requirePermission } from '@/lib/auth/guards';
 import { jsonError } from '@/lib/validation/api';
 import { renderGiftCardPdf } from '@/lib/services/gift-card-pdf';
+import { loadReceiptSettings } from '@/lib/settings/receipt-server';
 
 export async function GET(req: Request, { params }: { params: { id: string } }) {
   const g = await requirePermission('pos.use');
@@ -13,17 +14,20 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     buyer_name: string | null; buyer_phone: string | null;
     buyer_email: string | null;
     issued_at: string; expires_at: string | null;
+    store_id: string | null;
     org_name: string; org_legal: string; org_siret: string | null;
     org_address: { line1?: string; zip?: string; city?: string } | null;
     org_phone: string | null;
   }>(
     `SELECT gc.code, gc.initial_amount::text, gc.buyer_name, gc.buyer_phone,
             gc.buyer_email, gc.issued_at, gc.expires_at,
+            s.store_id AS store_id,
             o.name AS org_name, o.legal_name AS org_legal, o.siret AS org_siret,
             o.address AS org_address,
             (o.contact->>'phone') AS org_phone
        FROM gift_cards gc
        JOIN organizations o ON o.id = gc.organization_id
+       LEFT JOIN sales s ON s.id = gc.sale_id
       WHERE gc.id = $1 AND gc.organization_id = $2`,
     [params.id, g.user.organizationId],
   );
@@ -31,6 +35,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   const r = rows[0]!;
 
   const nativePrint = new URL(req.url).searchParams.get('native') === '1';
+  const receiptSettings = await loadReceiptSettings(g.user.organizationId, r.store_id);
 
   const buf = await renderGiftCardPdf(
     {
@@ -51,6 +56,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     },
     {
       nativePrint,
+      terms: receiptSettings.gift_card_terms,
     },
   );
 

@@ -18,6 +18,7 @@ const schema = z.object({
   vat_number: z.string().max(40).optional(),
   welcome_message: z.string().max(120).optional(),
   footer_message: z.string().max(500).optional(),
+  gift_card_terms: z.string().max(1000).optional(),
   show_barcode: z.boolean().optional(),
   show_tax_breakdown: z.boolean().optional(),
   auto_print_receipt: z.boolean().optional(),

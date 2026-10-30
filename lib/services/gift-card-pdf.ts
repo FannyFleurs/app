@@ -47,7 +47,7 @@ async function loadBwip(): Promise<BwipNode | null> {
 export async function renderGiftCardPdf(
   data: GiftCardPdfData,
   org: OrgInfo,
-  options: { nativePrint?: boolean } = {},
+  options: { nativePrint?: boolean; terms?: string | null } = {},
 ): Promise<Buffer> {
   const W = 226;
 
@@ -156,6 +156,17 @@ export async function renderGiftCardPdf(
       { align: 'center' },
     );
     doc.fillColor('#000');
+
+    // Conditions d'utilisation propres à la boutique (Réglages → Ticket),
+    // en plus de la mention légale fixe ci-dessus.
+    if (options.terms?.trim()) {
+      doc.moveDown(0.4);
+      doc.font('Helvetica').fontSize(7).fillColor('#444').text(
+        options.terms.trim(),
+        { align: 'center' },
+      );
+      doc.fillColor('#000');
+    }
 
     doc.moveDown(0.5);
 

@@ -37,6 +37,32 @@ const qty = (q: number) => (Number.isInteger(q) ? String(q) : String(q).replace(
 /** Translittère en ASCII (les imprimantes thermiques gèrent mal les accents). */
 const ascii = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\x20-\x7e]/g, '');
 
+/**
+ * Découpe un texte libre (paragraphe éventuellement long, retours à la ligne
+ * manuels possibles) en lignes tenant dans `width` colonnes. L'imprimante
+ * ESC/POS n'enveloppe jamais elle-même une ligne trop longue — contrairement
+ * au PDF (PDFKit), qui le fait seul via `{ width, align }`.
+ */
+export function wrapText(text: string, width: number): string[] {
+  const out: string[] = [];
+  for (const paragraph of text.split('\n')) {
+    const words = paragraph.trim().split(/\s+/).filter(Boolean);
+    if (words.length === 0) { out.push(''); continue; }
+    let cur = '';
+    for (const word of words) {
+      const candidate = cur ? `${cur} ${word}` : word;
+      if (candidate.length > width) {
+        if (cur) out.push(cur);
+        cur = word.length > width ? word.slice(0, width) : word;
+      } else {
+        cur = candidate;
+      }
+    }
+    if (cur) out.push(cur);
+  }
+  return out;
+}
+
 // Interface minimale de l'encodeur StarPRNT (typings du paquet incomplets).
 interface StarEnc {
   initialize(): StarEnc;
@@ -682,7 +708,7 @@ export async function buildGiftCardStarPrnt(
 ): Promise<Buffer> {
   const W = columns(paperWidthMm, widthDots);
   const enc = await newEncoder(W);
-  const { center, rule, row } = layout(enc, W);
+  const { center, left, rule, row } = layout(enc, W);
 
   await printShopName(enc, settings?.shop_name?.trim() || gc.org_name, paperWidthMm, widthDots);
   if (settings?.address_line1) center(settings.address_line1);
@@ -707,6 +733,11 @@ export async function buildGiftCardStarPrnt(
   if (gc.buyer_name) row('Offerte par', gc.buyer_name);
   enc.newline();
   center('A presenter en caisse pour reglement.');
+  center('Non rechargeable, non remboursable en especes.');
+  if (settings?.gift_card_terms?.trim()) {
+    enc.newline();
+    for (const line of wrapText(ascii(settings.gift_card_terms.trim()), W)) left(line);
+  }
   feedAndCut(enc);
   return Buffer.from(enc.encode());
 }

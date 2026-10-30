@@ -244,6 +244,15 @@ export default function ReceiptSettingsForm({ stores, canEdit, lockedStoreId }: 
             </Field>
           </div>
 
+          <div className="card p-5 space-y-4">
+            <h2 className="font-semibold">Carte cadeau</h2>
+            <Field label="Conditions d'utilisation" help="Imprimées sur le ticket de la carte cadeau, en plus de la mention légale fixe (non rechargeable, non remboursable en espèces). Plusieurs lignes possibles.">
+              <textarea className="input h-28" value={form.gift_card_terms} disabled={!canEdit}
+                        placeholder="Ex : Valable 1 an à compter de la date d'émission. Utilisable en une ou plusieurs fois."
+                        onChange={(e) => setForm({ ...form, gift_card_terms: e.target.value })} />
+            </Field>
+          </div>
+
           <div className="card p-5 space-y-3">
             <h2 className="font-semibold">Options d&apos;impression</h2>
             <Check label="Imprimer le code-barres du numéro de ticket (Code-128)"

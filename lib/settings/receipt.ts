@@ -36,6 +36,12 @@ export interface ReceiptSettings {
   welcome_message: string;
   /** Message de pied de page (plusieurs lignes possibles). */
   footer_message: string;
+  /**
+   * Conditions d'utilisation de la carte cadeau, imprimées sur son ticket
+   * (en plus de la mention légale fixe « non rechargeable, non remboursable
+   * en espèces »). Plusieurs lignes possibles. Vide = rien d'imprimé en plus.
+   */
+  gift_card_terms: string;
   /** Imprime le code-barres Code-128 du numéro de ticket. */
   show_barcode: boolean;
   /** Imprime le détail de TVA. */
@@ -73,6 +79,7 @@ export const RECEIPT_DEFAULTS: ReceiptSettings = {
   website: '',
   welcome_message: 'Merci de votre visite',
   footer_message: 'À bientôt !',
+  gift_card_terms: '',
   show_barcode: true,
   show_tax_breakdown: true,
   auto_print_receipt: false,
