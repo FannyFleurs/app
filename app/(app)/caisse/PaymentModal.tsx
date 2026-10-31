@@ -3,6 +3,7 @@ import { alertThemed } from '@/lib/ui/dialog';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { formatEUR, round2 } from '@/lib/services/money';
+import { splitPaymentsForAccountSettlement } from '@/lib/pos/split-combined-payment';
 
 type Method = 'cash' | 'card' | 'check' | 'transfer' | 'gift_card' | 'credit_note' | 'payment_link' | 'other' | 'deferred' | 'loyalty';
 
@@ -50,9 +51,24 @@ interface Props {
    *  mais valide un règlement de compte (pas une vente). */
   settlement?: { customerId: string };
   onSettled?: (result: { new_balance: number; total: number; settled_invoice_ids: string[] }) => void;
+  /**
+   * Combine la vente en cours ET le solde dû du client en UN SEUL
+   * encaissement : `totalTtc` inclut déjà ce montant (vente + solde). À la
+   * validation, les règlements saisis sont répartis — la part de la vente
+   * d'abord (jusqu'à son propre total), le reste pour le solde — en deux
+   * écritures serveur distinctes (la vente reste du CA, le solde reste un
+   * simple encaissement de créance), réunies pour le caissier en une seule
+   * saisie. Incompatible avec `settlement` (qui ne porte AUCUNE vente).
+   */
+  accountSettlement?: { customerId: string; amount: number };
 }
 
-export default function PaymentModal({ saleId, totalTtc, lines = [], storeId, hasCustomer = false, loyaltyRedemption, schoolMode, offlineEnabled, onOfflineFinalize, onClose, onValidated, settlement, onSettled }: Props) {
+export default function PaymentModal({ saleId, totalTtc, lines = [], storeId, hasCustomer = false, loyaltyRedemption, schoolMode, offlineEnabled, onOfflineFinalize, onClose, onValidated, settlement, onSettled, accountSettlement }: Props) {
+  // Part de la vente dans le total combiné (totalTtc inclut le solde dû
+  // quand accountSettlement est présent) — sert à plafonner la fidélité
+  // (qui ne peut régler que la vente, jamais une dette déjà existante) et à
+  // répartir les règlements saisis à la validation.
+  const saleTotal = accountSettlement ? round2(totalTtc - accountSettlement.amount) : totalTtc;
   const [methods, setMethods] = useState<Array<{ kind: Method; label: string; opens_drawer?: boolean }>>(FALLBACK_METHODS);
   const [amountStr, setAmountStr] = useState<string>('');
   const [payments, setPayments] = useState<RegisteredPayment[]>([]);
@@ -84,9 +100,10 @@ export default function PaymentModal({ saleId, totalTtc, lines = [], storeId, ha
         const j = await r.json();
         const active = (j.methods as Array<{ kind: Method; label: string; is_active: boolean; opens_drawer?: boolean }>)
           .filter((m) => m.is_active)
-          // Règlement d'un compte : on ne peut pas régler « en compte » avec
-          // « en compte », ni via lien de paiement (asynchrone).
-          .filter((m) => !settlement || (m.kind !== 'deferred' && m.kind !== 'payment_link'));
+          // Règlement d'un compte (seul ou combiné à une vente) : on ne peut
+          // pas régler « en compte » avec « en compte », ni via lien de
+          // paiement (asynchrone, incompatible avec un encaissement immédiat).
+          .filter((m) => !(settlement || accountSettlement) || (m.kind !== 'deferred' && m.kind !== 'payment_link'));
         if (active.length > 0) setMethods(active.map((m) => ({ kind: m.kind, label: m.label, opens_drawer: m.opens_drawer })));
       }
     })();
@@ -95,14 +112,15 @@ export default function PaymentModal({ saleId, totalTtc, lines = [], storeId, ha
 
   // Fidélité pré-sélectionnée au comptoir : on l'applique comme un MOYEN DE
   // PAIEMENT « Fidélité » (le solde règle une partie du ticket), et non comme
-  // une remise. Ajouté une seule fois, plafonné au total ; retirable comme un
-  // paiement classique.
+  // une remise. Ajouté une seule fois, plafonné au total DE LA VENTE (jamais
+  // au solde dû combiné : la fidélité ne peut pas régler une dette déjà
+  // existante) ; retirable comme un paiement classique.
   useEffect(() => {
     if (loyaltyAddedRef.current) return;
     if (settlement) return;
     if (loyaltyRedemption && loyaltyRedemption > 0) {
       loyaltyAddedRef.current = true;
-      const amt = round2(Math.min(loyaltyRedemption, totalTtc));
+      const amt = round2(Math.min(loyaltyRedemption, saleTotal));
       if (amt > 0) {
         setPayments((cur) => [...cur, { key: cryptoKey(), method: 'loyalty', label: 'Fidélité', amount: amt }]);
       }
@@ -241,6 +259,64 @@ export default function PaymentModal({ saleId, totalTtc, lines = [], storeId, ha
           return;
         }
         onSettled?.(await res.json());
+      } finally { setLoading(false); }
+      return;
+    }
+    // Vente ET solde dû combinés en un seul encaissement : on répartit les
+    // règlements saisis entre les deux (la part de la vente d'abord, jusqu'à
+    // SON total, le reste pour le solde) et on les soumet comme DEUX
+    // écritures serveur distinctes — la vente reste du CA, le règlement de
+    // solde n'en est jamais (la vente d'origine l'a déjà compté).
+    if (accountSettlement) {
+      setLoading(true); setError(null);
+      try {
+        const { salePayments, settlementPayments } = splitPaymentsForAccountSettlement(payments, saleTotal);
+
+        const saleRes = await fetch(`/api/sales/${saleId}/validate`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            payments: salePayments.map((p) => ({
+              method: p.method, amount: p.amount, given_amount: p.given_amount, reference: p.reference, label: p.label,
+            })),
+          }),
+        });
+        if (!saleRes.ok) {
+          const j = await saleRes.json().catch(() => ({}));
+          const code = j.error ?? j.message;
+          setError(
+            code === 'CASH_SESSION_CLOSED' || code === 'NO_OPEN_CASH_SESSION'
+              ? 'Journée clôturée : rouvrez la caisse (fonds de caisse) avant d\'encaisser.'
+              : code ?? 'Erreur d\'encaissement',
+          );
+          return;
+        }
+        const saleJson = await saleRes.json();
+
+        if (settlementPayments.length > 0) {
+          const settleRes = await fetch(`/api/customers/${accountSettlement.customerId}/settle-payment`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              payments: settlementPayments.map((p) => ({
+                method: p.method, amount: p.amount, given_amount: p.given_amount, reference: p.reference, label: p.label,
+              })),
+              store_id: storeId,
+            }),
+          });
+          if (!settleRes.ok) {
+            const j = await settleRes.json().catch(() => ({}));
+            // La vente est déjà validée (reçu imprimable) : on ne fait jamais
+            // croire à un échec complet, mais on signale clairement qu'il
+            // reste à régler le solde séparément.
+            setError(
+              `Vente validée (ticket ${saleJson.receipt_number}), mais le règlement du solde dû `
+              + `(${formatEUR(accountSettlement.amount)}) a échoué : ${j.message ?? j.error ?? 'erreur'}. `
+              + `Réglez-le séparément depuis la fiche client.`,
+            );
+            onValidated(saleJson.receipt_id, saleJson.receipt_number, saleJson.loyalty, saleJson.gift_cards_issued, change);
+            return;
+          }
+        }
+        onValidated(saleJson.receipt_id, saleJson.receipt_number, saleJson.loyalty, saleJson.gift_cards_issued, change);
       } finally { setLoading(false); }
       return;
     }
@@ -387,7 +463,9 @@ export default function PaymentModal({ saleId, totalTtc, lines = [], storeId, ha
             <span className="text-lg leading-none">←</span>
             Caisse
           </button>
-          <h2 className="text-base lg:text-lg font-semibold">{settlement ? 'Règlement du compte' : 'Encaissement'}</h2>
+          <h2 className="text-base lg:text-lg font-semibold">
+            {settlement ? 'Règlement du compte' : accountSettlement ? 'Encaissement + règlement du solde' : 'Encaissement'}
+          </h2>
         </div>
 
         {/* Contenu en 3 colonnes (comme la caisse), pleine largeur :
@@ -418,8 +496,14 @@ export default function PaymentModal({ saleId, totalTtc, lines = [], storeId, ha
                 );
               })}
             </div>
+            {accountSettlement && (
+              <div className="mt-2 flex items-baseline justify-between rounded-xl bg-danger/10 px-3 py-2 text-sm">
+                <span className="text-danger font-medium">+ Solde dû ajouté</span>
+                <span className="font-semibold text-danger tabular-nums">{formatEUR(accountSettlement.amount)}</span>
+              </div>
+            )}
             <div className="mt-2 flex items-baseline justify-between rounded-xl bg-gray-50 px-3 py-2.5">
-              <span className="text-sm font-medium">Total</span>
+              <span className="text-sm font-medium">{accountSettlement ? 'Total à encaisser' : 'Total'}</span>
               <span className="text-lg font-semibold tabular-nums">{formatEUR(totalTtc)}</span>
             </div>
           </div>

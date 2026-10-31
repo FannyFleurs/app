@@ -318,6 +318,11 @@ export default function CashRegister({
   } | null>(null);
   const [showPicker, setShowPicker] = useState(false);
   const [showSettle, setShowSettle] = useState(false);
+  // Combine la vente en cours et le solde dû du client en un seul règlement
+  // (case à cocher visible uniquement quand le panier n'est pas vide — voir
+  // accountSettlement sur PaymentModal). Réinitialisé à chaque changement de
+  // client, avec customerBalances.
+  const [includeAccountDue, setIncludeAccountDue] = useState(false);
   const [customer, setCustomer] = useState<PickedCustomer | null>(null);
   const [discountLineKey, setDiscountLineKey] = useState<string | null>(null);
   const [justifyAction, setJustifyAction] = useState<
@@ -932,6 +937,12 @@ export default function CashRegister({
   // c'est un affichage. Plafonné au total du ticket.
   const loyaltyApplied = round2(Math.min(loyalty.used, totals.ttc));
   const resteAPayer = round2(Math.max(0, totals.ttc - loyaltyApplied));
+  // Solde dû du client, ajouté au règlement si la case est cochée (voir
+  // includeAccountDue) — combine la vente en cours et le solde en un seul
+  // encaissement (accountSettlement sur PaymentModal).
+  const accountDueAmount = customer && customerBalances.account_balance < 0
+    ? round2(-customerBalances.account_balance) : 0;
+  const payableWithDue = round2(totals.ttc + (includeAccountDue ? accountDueAmount : 0));
 
   // Vente d'un PACK : on l'éclate en lignes composant (chacune avec son prix et
   // sa TVA). La remise du pack est répartie au prorata sur les composants — la
@@ -1152,6 +1163,7 @@ export default function CashRegister({
     setCustomer(null);
     setLoyalty({ enabled: false, balance_euros: 0, min_redeem: 0, used: 0 });
     setCustomerBalances({ gift_card_balance: 0, account_balance: 0, credit_notes_balance: 0 });
+    setIncludeAccountDue(false);
     setCartComment('');
     setView({ kind: 'categories' });
     setSearch('');
@@ -1208,6 +1220,7 @@ export default function CashRegister({
       setCustomer(null);
       setLoyalty({ enabled: false, balance_euros: 0, min_redeem: 0, used: 0 });
       setCustomerBalances({ gift_card_balance: 0, account_balance: 0, credit_notes_balance: 0 });
+    setIncludeAccountDue(false);
       return;
     }
     try {
@@ -1411,6 +1424,7 @@ export default function CashRegister({
     setSaleId(null); setLines([]); setCustomer(null);
     setLoyalty({ enabled: false, balance_euros: 0, min_redeem: 0, used: 0 });
     setCustomerBalances({ gift_card_balance: 0, account_balance: 0, credit_notes_balance: 0 });
+    setIncludeAccountDue(false);
     setCartComment('');
     setMobileCartOpen(false);
     // Retour à la vue catégories
@@ -1463,6 +1477,7 @@ export default function CashRegister({
     if (isSchoolCustomerId(c.id)) {
       setLoyalty({ enabled: false, balance_euros: 0, min_redeem: 0, used: 0 });
       setCustomerBalances({ gift_card_balance: 0, account_balance: 0, credit_notes_balance: 0 });
+    setIncludeAccountDue(false);
       return;
     }
 
@@ -1498,6 +1513,7 @@ export default function CashRegister({
     // se joue entièrement à l'écran.
     if (!saleId || schoolMode) { setCustomer(null); setLoyalty({ enabled: false, balance_euros: 0, min_redeem: 0, used: 0 });
     setCustomerBalances({ gift_card_balance: 0, account_balance: 0, credit_notes_balance: 0 });
+    setIncludeAccountDue(false);
     setLines((cur) => cur.filter((l) => l.metadata?.loyalty_redemption !== true)); return; }
     const res = await fetch(`/api/sales/${saleId}/customer`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
@@ -1507,6 +1523,7 @@ export default function CashRegister({
       setCustomer(null);
       setLoyalty({ enabled: false, balance_euros: 0, min_redeem: 0, used: 0 });
     setCustomerBalances({ gift_card_balance: 0, account_balance: 0, credit_notes_balance: 0 });
+    setIncludeAccountDue(false);
       // Retire la ligne fidélité éventuellement déjà appliquée
       setLines((cur) => cur.filter((l) => l.metadata?.loyalty_redemption !== true));
     }
@@ -2157,12 +2174,35 @@ export default function CashRegister({
                     <span className="text-danger font-medium">💳 En compte (dû)</span>
                     <span className="font-semibold text-danger">{formatEUR(customerBalances.account_balance)}</span>
                   </div>
-                  <button
-                    onClick={() => setShowSettle(true)}
-                    className="w-full rounded-xl bg-danger/10 text-danger px-3 py-2 text-sm font-semibold hover:bg-danger/20"
-                  >
-                    Régler le solde ({formatEUR(-customerBalances.account_balance)})
-                  </button>
+                  {lines.length > 0 ? (
+                    // Panier en cours : on peut combiner la vente ET le solde
+                    // dû en UN SEUL règlement, sans passer par un paiement
+                    // différé intermédiaire — voir accountSettlement sur
+                    // PaymentModal. Non proposé si le poste est RÉELLEMENT
+                    // hors-ligne là maintenant (nécessite deux appels serveur
+                    // successifs) — offlinePosEnabled() seule ne suffit pas,
+                    // c'est la capacité du poste, pas sa connectivité actuelle.
+                    !shouldGoOffline() && (
+                      <label className="flex items-center gap-2 rounded-xl bg-danger/10 px-3 py-2 text-sm cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={includeAccountDue}
+                          onChange={(e) => setIncludeAccountDue(e.target.checked)}
+                          className="shrink-0"
+                        />
+                        <span className="text-danger font-medium">
+                          Ajouter le solde dû au règlement ({formatEUR(-customerBalances.account_balance)})
+                        </span>
+                      </label>
+                    )
+                  ) : (
+                    <button
+                      onClick={() => setShowSettle(true)}
+                      className="w-full rounded-xl bg-danger/10 text-danger px-3 py-2 text-sm font-semibold hover:bg-danger/20"
+                    >
+                      Régler le solde ({formatEUR(-customerBalances.account_balance)})
+                    </button>
+                  )}
                 </>
               )}
               {customerBalances.account_balance > 0 && (
@@ -2280,7 +2320,7 @@ export default function CashRegister({
               <span>Remises</span><span>-{formatEUR(totals.discount)}</span>
             </div>
           )}
-          {loyaltyApplied > 0 ? (
+          {loyaltyApplied > 0 && (
             <>
               <div className="flex items-center justify-between">
                 <span className="text-ink-soft">Total</span>
@@ -2290,17 +2330,22 @@ export default function CashRegister({
                 <span>Remise fidélité</span>
                 <span className="tabular-nums">-{formatEUR(loyaltyApplied)}</span>
               </div>
-              <div className="flex items-center justify-between pt-1">
-                <span className="text-base font-semibold">Reste à payer</span>
-                <span className="text-2xl font-semibold tracking-tight tabular-nums">{formatEUR(resteAPayer)}</span>
-              </div>
             </>
-          ) : (
-            <div className="flex items-center justify-between pt-1">
-              <span className="text-base font-semibold">Total</span>
-              <span className="text-2xl font-semibold tracking-tight">{formatEUR(totals.ttc)}</span>
+          )}
+          {includeAccountDue && accountDueAmount > 0 && (
+            <div className="flex items-center justify-between text-danger">
+              <span>+ Solde dû ajouté</span>
+              <span className="tabular-nums">+{formatEUR(accountDueAmount)}</span>
             </div>
           )}
+          <div className="flex items-center justify-between pt-1">
+            <span className="text-base font-semibold">
+              {loyaltyApplied > 0 || includeAccountDue ? 'Reste à payer' : 'Total'}
+            </span>
+            <span className="text-2xl font-semibold tracking-tight tabular-nums">
+              {formatEUR(round2(payableWithDue - loyaltyApplied))}
+            </span>
+          </div>
         </div>
 
         <div className="p-2.5 border-t border-border space-y-2">
@@ -2318,8 +2363,9 @@ export default function CashRegister({
               écran (choix du mode : espèces, carte, chèque, multiple, lien
               Stripe, avoir, carte cadeau…). Cas particulier : vente à 0 €
               (offerte / entièrement remisée) → bouton « Valider » direct car
-              aucun règlement n'est nécessaire. */}
-          {lines.length > 0 && totals.ttc === 0 ? (
+              aucun règlement n'est nécessaire — SAUF si un solde dû est
+              ajouté au règlement, qui reste bien à encaisser. */}
+          {lines.length > 0 && totals.ttc === 0 && !(includeAccountDue && accountDueAmount > 0) ? (
             <button
               onClick={() => void validateZeroSale()}
               className="btn-primary h-16 w-full text-xl font-semibold rounded-xl flex items-center justify-center gap-3"
@@ -2329,7 +2375,7 @@ export default function CashRegister({
             </button>
           ) : (
             <button
-              disabled={lines.length === 0 || totals.ttc <= 0}
+              disabled={lines.length === 0 || payableWithDue <= 0}
               onClick={async () => {
                 if (shouldGoOffline()) { setShowPayment(true); return; }
                 const id = await ensureSale(); if (id) { await syncLines(); setShowPayment(true); }
@@ -2352,16 +2398,21 @@ export default function CashRegister({
       {showPayment && (saleId || shouldGoOffline()) && (
         <PaymentModal
           saleId={saleId ?? ''}
-          totalTtc={totals.ttc}
+          totalTtc={payableWithDue}
           lines={lines}
           storeId={storeId}
           hasCustomer={!!customer}
           loyaltyRedemption={loyalty.used > 0 ? loyalty.used : undefined}
           schoolMode={schoolMode}
-          offlineEnabled={offlinePosEnabled()}
+          offlineEnabled={includeAccountDue ? false : offlinePosEnabled()}
           onOfflineFinalize={(payments, loyaltyUsed) => finalizeOffline(payments, loyaltyUsed)}
           onClose={() => setShowPayment(false)}
           onValidated={onValidated}
+          accountSettlement={
+            includeAccountDue && customer && accountDueAmount > 0
+              ? { customerId: customer.id, amount: accountDueAmount }
+              : undefined
+          }
         />
       )}
       {showSettle && customer && customerBalances.account_balance < 0 && (
