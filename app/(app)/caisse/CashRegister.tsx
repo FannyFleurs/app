@@ -432,6 +432,12 @@ export default function CashRegister({
     min_redeem: number;
     used: number;
   }>({ enabled: false, balance_euros: 0, min_redeem: 0, used: 0 });
+  // Montant de fidélité à utiliser, saisi librement (par défaut le solde
+  // entier). Remis à jour dès que le solde change (nouveau client, retrait).
+  const [loyaltyAmountStr, setLoyaltyAmountStr] = useState('');
+  useEffect(() => {
+    setLoyaltyAmountStr(loyalty.balance_euros > 0 ? String(loyalty.balance_euros) : '');
+  }, [loyalty.balance_euros, loyalty.enabled]);
 
   // Soldes complémentaires du client (cartes cadeau, compte client, avoirs)
   // affichés dans la zone ticket. Rafraîchis quand un client est attaché.
@@ -1030,7 +1036,9 @@ export default function CashRegister({
   function useLoyalty(amountEuros: number) {
     if (!customer || amountEuros <= 0) return;
     const subtotal = lines.reduce((s, l) => s + round2(l.unit_price_ttc * l.quantity - l.discount_amount), 0);
-    const apply = Math.min(round2(amountEuros), round2(subtotal));
+    // Plafonné au panier ET au solde réellement disponible : amountEuros vient
+    // désormais d'une saisie libre (jusque-là toujours égal au solde entier).
+    const apply = Math.min(round2(amountEuros), round2(subtotal), round2(loyalty.balance_euros));
     if (apply <= 0) return;
     // La fidélité est un MOYEN DE PAIEMENT « Fidélité », pas une remise : on ne
     // touche PAS aux lignes (articles à plein prix, CA/TVA pleins). On mémorise
@@ -2164,12 +2172,28 @@ export default function CashRegister({
                 </div>
               )}
               {loyalty.enabled && loyalty.balance_euros >= loyalty.min_redeem && loyalty.used === 0 && (
-                <button
-                  onClick={() => useLoyalty(loyalty.balance_euros)}
-                  className="w-full rounded-xl bg-success/10 text-success px-3 py-2 text-sm font-medium hover:bg-success/20"
-                >
-                  ✦ Utiliser {formatEUR(loyalty.balance_euros)} de fidélité
-                </button>
+                <div className="rounded-xl bg-success/10 px-3 py-2 space-y-1.5">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-success font-medium">✦ Fidélité disponible</span>
+                    <span className="text-ink-soft">{formatEUR(loyalty.balance_euros)}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number" step="0.01" min={0} max={loyalty.balance_euros}
+                      value={loyaltyAmountStr}
+                      onChange={(e) => setLoyaltyAmountStr(e.target.value)}
+                      className="input h-9 flex-1 text-sm tabular-nums"
+                      placeholder="Montant à utiliser"
+                    />
+                    <button
+                      onClick={() => useLoyalty(Number(loyaltyAmountStr.replace(',', '.')) || 0)}
+                      disabled={!(Number(loyaltyAmountStr.replace(',', '.')) > 0)}
+                      className="btn-soft h-9 px-3 text-sm text-success shrink-0 disabled:opacity-40"
+                    >
+                      Utiliser
+                    </button>
+                  </div>
+                </div>
               )}
               {loyalty.used > 0 && (
                 <div className="flex items-center justify-between rounded-xl bg-success/10 px-3 py-2 text-sm">

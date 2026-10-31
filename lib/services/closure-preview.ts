@@ -6,7 +6,7 @@ import { SETTLEMENT_PAYMENTS_UNION_SQL } from '@/lib/analytics/account-settlemen
 export interface ClosurePreview {
   totals: { sales: number; ht: number; tva: number; ttc: number; discount: number };
   tva_breakdown: { rate: number; base_ht: number; tva: number; ttc: number }[];
-  payments: { method: string; total: number }[];
+  payments: { method: string; total: number; count: number }[];
   cash_breakdown: {
     opening_floats: number; cash_sales: number; cash_in: number;
     cash_out: number; bank_deposits: number; expected: number;
@@ -93,9 +93,11 @@ export async function computeClosurePreview(storeId: string, date: string): Prom
 
   // Paiements de vente DU JOUR + règlements de solde « en compte » encaissés
   // le même jour (hors espèces, déjà comptées via cash_movements ci-dessous)
-  // — voir lib/analytics/account-settlements.ts.
-  const payments = await query<{ method: string; total: string }>(
-    `SELECT method, SUM(amount)::text AS total FROM (
+  // — voir lib/analytics/account-settlements.ts. Le nombre de transactions
+  // (count) sert à afficher « N CB » à côté du montant carte sur l'écran de
+  // validation de clôture.
+  const payments = await query<{ method: string; total: string; count: string }>(
+    `SELECT method, SUM(amount)::text AS total, COUNT(*)::text AS count FROM (
        SELECT p.method AS method, p.amount AS amount
          FROM payments p
          JOIN sales s ON s.id = p.sale_id
@@ -210,7 +212,7 @@ export async function computeClosurePreview(storeId: string, date: string): Prom
     tva_breakdown: tvaBreakdown.rows.map((r) => ({
       rate: Number(r.rate), base_ht: Number(r.base_ht), tva: Number(r.tva), ttc: Number(r.ttc),
     })),
-    payments: payments.rows.map((r) => ({ method: r.method, total: Number(r.total) })),
+    payments: payments.rows.map((r) => ({ method: r.method, total: Number(r.total), count: Number(r.count) })),
     cash_breakdown: {
       opening_floats: openingFloats, cash_sales: cashSales, cash_in: cashIns,
       cash_out: cashOuts, bank_deposits: bankDeposits, expected: cashExpected,

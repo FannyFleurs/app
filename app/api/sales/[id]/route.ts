@@ -79,6 +79,19 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   ).catch(() => ({ rows: [] as { line_index: number; qty: string }[] }));
   const returned_by_line: Record<number, number> = {};
   for (const r of returnedRes.rows) returned_by_line[r.line_index] = Number(r.qty);
+
+  // Avantage fidélité (points dépensés sur CETTE vente) : sert à afficher/
+  // masquer le bouton « Retirer avantage fid » — voir loyalty-reversal.ts.
+  const loyaltyMoves = await query<{ movement_type: string; points_delta: string }>(
+    `SELECT movement_type, points_delta::text FROM loyalty_movements
+      WHERE source_type = 'sale' AND source_id = $1`,
+    [params.id],
+  );
+  const redeemed = loyaltyMoves.rows
+    .filter((r) => r.movement_type === 'redeem')
+    .reduce((s, r) => s + Math.abs(Number(r.points_delta)), 0);
+  const alreadyRemoved = loyaltyMoves.rows.some((r) => r.movement_type === 'adjust' && Number(r.points_delta) > 0);
+
   return NextResponse.json({
     sale: sale.rows[0],
     lines: lines.rows,
@@ -86,5 +99,6 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     invoice: invoiceRow,
     returns: returns.rows,
     returned_by_line,
+    loyalty: { redeemed, removable: redeemed > 0 && !alreadyRemoved },
   });
 }

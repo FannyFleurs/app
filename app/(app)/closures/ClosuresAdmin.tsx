@@ -35,7 +35,7 @@ const DENOMINATIONS: Array<{ value: number; label: string }> = [
 interface PreviewData {
   totals: { sales: number; ht: number; tva: number; ttc: number; discount: number };
   tva_breakdown: { rate: number; base_ht: number; tva: number; ttc: number }[];
-  payments: { method: string; total: number }[];
+  payments: { method: string; total: number; count: number }[];
   cash_breakdown: {
     opening_floats: number;
     cash_sales: number;
@@ -447,15 +447,18 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
     const dateStr = `${new Date(sealed.sealed_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })} à ${new Date(sealed.sealed_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
     const storeName = stores.find((s) => s.id === storeId)?.name ?? '—';
     const cashTotal = preview.payments.find((p) => p.method === 'cash')?.total ?? 0;
-    const cardTotal = preview.payments.find((p) => p.method === 'card')?.total ?? 0;
+    const cardPayment = preview.payments.find((p) => p.method === 'card');
+    const cardTotal = cardPayment?.total ?? 0;
+    const cardCount = cardPayment?.count ?? 0;
     const recap: Array<{ icon: RecapIconName; label: string; value: string }> = [
       { icon: 'calendar', label: 'Date de clôture', value: dateStr },
       { icon: 'store', label: 'Caisse', value: storeName },
       { icon: 'user', label: 'Utilisateur', value: userName ?? '—' },
       { icon: 'chart', label: 'Total des ventes', value: formatEUR(preview.totals.ttc) },
       { icon: 'cash', label: 'Montant en espèces', value: formatEUR(cashTotal) },
-      { icon: 'card', label: 'Montant par carte', value: formatEUR(cardTotal) },
+      { icon: 'card', label: 'Montant par carte', value: `${formatEUR(cardTotal)} (${cardCount} CB)` },
       { icon: 'receipt', label: 'Nombre de transactions', value: String(preview.totals.sales) },
+      { icon: 'deposit', label: 'Prélèvement', value: formatEUR(preview.cash_breakdown.bank_deposits) },
     ];
 
     return (
@@ -467,7 +470,7 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
   <img
     src="/projet/caisse-cloturee.png"
     alt="Caisse clôturée avec succès"
-    className="h-auto w-44 object-contain"
+    className="h-auto w-[70px] object-contain"
   />
 </div>
 
@@ -879,7 +882,7 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
   );
 }
 
-type RecapIconName = 'calendar' | 'store' | 'user' | 'chart' | 'cash' | 'card' | 'receipt';
+type RecapIconName = 'calendar' | 'store' | 'user' | 'chart' | 'cash' | 'card' | 'receipt' | 'deposit';
 
 /** Icônes fines (contour) de l'écran de validation de fermeture. */
 function RecapIcon({ name }: { name: RecapIconName }) {
@@ -891,6 +894,7 @@ function RecapIcon({ name }: { name: RecapIconName }) {
     cash: <><rect x="2" y="6" width="20" height="12" rx="2" /><circle cx="12" cy="12" r="2.5" /><path d="M6 9v6M18 9v6" /></>,
     card: <><rect x="2" y="5" width="20" height="14" rx="2" /><path d="M2 10h20M6 15h4" /></>,
     receipt: <><rect x="5" y="3" width="14" height="18" rx="1.5" /><path d="M9 8h6M9 12h6M9 16h4" /></>,
+    deposit: <><path d="M3 10l9-6 9 6" /><path d="M5 10v9M19 10v9" /><path d="M3 19h18" /><path d="M9 19v-5h6v5" /></>,
   };
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"

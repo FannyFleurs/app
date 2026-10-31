@@ -16,7 +16,7 @@ import AttachCustomerAfterSaleModal from './AttachCustomerAfterSaleModal';
 import DayReportView from './DayReportView';
 import GiftReceiptPickerModal from '@/components/GiftReceiptPickerModal';
 import type { DayReport } from '@/lib/services/day-report';
-import { promptThemed } from '@/lib/ui/dialog';
+import { promptThemed, confirmThemed } from '@/lib/ui/dialog';
 import { printReceipt } from '@/lib/pos/receipt-print';
 import PdfPreviewModal from '@/components/PdfPreviewModal';
 import { readRoamingChoice } from '@/lib/caisse/roaming';
@@ -56,6 +56,8 @@ interface SaleDetail {
   }>;
   /** Quantités déjà retournées par ligne (line_index → qté). */
   returned_by_line?: Record<number, number>;
+  /** Avantage fidélité (points dépensés) de cette vente — voir bouton « Retirer avantage fid ». */
+  loyalty?: { redeemed: number; removable: boolean };
 }
 
 type SummaryMode = 'simple' | 'complet';
@@ -501,6 +503,10 @@ export default function MaJourneeClient() {
                     reloadDay(false); // rafraîchit CA / badges sans fermer le détail
                   }}
                   onNotesUpdated={(notes) => setDetail((prev) => (prev ? { ...prev, sale: { ...prev.sale, notes } } : prev))}
+                  onLoyaltyRemoved={() => {
+                    void pickSale(detail.sale.id);
+                    reloadDay(false);
+                  }}
                 />
               ) : (
                 <EmptyState icon="⚠" title="Erreur de chargement" />
@@ -1085,13 +1091,15 @@ function KpiRow({ label, value, tone }: {
   );
 }
 
-function SaleDetailPanel({ detail, onInvoiceGenerated, onNotesUpdated }: {
+function SaleDetailPanel({ detail, onInvoiceGenerated, onNotesUpdated, onLoyaltyRemoved }: {
   detail: SaleDetail;
   onInvoiceGenerated: () => void;
   onNotesUpdated: (notes: string | null) => void;
+  onLoyaltyRemoved: () => void;
 }) {
   const s = detail.sale;
   const [generating, setGenerating] = useState(false);
+  const [removingLoyalty, setRemovingLoyalty] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showReturn, setShowReturn] = useState(false);
   const [creditNote, setCreditNote] = useState<{
@@ -1150,6 +1158,32 @@ function SaleDetailPanel({ detail, onInvoiceGenerated, onNotesUpdated }: {
     (detail.lines.length > 0 && detail.lines.every(
       (l) => (returnedByLine[l.line_index] ?? 0) >= Number(l.quantity) - 0.0001,
     ));
+
+  async function removeLoyaltyAdvantage() {
+    if (!(await confirmThemed({
+      title: 'Retirer l\'avantage fidélité',
+      message: `${formatEUR(detail.loyalty?.redeemed ?? 0)} de points dépensés seront recrédités au client. Le ticket et ses règlements ne sont pas modifiés.`,
+      confirmLabel: 'Retirer',
+    }))) return;
+    setRemovingLoyalty(true); setError(null); setInfo(null);
+    try {
+      const res = await fetch(`/api/sales/${s.id}/remove-loyalty-advantage`, { method: 'POST' });
+      if (res.ok) {
+        const j = await res.json() as { removed_amount: number };
+        setInfo(`Avantage fidélité retiré : ${formatEUR(j.removed_amount)} recrédités au client.`);
+        onLoyaltyRemoved();
+      } else {
+        const j = await res.json().catch(() => ({}));
+        setError(
+          j.error === 'ALREADY_REMOVED' ? 'Avantage déjà retiré.'
+          : j.error === 'NO_LOYALTY_ADVANTAGE' ? 'Aucun avantage fidélité sur cette vente.'
+          : 'Échec du retrait.',
+        );
+      }
+    } finally {
+      setRemovingLoyalty(false);
+    }
+  }
 
   // Marge sur les lignes ayant un product_purchase_price_ht connu.
   const marginInfo = useMemo(() => {
@@ -1280,6 +1314,15 @@ function SaleDetailPanel({ detail, onInvoiceGenerated, onNotesUpdated }: {
           ) : (
             <button onClick={() => setShowAttach(true)} className="btn-soft text-sm">
               + Attribuer un client
+            </button>
+          )}
+          {s.status === 'validated' && detail.loyalty?.removable && (
+            <button
+              onClick={() => void removeLoyaltyAdvantage()}
+              disabled={removingLoyalty}
+              className="btn-soft text-sm text-danger disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {removingLoyalty ? '…' : '✦ Retirer avantage fid'}
             </button>
           )}
           {s.status === 'cancelled_by_credit_note' ? (
