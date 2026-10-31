@@ -145,11 +145,15 @@ export default function TopBar({
           contexte, « la boutique du poste » ne veut rien dire. */}
       {caReveal && path === '/caisse' && (
         <button
-          onClick={() => { if (caValue === null && !caLoading) void revealCa(caReveal.storeId); }}
-          title={caValue === null ? 'Afficher le CA du jour' : undefined}
+          onClick={() => {
+            if (caLoading) return;
+            if (caValue === null) void revealCa(caReveal.storeId);
+            else setCaValue(null); // reclic sur le montant : masque à nouveau
+          }}
+          title={caValue === null ? 'Afficher le CA du jour' : 'Masquer le CA du jour'}
           aria-label="CA du jour"
           className="px-4 flex items-center justify-center border-l border-border text-ink-soft hover:text-ink hover:bg-gray-50 transition-colors disabled:cursor-default"
-          disabled={caValue !== null}
+          disabled={caLoading}
         >
           {caValue === null ? (
             caLoading ? (

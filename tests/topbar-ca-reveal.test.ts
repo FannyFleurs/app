@@ -6,6 +6,8 @@ import { readFileSync } from 'node:fs';
  * assistance, même hauteur/police que les onglets du menu), remplacée au
  * clic par le CA du jour — réglage PAR BOUTIQUE (voir ca-reveal-server.ts),
  * résolu au niveau layout (app/(app)/layout.tsx) et transmis via AppShell.
+ * Reclic sur le montant affiché : masque à nouveau (retour à l'œil), sans
+ * nouvel appel réseau (la valeur reste en mémoire, juste masquée).
  *
  * TopBar.tsx est un composant client sans rendu complet en test (même choix
  * que CashRegister.tsx/MaJourneeClient.tsx) : on vérifie la présence et la
@@ -33,6 +35,12 @@ describe('TopBar — CA du jour (icône œil)', () => {
     expect(caIdx).toBeGreaterThan(-1);
     expect(assistanceIdx).toBeGreaterThan(-1);
     expect(caIdx).toBeLessThan(assistanceIdx);
+  });
+
+  it('un reclic sur le montant affiché le masque à nouveau (pas de disabled permanent)', () => {
+    expect(page).toMatch(/else setCaValue\(null\); \/\/ reclic sur le montant : masque à nouveau/);
+    expect(page).not.toMatch(/disabled=\{caValue !== null\}/);
+    expect(page).toMatch(/disabled=\{caLoading\}/);
   });
 });
 
