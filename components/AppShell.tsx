@@ -187,6 +187,43 @@ export default function AppShell({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoLogoutMode]);
 
+  // Déconnexion rapide au clavier : Espace + Entrée (l'une tenue, l'autre
+  // pressée, peu importe l'ordre) — se déconnecter sans toucher l'écran,
+  // dans le même esprit que la détection de PIN au clavier (PinLogin.tsx).
+  // Jamais pendant une saisie de texte (champ focalisé), pour ne pas
+  // interférer avec une utilisation normale du clavier.
+  useEffect(() => {
+    const held = new Set<string>();
+    let fired = false;
+    function inField(e: KeyboardEvent): boolean {
+      const t = e.target as HTMLElement | null;
+      return !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable);
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (inField(e)) return;
+      if (e.key !== ' ' && e.key !== 'Enter') return;
+      const other = e.key === ' ' ? 'Enter' : ' ';
+      if (held.has(other) && !fired) {
+        fired = true;
+        e.preventDefault();
+        void logout();
+      }
+      held.add(e.key);
+    }
+    function onKeyUp(e: KeyboardEvent) {
+      if (e.key !== ' ' && e.key !== 'Enter') return;
+      held.delete(e.key);
+      if (held.size === 0) fired = false;
+    }
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div
       className={`app-shell-root h-app overflow-hidden flex flex-col bg-bg pt-safe pl-safe pr-safe pb-safe ${uiScale !== UI_SCALE_DEFAULT ? 'ui-scaled' : ''}`}
