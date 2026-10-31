@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requirePermission } from '@/lib/auth/guards';
 import { InvoiceService } from '@/lib/services/invoice-service';
+import { resolveDeviceStoreId } from '@/lib/pos/current-store';
 
 const schema = z.object({
   amount: z.number().positive(),
@@ -32,13 +33,22 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   }
 
   try {
+    // Boutique : celle envoyée par le client (webpos_current_store_id), sinon
+    // celle du poste appairé à CET appareil (même résolution que TopBar/
+    // paramètres verrouillés par boutique — voir lib/pos/current-store.ts).
+    // Sans ce repli, un règlement fait depuis la fiche client restait souvent
+    // SANS boutique (la clé localStorage n'est en pratique jamais posée),
+    // donc invisible de la réconciliation de clôture de n'importe quelle
+    // boutique — l'argent encaissé (carte, chèque…) n'était alors jamais
+    // attendu au soir.
+    const storeId = parsed.data.store_id ?? (await resolveDeviceStoreId(g.user.organizationId)) ?? undefined;
     const out = await InvoiceService.settleAccount({
       organizationId: g.user.organizationId,
       userId: g.user.id,
       customerId: params.id,
       amount: parsed.data.amount,
       method: parsed.data.method,
-      storeId: parsed.data.store_id,
+      storeId,
     });
     return NextResponse.json(out);
   } catch (e) {

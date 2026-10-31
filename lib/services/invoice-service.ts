@@ -566,6 +566,19 @@ export class InvoiceService {
         );
       }
 
+      // Trace le règlement dans account_settlement_payments — SANS quoi un
+      // règlement par CARTE (ou chèque, virement) depuis cette fiche client
+      // restait invisible de la réconciliation de clôture (seule l'entrée
+      // cash_movements ci-dessus couvre les espèces) : l'argent était bien
+      // encaissé mais le système ne l'attendait pas, d'où un écart le soir
+      // (même motif que settleInvoice / settleAccountWithPayments).
+      await client.query(
+        `INSERT INTO account_settlement_payments
+           (organization_id, customer_id, store_id, cash_session_id, user_id, method, amount)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        [args.organizationId, args.customerId, args.storeId ?? null, cashSessionId, args.userId, args.method ?? 'other', amount],
+      );
+
       return { new_balance: newBalance, settled_invoice_ids: settled };
     });
   }
