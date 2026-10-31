@@ -1,9 +1,8 @@
-import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { cookies, headers } from 'next/headers';
 import { query } from '@/lib/db/client';
 import { verifyPassword } from '@/lib/auth/password';
-import { createSession, sessionCookieOptions, DeviceLimitError } from '@/lib/auth/session';
+import { openPinSession } from '@/lib/auth/pin-session';
 import { audit } from '@/lib/audit/log';
 import { parseJson, jsonError } from '@/lib/validation/api';
 
@@ -85,71 +84,5 @@ export async function POST(req: Request) {
     return jsonError('INVALID_PIN', 401);
   }
 
-  await query(
-    `UPDATE users SET failed_attempts = 0, locked_until = NULL,
-                       last_login_at = now(), updated_at = now()
-       WHERE id = $1`,
-    [user.id],
-  );
-
-  const authUser = user; // capture non-null (narrowing perdu dans les closures)
-  async function openSession() {
-    return createSession({
-      userId: authUser.id,
-      organizationId: authUser.organization_id,
-      role: authUser.role,
-      ip,
-      userAgent: ua,
-    });
-  }
-
-  const limitMsg = (limit: number) =>
-    `Limite d'appareils atteinte (${limit}). Un autre poste est déjà connecté : libérez-le depuis Réglages ▸ Société & boutiques ▸ Caisses, ou augmentez la limite multi-appareils.`;
-
-  let token: string;
-  try {
-    token = await openSession();
-  } catch (err) {
-    if (err instanceof DeviceLimitError) {
-      // Libère une éventuelle session caisse fantôme du même utilisateur
-      // (onglet fermé sans déconnexion) puis réessaie une fois.
-      const freed = await query(
-        `UPDATE sessions SET revoked_at = now()
-          WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > now()
-            AND COALESCE(kind, 'pos') = 'pos'`,
-        [user.id],
-      );
-      if ((freed.rowCount ?? 0) > 0) {
-        try {
-          token = await openSession();
-        } catch (err2) {
-          if (err2 instanceof DeviceLimitError) {
-            return jsonError('DEVICE_LIMIT_REACHED', 403, { limit: err2.limit, message: limitMsg(err2.limit) });
-          }
-          throw err2;
-        }
-      } else {
-        return jsonError('DEVICE_LIMIT_REACHED', 403, { limit: err.limit, message: limitMsg(err.limit) });
-      }
-    } else {
-      throw err;
-    }
-  }
-
-  cookies().set({ ...sessionCookieOptions(), value: token });
-
-  await audit({
-    organizationId: user.organization_id, userId: user.id, action: 'auth.pin_login.ok',
-    ip, userAgent: ua, payload: { role: user.role, store_id: deviceStoreId }, severity: 'info',
-  });
-
-  return NextResponse.json({
-    user: {
-      id: user.id,
-      email: user.email,
-      full_name: user.full_name,
-      role: user.role,
-      organization_id: user.organization_id,
-    },
-  });
+  return openPinSession(user, ip, ua, 'auth.pin_login.ok', { store_id: deviceStoreId });
 }

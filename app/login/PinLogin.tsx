@@ -58,6 +58,14 @@ export default function PinLogin({ onEmailLogin }: { onEmailLogin?: () => void }
   const [migrationRequired, setMigrationRequired] = useState<string | null>(null);
   const [tenantRequired, setTenantRequired] = useState(false);
 
+  // Saisie du PIN SANS choisir de profil au préalable : on arrive sur
+  // l'écran, on tape directement son code au clavier physique, et le compte
+  // qui a ce PIN est détecté et connecté (voir onKey plus bas). Buffer et
+  // état séparés de `pin`/`selectedId`, propres à cette grille de profils.
+  const [autoPin, setAutoPin] = useState('');
+  const [autoSubmitting, setAutoSubmitting] = useState(false);
+  const [autoError, setAutoError] = useState<string | null>(null);
+
   async function loadUsers() {
     // On transmet le device_id du poste (localStorage) : le serveur
     // resout la boutique liee a cette caisse et ne renvoie que les
@@ -138,6 +146,30 @@ export default function PinLogin({ onEmailLogin }: { onEmailLogin?: () => void }
     }
   }
 
+  /** Détection automatique du compte à partir du PIN seul — voir autoPin. */
+  async function submitAuto(pinValue: string) {
+    setAutoSubmitting(true); setAutoError(null);
+    try {
+      const r = await fetch('/api/auth/pin-login-auto', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin: pinValue }),
+      });
+      if (!r.ok) {
+        setAutoSubmitting(false);
+        const j = await r.json().catch(() => ({}));
+        setAutoError(prettyAutoError(j.error, j.message));
+        setAutoPin('');
+        return;
+      }
+      setTransitioning(true);
+      window.location.assign('/caisse');
+    } catch (e) {
+      setAutoSubmitting(false);
+      setAutoError((e as Error).message || 'Réseau indisponible');
+      setAutoPin('');
+    }
+  }
+
   function press(key: string) {
     if (!selectedId) return;
     setError(null);
@@ -155,15 +187,35 @@ export default function PinLogin({ onEmailLogin }: { onEmailLogin?: () => void }
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (!selectedId) return;
-      if (e.key >= '0' && e.key <= '9') { press(e.key); e.preventDefault(); }
-      else if (e.key === 'Backspace') { press('⌫'); e.preventDefault(); }
-      else if (e.key === 'Escape') { setSelectedId(null); setPin(''); }
+      if (selectedId) {
+        if (e.key >= '0' && e.key <= '9') { press(e.key); e.preventDefault(); }
+        else if (e.key === 'Backspace') { press('⌫'); e.preventDefault(); }
+        else if (e.key === 'Escape') { setSelectedId(null); setPin(''); }
+        return;
+      }
+      // Aucune tuile choisie : saisie directe au clavier physique, sans
+      // toucher l'écran — le compte est détecté à partir du PIN seul.
+      if (autoSubmitting) return;
+      if (e.key >= '0' && e.key <= '9') {
+        e.preventDefault();
+        setAutoError(null);
+        setAutoPin((cur) => {
+          const next = cur.length < PIN_LENGTH ? cur + e.key : cur;
+          if (next.length === PIN_LENGTH) void submitAuto(next);
+          return next;
+        });
+      } else if (e.key === 'Backspace') {
+        e.preventDefault();
+        setAutoError(null);
+        setAutoPin((cur) => cur.slice(0, -1));
+      } else if (e.key === 'Escape') {
+        setAutoPin(''); setAutoError(null);
+      }
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId]);
+  }, [selectedId, autoSubmitting]);
 
   // En transition : on masque completement l'ecran de login (fade tres
   // court) pour que la caisse dessous apparaisse quasi-instantanement.
@@ -225,7 +277,7 @@ export default function PinLogin({ onEmailLogin }: { onEmailLogin?: () => void }
           </div>
           <h1 className="text-3xl font-bold tracking-tight" style={{ color: GOLD }}>Connexion</h1>
           <p className="mt-1.5 text-xs font-semibold uppercase tracking-[0.2em]" style={{ color: GOLD, opacity: 0.75 }}>
-            {selected ? 'Entrez votre code' : 'Choisissez votre profil'}
+            {selected ? 'Entrez votre code' : 'Choisissez votre profil, ou tapez votre code'}
           </p>
         </header>
 
@@ -237,6 +289,24 @@ export default function PinLogin({ onEmailLogin }: { onEmailLogin?: () => void }
               La connexion par PIN nécessite la migration{' '}
               <code className="text-xs bg-white/10 px-1 rounded">{migrationRequired}</code>.
             </p>
+          </div>
+        )}
+
+        {/* Retour visuel de la saisie clavier directe (sans tuile choisie) :
+            pastilles de progression + erreur éventuelle (code inconnu,
+            ambigu, trop d'essais). */}
+        {!selected && (autoPin.length > 0 || autoError) && (
+          <div className="mb-4 flex flex-col items-center gap-2">
+            <div className="flex items-center justify-center gap-3">
+              {Array.from({ length: PIN_LENGTH }).map((_, i) => (
+                <span
+                  key={i}
+                  className="h-3 w-3 rounded-full"
+                  style={i < autoPin.length ? { backgroundColor: GOLD } : { backgroundColor: 'rgba(255,255,255,0.25)' }}
+                />
+              ))}
+            </div>
+            {autoError && <p className="text-sm text-center" style={{ color: GOLD }}>{autoError}</p>}
           </div>
         )}
 
@@ -446,6 +516,16 @@ function prettyError(code?: string, message?: string): string {
     case 'INVALID_PIN': return 'Code incorrect. Réessayez.';
     case 'ACCOUNT_LOCKED': return 'Compte verrouillé temporairement.';
     case 'NO_PIN_SET': return 'Aucun code configuré pour cet utilisateur.';
+    case 'DEVICE_LIMIT_REACHED': return message || 'Limite d\'appareils atteinte.';
+    default: return message || 'Connexion impossible.';
+  }
+}
+
+function prettyAutoError(code?: string, message?: string): string {
+  switch (code) {
+    case 'INVALID_PIN': return 'Aucun compte ne correspond à ce code.';
+    case 'AMBIGUOUS_PIN': return 'Plusieurs comptes partagent ce code : choisissez votre profil.';
+    case 'TOO_MANY_ATTEMPTS': return 'Trop d\'essais. Réessayez dans quelques minutes, ou choisissez votre profil.';
     case 'DEVICE_LIMIT_REACHED': return message || 'Limite d\'appareils atteinte.';
     default: return message || 'Connexion impossible.';
   }
