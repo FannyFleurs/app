@@ -950,6 +950,11 @@ export default function CashRegister({
   const accountDueAmount = customer && customerBalances.account_balance < 0
     ? round2(-customerBalances.account_balance) : 0;
   const payableWithDue = round2(totals.ttc + (includeAccountDue ? accountDueAmount : 0));
+  // Les deux pastilles "En compte" / "Fidélité" se partagent une rangée
+  // (côte à côte) quand elles sont présentes toutes les deux, pour ne pas
+  // empiler deux lignes pleine largeur dans la zone ticket.
+  const showLoyaltySimple = loyalty.enabled && loyalty.balance_euros >= loyalty.min_redeem
+    && loyalty.used === 0 && !editingLoyaltyAmount;
 
   // Vente d'un PACK : on l'éclate en lignes composant (chacune avec son prix et
   // sa TVA). La remise du pack est répartie au prorata sur les composants — la
@@ -2181,81 +2186,87 @@ export default function CashRegister({
                   <span className="font-semibold">{formatEUR(customerBalances.credit_notes_balance)}</span>
                 </div>
               )}
-              {customerBalances.account_balance < 0 && (
-                // Panier en cours (et poste réellement en ligne) : un clic
-                // ajoute/retire le solde dû au règlement, combiné à la vente
-                // en un seul encaissement (accountSettlement sur
-                // PaymentModal) — pas de ligne séparée. Panier vide : un clic
-                // ouvre directement le règlement du solde seul (comme avant).
-                <button
-                  onClick={() => {
-                    if (lines.length > 0 && !shouldGoOffline()) setIncludeAccountDue((v) => !v);
-                    else setShowSettle(true);
-                  }}
-                  className={`w-full flex items-center justify-between rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
-                    includeAccountDue && lines.length > 0
-                      ? 'bg-danger text-white'
-                      : 'bg-danger/10 text-danger hover:bg-danger/20'
-                  }`}
-                >
-                  <span>{includeAccountDue && lines.length > 0 ? '✓ Solde dû ajouté' : '💳 En compte (dû)'}</span>
-                  <span className="font-semibold">{formatEUR(customerBalances.account_balance)}</span>
-                </button>
-              )}
               {customerBalances.account_balance > 0 && (
                 <div className="flex items-center justify-between rounded-xl bg-success/10 px-3 py-2 text-sm">
                   <span className="text-success font-medium">💳 Crédit en compte</span>
                   <span className="font-semibold">+{formatEUR(customerBalances.account_balance)}</span>
                 </div>
               )}
-              {loyalty.enabled && loyalty.balance_euros >= loyalty.min_redeem && loyalty.used === 0 && (
-                editingLoyaltyAmount ? (
-                  <div className="rounded-xl bg-success/10 px-3 py-2 space-y-1.5">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-success font-medium">✦ Fidélité disponible</span>
-                      <span className="text-ink-soft">{formatEUR(loyalty.balance_euros)}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <input
-                        autoFocus
-                        type="number" step="0.01" min={0} max={loyalty.balance_euros}
-                        value={loyaltyAmountStr}
-                        onChange={(e) => setLoyaltyAmountStr(e.target.value)}
-                        className="input h-9 flex-1 text-sm tabular-nums"
-                        placeholder="Montant à utiliser"
-                      />
+              {/* « En compte » et fidélité (version simple, sans édition) côte
+                  à côte — pas deux lignes pleine largeur qui mangent la place
+                  des articles du ticket. */}
+              {(accountDueAmount > 0 || showLoyaltySimple) && (
+                <div className="flex items-stretch gap-1.5">
+                  {accountDueAmount > 0 && (
+                    // Panier en cours (et poste réellement en ligne) : un clic
+                    // ajoute/retire le solde dû au règlement, combiné à la
+                    // vente en un seul encaissement (accountSettlement sur
+                    // PaymentModal). Panier vide : un clic ouvre directement
+                    // le règlement du solde seul (comme avant).
+                    <button
+                      onClick={() => {
+                        if (lines.length > 0 && !shouldGoOffline()) setIncludeAccountDue((v) => !v);
+                        else setShowSettle(true);
+                      }}
+                      className={`flex-1 min-w-0 flex items-center justify-between gap-1 rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
+                        includeAccountDue && lines.length > 0
+                          ? 'bg-danger text-white'
+                          : 'bg-danger/10 text-danger hover:bg-danger/20'
+                      }`}
+                    >
+                      <span className="truncate">{includeAccountDue && lines.length > 0 ? '✓ Ajouté' : '💳 En compte'}</span>
+                      <span className="font-semibold shrink-0">{formatEUR(customerBalances.account_balance)}</span>
+                    </button>
+                  )}
+                  {showLoyaltySimple && (
+                    <div className="flex-1 min-w-0 flex items-stretch gap-1.5">
                       <button
-                        onClick={() => { useLoyalty(Number(loyaltyAmountStr.replace(',', '.')) || 0); setEditingLoyaltyAmount(false); }}
-                        disabled={!(Number(loyaltyAmountStr.replace(',', '.')) > 0)}
-                        className="btn-soft h-9 px-3 text-sm text-success shrink-0 disabled:opacity-40"
+                        onClick={() => useLoyalty(loyalty.balance_euros)}
+                        className="flex-1 min-w-0 rounded-xl bg-success/10 text-success px-3 py-2 text-sm font-medium hover:bg-success/20 text-left truncate"
                       >
-                        Utiliser
+                        ✦ Utiliser {formatEUR(loyalty.balance_euros)}
                       </button>
                       <button
-                        onClick={() => setEditingLoyaltyAmount(false)}
-                        aria-label="Annuler"
-                        className="h-9 w-9 shrink-0 grid place-items-center rounded-lg text-ink-soft hover:bg-gray-100"
-                      >✕</button>
+                        onClick={() => setEditingLoyaltyAmount(true)}
+                        title="Utiliser un autre montant"
+                        aria-label="Modifier le montant de fidélité à utiliser"
+                        className="shrink-0 h-9 w-9 grid place-items-center rounded-xl bg-success/10 text-success hover:bg-success/20"
+                      >
+                        ✎
+                      </button>
                     </div>
+                  )}
+                </div>
+              )}
+              {loyalty.enabled && loyalty.balance_euros >= loyalty.min_redeem && loyalty.used === 0 && editingLoyaltyAmount && (
+                <div className="rounded-xl bg-success/10 px-3 py-2 space-y-1.5">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-success font-medium">✦ Fidélité disponible</span>
+                    <span className="text-ink-soft">{formatEUR(loyalty.balance_euros)}</span>
                   </div>
-                ) : (
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <input
+                      autoFocus
+                      type="number" step="0.01" min={0} max={loyalty.balance_euros}
+                      value={loyaltyAmountStr}
+                      onChange={(e) => setLoyaltyAmountStr(e.target.value)}
+                      className="input h-9 flex-1 text-sm tabular-nums"
+                      placeholder="Montant à utiliser"
+                    />
                     <button
-                      onClick={() => useLoyalty(loyalty.balance_euros)}
-                      className="flex-1 min-w-0 rounded-xl bg-success/10 text-success px-3 py-2 text-sm font-medium hover:bg-success/20 text-left truncate"
+                      onClick={() => { useLoyalty(Number(loyaltyAmountStr.replace(',', '.')) || 0); setEditingLoyaltyAmount(false); }}
+                      disabled={!(Number(loyaltyAmountStr.replace(',', '.')) > 0)}
+                      className="btn-soft h-9 px-3 text-sm text-success shrink-0 disabled:opacity-40"
                     >
-                      ✦ Utiliser {formatEUR(loyalty.balance_euros)} de fidélité
+                      Utiliser
                     </button>
                     <button
-                      onClick={() => setEditingLoyaltyAmount(true)}
-                      title="Utiliser un autre montant"
-                      aria-label="Modifier le montant de fidélité à utiliser"
-                      className="shrink-0 h-9 w-9 grid place-items-center rounded-xl bg-success/10 text-success hover:bg-success/20"
-                    >
-                      ✎
-                    </button>
+                      onClick={() => setEditingLoyaltyAmount(false)}
+                      aria-label="Annuler"
+                      className="h-9 w-9 shrink-0 grid place-items-center rounded-lg text-ink-soft hover:bg-gray-100"
+                    >✕</button>
                   </div>
-                )
+                </div>
               )}
               {loyalty.used > 0 && (
                 <div className="flex items-center justify-between rounded-xl bg-success/10 px-3 py-2 text-sm">
