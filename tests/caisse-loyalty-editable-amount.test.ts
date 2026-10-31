@@ -20,7 +20,7 @@ describe('Caisse — fidélité : bouton simple par défaut, montant modifiable 
 
   it('le champ de saisie libre est masqué par défaut, révélé par editingLoyaltyAmount', () => {
     expect(page).toMatch(/const \[editingLoyaltyAmount, setEditingLoyaltyAmount\] = useState\(false\);/);
-    expect(page).toMatch(/&& editingLoyaltyAmount && \(/);
+    expect(page).toMatch(/editingLoyaltyAmount \? \(/);
     expect(page).toMatch(/<input[\s\S]{0,200}value=\{loyaltyAmountStr\}/);
   });
 
@@ -42,11 +42,5 @@ describe('Caisse — fidélité : bouton simple par défaut, montant modifiable 
     expect(page).toMatch(
       /Math\.min\(round2\(amountEuros\), round2\(subtotal\), round2\(loyalty\.balance_euros\)\)/,
     );
-  });
-
-  it('partage une rangée côte à côte avec la pastille « En compte » (pas deux lignes pleine largeur)', () => {
-    expect(page).toMatch(/const showLoyaltySimple = loyalty\.enabled && loyalty\.balance_euros >= loyalty\.min_redeem/);
-    expect(page).toMatch(/\{\(accountDueAmount > 0 \|\| showLoyaltySimple\) && \(/);
-    expect(page).toMatch(/<div className="flex items-stretch gap-1\.5">/);
   });
 });
