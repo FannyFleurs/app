@@ -28,6 +28,10 @@ describe('Écran de confirmation de clôture', () => {
   it('une ligne « Prélèvement » est présente, basée sur cash_breakdown.bank_deposits', () => {
     expect(admin).toMatch(/label: 'Prélèvement', value: formatEUR\(preview\.cash_breakdown\.bank_deposits\)/);
   });
+
+  it('la réconciliation des paiements (avant scellement) affiche le nombre de transactions par mode', () => {
+    expect(admin).toMatch(/<span className="text-ink-soft"> \(\{p\.count\} transaction\{p\.count > 1 \? 's' : ''\}\)<\/span>/);
+  });
 });
 
 const hasDb = !!process.env.DATABASE_URL;

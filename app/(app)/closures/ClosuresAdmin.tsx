@@ -676,6 +676,7 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
                           <span className="text-sm">
                             <span className="text-ink-soft">Système : </span>
                             <span className="font-medium">{formatEUR(p.total)}</span>
+                            <span className="text-ink-soft"> ({p.count} transaction{p.count > 1 ? 's' : ''})</span>
                           </span>
                         </div>
                         {p.method !== 'cash' && (
