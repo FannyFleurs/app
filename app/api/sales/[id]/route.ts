@@ -80,17 +80,22 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   const returned_by_line: Record<number, number> = {};
   for (const r of returnedRes.rows) returned_by_line[r.line_index] = Number(r.qty);
 
-  // Avantage fidélité (points dépensés sur CETTE vente) : sert à afficher/
-  // masquer le bouton « Retirer avantage fid » — voir loyalty-reversal.ts.
-  const loyaltyMoves = await query<{ movement_type: string; points_delta: string }>(
-    `SELECT movement_type, points_delta::text FROM loyalty_movements
+  // Fidélité de CETTE vente (points dépensés / gagnés) : sert à afficher/
+  // masquer les boutons « Retirer avantage fid » et « Retirer points
+  // acquis » — voir loyalty-reversal.ts (mêmes préfixes de motif).
+  const loyaltyMoves = await query<{ movement_type: string; points_delta: string; reason: string | null }>(
+    `SELECT movement_type, points_delta::text, reason FROM loyalty_movements
       WHERE source_type = 'sale' AND source_id = $1`,
     [params.id],
   );
   const redeemed = loyaltyMoves.rows
     .filter((r) => r.movement_type === 'redeem')
     .reduce((s, r) => s + Math.abs(Number(r.points_delta)), 0);
-  const alreadyRemoved = loyaltyMoves.rows.some((r) => r.movement_type === 'adjust' && Number(r.points_delta) > 0);
+  const earned = loyaltyMoves.rows
+    .filter((r) => r.movement_type === 'earn')
+    .reduce((s, r) => s + Number(r.points_delta), 0);
+  const advantageRemoved = loyaltyMoves.rows.some((r) => r.movement_type === 'adjust' && r.reason?.startsWith('Retrait avantage fidélité'));
+  const earnRemoved = loyaltyMoves.rows.some((r) => r.movement_type === 'adjust' && r.reason?.startsWith('Retrait points acquis'));
 
   return NextResponse.json({
     sale: sale.rows[0],
@@ -99,6 +104,9 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     invoice: invoiceRow,
     returns: returns.rows,
     returned_by_line,
-    loyalty: { redeemed, removable: redeemed > 0 && !alreadyRemoved },
+    loyalty: {
+      redeemed, removable: redeemed > 0 && !advantageRemoved,
+      earned, earnRemovable: earned > 0 && !earnRemoved,
+    },
   });
 }

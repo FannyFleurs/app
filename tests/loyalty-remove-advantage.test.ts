@@ -148,13 +148,13 @@ describe.skipIf(!hasDb)('Retirer avantage fidélité (Ma journée)', () => {
     const saleId = await makeSaleWithLoyalty(6);
     const before = await saleDetailRoute(new Request('https://x.test'), { params: { id: saleId } });
     const beforeBody = await before.json() as { loyalty: { redeemed: number; removable: boolean } };
-    expect(beforeBody.loyalty).toEqual({ redeemed: 6, removable: true });
+    expect(beforeBody.loyalty).toMatchObject({ redeemed: 6, removable: true });
 
     await removeLoyaltyAdvantage({ organizationId, userId, saleId });
 
     const after = await saleDetailRoute(new Request('https://x.test'), { params: { id: saleId } });
     const afterBody = await after.json() as { loyalty: { redeemed: number; removable: boolean } };
-    expect(afterBody.loyalty).toEqual({ redeemed: 6, removable: false });
+    expect(afterBody.loyalty).toMatchObject({ redeemed: 6, removable: false });
   });
 });
 

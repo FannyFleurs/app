@@ -56,8 +56,8 @@ interface SaleDetail {
   }>;
   /** Quantités déjà retournées par ligne (line_index → qté). */
   returned_by_line?: Record<number, number>;
-  /** Avantage fidélité (points dépensés) de cette vente — voir bouton « Retirer avantage fid ». */
-  loyalty?: { redeemed: number; removable: boolean };
+  /** Fidélité de cette vente — voir boutons « Retirer avantage fid » / « Retirer points acquis ». */
+  loyalty?: { redeemed: number; removable: boolean; earned: number; earnRemovable: boolean };
 }
 
 type SummaryMode = 'simple' | 'complet';
@@ -1100,6 +1100,7 @@ function SaleDetailPanel({ detail, onInvoiceGenerated, onNotesUpdated, onLoyalty
   const s = detail.sale;
   const [generating, setGenerating] = useState(false);
   const [removingLoyalty, setRemovingLoyalty] = useState(false);
+  const [removingEarn, setRemovingEarn] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showReturn, setShowReturn] = useState(false);
   const [creditNote, setCreditNote] = useState<{
@@ -1182,6 +1183,32 @@ function SaleDetailPanel({ detail, onInvoiceGenerated, onNotesUpdated, onLoyalty
       }
     } finally {
       setRemovingLoyalty(false);
+    }
+  }
+
+  async function removeLoyaltyEarn() {
+    if (!(await confirmThemed({
+      title: 'Retirer les points acquis',
+      message: `${formatEUR(detail.loyalty?.earned ?? 0)} de points gagnés sur cet achat seront repris au client (dans la limite de son solde actuel). Le ticket et ses règlements ne sont pas modifiés.`,
+      confirmLabel: 'Retirer',
+    }))) return;
+    setRemovingEarn(true); setError(null); setInfo(null);
+    try {
+      const res = await fetch(`/api/sales/${s.id}/remove-loyalty-earn`, { method: 'POST' });
+      if (res.ok) {
+        const j = await res.json() as { removed_amount: number };
+        setInfo(`Points acquis retirés : ${formatEUR(j.removed_amount)} repris au client.`);
+        onLoyaltyRemoved();
+      } else {
+        const j = await res.json().catch(() => ({}));
+        setError(
+          j.error === 'ALREADY_REMOVED' ? 'Points acquis déjà retirés.'
+          : j.error === 'NO_LOYALTY_EARNED' ? 'Aucun point acquis sur cette vente.'
+          : 'Échec du retrait.',
+        );
+      }
+    } finally {
+      setRemovingEarn(false);
     }
   }
 
@@ -1323,6 +1350,15 @@ function SaleDetailPanel({ detail, onInvoiceGenerated, onNotesUpdated, onLoyalty
               className="btn-soft text-sm text-danger disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {removingLoyalty ? '…' : '✦ Retirer avantage fid'}
+            </button>
+          )}
+          {s.status === 'validated' && detail.loyalty?.earnRemovable && (
+            <button
+              onClick={() => void removeLoyaltyEarn()}
+              disabled={removingEarn}
+              className="btn-soft text-sm text-danger disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {removingEarn ? '…' : '✦ Retirer points acquis'}
             </button>
           )}
           {s.status === 'cancelled_by_credit_note' ? (
