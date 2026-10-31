@@ -267,6 +267,7 @@ export default function ProductsList({
           <div className="px-3 py-2 border-b border-border space-y-2 shrink-0">
             <div className="flex gap-2">
               <input
+                autoFocus
                 className="input flex-1"
                 placeholder="Rechercher (nom, SKU, code-barres)…"
                 value={q}
