@@ -28,6 +28,10 @@ interface Props {
   hiddenPaths: string[];
   autoLogoutMode: AutoLogoutMode;
   autoLogoutMinutes: number;
+  /** CA du jour sur la TopBar (icône œil), null si désactivé/non applicable
+   *  (back-office, poste non appairé, ou réglage boutique désactivé) — voir
+   *  ca-reveal-server.ts et app/(app)/layout.tsx. */
+  caReveal: { storeId: string } | null;
   headerTabs: string[];
   subscription: SubscriptionInfo | null;
   permissions: Permission[];
@@ -40,7 +44,7 @@ interface Props {
 }
 
 export default function AppShell({
-  user, hiddenPaths, autoLogoutMode, autoLogoutMinutes, headerTabs,
+  user, hiddenPaths, autoLogoutMode, autoLogoutMinutes, caReveal, headerTabs,
   subscription, permissions, backOffice = false, children,
 }: Props) {
   const permSet = new Set(permissions);
@@ -221,6 +225,7 @@ export default function AppShell({
               // vertical) : à TOUTE taille d'écran maintenant que la TopBar
               // s'affiche aussi en desktop hors BO, pas seulement sur mobile.
               subscription={backOffice ? subscription : null}
+              caReveal={caReveal}
               permissions={permSet}
               onOpenMenu={() => setMenuOpen(true)}
               onLogout={() => void logout()}

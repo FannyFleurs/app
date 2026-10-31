@@ -44,13 +44,16 @@ interface Props {
   /** Affichage du stock effectif (override boutique, sinon défaut
    *  organisation) pour storeId = lockStoreId ?? '' au 1er rendu. */
   initialShowStock: boolean;
+  /** CA du jour sur la TopBar (icône œil) effectif (override boutique, sinon
+   *  défaut organisation) pour storeId = lockStoreId ?? '' au 1er rendu. */
+  initialCaReveal: boolean;
 }
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
 export default function POSSettingsForm({
   initial, canWrite, stores, lockStoreId, initialTileSize,
-  initialAutoLogoutMode, initialAutoLogoutMinutes, initialShowStock,
+  initialAutoLogoutMode, initialAutoLogoutMinutes, initialShowStock, initialCaReveal,
 }: Props) {
   const router = useRouter();
   const [settings, setSettings] = useState<PosUiSettings>(initial);
@@ -221,6 +224,50 @@ export default function POSSettingsForm({
     }, 400);
     return () => clearTimeout(t);
   }, [showStock, showStockStoreId, canWrite, router]);
+
+  // CA du jour sur la TopBar (icône œil) : réglage PAR BOUTIQUE, géré
+  // séparément du reste (même motif que l'affichage du stock ci-dessus).
+  const [caRevealStoreId, setCaRevealStoreId] = useState<string>(lockStoreId ?? '');
+  const [caReveal, setCaReveal] = useState<boolean>(initialCaReveal);
+  const [caRevealLoading, setCaRevealLoading] = useState(false);
+  const caRevealFirstRender = useRef(true);
+  const caRevealLastSaved = useRef<{ storeId: string; value: boolean }>({ storeId: lockStoreId ?? '', value: initialCaReveal });
+
+  useEffect(() => {
+    if (lockStoreId) return;
+    if (caRevealFirstRender.current) { caRevealFirstRender.current = false; return; }
+    let cancelled = false;
+    setCaRevealLoading(true);
+    void fetch(`/api/settings/pos/ca-reveal${caRevealStoreId ? `?store_id=${caRevealStoreId}` : ''}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (cancelled || !j) return;
+        setCaReveal(j.enabled);
+        caRevealLastSaved.current = { storeId: caRevealStoreId, value: j.enabled };
+      })
+      .finally(() => { if (!cancelled) setCaRevealLoading(false); });
+    return () => { cancelled = true; };
+  }, [caRevealStoreId, lockStoreId]);
+
+  // Auto-save (debounce 400ms), indépendant du reste.
+  useEffect(() => {
+    if (!canWrite) return;
+    if (caRevealLastSaved.current.storeId === caRevealStoreId && caRevealLastSaved.current.value === caReveal) return;
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch('/api/settings/pos/ca-reveal', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ store_id: caRevealStoreId || null, enabled: caReveal }),
+        });
+        if (res.ok) {
+          caRevealLastSaved.current = { storeId: caRevealStoreId, value: caReveal };
+          router.refresh();
+        }
+      } catch { /* tant pis, l'utilisateur peut recliquer */ }
+    }, 400);
+    return () => clearTimeout(t);
+  }, [caReveal, caRevealStoreId, canWrite, router]);
 
   // Échelle de l'interface : réglage PROPRE À CET ÉCRAN (localStorage), pas au
   // niveau organisation — chaque poste a sa taille d'écran. Indépendant de
@@ -452,6 +499,42 @@ export default function POSSettingsForm({
               checked={showStock}
               onChange={setShowStock}
               disabled={!canWrite || showStockLoading}
+            />
+          </div>
+        </Section>
+
+        <Section
+          title="CA du jour sur la caisse"
+          description="Affiche une icône œil en haut de la caisse, à gauche du bouton assistance. Au clic, elle est remplacée par le chiffre d'affaires du jour en cours. Réglage PROPRE À CHAQUE BOUTIQUE — contrairement au reste de cette page, changer ce réglage ici n'affecte que la boutique sélectionnée. Désactivé par défaut."
+        >
+          {lockStoreId ? (
+            <p className="mb-3 text-xs text-ink-soft">
+              Poste de caisse : réglage de{' '}
+              <strong>{stores.find((s) => s.id === lockStoreId)?.name ?? 'cette boutique'}</strong> uniquement.
+            </p>
+          ) : stores.length > 1 ? (
+            <label className="mb-3 block text-sm">
+              <span className="text-ink-soft">Boutique</span>
+              <select
+                className="input h-10 w-full mt-1 max-w-sm"
+                value={caRevealStoreId}
+                onChange={(e) => setCaRevealStoreId(e.target.value)}
+                disabled={!canWrite}
+              >
+                <option value="">Toutes les boutiques (réglage par défaut)</option>
+                {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+              <span className="mt-1 block text-xs text-ink-soft">
+                « Toutes les boutiques » ne sert que de valeur par défaut, reprise par une boutique sans réglage propre.
+              </span>
+            </label>
+          ) : null}
+          <div className={caRevealLoading ? 'opacity-50' : ''}>
+            <Toggle
+              label="Afficher le CA du jour sur la caisse"
+              checked={caReveal}
+              onChange={setCaReveal}
+              disabled={!canWrite || caRevealLoading}
             />
           </div>
         </Section>

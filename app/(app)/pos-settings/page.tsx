@@ -12,6 +12,7 @@ import {
 import { loadTileSizeOverride } from '@/lib/settings/tile-size-server';
 import { loadAutoLogoutOverride } from '@/lib/settings/auto-logout-server';
 import { loadShowStockOverride } from '@/lib/settings/show-stock-server';
+import { loadCaRevealOverride } from '@/lib/settings/ca-reveal-server';
 import PageHeader from '@/components/PageHeader';
 import POSSettingsForm from './POSSettingsForm';
 import PosteRefCard from '@/components/PosteRefCard';
@@ -53,11 +54,17 @@ export default async function POSSettingsPage() {
   const initialShowStock = (await loadShowStockOverride(user.organizationId, lockStoreId))
     ?? initial.show_stock ?? POS_UI_DEFAULTS.show_stock;
 
+  // CA du jour sur la TopBar (icône œil) : réglage PAR BOUTIQUE (voir
+  // ca-reveal-server.ts) — même motif que l'affichage du stock ci-dessus.
+  // Désactivé par défaut (pas de champ dans POS_UI_DEFAULTS : nouveau
+  // réglage, pas de repli sur un ancien emplacement organisation entière).
+  const initialCaReveal = (await loadCaRevealOverride(user.organizationId, lockStoreId)) ?? false;
+
   return (
     <div className="p-6 md:p-8 space-y-5">
       <PageHeader
         title="Paramètres caisse"
-        subtitle="Personnalisez l'interface de vente. Vos réglages sont enregistrés au niveau de votre organisation et appliqués sur toutes les caisses, à l'exception de la taille des tuiles, de la déconnexion automatique et de l'affichage du stock (réglables par boutique)."
+        subtitle="Personnalisez l'interface de vente. Vos réglages sont enregistrés au niveau de votre organisation et appliqués sur toutes les caisses, à l'exception de la taille des tuiles, de la déconnexion automatique, de l'affichage du stock et du CA du jour sur la caisse (réglables par boutique)."
         badge={!canWrite ? { label: 'Lecture seule pour votre rôle', tone: 'soft' } : undefined}
       />
       <PosteRefCard />
@@ -70,6 +77,7 @@ export default async function POSSettingsPage() {
         initialAutoLogoutMode={initialAutoLogoutMode}
         initialAutoLogoutMinutes={initialAutoLogoutMinutes}
         initialShowStock={initialShowStock}
+        initialCaReveal={initialCaReveal}
       />
     </div>
   );

@@ -47,7 +47,8 @@ export type IconName =
   | 'sparkle'
   | 'transfer'
   | 'discount'
-  | 'helpline';
+  | 'helpline'
+  | 'eye';
 
 const ICONS: Record<IconName, React.ReactNode> = {
   dashboard: (
@@ -300,6 +301,12 @@ const ICONS: Record<IconName, React.ReactNode> = {
       <path d="M4 15v-3a8 8 0 0 1 16 0v3" />
       <path d="M4 15a2 2 0 0 1 2-2h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1H6a2 2 0 0 1-2-2Z" />
       <path d="M20 15a2 2 0 0 0-2-2h-1a1 1 0 0 0-1 1v3a1 1 0 0 0 1 1h1a2 2 0 0 0 2-2Z" />
+    </>
+  ),
+  eye: (
+    <>
+      <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z" />
+      <circle cx="12" cy="12" r="3" />
     </>
   ),
 };

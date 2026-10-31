@@ -2,12 +2,14 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useState } from 'react';
 import { SIDEBAR_ITEMS, type SidebarItem } from './Sidebar';
 import type { Role, Permission } from '@/lib/auth/rbac';
 import { HEADER_TABS_DEFAULT, HEADER_TABS_MAX } from '@/lib/settings/pos-ui';
 import Icon from './Icon';
 import { useBrand } from './BrandMark';
 import { activeNavHref } from '@/lib/nav/active';
+import { formatEUR } from '@/lib/services/money';
 
 export interface TopBarUser {
   fullName: string;
@@ -37,6 +39,9 @@ interface Props {
   hiddenPaths: string[];
   headerTabs: string[];
   subscription: TopBarSubscription | null;
+  /** CA du jour, révélé au clic sur l'œil — voir ca-reveal-server.ts et
+   *  app/(app)/layout.tsx. Null si désactivé/non applicable (bouton masqué). */
+  caReveal: { storeId: string } | null;
   permissions: Set<Permission>;
   onOpenMenu: () => void;
   onLogout: () => void;
@@ -46,10 +51,26 @@ interface Props {
 }
 
 export default function TopBar({
-  user, hiddenPaths, headerTabs, subscription, permissions, onOpenMenu, onLogout, backOffice = false,
+  user, hiddenPaths, headerTabs, subscription, caReveal, permissions, onOpenMenu, onLogout, backOffice = false,
 }: Props) {
   const path = usePathname();
   const brand = useBrand();
+  const [caValue, setCaValue] = useState<number | null>(null);
+  const [caLoading, setCaLoading] = useState(false);
+
+  async function revealCa(storeId: string) {
+    setCaLoading(true);
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const res = await fetch(`/api/ca/summary?store_id=${storeId}&from=${today}&to=${today}`);
+      if (res.ok) {
+        const j = await res.json() as { ca_ttc: number };
+        setCaValue(j.ca_ttc);
+      }
+    } finally {
+      setCaLoading(false);
+    }
+  }
 
   // Liste effective des onglets : configuration utilisateur (max 10), filtrée
   // par permissions + paths masqués. Vide → on retombe sur la liste par défaut.
@@ -117,6 +138,29 @@ export default function TopBar({
       {/* Pastille abonnement (sans le compteur de jours) */}
       {subscription && (
         <SubscriptionChip subscription={subscription} />
+      )}
+
+      {/* CA du jour, masqué par défaut (œil) — réglage PAR BOUTIQUE, voir
+          ca-reveal-server.ts. Uniquement sur l'écran de caisse : hors de ce
+          contexte, « la boutique du poste » ne veut rien dire. */}
+      {caReveal && path === '/caisse' && (
+        <button
+          onClick={() => { if (caValue === null && !caLoading) void revealCa(caReveal.storeId); }}
+          title={caValue === null ? 'Afficher le CA du jour' : undefined}
+          aria-label="CA du jour"
+          className="px-4 flex items-center justify-center border-l border-border text-ink-soft hover:text-ink hover:bg-gray-50 transition-colors disabled:cursor-default"
+          disabled={caValue !== null}
+        >
+          {caValue === null ? (
+            caLoading ? (
+              <span className="text-sm font-medium tabular-nums">…</span>
+            ) : (
+              <Icon name="eye" size={20} />
+            )
+          ) : (
+            <span className="text-sm font-medium tabular-nums text-ink">{formatEUR(caValue)}</span>
+          )}
+        </button>
       )}
 
       {/* Assistance — permanente, y compris sur mobile où les onglets sont

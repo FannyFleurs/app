@@ -20,6 +20,7 @@ import {
 } from '@/lib/settings/screen-delivery';
 import { loadScopedSettingValue } from '@/lib/settings/scoped-server';
 import { loadAutoLogoutOverride } from '@/lib/settings/auto-logout-server';
+import { loadCaRevealOverride } from '@/lib/settings/ca-reveal-server';
 import { resolveDeviceStoreId } from '@/lib/pos/current-store';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -80,6 +81,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     auto_logout_mode: ui.auto_logout_mode,
     auto_logout_minutes: ui.auto_logout_minutes,
   };
+
+  // CA du jour sur la TopBar (icône œil) : réglage PAR BOUTIQUE (voir
+  // ca-reveal-server.ts), visible uniquement sur un poste de caisse appairé
+  // (deviceStoreId résolu) et jamais en back-office — là où « la boutique du
+  // poste » n'a pas de sens (multi-boutiques centralisé).
+  const caReveal = !backOffice && deviceStoreId
+    && (await loadCaRevealOverride(user.organizationId, deviceStoreId))
+    ? { storeId: deviceStoreId }
+    : null;
 
   // Charge le plan / la date d'échéance (silencieux si migration 0010 absente).
   let subscription: SubscriptionInfo | null = null;
@@ -144,6 +154,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         hiddenPaths={hiddenPaths}
         autoLogoutMode={autoLogout.auto_logout_mode}
         autoLogoutMinutes={autoLogout.auto_logout_minutes}
+        caReveal={caReveal}
         headerTabs={ui.header_tabs ?? []}
         subscription={subscription}
         permissions={Array.from(effectivePerms)}
