@@ -335,8 +335,9 @@ export default function CashRegister({
   const [showOrderModal, setShowOrderModal] = useState(false);
   const [heldCount, setHeldCount] = useState(0);
   const [showScanner, setShowScanner] = useState(false);
-  // Le champ recherche est toujours actif (autofocus au montage) : saisir
-  // ou scanner ne nécessite jamais de cliquer dessus au préalable.
+  // Recherche repliée par défaut : ouverte via la loupe (près du panier
+  // en attente) ou la touche « / ».
+  const [searchOpen, setSearchOpen] = useState(false);
   // Panier glissé en mode mobile : ouvert via le bouton flottant OU via
   // un swipe horizontal (gauche = ouvrir, droite = fermer).
   const [mobileCartOpen, setMobileCartOpen] = useState(false);
@@ -1565,7 +1566,9 @@ export default function CashRegister({
     function onKey(e: KeyboardEvent) {
       if (e.key === '/' && document.activeElement !== searchRef.current) {
         e.preventDefault();
-        searchRef.current?.focus();
+        setSearchOpen(true);
+        // Le champ est monté au prochain render : on le focuse juste après.
+        setTimeout(() => searchRef.current?.focus(), 0);
       } else if (e.key === 'F2') { e.preventDefault(); setShowFreePrice({}); }
       else if (e.key === 'F4') { e.preventDefault(); setShowHeld(true); }
       else if (e.key === 'F9' && lines.length > 0) {
@@ -1799,49 +1802,60 @@ export default function CashRegister({
               d'actions du ticket (même hauteur reprise plus bas), pour que
               les deux bordures basses (catalogue / ticket) se rejoignent au
               même pixel de part et d'autre de la séparation verticale. */}
-          {/* Barre de recherche TOUJOURS ACTIVE : un champ de saisie réel en
-              permanence (pas une barre cliquable à ouvrir) — autofocus au
-              montage pour pouvoir saisir ou scanner sans jamais avoir à
-              cliquer dessus au préalable. */}
-          <div className="flex-1 md:flex-none md:w-[416px] md:ml-auto relative">
-            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-soft" aria-hidden>
-              <Icon name="search" size={23} />
-            </span>
-            <input
-              ref={searchRef}
-              autoFocus
-              className="input h-[57px] w-full pl-[52px] pr-[52px] text-lg"
-              placeholder="Rechercher / scanner…"
-              aria-label="Rechercher un article"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Escape') { setSearch(''); return; }
-                if (e.key === 'Enter' && search.trim()) {
-                  const raw = search.trim();
-                  const normalized = raw.replace(/[^A-Z0-9]/gi, '').toUpperCase();
-                  if (normalized.startsWith('FID') && normalized.length >= 6) {
-                    void attachCustomerBySerial(normalized);
-                    setSearch('');
-                    return;
+          {/* Barre de recherche VISIBLE : champ dès qu'ouverte, sinon une barre
+              cliquable claire (pas une simple loupe). */}
+          {searchOpen ? (
+            <div className="flex-1 md:flex-none md:w-[416px] md:ml-auto relative">
+              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-soft" aria-hidden>
+                <Icon name="search" size={23} />
+              </span>
+              <input
+                ref={searchRef}
+                autoFocus
+                className="input h-[57px] w-full pl-[52px] pr-[52px] text-lg"
+                placeholder="Rechercher / scanner…"
+                aria-label="Rechercher un article"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onBlur={() => { if (!search.trim()) setSearchOpen(false); }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') { setSearch(''); setSearchOpen(false); return; }
+                  if (e.key === 'Enter' && search.trim()) {
+                    const raw = search.trim();
+                    const normalized = raw.replace(/[^A-Z0-9]/gi, '').toUpperCase();
+                    if (normalized.startsWith('FID') && normalized.length >= 6) {
+                      void attachCustomerBySerial(normalized);
+                      setSearch('');
+                      return;
+                    }
+                    const match = matchProductByCode(products, raw);
+                    if (match) { addProduct(match); setSearch(''); }
                   }
-                  const match = matchProductByCode(products, raw);
-                  if (match) { addProduct(match); setSearch(''); }
-                }
-              }}
-            />
-            {search && (
-              <button
-                type="button"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => { setSearch(''); searchRef.current?.focus(); }}
-                aria-label="Effacer la recherche"
-                className="absolute right-2 top-1/2 -translate-y-1/2 grid place-items-center h-9 w-9 rounded-full text-ink-soft hover:bg-gray-100 hover:text-ink"
-              >
-                <span aria-hidden className="text-[23px] leading-none">×</span>
-              </button>
-            )}
-          </div>
+                }}
+              />
+              {search && (
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => { setSearch(''); searchRef.current?.focus(); }}
+                  aria-label="Effacer la recherche"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 grid place-items-center h-9 w-9 rounded-full text-ink-soft hover:bg-gray-100 hover:text-ink"
+                >
+                  <span aria-hidden className="text-[23px] leading-none">×</span>
+                </button>
+              )}
+            </div>
+          ) : (
+            <button
+              onClick={() => setSearchOpen(true)}
+              title="Rechercher / scanner ( / )"
+              aria-label="Rechercher un article"
+              className="flex-1 md:flex-none md:w-[416px] md:ml-auto h-[57px] rounded-xl border border-border bg-white hover:bg-gray-50 flex items-center gap-2 px-[18px] text-ink-soft text-lg text-left transition-colors"
+            >
+              <Icon name="search" size={26} />
+              <span>Rechercher / scanner…</span>
+            </button>
+          )}
           {/* Scanner caméra : uniquement sur mobile/tablette. */}
           <button
             className="btn-ghost h-[57px] px-[18px] hidden [@media(pointer:coarse)]:inline-flex"
