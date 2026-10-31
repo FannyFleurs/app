@@ -187,11 +187,18 @@ export default function AppShell({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoLogoutMode]);
 
-  // Déconnexion rapide au clavier : Espace + Entrée (l'une tenue, l'autre
+  // Déconnexion rapide au clavier : 0 + Entrée (l'une tenue, l'autre
   // pressée, peu importe l'ordre) — se déconnecter sans toucher l'écran,
   // dans le même esprit que la détection de PIN au clavier (PinLogin.tsx).
   // Jamais pendant une saisie de texte (champ focalisé), pour ne pas
   // interférer avec une utilisation normale du clavier.
+  //
+  // CAPTURE sur window (donc AVANT le scanner de code-barres de la caisse,
+  // qui écoute en capture sur document et avale — preventDefault +
+  // stopPropagation — chaque caractère seul tapé hors d'un champ, y compris
+  // « 0 » : sans cela, le raccourci ne verrait jamais le « 0 » sur l'écran
+  // de caisse). window précède document dans la phase de capture, donc ce
+  // listener voit l'événement en premier, qu'il soit ensuite avalé ou non.
   useEffect(() => {
     const held = new Set<string>();
     let fired = false;
@@ -201,8 +208,8 @@ export default function AppShell({
     }
     function onKeyDown(e: KeyboardEvent) {
       if (inField(e)) return;
-      if (e.key !== ' ' && e.key !== 'Enter') return;
-      const other = e.key === ' ' ? 'Enter' : ' ';
+      if (e.key !== '0' && e.key !== 'Enter') return;
+      const other = e.key === '0' ? 'Enter' : '0';
       if (held.has(other) && !fired) {
         fired = true;
         e.preventDefault();
@@ -211,15 +218,15 @@ export default function AppShell({
       held.add(e.key);
     }
     function onKeyUp(e: KeyboardEvent) {
-      if (e.key !== ' ' && e.key !== 'Enter') return;
+      if (e.key !== '0' && e.key !== 'Enter') return;
       held.delete(e.key);
       if (held.size === 0) fired = false;
     }
-    window.addEventListener('keydown', onKeyDown);
-    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('keydown', onKeyDown, true);
+    window.addEventListener('keyup', onKeyUp, true);
     return () => {
-      window.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('keydown', onKeyDown, true);
+      window.removeEventListener('keyup', onKeyUp, true);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
