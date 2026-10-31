@@ -319,10 +319,14 @@ export default function CashRegister({
   const [showPicker, setShowPicker] = useState(false);
   const [showSettle, setShowSettle] = useState(false);
   // Combine la vente en cours et le solde dû du client en un seul règlement
-  // (case à cocher visible uniquement quand le panier n'est pas vide — voir
-  // accountSettlement sur PaymentModal). Réinitialisé à chaque changement de
-  // client, avec customerBalances.
+  // (clic sur la pastille « En compte », visible uniquement quand le panier
+  // n'est pas vide — voir accountSettlement sur PaymentModal). Réinitialisé
+  // à chaque changement de client, avec customerBalances, et dès que le
+  // panier se vide (plus rien à combiner).
   const [includeAccountDue, setIncludeAccountDue] = useState(false);
+  useEffect(() => {
+    if (lines.length === 0) setIncludeAccountDue(false);
+  }, [lines.length]);
   const [customer, setCustomer] = useState<PickedCustomer | null>(null);
   const [discountLineKey, setDiscountLineKey] = useState<string | null>(null);
   const [justifyAction, setJustifyAction] = useState<
@@ -443,6 +447,9 @@ export default function CashRegister({
   useEffect(() => {
     setLoyaltyAmountStr(loyalty.balance_euros > 0 ? String(loyalty.balance_euros) : '');
   }, [loyalty.balance_euros, loyalty.enabled]);
+  // Champ de saisie du montant de fidélité : masqué par défaut (bouton
+  // simple « Utiliser le solde entier »), révélé au clic sur « Modifier ».
+  const [editingLoyaltyAmount, setEditingLoyaltyAmount] = useState(false);
 
   // Soldes complémentaires du client (cartes cadeau, compte client, avoirs)
   // affichés dans la zone ticket. Rafraîchis quand un client est attaché.
@@ -1164,6 +1171,7 @@ export default function CashRegister({
     setLoyalty({ enabled: false, balance_euros: 0, min_redeem: 0, used: 0 });
     setCustomerBalances({ gift_card_balance: 0, account_balance: 0, credit_notes_balance: 0 });
     setIncludeAccountDue(false);
+    setEditingLoyaltyAmount(false);
     setCartComment('');
     setView({ kind: 'categories' });
     setSearch('');
@@ -1221,6 +1229,7 @@ export default function CashRegister({
       setLoyalty({ enabled: false, balance_euros: 0, min_redeem: 0, used: 0 });
       setCustomerBalances({ gift_card_balance: 0, account_balance: 0, credit_notes_balance: 0 });
     setIncludeAccountDue(false);
+    setEditingLoyaltyAmount(false);
       return;
     }
     try {
@@ -1425,6 +1434,7 @@ export default function CashRegister({
     setLoyalty({ enabled: false, balance_euros: 0, min_redeem: 0, used: 0 });
     setCustomerBalances({ gift_card_balance: 0, account_balance: 0, credit_notes_balance: 0 });
     setIncludeAccountDue(false);
+    setEditingLoyaltyAmount(false);
     setCartComment('');
     setMobileCartOpen(false);
     // Retour à la vue catégories
@@ -1478,6 +1488,7 @@ export default function CashRegister({
       setLoyalty({ enabled: false, balance_euros: 0, min_redeem: 0, used: 0 });
       setCustomerBalances({ gift_card_balance: 0, account_balance: 0, credit_notes_balance: 0 });
     setIncludeAccountDue(false);
+    setEditingLoyaltyAmount(false);
       return;
     }
 
@@ -1514,6 +1525,7 @@ export default function CashRegister({
     if (!saleId || schoolMode) { setCustomer(null); setLoyalty({ enabled: false, balance_euros: 0, min_redeem: 0, used: 0 });
     setCustomerBalances({ gift_card_balance: 0, account_balance: 0, credit_notes_balance: 0 });
     setIncludeAccountDue(false);
+    setEditingLoyaltyAmount(false);
     setLines((cur) => cur.filter((l) => l.metadata?.loyalty_redemption !== true)); return; }
     const res = await fetch(`/api/sales/${saleId}/customer`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
@@ -1524,6 +1536,7 @@ export default function CashRegister({
       setLoyalty({ enabled: false, balance_euros: 0, min_redeem: 0, used: 0 });
     setCustomerBalances({ gift_card_balance: 0, account_balance: 0, credit_notes_balance: 0 });
     setIncludeAccountDue(false);
+    setEditingLoyaltyAmount(false);
       // Retire la ligne fidélité éventuellement déjà appliquée
       setLines((cur) => cur.filter((l) => l.metadata?.loyalty_redemption !== true));
     }
@@ -2169,41 +2182,25 @@ export default function CashRegister({
                 </div>
               )}
               {customerBalances.account_balance < 0 && (
-                <>
-                  <div className="flex items-center justify-between rounded-xl bg-danger/10 px-3 py-2 text-sm">
-                    <span className="text-danger font-medium">💳 En compte (dû)</span>
-                    <span className="font-semibold text-danger">{formatEUR(customerBalances.account_balance)}</span>
-                  </div>
-                  {lines.length > 0 ? (
-                    // Panier en cours : on peut combiner la vente ET le solde
-                    // dû en UN SEUL règlement, sans passer par un paiement
-                    // différé intermédiaire — voir accountSettlement sur
-                    // PaymentModal. Non proposé si le poste est RÉELLEMENT
-                    // hors-ligne là maintenant (nécessite deux appels serveur
-                    // successifs) — offlinePosEnabled() seule ne suffit pas,
-                    // c'est la capacité du poste, pas sa connectivité actuelle.
-                    !shouldGoOffline() && (
-                      <label className="flex items-center gap-2 rounded-xl bg-danger/10 px-3 py-2 text-sm cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={includeAccountDue}
-                          onChange={(e) => setIncludeAccountDue(e.target.checked)}
-                          className="shrink-0"
-                        />
-                        <span className="text-danger font-medium">
-                          Ajouter le solde dû au règlement ({formatEUR(-customerBalances.account_balance)})
-                        </span>
-                      </label>
-                    )
-                  ) : (
-                    <button
-                      onClick={() => setShowSettle(true)}
-                      className="w-full rounded-xl bg-danger/10 text-danger px-3 py-2 text-sm font-semibold hover:bg-danger/20"
-                    >
-                      Régler le solde ({formatEUR(-customerBalances.account_balance)})
-                    </button>
-                  )}
-                </>
+                // Panier en cours (et poste réellement en ligne) : un clic
+                // ajoute/retire le solde dû au règlement, combiné à la vente
+                // en un seul encaissement (accountSettlement sur
+                // PaymentModal) — pas de ligne séparée. Panier vide : un clic
+                // ouvre directement le règlement du solde seul (comme avant).
+                <button
+                  onClick={() => {
+                    if (lines.length > 0 && !shouldGoOffline()) setIncludeAccountDue((v) => !v);
+                    else setShowSettle(true);
+                  }}
+                  className={`w-full flex items-center justify-between rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
+                    includeAccountDue && lines.length > 0
+                      ? 'bg-danger text-white'
+                      : 'bg-danger/10 text-danger hover:bg-danger/20'
+                  }`}
+                >
+                  <span>{includeAccountDue && lines.length > 0 ? '✓ Solde dû ajouté' : '💳 En compte (dû)'}</span>
+                  <span className="font-semibold">{formatEUR(customerBalances.account_balance)}</span>
+                </button>
               )}
               {customerBalances.account_balance > 0 && (
                 <div className="flex items-center justify-between rounded-xl bg-success/10 px-3 py-2 text-sm">
@@ -2212,28 +2209,53 @@ export default function CashRegister({
                 </div>
               )}
               {loyalty.enabled && loyalty.balance_euros >= loyalty.min_redeem && loyalty.used === 0 && (
-                <div className="rounded-xl bg-success/10 px-3 py-2 space-y-1.5">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-success font-medium">✦ Fidélité disponible</span>
-                    <span className="text-ink-soft">{formatEUR(loyalty.balance_euros)}</span>
+                editingLoyaltyAmount ? (
+                  <div className="rounded-xl bg-success/10 px-3 py-2 space-y-1.5">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-success font-medium">✦ Fidélité disponible</span>
+                      <span className="text-ink-soft">{formatEUR(loyalty.balance_euros)}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        autoFocus
+                        type="number" step="0.01" min={0} max={loyalty.balance_euros}
+                        value={loyaltyAmountStr}
+                        onChange={(e) => setLoyaltyAmountStr(e.target.value)}
+                        className="input h-9 flex-1 text-sm tabular-nums"
+                        placeholder="Montant à utiliser"
+                      />
+                      <button
+                        onClick={() => { useLoyalty(Number(loyaltyAmountStr.replace(',', '.')) || 0); setEditingLoyaltyAmount(false); }}
+                        disabled={!(Number(loyaltyAmountStr.replace(',', '.')) > 0)}
+                        className="btn-soft h-9 px-3 text-sm text-success shrink-0 disabled:opacity-40"
+                      >
+                        Utiliser
+                      </button>
+                      <button
+                        onClick={() => setEditingLoyaltyAmount(false)}
+                        aria-label="Annuler"
+                        className="h-9 w-9 shrink-0 grid place-items-center rounded-lg text-ink-soft hover:bg-gray-100"
+                      >✕</button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number" step="0.01" min={0} max={loyalty.balance_euros}
-                      value={loyaltyAmountStr}
-                      onChange={(e) => setLoyaltyAmountStr(e.target.value)}
-                      className="input h-9 flex-1 text-sm tabular-nums"
-                      placeholder="Montant à utiliser"
-                    />
+                ) : (
+                  <div className="flex items-center gap-1.5">
                     <button
-                      onClick={() => useLoyalty(Number(loyaltyAmountStr.replace(',', '.')) || 0)}
-                      disabled={!(Number(loyaltyAmountStr.replace(',', '.')) > 0)}
-                      className="btn-soft h-9 px-3 text-sm text-success shrink-0 disabled:opacity-40"
+                      onClick={() => useLoyalty(loyalty.balance_euros)}
+                      className="flex-1 min-w-0 rounded-xl bg-success/10 text-success px-3 py-2 text-sm font-medium hover:bg-success/20 text-left truncate"
                     >
-                      Utiliser
+                      ✦ Utiliser {formatEUR(loyalty.balance_euros)} de fidélité
+                    </button>
+                    <button
+                      onClick={() => setEditingLoyaltyAmount(true)}
+                      title="Utiliser un autre montant"
+                      aria-label="Modifier le montant de fidélité à utiliser"
+                      className="shrink-0 h-9 w-9 grid place-items-center rounded-xl bg-success/10 text-success hover:bg-success/20"
+                    >
+                      ✎
                     </button>
                   </div>
-                </div>
+                )
               )}
               {loyalty.used > 0 && (
                 <div className="flex items-center justify-between rounded-xl bg-success/10 px-3 py-2 text-sm">

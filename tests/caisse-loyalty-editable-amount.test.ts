@@ -2,25 +2,34 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 
 /**
- * Utilisation de la fidélité en caisse : le solde entier était appliqué en
- * un clic, sans possibilité de réduire le montant. Un champ libre permet
- * désormais de choisir le montant à utiliser (par défaut le solde entier).
+ * Utilisation de la fidélité en caisse : un bouton simple applique le solde
+ * entier en un clic (comportement d'origine, restauré pour réduire
+ * l'encombrement de la zone ticket) ; un bouton « ✎ » à côté révèle, à la
+ * demande seulement, un champ libre pour utiliser un montant moindre.
  *
  * CashRegister.tsx est un très gros composant client, sans rendu complet en
  * test (voir tests/ma-journee.test.ts pour le même choix) : on vérifie la
  * présence et la condition exacte sur la source.
  */
-describe('Caisse — montant de fidélité modifiable', () => {
+describe('Caisse — fidélité : bouton simple par défaut, montant modifiable au clic', () => {
   const page = readFileSync('app/(app)/caisse/CashRegister.tsx', 'utf8');
 
-  it('un champ de saisie libre existe pour le montant de fidélité à utiliser', () => {
-    expect(page).toMatch(/const \[loyaltyAmountStr, setLoyaltyAmountStr\] = useState/);
+  it('par défaut, un seul clic sur le bouton principal applique le solde entier', () => {
+    expect(page).toMatch(/onClick=\{\(\) => useLoyalty\(loyalty\.balance_euros\)\}/);
+  });
+
+  it('le champ de saisie libre est masqué par défaut, révélé par editingLoyaltyAmount', () => {
+    expect(page).toMatch(/const \[editingLoyaltyAmount, setEditingLoyaltyAmount\] = useState\(false\);/);
+    expect(page).toMatch(/editingLoyaltyAmount \? \(/);
     expect(page).toMatch(/<input[\s\S]{0,200}value=\{loyaltyAmountStr\}/);
   });
 
-  it('le bouton "Utiliser" applique le montant SAISI, pas automatiquement le solde entier', () => {
-    expect(page).not.toMatch(/onClick=\{\(\) => useLoyalty\(loyalty\.balance_euros\)\}/);
-    expect(page).toMatch(/onClick=\{\(\) => useLoyalty\(Number\(loyaltyAmountStr\.replace/);
+  it('un bouton dédié ("Modifier le montant") révèle le champ', () => {
+    expect(page).toMatch(/onClick=\{\(\) => setEditingLoyaltyAmount\(true\)\}/);
+  });
+
+  it('le bouton "Utiliser" du champ applique le montant SAISI, puis referme le champ', () => {
+    expect(page).toMatch(/onClick=\{\(\) => \{ useLoyalty\(Number\(loyaltyAmountStr\.replace\([\s\S]{0,80}setEditingLoyaltyAmount\(false\); \}\}/);
   });
 
   it('le champ est initialisé au solde entier par défaut', () => {
