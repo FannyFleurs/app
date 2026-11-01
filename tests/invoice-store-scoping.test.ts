@@ -9,18 +9,23 @@ import { runMonthlyBillingForOrg } from '@/lib/services/monthly-billing';
 
 /**
  * Une facture de PÉRIODE (createFromAccountSales — « Facturation » en BO)
- * porte l'en-tête et le RIB d'UNE boutique (paramétrage par boutique). Tant
- * que tous les tickets regroupés viennent de la même boutique, elle affiche
- * exactement le même RIB qu'une facture générée directement depuis une vente
+ * porte le RIB d'UNE boutique (paramétrage par boutique). Tant que tous les
+ * tickets regroupés viennent de la même boutique, elle affiche exactement
+ * le même RIB qu'une facture générée directement depuis une vente
  * (createFromSale) de cette boutique — vérifié ici en comparant les réglages
  * effectivement résolus pour les deux factures, et en confirmant que le PDF
  * se génère bien dans les deux cas.
  *
- * Si les tickets sélectionnés viennent de boutiques différentes, l'identité
- * (et donc le RIB) de la facture serait arbitraire — refusé explicitement
- * (STORE_MISMATCH) plutôt que silencieusement incohérent. La facturation
- * mensuelle automatique (runMonthlyBillingForOrg) ne peut donc jamais
- * déclencher ce refus : elle scinde elle-même par boutique en amont.
+ * Des tickets de boutiques DIFFÉRENTES ne sont refusés (STORE_MISMATCH) que
+ * si ces boutiques ont des RIB RÉELLEMENT différents — l'identité serait
+ * alors arbitraire. Si leurs RIB sont identiques (cas courant : aucune
+ * boutique n'a de réglage propre, toutes héritent du même défaut
+ * organisation), les regrouper est sûr et nécessaire pour une facturation
+ * mensuelle consolidée d'un client multi-boutiques (ex. une chaîne de
+ * magasins réglant une seule facture pour plusieurs points de vente). La
+ * facturation mensuelle automatique (runMonthlyBillingForOrg) tente donc
+ * d'abord UNE facture unique par client, et ne se replie sur une facture par
+ * boutique que si ce refus est effectivement déclenché.
  *
  * Intégration contre une VRAIE base Postgres.
  */
@@ -92,12 +97,12 @@ describe.skipIf(!hasDb)('Facturation de période — cohérence boutique/RIB', (
     await pool.end();
   });
 
-  async function makeSale(storeId: string, registerId: string, deferred: boolean): Promise<string> {
+  async function makeSale(storeId: string, registerId: string, deferred: boolean, forCustomerId: string = customerId): Promise<string> {
     const sale = await query<{ id: string }>(
       `INSERT INTO sales (organization_id, store_id, register_id, user_id, customer_id, status,
          total_ht, total_tva, total_ttc, tva_breakdown, validated_at)
        VALUES ($1,$2,$3,$4,$5,'validated', 10, 2, 12, $6, now()) RETURNING id`,
-      [organizationId, storeId, registerId, userId, customerId, JSON.stringify([{ rate: 20, base_ht: 10, tva: 2, ttc: 12 }])],
+      [organizationId, storeId, registerId, userId, forCustomerId, JSON.stringify([{ rate: 20, base_ht: 10, tva: 2, ttc: 12 }])],
     );
     const saleId = sale.rows[0]!.id;
     await query(
@@ -173,5 +178,80 @@ describe.skipIf(!hasDb)('Facturation de période — cohérence boutique/RIB', (
       [[saleA, saleB]],
     );
     expect(saleRows.rows.every((r) => r.account_invoice_id !== null)).toBe(true);
+  });
+
+  it('regroupe des tickets de boutiques différentes dans UNE facture quand leur RIB est identique (ici : aucune des deux n\'a de réglage propre)', async () => {
+    const storeC = await query<{ id: string }>(
+      `INSERT INTO stores (organization_id, code, name) VALUES ($1, 'C', 'Boutique C') RETURNING id`,
+      [organizationId],
+    );
+    const storeD = await query<{ id: string }>(
+      `INSERT INTO stores (organization_id, code, name) VALUES ($1, 'D', 'Boutique D') RETURNING id`,
+      [organizationId],
+    );
+    const registerC = await query<{ id: string }>(
+      `INSERT INTO registers (organization_id, store_id, code, name) VALUES ($1,$2,'R-C','Caisse C') RETURNING id`,
+      [organizationId, storeC.rows[0]!.id],
+    );
+    const registerD = await query<{ id: string }>(
+      `INSERT INTO registers (organization_id, store_id, code, name) VALUES ($1,$2,'R-D','Caisse D') RETURNING id`,
+      [organizationId, storeD.rows[0]!.id],
+    );
+    const saleC = await makeSale(storeC.rows[0]!.id, registerC.rows[0]!.id, false);
+    const saleD = await makeSale(storeD.rows[0]!.id, registerD.rows[0]!.id, false);
+
+    const out = await InvoiceService.createFromAccountSales({
+      organizationId, userId, customerId, saleIds: [saleC, saleD],
+    });
+
+    const linesCount = await query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count FROM invoice_lines WHERE invoice_id = $1`,
+      [out.invoice_id],
+    );
+    expect(Number(linesCount.rows[0]!.count)).toBe(2); // une ligne par vente regroupée
+
+    const saleRows = await query<{ id: string; account_invoice_id: string | null }>(
+      `SELECT id, account_invoice_id FROM sales WHERE id = ANY($1::uuid[])`,
+      [[saleC, saleD]],
+    );
+    expect(saleRows.rows.every((r) => r.account_invoice_id === out.invoice_id)).toBe(true);
+  });
+
+  it('la facturation mensuelle génère UNE SEULE facture (pas une par boutique) quand le RIB est identique entre les boutiques', async () => {
+    const storeE = await query<{ id: string }>(
+      `INSERT INTO stores (organization_id, code, name) VALUES ($1, 'E', 'Boutique E') RETURNING id`,
+      [organizationId],
+    );
+    const storeF = await query<{ id: string }>(
+      `INSERT INTO stores (organization_id, code, name) VALUES ($1, 'F', 'Boutique F') RETURNING id`,
+      [organizationId],
+    );
+    const registerE = await query<{ id: string }>(
+      `INSERT INTO registers (organization_id, store_id, code, name) VALUES ($1,$2,'R-E','Caisse E') RETURNING id`,
+      [organizationId, storeE.rows[0]!.id],
+    );
+    const registerF = await query<{ id: string }>(
+      `INSERT INTO registers (organization_id, store_id, code, name) VALUES ($1,$2,'R-F','Caisse F') RETURNING id`,
+      [organizationId, storeF.rows[0]!.id],
+    );
+    const customer2 = await query<{ id: string }>(
+      `INSERT INTO customers (organization_id, first_name, last_name, billing_frequency)
+       VALUES ($1, 'Marie', 'Martin', 'monthly') RETURNING id`,
+      [organizationId],
+    );
+    const customer2Id = customer2.rows[0]!.id;
+    const saleE = await makeSale(storeE.rows[0]!.id, registerE.rows[0]!.id, true, customer2Id);
+    const saleF = await makeSale(storeF.rows[0]!.id, registerF.rows[0]!.id, true, customer2Id);
+
+    const result = await runMonthlyBillingForOrg(organizationId, userId);
+    const forCustomer2 = result.generated.filter((g) => g.customer_id === customer2Id);
+    expect(forCustomer2.length).toBe(1);
+    expect(forCustomer2[0]!.sale_count).toBe(2);
+
+    const saleRows = await query<{ id: string; account_invoice_id: string | null }>(
+      `SELECT id, account_invoice_id FROM sales WHERE id = ANY($1::uuid[])`,
+      [[saleE, saleF]],
+    );
+    expect(new Set(saleRows.rows.map((r) => r.account_invoice_id))).toEqual(new Set([forCustomer2[0]!.invoice_id]));
   });
 });

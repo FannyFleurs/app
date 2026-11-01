@@ -53,10 +53,30 @@ export async function runMonthlyBillingForOrg(
       result.skipped.push({ customer_id: c.id, customer_name: name, reason: 'Aucun ticket à facturer' });
       continue;
     }
-    // Une facture de période ne mélange pas les boutiques (en-tête + RIB
-    // propres à chacune — voir createFromAccountSales) : un client ayant des
-    // tickets non facturés dans plusieurs boutiques reçoit UNE facture par
-    // boutique, pas une facture unique à l'identité arbitraire.
+    // Une facture de période mensuelle regroupe TOUS les tickets du client,
+    // boutiques comprises — une consolidation mensuelle sur un seul document
+    // (ex. un client multi-boutiques facturé une fois par mois), et non
+    // plusieurs factures à rapprocher. createFromAccountSales ne refuse le
+    // mélange (STORE_MISMATCH) QUE si les boutiques ont des RIB réellement
+    // différents ; dans ce cas (rare), on se replie sur UNE facture par
+    // boutique plutôt que de bloquer tout le client.
+    const allSaleIds = sales.rows.map((s) => s.id);
+    try {
+      const out = await InvoiceService.createFromAccountSales({
+        organizationId, userId, customerId: c.id, saleIds: allSaleIds,
+      });
+      result.generated.push({
+        customer_id: c.id, customer_name: name,
+        invoice_id: out.invoice_id, number: out.number, total_ttc: out.total_ttc,
+        sale_count: allSaleIds.length,
+      });
+      continue;
+    } catch (e) {
+      if ((e as Error).message !== 'STORE_MISMATCH') {
+        result.skipped.push({ customer_id: c.id, customer_name: name, reason: (e as Error).message });
+        continue;
+      }
+    }
     const byStore = new Map<string, string[]>();
     for (const s of sales.rows) {
       const arr = byStore.get(s.store_id);

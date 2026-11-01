@@ -232,13 +232,31 @@ export class InvoiceService {
         if (s.account_invoice_id) throw new Error('SALE_ALREADY_INVOICED');
       }
       const storeId = sales[0]!.store_id;
-      // Une facture de période porte l'en-tête et le RIB d'UNE boutique
-      // (paramétrage par boutique — voir loadInvoiceSettings) : mélanger des
-      // tickets de boutiques différentes ferait porter à la facture l'identité
-      // et les coordonnées bancaires d'une boutique arbitraire (la première du
-      // tableau), potentiellement sans RIB si cette boutique-là n'en a pas
-      // configuré. Refusé explicitement plutôt que silencieusement incohérent.
-      if (sales.some((s) => s.store_id !== storeId)) throw new Error('STORE_MISMATCH');
+      // Une facture de période porte le RIB d'UNE boutique (paramétrage par
+      // boutique — voir loadInvoiceSettings). Mélanger des tickets de
+      // boutiques différentes n'est refusé QUE si leurs coordonnées
+      // bancaires sont RÉELLEMENT différentes — sinon (cas courant : un seul
+      // RIB au niveau organisation, aucune boutique n'a de réglage propre),
+      // les regrouper est sûr et nécessaire pour une facturation mensuelle
+      // consolidée d'un client multi-boutiques (ex. une franchise réglant
+      // une seule facture pour plusieurs points de vente). La facture porte
+      // alors l'en-tête de la PREMIÈRE boutique du lot (RIB déjà vérifié
+      // identique entre toutes).
+      const distinctStoreIds = Array.from(new Set(sales.map((s) => s.store_id)));
+      if (distinctStoreIds.length > 1) {
+        const settingsByStore = await Promise.all(
+          distinctStoreIds.map((id) => loadInvoiceSettings(args.organizationId, id)),
+        );
+        const [first, ...rest] = settingsByStore;
+        const sameBankDetails = rest.every((s) =>
+          s.show_bank_details === first!.show_bank_details
+          && s.bank_holder === first!.bank_holder
+          && s.bank_name === first!.bank_name
+          && s.bank_iban === first!.bank_iban
+          && s.bank_bic === first!.bank_bic,
+        );
+        if (!sameBankDetails) throw new Error('STORE_MISMATCH');
+      }
       const totalHt = round4(sales.reduce((a, s) => a + Number(s.total_ht), 0));
       const totalTva = round4(sales.reduce((a, s) => a + Number(s.total_tva), 0));
       const totalTtc = round4(sales.reduce((a, s) => a + Number(s.total_ttc), 0));

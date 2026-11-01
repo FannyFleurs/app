@@ -15,7 +15,7 @@ const ERR: Record<string, { status: number; message: string }> = {
   SALE_NOT_VALIDATED: { status: 400, message: 'Un ticket n’est pas validé.' },
   CUSTOMER_MISMATCH: { status: 400, message: 'Un ticket appartient à un autre client.' },
   SALE_ALREADY_INVOICED: { status: 409, message: 'Un ticket est déjà facturé.' },
-  STORE_MISMATCH: { status: 400, message: 'Les tickets sélectionnés proviennent de boutiques différentes : facturez-les séparément.' },
+  STORE_MISMATCH: { status: 400, message: 'Les boutiques des tickets sélectionnés ont des coordonnées bancaires (RIB) différentes : facturez-les séparément, ou harmonisez le RIB dans Réglages ▸ Facturation.' },
 };
 
 /**
