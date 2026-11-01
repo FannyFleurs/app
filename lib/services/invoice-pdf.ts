@@ -1,6 +1,6 @@
 import path from 'node:path';
 import PDFDocument from 'pdfkit';
-import { formatEUR } from './money';
+import { formatEurPdf } from './money';
 import type { InvoiceSaleGroup } from './invoice-lines';
 
 // Arimo (métriques compatibles Arial), déjà utilisée pour l'impression des
@@ -183,6 +183,30 @@ export async function renderInvoicePdf(
       if (paid && invoice.paid_at) doc.text(fmtDate(invoice.paid_at), 200, meta2Y + 12, { width: 140 });
     }
 
+    const bank = emitter.bank;
+    // Hauteur du bloc de pied (totaux, conditions de règlement, mention
+    // « acquittée », RIB), mesurée AVANT tout tracé — voir son usage plus
+    // bas. `doc.heightOfString` modifie la police/taille courante du
+    // document comme `doc.text` ; on la restaure après usage.
+    function measureFooterHeight(): number {
+      let h = 12 + 14 + invoice.tva_breakdown.length * 13 + 14 + 8 + 28; // hr+Total HT+TVA(s)+Total TVA+hr+TOTAL TTC
+      if (invoice.payment_terms) {
+        doc.font('Arimo').fontSize(9);
+        h += 12 + doc.heightOfString(invoice.payment_terms, { width: 480 }) + 10;
+      }
+      if (paid) h += 16;
+      if (bank?.show && (bank.iban || bank.holder || bank.name)) {
+        const fieldsCount = [bank.holder, bank.name, bank.iban, bank.bic].filter(Boolean).length;
+        h += 18 + 16 + 18 + fieldsCount * 26 + 16 + 10; // espace + topPad + titre + champs + bottomPad + marge basse
+      }
+      if (invoice.legal_mentions) {
+        doc.font('Arimo').fontSize(8);
+        h += doc.heightOfString(invoice.legal_mentions, { width: 480, align: 'justify' });
+      }
+      doc.font('Arimo').fontSize(9).fillColor('#000');
+      return h;
+    }
+
     // Table des lignes (décalée pour laisser la place à la 2ᵉ ligne méta).
     const tableTop = 300;
     doc.font('Arimo-Bold').fontSize(9).fillColor('#666');
@@ -250,9 +274,9 @@ export async function renderInvoicePdf(
         doc.font('Arimo').fontSize(9).fillColor('#000');
         doc.text(l.label, 48, startY, { width: 280 });
         doc.text(String(l.quantity), 340, startY, { width: 30, align: 'right' });
-        doc.text(formatEUR(l.unit_price_ht), 375, startY, { width: 50, align: 'right' });
+        doc.text(formatEurPdf(l.unit_price_ht), 375, startY, { width: 50, align: 'right' });
         doc.text(`${l.tax_rate}%`, 430, startY, { width: 25, align: 'right' });
-        doc.text(formatEUR(l.line_ht), 460, startY, { width: 80, align: 'right' });
+        doc.text(formatEurPdf(l.line_ht), 460, startY, { width: 80, align: 'right' });
         y = startY + lineHeights[i]!;
       }
 
@@ -268,6 +292,18 @@ export async function renderInvoicePdf(
       gi++;
     }
 
+    // Bloc de pied (totaux, conditions de règlement, RIB, mentions légales) :
+    // mesuré d'un seul tenant AVANT de rien dessiner, pour le garder groupé
+    // sur une même page plutôt que scindé élément par élément (chacun sur
+    // sa propre page dès que `y` dépassait la hauteur de page — le "TOTAL
+    // TTC", son montant, les conditions de règlement et le RIB atterrissant
+    // chacun, isolés, sur une page quasi vierge).
+    const footerH = measureFooterHeight();
+    if (y + footerH > 720) {
+      doc.addPage();
+      y = 50;
+    }
+
     drawHr(doc, y);
     y += 12;
 
@@ -279,17 +315,17 @@ export async function renderInvoicePdf(
     const valueW = 80;
 
     doc.text('Total HT', totalsX, y, { width: labelW });
-    doc.text(formatEUR(invoice.total_ht), valueX, y, { width: valueW, align: 'right' });
+    doc.text(formatEurPdf(invoice.total_ht), valueX, y, { width: valueW, align: 'right' });
     y += 14;
 
     for (const t of invoice.tva_breakdown) {
       doc.fillColor('#666').text(`TVA ${t.rate}%`, totalsX, y, { width: labelW });
-      doc.fillColor('#000').text(formatEUR(t.tva), valueX, y, { width: valueW, align: 'right' });
+      doc.fillColor('#000').text(formatEurPdf(t.tva), valueX, y, { width: valueW, align: 'right' });
       y += 13;
     }
 
     doc.fillColor('#000').text('Total TVA', totalsX, y, { width: labelW });
-    doc.text(formatEUR(invoice.total_tva), valueX, y, { width: valueW, align: 'right' });
+    doc.text(formatEurPdf(invoice.total_tva), valueX, y, { width: valueW, align: 'right' });
     y += 14;
 
     drawHr(doc, y);
@@ -297,7 +333,7 @@ export async function renderInvoicePdf(
 
     doc.font('Arimo-Bold').fontSize(13);
     doc.text('TOTAL TTC', totalsX, y, { width: labelW });
-    doc.text(formatEUR(invoice.total_ttc), valueX, y, { width: valueW, align: 'right' });
+    doc.text(formatEurPdf(invoice.total_ttc), valueX, y, { width: valueW, align: 'right' });
     y += 28;
 
     // (Le commentaire de chaque vente est désormais imprimé au sein de ses
@@ -324,7 +360,6 @@ export async function renderInvoicePdf(
     // encadré ; le cadre est dessiné APRÈS le texte, sa hauteur dérivée du
     // point d'arrivée réel (jamais d'une formule devinée à l'avance, qui
     // avait déjà fait tomber le bord du cadre entre l'IBAN et le BIC).
-    const bank = emitter.bank;
     if (bank?.show && (bank.iban || bank.holder || bank.name)) {
       y += 18; // espace avant le bloc, détaché de la mention « FACTURE ACQUITTÉE ».
       const boxW = 300;

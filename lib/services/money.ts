@@ -129,3 +129,19 @@ export function formatEUR(n: number): string {
     maximumFractionDigits: 2,
   }).format(n);
 }
+
+/**
+ * Montant formaté pour un PDF (PDFKit + police embarquée Arimo) : `formatEUR`
+ * sépare les milliers par une espace fine insécable (U+202F, ex.
+ * « 3 142,18 € » — bénéfique à l'écran contre les coupures de ligne), et une
+ * espace insécable normale (U+00A0) avant le symbole €. Ni l'une ni l'autre
+ * n'a de glyphe dans la police embarquée : PDFKit affiche un carré (tofu) à
+ * partir de 1 000 € — vérifié : U+202F, le séparateur de milliers, en est la
+ * cause concrète ; U+00A0 est remplacée par prudence (même absence de
+ * glyphe, simplement sans box visible avec cette police-ci). Remplacées
+ * toutes deux par une espace normale, toujours présente dans n'importe
+ * quelle police.
+ */
+export function formatEurPdf(n: number): string {
+  return formatEUR(n).replace(/[  ]/g, ' ');
+}

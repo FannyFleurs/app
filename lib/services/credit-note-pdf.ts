@@ -1,5 +1,5 @@
 import PDFDocument from 'pdfkit';
-import { formatEUR } from './money';
+import { formatEurPdf } from './money';
 
 export interface CreditNotePdfData {
   number: string;
@@ -83,16 +83,16 @@ function drawAvoir(doc: PDFKit.PDFDocument, data: CreditNotePdfData, emitter: Pa
     rule();
     for (const l of data.lines) {
       const label = l.quantity > 1 ? `${l.label} x${l.quantity}` : l.label;
-      row(label, `-${formatEUR(l.refunded_ttc)}`, 9);
+      row(label, `-${formatEurPdf(l.refunded_ttc)}`, 9);
     }
   }
 
   rule();
-  row("MONTANT AVOIR", `-${formatEUR(data.amount)}`, 12, true);
+  row("MONTANT AVOIR", `-${formatEurPdf(data.amount)}`, 12, true);
 
   y += 4;
   if (data.refund_method === 'cash') {
-    center(`Remboursé en espèces : ${formatEUR(data.amount)}`, 8, true);
+    center(`Remboursé en espèces : ${formatEurPdf(data.amount)}`, 8, true);
   } else {
     center('À valoir sur un prochain achat.', 9);
     center('À conserver et présenter en caisse.', 8);

@@ -1,5 +1,5 @@
 import PDFDocument from 'pdfkit';
-import { formatEUR } from './money';
+import { formatEurPdf } from './money';
 
 export interface GiftCardPdfData {
   code: string;
@@ -103,7 +103,7 @@ export async function renderGiftCardPdf(
     doc.moveDown(0.2);
 
     // Montant
-    doc.font('Helvetica-Bold').fontSize(22).text(formatEUR(data.amount), { align: 'center' });
+    doc.font('Helvetica-Bold').fontSize(22).text(formatEurPdf(data.amount), { align: 'center' });
     doc.moveDown(0.4);
 
     // Acheteur

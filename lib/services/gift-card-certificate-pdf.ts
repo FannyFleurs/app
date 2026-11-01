@@ -1,5 +1,5 @@
 import PDFDocument from 'pdfkit';
-import { formatEUR } from './money';
+import { formatEurPdf } from './money';
 
 /**
  * Carte cadeau HelloPos — PDF A4 destiné à être joint à l'email de
@@ -192,7 +192,7 @@ export async function renderGiftCardCertificatePdf(data: GiftCardCertificateData
     if (buyerName) rows.push({ label: 'De la part de', value: buyerName, valueFont: 'Helvetica-Bold', valueSize: 13, valueColor: INK });
 
     const amountLabel = 'Montant';
-    const amountValue = formatEUR(data.amountCents / 100);
+    const amountValue = formatEurPdf(data.amountCents / 100);
     const expiresLabel = 'Expire le';
     const expiresValue = data.expiresAt ? fmtDateFr(data.expiresAt) : null;
 
