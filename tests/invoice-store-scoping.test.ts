@@ -254,4 +254,47 @@ describe.skipIf(!hasDb)('Facturation de période — cohérence boutique/RIB', (
     );
     expect(new Set(saleRows.rows.map((r) => r.account_invoice_id))).toEqual(new Set([forCustomer2[0]!.invoice_id]));
   });
+
+  it('regroupe aussi quand le MÊME RIB est ressaisi avec des espaces/casse différents (bug remonté : "le RIB est bien le même")', async () => {
+    const storeG = await query<{ id: string }>(
+      `INSERT INTO stores (organization_id, code, name) VALUES ($1, 'G', 'Boutique G') RETURNING id`,
+      [organizationId],
+    );
+    const storeH = await query<{ id: string }>(
+      `INSERT INTO stores (organization_id, code, name) VALUES ($1, 'H', 'Boutique H') RETURNING id`,
+      [organizationId],
+    );
+    const registerG = await query<{ id: string }>(
+      `INSERT INTO registers (organization_id, store_id, code, name) VALUES ($1,$2,'R-G','Caisse G') RETURNING id`,
+      [organizationId, storeG.rows[0]!.id],
+    );
+    const registerH = await query<{ id: string }>(
+      `INSERT INTO registers (organization_id, store_id, code, name) VALUES ($1,$2,'R-H','Caisse H') RETURNING id`,
+      [organizationId, storeH.rows[0]!.id],
+    );
+    // Même RIB, ressaisi deux fois : espaces (affichage IBAN groupé par 4) et
+    // casse différents — un humain lirait « le même RIB », une comparaison
+    // texte brut, elle, les verrait différents.
+    await query(
+      `INSERT INTO settings (organization_id, key, value) VALUES ($1, $2, $3)`,
+      [organizationId, `invoice:${storeG.rows[0]!.id}`, JSON.stringify({
+        show_bank_details: true, bank_holder: 'HelloPos SAS', bank_name: 'Banque Test',
+        bank_iban: 'FR76 3000 6000 0112 3456 7890 189', bank_bic: 'bnpafrpp', default_payment_terms: 'net_30',
+      })],
+    );
+    await query(
+      `INSERT INTO settings (organization_id, key, value) VALUES ($1, $2, $3)`,
+      [organizationId, `invoice:${storeH.rows[0]!.id}`, JSON.stringify({
+        show_bank_details: true, bank_holder: '  HelloPos SAS  ', bank_name: 'Banque Test',
+        bank_iban: 'FR7630006000011234567890189', bank_bic: 'BNPAFRPP', default_payment_terms: 'net_60',
+      })],
+    );
+    const saleG = await makeSale(storeG.rows[0]!.id, registerG.rows[0]!.id, false);
+    const saleH = await makeSale(storeH.rows[0]!.id, registerH.rows[0]!.id, false);
+
+    const out = await InvoiceService.createFromAccountSales({
+      organizationId, userId, customerId, saleIds: [saleG, saleH],
+    });
+    expect(out.total_ttc).toBeCloseTo(24, 4); // 2 × 12 TTC (makeSale)
+  });
 });

@@ -8,6 +8,17 @@ const round4 = (n: number) => Math.round(n * 10000) / 10000;
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 /**
+ * Normalisation pour COMPARER le RIB de deux boutiques (voir
+ * createFromAccountSales) : un même IBAN/BIC ressaisi dans deux formulaires
+ * de réglages distincts diffère souvent par des espaces ou la casse (IBAN
+ * affiché/collé avec espaces tous les 4 caractères, BIC en minuscules…) sans
+ * être un RIB réellement différent. On compare la VALEUR, pas le texte brut.
+ */
+const normalizeIban = (s: string) => s.normalize('NFC').replace(/\s+/g, '').toUpperCase();
+const normalizeBic = (s: string) => s.normalize('NFC').trim().toUpperCase();
+const normalizeBankText = (s: string) => s.normalize('NFC').trim().replace(/\s+/g, ' ').toLowerCase();
+
+/**
  * Service de facturation.
  * Une facture validée est immuable (trigger fn_protect_validated_invoice) et
  * inscrit un événement fiscal INVOICE_VALIDATED dans la chaîne.
@@ -250,10 +261,10 @@ export class InvoiceService {
         const [first, ...rest] = settingsByStore;
         const sameBankDetails = rest.every((s) =>
           s.show_bank_details === first!.show_bank_details
-          && s.bank_holder === first!.bank_holder
-          && s.bank_name === first!.bank_name
-          && s.bank_iban === first!.bank_iban
-          && s.bank_bic === first!.bank_bic,
+          && normalizeBankText(s.bank_holder) === normalizeBankText(first!.bank_holder)
+          && normalizeBankText(s.bank_name) === normalizeBankText(first!.bank_name)
+          && normalizeIban(s.bank_iban) === normalizeIban(first!.bank_iban)
+          && normalizeBic(s.bank_bic) === normalizeBic(first!.bank_bic),
         );
         if (!sameBankDetails) throw new Error('STORE_MISMATCH');
       }
