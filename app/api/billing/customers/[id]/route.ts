@@ -13,11 +13,12 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   if ('response' in g) return g.response;
 
   const customer = await query<{
-    id: string; name: string | null; account_balance: string;
+    id: string; name: string | null; account_balance: string; email: string | null;
   }>(
     `SELECT id,
             COALESCE(company_name, NULLIF(TRIM(CONCAT(first_name,' ',last_name)), '')) AS name,
-            COALESCE(account_balance, 0)::text AS account_balance
+            COALESCE(account_balance, 0)::text AS account_balance,
+            email
        FROM customers WHERE id = $1 AND organization_id = $2`,
     [params.id, g.user.organizationId],
   );
@@ -61,6 +62,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
       id: customer.rows[0]!.id,
       name: customer.rows[0]!.name || 'Client',
       account_balance: Number(customer.rows[0]!.account_balance),
+      email: customer.rows[0]!.email,
     },
     sales: sales.rows.map((s) => ({
       id: s.id,

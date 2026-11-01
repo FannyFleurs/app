@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import PageHeader from '@/components/PageHeader';
+import SendInvoiceEmailModal from '@/components/SendInvoiceEmailModal';
 
 interface CustomerRow {
   id: string;
@@ -27,7 +28,7 @@ interface InvoiceRow {
   status: string;
 }
 interface Detail {
-  customer: { id: string; name: string; account_balance: number };
+  customer: { id: string; name: string; account_balance: number; email: string | null };
   sales: SaleRow[];
   invoices: InvoiceRow[];
 }
@@ -80,6 +81,12 @@ export default function BillingManager({ canInvoice }: { canInvoice: boolean }) 
   // Génération manuelle des factures mensuelles.
   const [monthlyBusy, setMonthlyBusy] = useState(false);
   const [monthlyInfo, setMonthlyInfo] = useState<string | null>(null);
+
+  // Envoi d'une facture par email depuis la ligne.
+  const [sendingId, setSendingId] = useState<string | null>(null);
+  const [sentId, setSentId] = useState<string | null>(null);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [emailModalFor, setEmailModalFor] = useState<InvoiceRow | null>(null);
 
   const loadCustomers = useCallback(async () => {
     const r = await fetch('/api/billing/customers');
@@ -166,6 +173,32 @@ export default function BillingManager({ canInvoice }: { canInvoice: boolean }) 
     } else {
       const j = await r.json().catch(() => null);
       setError(j?.message ?? 'Échec de la facturation.');
+    }
+  }
+
+  async function sendInvoice(invoiceId: string, email?: string) {
+    setSendingId(invoiceId); setSendError(null);
+    const r = await fetch(`/api/invoices/${invoiceId}/email`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(email ? { email } : {}),
+    });
+    setSendingId(null);
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      setSendError(j.message ?? j.error ?? 'Échec de l\'envoi.');
+      return;
+    }
+    setEmailModalFor(null);
+    setSentId(invoiceId);
+    setTimeout(() => setSentId(null), 4000);
+  }
+
+  function onSendClick(inv: InvoiceRow) {
+    if (detail?.customer.email) {
+      void sendInvoice(inv.id);
+    } else {
+      setSendError(null);
+      setEmailModalFor(inv);
     }
   }
 
@@ -372,6 +405,7 @@ export default function BillingManager({ canInvoice }: { canInvoice: boolean }) 
               {/* Factures en attente */}
               <div className="card p-4 space-y-3">
                 <h3 className="font-semibold">Factures en attente de règlement</h3>
+                {sendError && <p className="text-sm text-danger">{sendError}</p>}
                 {detail.invoices.length === 0 ? (
                   <p className="text-sm text-ink-soft">Aucune facture en attente.</p>
                 ) : (
@@ -395,9 +429,20 @@ export default function BillingManager({ canInvoice }: { canInvoice: boolean }) 
                             <td className="py-2 pr-2 text-ink-soft">{dateFr(i.due_date)}</td>
                             <td className="py-2 pr-2">{INVOICE_STATUS[i.status] ?? i.status}</td>
                             <td className="py-2 pr-2 text-right tabular-nums font-medium">{eur(i.total_ttc)}</td>
-                            <td className="py-2 pl-2 text-right">
+                            <td className="py-2 pl-2 text-right whitespace-nowrap">
                               <a href={`/api/invoices/${i.id}/pdf`} target="_blank" rel="noreferrer"
                                  className="text-accent-deep text-xs hover:underline mr-3">PDF</a>
+                              {sentId === i.id ? (
+                                <span className="text-xs text-success mr-3">✓ Envoyée</span>
+                              ) : (
+                                <button
+                                  className="text-accent-deep text-xs hover:underline mr-3 disabled:opacity-50"
+                                  disabled={sendingId === i.id}
+                                  onClick={() => onSendClick(i)}
+                                >
+                                  {sendingId === i.id ? 'Envoi…' : 'Envoyer'}
+                                </button>
+                              )}
                               {canInvoice && (
                                 <button className="btn-secondary h-8 px-3 text-sm" onClick={() => openSettle(i)}>
                                   Solder
@@ -461,6 +506,17 @@ export default function BillingManager({ canInvoice }: { canInvoice: boolean }) 
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modale de saisie d'email avant envoi */}
+      {emailModalFor && (
+        <SendInvoiceEmailModal
+          invoiceNumber={emailModalFor.number}
+          customerName={detail?.customer.name ?? null}
+          onClose={() => setEmailModalFor(null)}
+          onSend={(email) => sendInvoice(emailModalFor.id, email)}
+          busy={sendingId === emailModalFor.id}
+        />
       )}
     </div>
   );
