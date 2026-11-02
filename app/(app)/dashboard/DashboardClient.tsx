@@ -152,12 +152,12 @@ export default function DashboardClient({ stores, lockedStoreId }: { stores: Sto
           onClick={() => setExcludeNonStore(!excludeNonStore)}
           title="Retire le CA hors boutique (OGF, Web, Chorus, Mariage…) — configurable dans Réglages ▸ Exclusions du CA boutique"
           className={`${!lockedStoreId && stores.length > 1 ? '' : 'ml-auto'} inline-flex items-center gap-2 rounded-full border h-9 px-3 text-sm font-medium transition-colors ${
-            excludeNonStore ? 'border-accent-deep bg-accent-soft/40 text-accent-deep' : 'border-border bg-white text-ink-soft hover:bg-gray-50'
+            excludeNonStore ? 'border-accent bg-accent-soft/40 text-accent-deep' : 'border-border bg-white text-ink-soft hover:bg-gray-50'
           }`}
         >
           <span
             className={`relative h-4 w-7 rounded-full transition-colors shrink-0 ${
-              excludeNonStore ? 'bg-accent-deep' : 'bg-gray-300'
+              excludeNonStore ? 'accent-bar' : 'bg-gray-300'
             }`}
           >
             <span

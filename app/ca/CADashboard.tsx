@@ -226,7 +226,7 @@ export default function CADashboard({
 
   return (
     <div className="fixed inset-0 flex flex-col bg-bg overflow-hidden">
-      {/* Barre du haut : selecteur boutique + refresh */}
+      {/* Barre du haut : selecteur boutique + toggle CA boutique + refresh */}
       <TopBar
         currentStore={currentStore}
         stores={stores}
@@ -235,6 +235,8 @@ export default function CADashboard({
         onStoreChange={setStoreId}
         loading={loading}
         onRefresh={() => void reload()}
+        excludeNonStore={excludeNonStore}
+        onToggleExcludeNonStore={() => setExcludeNonStore(!excludeNonStore)}
       />
 
       {/* Contenu scrollable + pull-to-refresh */}
@@ -262,8 +264,6 @@ export default function CADashboard({
         {tab === 'xz' && (
           <XzView
             summary={summary}
-            excludeNonStore={excludeNonStore}
-            setExcludeNonStore={setExcludeNonStore}
             storeId={storeId}
             storeSummaries={storeSummaries}
             onSelectStore={setStoreId}
@@ -301,10 +301,12 @@ export default function CADashboard({
 
 function TopBar({
   currentStore, stores, orgName, logoUrl, onStoreChange, loading, onRefresh,
+  excludeNonStore, onToggleExcludeNonStore,
 }: {
   currentStore: Store | null; stores: Store[]; orgName: string; logoUrl?: string;
   onStoreChange: (id: string) => void;
   loading: boolean; onRefresh: () => void;
+  excludeNonStore: boolean; onToggleExcludeNonStore: () => void;
 }) {
   return (
     <div
@@ -350,6 +352,26 @@ function TopBar({
         </div>
       </div>
 
+      {/* CA boutique uniquement : retire du CA (et de tous les indicateurs)
+          les ventes dont le client, le mode de règlement ou la catégorie
+          correspond à la liste configurée dans Réglages ▸ Exclusions du CA
+          boutique (OGF, Web, Chorus, Mariage…). Icône seule (même gabarit
+          que le bouton Actualiser) pour tenir dans la topbar. */}
+      <button
+        type="button"
+        onClick={onToggleExcludeNonStore}
+        aria-label="CA boutique uniquement"
+        aria-pressed={excludeNonStore}
+        title="CA boutique uniquement — retire le CA hors boutique (OGF, Web, Chorus, Mariage…)"
+        className={`h-10 w-10 grid place-items-center rounded-full shrink-0 transition-colors ${
+          excludeNonStore
+            ? 'accent-bar text-white'
+            : 'border border-border text-ink-soft hover:bg-gray-50'
+        }`}
+      >
+        <FilterIcon />
+      </button>
+
       <button
         onClick={onRefresh}
         disabled={loading}
@@ -367,13 +389,11 @@ function TopBar({
 /* ------------------------------------------------------------------ */
 
 function XzView({
-  summary, excludeNonStore, setExcludeNonStore, storeId, storeSummaries, onSelectStore, hours, products, vendors, tva, discounts, returnsInfo,
+  summary, storeId, storeSummaries, onSelectStore, hours, products, vendors, tva, discounts, returnsInfo,
   period, setPeriod, customFrom, setCustomFrom, customTo, setCustomTo, today,
   showFullSales, setShowFullSales, refreshedAt,
 }: {
   summary: Summary | null;
-  excludeNonStore: boolean;
-  setExcludeNonStore: (v: boolean) => void;
   storeId: string;
   storeSummaries: StoreSummary[];
   onSelectStore: (id: string) => void;
@@ -421,34 +441,6 @@ function XzView({
           </div>
         )}
       </div>
-
-      {/* Toggle CA boutique uniquement : retire du CA (et de tous les
-          indicateurs ci-dessous) les ventes dont le client, le mode de
-          règlement ou la catégorie correspond à la liste configurée dans
-          Réglages ▸ Exclusions du CA boutique (OGF, Web, Chorus, Mariage…).
-          Chip compacte (pas de carte pleine largeur) pour ne pas prendre de
-          place sur un écran mobile. */}
-      <button
-        type="button"
-        onClick={() => setExcludeNonStore(!excludeNonStore)}
-        title="Retire le CA hors boutique (OGF, Web, Chorus, Mariage…) — configurable dans Réglages ▸ Exclusions du CA boutique"
-        className={`inline-flex items-center gap-2 rounded-full border h-8 px-3 text-xs font-medium transition-colors ${
-          excludeNonStore ? 'border-accent-deep bg-accent-soft/40 text-accent-deep' : 'border-border bg-white text-ink-soft'
-        }`}
-      >
-        <span
-          className={`relative h-4 w-7 rounded-full transition-colors shrink-0 ${
-            excludeNonStore ? 'bg-accent-deep' : 'bg-gray-300'
-          }`}
-        >
-          <span
-            className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-transform ${
-              excludeNonStore ? 'translate-x-3.5' : 'translate-x-0.5'
-            }`}
-          />
-        </span>
-        CA boutique uniquement
-      </button>
 
       {/* CA par boutique — visible d'un coup d'œil, sans avoir à sélectionner
           une boutique à la fois. Seulement sur "Toutes les boutiques" : dès
@@ -1042,6 +1034,13 @@ function BottomNav({ tab, onChange }: { tab: Tab; onChange: (t: Tab) => void }) 
   );
 }
 
+function FilterIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 5h16l-6 7v6l-4 2v-8z" />
+    </svg>
+  );
+}
 function ChartIcon() {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">

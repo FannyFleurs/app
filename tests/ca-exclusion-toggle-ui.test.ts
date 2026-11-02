@@ -23,6 +23,25 @@ describe('app/ca/CADashboard.tsx — toggle CA boutique uniquement', () => {
   it('excludeNonStore fait partie des dépendances de reload (re-fetch au changement)', () => {
     expect(src).toMatch(/\}, \[range\.from, range\.to, storeId, excludeNonStore\]\);/);
   });
+
+  it('le toggle vit dans la topbar (bouton icône, aria-pressed), pas dans le corps de la vue X/Z', () => {
+    expect(src).toMatch(/onClick=\{onToggleExcludeNonStore\}/);
+    expect(src).toMatch(/aria-pressed=\{excludeNonStore\}/);
+    expect(src).toMatch(/<FilterIcon \/>/);
+  });
+
+  // Régression : `bg-accent-deep` / `border-accent-deep` N'EXISTENT PAS dans
+  // ce projet (ni classe Tailwind générée — aucune couleur "accent" dans
+  // tailwind.config.ts —, ni règle manuelle dans globals.css, qui ne définit
+  // que .accent-bar, .bg-accent-soft, .border-accent, .text-accent-deep).
+  // Les utiliser ne lève aucune erreur mais ne colore RIEN : le bouton actif
+  // restait un cercle blanc avec une icône blanche invisible dessus — trouvé
+  // en vérification navigateur sur ce toggle précisément. N'utiliser QUE les
+  // classes `accent-*` réellement définies.
+  it("n'utilise pas les classes bg-accent-deep / border-accent-deep (inexistantes, no-op silencieux)", () => {
+    expect(src).not.toMatch(/\bbg-accent-deep\b/);
+    expect(src).not.toMatch(/\bborder-accent-deep\b/);
+  });
 });
 
 describe('app/(app)/dashboard/DashboardClient.tsx — toggle CA boutique uniquement', () => {
@@ -38,6 +57,11 @@ describe('app/(app)/dashboard/DashboardClient.tsx — toggle CA boutique uniquem
 
   it('excludeNonStore fait partie des dépendances de reload (re-fetch au changement)', () => {
     expect(src).toMatch(/\}, \[range\.from, range\.to, storeId, excludeNonStore\]\);/);
+  });
+
+  it("n'utilise pas les classes bg-accent-deep / border-accent-deep (inexistantes, no-op silencieux — voir CADashboard.tsx)", () => {
+    expect(src).not.toMatch(/\bbg-accent-deep\b/);
+    expect(src).not.toMatch(/\bborder-accent-deep\b/);
   });
 });
 
