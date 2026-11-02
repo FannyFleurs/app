@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatEUR } from '@/lib/services/money';
 import type { DashboardData } from '@/lib/analytics/dashboard';
 import { LineCompare, Bars } from '@/components/analytics/charts';
@@ -65,15 +65,33 @@ export default function DashboardClient({ stores, lockedStoreId }: { stores: Sto
   const ht = mode === 'ht';
   const suffix = ht ? 'H.T.' : 'TTC';
 
+  // Annule le chargement précédent s'il n'est pas terminé : sans ça, un
+  // changement rapide de filtre (période, boutique, toggle CA boutique
+  // uniquement) peut laisser deux requêtes en vol, et celle qui répond en
+  // DERNIER écrase l'état même si elle correspond à un filtre déjà
+  // abandonné (ex. toggle décoché, mais tableau de bord encore filtré, le
+  // temps que l'ancienne requête réponde après la nouvelle).
+  const abortRef = useRef<AbortController | null>(null);
+
   const reload = useCallback(async () => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const { signal } = controller;
+
     setLoading(true);
     const qs = new URLSearchParams({ from: range.from, to: range.to });
     if (storeId) qs.set('store_id', storeId);
     if (excludeNonStore) qs.set('exclude_non_store', '1');
     try {
-      const r = await fetch(`/api/analytics/dashboard?${qs.toString()}`);
+      const r = await fetch(`/api/analytics/dashboard?${qs.toString()}`, { signal });
+      if (signal.aborted) return;
       if (r.ok) setData(await r.json());
-    } finally { setLoading(false); }
+    } catch (e) {
+      if ((e as { name?: string })?.name !== 'AbortError') throw e;
+    } finally {
+      if (!signal.aborted) setLoading(false);
+    }
   }, [range.from, range.to, storeId, excludeNonStore]);
 
   useEffect(() => { void reload(); }, [reload]);

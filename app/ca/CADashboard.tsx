@@ -125,7 +125,22 @@ export default function CADashboard({
     [stores, storeId],
   );
 
+  // Annule le chargement précédent s'il n'est pas terminé : sans ça, un
+  // changement rapide de filtre (période, boutique, toggle CA boutique
+  // uniquement) peut laisser deux chargements en vol, et celui qui répond
+  // en DERNIER écrase l'état même s'il correspond à un filtre déjà
+  // abandonné — l'écran reste alors bloqué sur des chiffres qui ne
+  // correspondent plus aux filtres affichés (ex. toggle décoché, mais CA
+  // encore filtré, le temps que l'ancienne requête réponde après la
+  // nouvelle).
+  const abortRef = useRef<AbortController | null>(null);
+
   const reload = useCallback(async () => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const { signal } = controller;
+
     setLoading(true);
     const qs = new URLSearchParams({ from: range.from, to: range.to });
     if (storeId) qs.set('store_id', storeId);
@@ -145,15 +160,19 @@ export default function CADashboard({
     const detailNeeded = !!storeId;
     try {
       const [rS, rBS, rH, rP, rV, rT, rD, rR] = await Promise.all([
-        fetch(`/api/ca/summary?${qs.toString()}`),
-        storeId ? null : fetch(`/api/ca/summary-by-store?${qsByStore.toString()}`),
-        detailNeeded ? fetch(`/api/ca/hourly?${qs.toString()}`) : null,
-        detailNeeded ? fetch(`/api/ca/products?${qs.toString()}&sort=ca_ttc&order=desc&limit=100`) : null,
-        detailNeeded ? fetch(`/api/ca/vendors?${qs.toString()}`) : null,
-        detailNeeded ? fetch(`/api/ca/tva?${qs.toString()}`) : null,
-        detailNeeded ? fetch(`/api/ca/discounts?${qs.toString()}`) : null,
-        detailNeeded ? fetch(`/api/ca/returns?${qs.toString()}`) : null,
+        fetch(`/api/ca/summary?${qs.toString()}`, { signal }),
+        storeId ? null : fetch(`/api/ca/summary-by-store?${qsByStore.toString()}`, { signal }),
+        detailNeeded ? fetch(`/api/ca/hourly?${qs.toString()}`, { signal }) : null,
+        detailNeeded ? fetch(`/api/ca/products?${qs.toString()}&sort=ca_ttc&order=desc&limit=100`, { signal }) : null,
+        detailNeeded ? fetch(`/api/ca/vendors?${qs.toString()}`, { signal }) : null,
+        detailNeeded ? fetch(`/api/ca/tva?${qs.toString()}`, { signal }) : null,
+        detailNeeded ? fetch(`/api/ca/discounts?${qs.toString()}`, { signal }) : null,
+        detailNeeded ? fetch(`/api/ca/returns?${qs.toString()}`, { signal }) : null,
       ]);
+      // Une requête plus récente a déjà démarré (ce lot est abandonné) :
+      // ne touche à aucun state, pour ne jamais écraser le résultat de la
+      // requête courante avec une réponse tardive d'un filtre périmé.
+      if (signal.aborted) return;
       if (rS.ok) setSummary(await rS.json());
       if (rBS?.ok) setStoreSummaries((await rBS.json()).stores);
       else if (!rBS) setStoreSummaries([]);
@@ -164,8 +183,10 @@ export default function CADashboard({
       if (rD?.ok) setDiscounts(await rD.json()); else if (!rD) setDiscounts(null);
       if (rR?.ok) setReturnsInfo(await rR.json()); else if (!rR) setReturnsInfo(null);
       setRefreshedAt(new Date());
+    } catch (e) {
+      if ((e as { name?: string })?.name !== 'AbortError') throw e;
     } finally {
-      setLoading(false);
+      if (!signal.aborted) setLoading(false);
     }
   }, [range.from, range.to, storeId, excludeNonStore]);
 
@@ -858,15 +879,21 @@ function TicketsView({ storeId, range, excludeNonStore }: {
   const [items, setItems] = useState<TicketRow[]>([]);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
+    // `cancelled` évite qu'une réponse tardive d'un filtre déjà abandonné
+    // (ex. toggle rebasculé avant la fin du chargement précédent) écrase
+    // l'état avec des données qui ne correspondent plus aux filtres affichés.
+    let cancelled = false;
     void (async () => {
       setLoading(true);
       const qs = new URLSearchParams({ from: range.from, to: range.to });
       if (storeId) qs.set('store_id', storeId);
       if (excludeNonStore) qs.set('exclude_non_store', '1');
       const r = await fetch(`/api/ca/tickets?${qs.toString()}`);
+      if (cancelled) return;
       if (r.ok) setItems((await r.json()).tickets);
-      setLoading(false);
+      if (!cancelled) setLoading(false);
     })();
+    return () => { cancelled = true; };
   }, [storeId, range.from, range.to, excludeNonStore]);
 
   // Détail d'une vente en modale (mêmes articles/récap/modes de règlement
