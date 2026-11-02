@@ -404,31 +404,29 @@ function XzView({
       {/* Toggle CA boutique uniquement : retire du CA (et de tous les
           indicateurs ci-dessous) les ventes dont le client, le mode de
           règlement ou la catégorie correspond à la liste configurée dans
-          Réglages ▸ Exclusions du CA boutique (OGF, Web, Chorus, Mariage…). */}
+          Réglages ▸ Exclusions du CA boutique (OGF, Web, Chorus, Mariage…).
+          Chip compacte (pas de carte pleine largeur) pour ne pas prendre de
+          place sur un écran mobile. */}
       <button
         type="button"
         onClick={() => setExcludeNonStore(!excludeNonStore)}
-        className={`w-full flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 transition-colors ${
-          excludeNonStore ? 'border-accent-deep bg-accent-soft/30' : 'border-border bg-white'
+        title="Retire le CA hors boutique (OGF, Web, Chorus, Mariage…) — configurable dans Réglages ▸ Exclusions du CA boutique"
+        className={`inline-flex items-center gap-2 rounded-full border h-8 px-3 text-xs font-medium transition-colors ${
+          excludeNonStore ? 'border-accent-deep bg-accent-soft/40 text-accent-deep' : 'border-border bg-white text-ink-soft'
         }`}
       >
-        <span className="text-sm font-medium text-left">
-          CA boutique uniquement
-          <span className="block text-xs text-ink-soft font-normal">
-            Retire le CA hors boutique (OGF, Web, Chorus, Mariage…)
-          </span>
-        </span>
         <span
-          className={`shrink-0 relative h-6 w-11 rounded-full transition-colors ${
+          className={`relative h-4 w-7 rounded-full transition-colors shrink-0 ${
             excludeNonStore ? 'bg-accent-deep' : 'bg-gray-300'
           }`}
         >
           <span
-            className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
-              excludeNonStore ? 'translate-x-5' : 'translate-x-0.5'
+            className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-transform ${
+              excludeNonStore ? 'translate-x-3.5' : 'translate-x-0.5'
             }`}
           />
         </span>
+        CA boutique uniquement
       </button>
 
       {/* CA par boutique — visible d'un coup d'œil, sans avoir à sélectionner
