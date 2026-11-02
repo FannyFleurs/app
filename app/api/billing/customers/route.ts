@@ -22,11 +22,18 @@ export async function GET() {
     `SELECT c.id,
             COALESCE(c.company_name, NULLIF(TRIM(CONCAT(c.first_name,' ',c.last_name)), '')) AS name,
             COALESCE(c.account_balance, 0)::text AS account_balance,
+            -- account_invoice_id IS NULL exclut les ventes déjà en facture de
+            -- PÉRIODE ; le NOT EXISTS exclut aussi celles déjà facturées
+            -- INDIVIDUELLEMENT (invoices.sale_id, posé par createFromSale
+            -- sans toucher account_invoice_id) — sinon un ticket déjà
+            -- facturé isolément gonflait encore ce compteur « à facturer ».
             (SELECT COUNT(*) FROM sales s
                WHERE s.customer_id = c.id
                  AND s.organization_id = c.organization_id
                  AND s.status = 'validated'
                  AND s.account_invoice_id IS NULL
+                 AND NOT EXISTS (SELECT 1 FROM invoices i
+                                   WHERE i.sale_id = s.id AND i.status <> 'cancelled')
                  AND EXISTS (SELECT 1 FROM payments p
                                WHERE p.sale_id = s.id AND p.method = 'deferred')
             )::text AS uninvoiced_count,

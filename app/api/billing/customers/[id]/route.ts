@@ -26,6 +26,12 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     return NextResponse.json({ error: 'CUSTOMER_NOT_FOUND' }, { status: 404 });
   }
 
+  // account_invoice_id IS NULL exclut les ventes déjà incluses dans une
+  // facture de PÉRIODE ; le NOT EXISTS exclut en plus celles déjà facturées
+  // INDIVIDUELLEMENT (depuis Ma journée/caisse, qui ne pose pas
+  // account_invoice_id — seulement invoices.sale_id). Sans ce 2nd filtre, un
+  // ticket déjà facturé isolément restait sélectionnable ici, au risque de
+  // le refacturer une 2e fois dans une facture de période.
   const sales = await query<{
     id: string; receipt_number: string | null;
     validated_at: string | null; total_ttc: string; deferred_amount: string;
@@ -38,6 +44,8 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
         AND s.organization_id = $2
         AND s.status = 'validated'
         AND s.account_invoice_id IS NULL
+        AND NOT EXISTS (SELECT 1 FROM invoices i
+                          WHERE i.sale_id = s.id AND i.status <> 'cancelled')
         AND EXISTS (SELECT 1 FROM payments p
                       WHERE p.sale_id = s.id AND p.method = 'deferred')
       ORDER BY s.validated_at ASC`,

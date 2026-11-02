@@ -459,6 +459,7 @@ function EmailReceiptModal({ receiptId, customerId, onClose, onSent }: {
 function prettyError(code: string): string {
   switch (code) {
     case 'INVOICE_ALREADY_EXISTS': return 'Une facture existe déjà pour cette vente.';
+    case 'SALE_ALREADY_INVOICED': return 'Ce ticket est déjà inclus dans une facture de période.';
     case 'CUSTOMER_REQUIRED': return 'Aucun client attaché à la vente.';
     case 'SALE_NOT_VALIDATED': return 'La vente n\'est pas validée.';
     case 'FORBIDDEN': return 'Vous n\'avez pas la permission de facturer.';

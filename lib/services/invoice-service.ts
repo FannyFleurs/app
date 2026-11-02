@@ -47,9 +47,11 @@ export class InvoiceService {
         tva_breakdown: { rate: number; base_ht: number; tva: number; ttc: number }[];
         validated_at: string;
         notes: string | null;
+        account_invoice_id: string | null;
       }>(
         `SELECT id, store_id, customer_id, status,
-                total_ht, total_tva, total_ttc, tva_breakdown, validated_at, notes
+                total_ht, total_tva, total_ttc, tva_breakdown, validated_at, notes,
+                account_invoice_id
            FROM sales WHERE id = $1 AND organization_id = $2 FOR UPDATE`,
         [args.saleId, args.organizationId],
       );
@@ -60,12 +62,18 @@ export class InvoiceService {
       const customerId = args.customerId ?? s.customer_id;
       if (!customerId) throw new Error('CUSTOMER_REQUIRED');
 
-      // Refuse double facturation pour la même vente
+      // Refuse double facturation pour la même vente : soit une facture
+      // individuelle existe déjà (ce check), soit la vente est déjà incluse
+      // dans une facture de PÉRIODE (sales.account_invoice_id — regroupement
+      // « Facturation » du back-office, voir createFromAccountSales plus bas
+      // qui applique le même garde-fou en sens inverse). Sans ce 2nd check,
+      // un ticket déjà facturé en période restait facturable individuellement.
       const existing = await client.query(
         `SELECT id FROM invoices WHERE sale_id = $1 AND status <> 'cancelled'`,
         [s.id],
       );
       if (existing.rowCount && existing.rowCount > 0) throw new Error('INVOICE_ALREADY_EXISTS');
+      if (s.account_invoice_id) throw new Error('SALE_ALREADY_INVOICED');
 
       // Récupère les lignes (snapshot)
       const linesRes = await client.query<{
@@ -242,6 +250,18 @@ export class InvoiceService {
         if (s.customer_id !== args.customerId) throw new Error('CUSTOMER_MISMATCH');
         if (s.account_invoice_id) throw new Error('SALE_ALREADY_INVOICED');
       }
+      // Symétrique du check account_invoice_id ci-dessus : une vente peut
+      // aussi avoir déjà été facturée INDIVIDUELLEMENT (createFromSale,
+      // facture isolée depuis Ma journée/caisse), qui ne pose pas
+      // account_invoice_id sur la vente — seulement invoices.sale_id. Sans ce
+      // check, un ticket déjà facturé isolément restait regroupable dans une
+      // facture de période, doublant la facturation du même ticket.
+      const alreadyMono = await client.query<{ sale_id: string }>(
+        `SELECT sale_id FROM invoices
+          WHERE sale_id = ANY($1::uuid[]) AND status <> 'cancelled'`,
+        [sales.map((s) => s.id)],
+      );
+      if (alreadyMono.rowCount && alreadyMono.rowCount > 0) throw new Error('SALE_ALREADY_INVOICED');
       const storeId = sales[0]!.store_id;
       // Une facture de période porte le RIB d'UNE boutique (paramétrage par
       // boutique — voir loadInvoiceSettings). Mélanger des tickets de

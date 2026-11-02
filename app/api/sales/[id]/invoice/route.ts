@@ -43,6 +43,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const msg = (e as Error).message;
     const status =
       msg === 'INVOICE_ALREADY_EXISTS' ? 409 :
+      msg === 'SALE_ALREADY_INVOICED' ? 409 :
       msg === 'CUSTOMER_REQUIRED' ? 400 :
       msg === 'SALE_NOT_FOUND' ? 404 :
       msg === 'SALE_NOT_VALIDATED' ? 409 : 400;

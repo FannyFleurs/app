@@ -1238,7 +1238,11 @@ function SaleDetailPanel({ detail, onInvoiceGenerated, onNotesUpdated, onLoyalty
     setGenerating(false);
     if (!res.ok) {
       const j = await res.json().catch(() => ({}));
-      setError(j.error ?? 'Erreur');
+      setError(
+        j.error === 'SALE_ALREADY_INVOICED' ? 'Ce ticket est déjà inclus dans une facture de période.'
+        : j.error === 'INVOICE_ALREADY_EXISTS' ? 'Une facture existe déjà pour cette vente.'
+        : j.error ?? 'Erreur',
+      );
       return;
     }
     onInvoiceGenerated();
