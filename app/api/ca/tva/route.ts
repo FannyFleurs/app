@@ -4,6 +4,7 @@ import { query } from '@/lib/db/client';
 import { requireSession } from '@/lib/auth/guards';
 import { jsonError } from '@/lib/validation/api';
 import { EXCLUDE_GIFT_CARD_ISSUANCE_SQL } from '@/lib/analytics/gift-card-ca';
+import { loadCaExclusions, excludeNonStoreSalesSql } from '@/lib/analytics/store-ca-exclusions';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,6 +34,9 @@ export async function GET(req: Request) {
   const storeFilter = store_id ? 'AND s.store_id = $4' : '';
   const args: unknown[] = [g.user.organizationId, from, to];
   if (store_id) args.push(store_id);
+  const excludeNonStore = url.searchParams.get('exclude_non_store') === '1';
+  const exclusions = excludeNonStore ? await loadCaExclusions(g.user.organizationId) : { customerIds: [], paymentLabels: [], categoryIds: [] };
+  const excludeSql = excludeNonStoreSalesSql(exclusions, args, { alias: 's' });
 
   const r = await query<{
     tax_rate: string; base_ht: string; tva: string; ttc: string;
@@ -48,6 +52,7 @@ export async function GET(req: Request) {
         AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date
         AND ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}
         ${storeFilter}
+        ${excludeSql}
       GROUP BY sl.tax_rate
       ORDER BY sl.tax_rate DESC`,
     args,

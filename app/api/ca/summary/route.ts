@@ -5,6 +5,7 @@ import { requireSession } from '@/lib/auth/guards';
 import { jsonError } from '@/lib/validation/api';
 import { importOnlyCaTotal } from '@/lib/analytics/revenue-blend';
 import { EXCLUDE_GIFT_CARD_ISSUANCE_SQL } from '@/lib/analytics/gift-card-ca';
+import { loadCaExclusions, excludeNonStoreSalesSql } from '@/lib/analytics/store-ca-exclusions';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,10 +32,13 @@ export async function GET(req: Request) {
   });
   if (!parsed.success) return jsonError('INVALID_PARAMS', 400);
   const { store_id, from, to } = parsed.data;
+  const excludeNonStore = url.searchParams.get('exclude_non_store') === '1';
 
   const storeFilter = store_id ? 'AND s.store_id = $4' : '';
   const args: unknown[] = [g.user.organizationId, from, to];
   if (store_id) args.push(store_id);
+  const exclusions = excludeNonStore ? await loadCaExclusions(g.user.organizationId) : { customerIds: [], paymentLabels: [], categoryIds: [] };
+  const excludeSql = excludeNonStoreSalesSql(exclusions, args, { alias: 's' });
 
   // Aggreg sur sales validees dans la periode. Le CA (ca_ttc/ht/tva) est
   // calcule plus bas depuis sale_lines (requete `margin`) pour EXCLURE les
@@ -55,7 +59,8 @@ export async function GET(req: Request) {
       WHERE s.organization_id = $1
         AND s.status = 'validated'
         AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date
-        ${storeFilter}`,
+        ${storeFilter}
+        ${excludeSql}`,
     args,
   );
   const rowS = sales.rows[0]!;
@@ -85,7 +90,8 @@ export async function GET(req: Request) {
       WHERE s.organization_id = $1
         AND s.status = 'validated'
         AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date
-        ${storeFilter}`,
+        ${storeFilter}
+        ${excludeSql}`,
     args,
   );
   const rowM = margin.rows[0]!;

@@ -8,6 +8,7 @@ import {
   type DashboardData, type KpiSet, type ProductRow, type CategoryRow,
 } from '@/lib/analytics/dashboard';
 import { EXCLUDE_GIFT_CARD_ISSUANCE_SQL } from '@/lib/analytics/gift-card-ca';
+import { loadCaExclusions, excludeNonStoreSalesSql, pushExclusionParams } from '@/lib/analytics/store-ca-exclusions';
 
 export const dynamic = 'force-dynamic';
 
@@ -84,6 +85,21 @@ export async function GET(req: Request) {
   const argsCur: unknown[] = store_id ? [org, from, to, store_id] : [org, from, to];
   const argsPrev: unknown[] = store_id ? [org, pFrom, pTo, store_id] : [org, pFrom, pTo];
 
+  // Exclusions du CA boutique (OGF, Web, Chorus, Mariage...). `excludeSql`
+  // est généré à partir d'argsCur (qui reçoit les 3 tableaux d'exclusion) ;
+  // argsPrev reçoit SÉPARÉMENT les mêmes 3 tableaux via pushExclusionParams,
+  // sans regénérer le texte SQL — argsCur et argsPrev ont la même longueur
+  // à cet instant (storeSql déjà appliqué aux deux ci-dessus), donc les
+  // index $N générés pour argsCur restent valables pour argsPrev : une
+  // seule chaîne SQL partagée par toutes les requêtes ci-dessous, qu'elles
+  // utilisent argsCur ou argsPrev.
+  const excludeNonStore = url.searchParams.get('exclude_non_store') === '1';
+  const exclusions = excludeNonStore
+    ? await loadCaExclusions(org)
+    : { customerIds: [], paymentLabels: [], categoryIds: [] };
+  const excludeSql = excludeNonStoreSalesSql(exclusions, argsCur, { alias: 's' });
+  pushExclusionParams(exclusions, argsPrev);
+
   // ---- KPIs (courant + N-1) ------------------------------------------------
   // CA/TVA/marge calculés depuis sale_lines (PAS sales.total_ttc/ht/tva) pour
   // pouvoir EXCLURE les lignes d'émission de carte cadeau / bon d'achat :
@@ -98,7 +114,8 @@ export async function GET(req: Request) {
               COUNT(DISTINCT customer_id)::int AS customers
          FROM sales s
         WHERE s.organization_id = $1 AND s.status = 'validated'
-          AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date ${storeSql}`,
+          AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date ${storeSql}
+          ${excludeSql}`,
       args,
     )).rows[0]!;
     const ca = (await query<{ ca_ttc: string; ca_ht: string; tva: string }>(
@@ -108,7 +125,8 @@ export async function GET(req: Request) {
          FROM sale_lines sl JOIN sales s ON s.id = sl.sale_id
         WHERE s.organization_id = $1 AND s.status = 'validated'
           AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date ${storeSql}
-          AND ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}`,
+          AND ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}
+          ${excludeSql}`,
       args,
     )).rows[0]!;
     const m = (await query<{ revenue_ht: string; cost_ht: string }>(
@@ -118,7 +136,8 @@ export async function GET(req: Request) {
          LEFT JOIN products p ON p.id = sl.product_id
         WHERE s.organization_id = $1 AND s.status = 'validated'
           AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date ${storeSql}
-          AND ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}`,
+          AND ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}
+          ${excludeSql}`,
       args,
     )).rows[0]!;
     const ca_ttc = Number(ca.ca_ttc), ca_ht = Number(ca.ca_ht), tickets = Number(s.tickets);
@@ -147,6 +166,7 @@ export async function GET(req: Request) {
          LEFT JOIN sale_lines sl ON sl.sale_id = s.id AND ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}
         WHERE s.organization_id = $1 AND s.status = 'validated'
           AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date ${storeSql}
+          ${excludeSql}
         GROUP BY 1`,
       args,
     )).rows;
@@ -160,6 +180,7 @@ export async function GET(req: Request) {
         WHERE s.organization_id = $1 AND s.status = 'validated'
           AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date ${storeSql}
           AND ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}
+          ${excludeSql}
         GROUP BY 1`,
       args,
     )).rows;
@@ -175,6 +196,7 @@ export async function GET(req: Request) {
         WHERE s.organization_id = $1 AND s.status = 'validated'
           AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date ${storeSql}
           AND ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}
+          ${excludeSql}
         GROUP BY 1`,
       args,
     )).rows;
@@ -190,6 +212,7 @@ export async function GET(req: Request) {
         WHERE s.organization_id = $1 AND s.status = 'validated'
           AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date ${storeSql}
           AND ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}
+          ${excludeSql}
         GROUP BY 1`,
       args,
     )).rows;
@@ -217,6 +240,10 @@ export async function GET(req: Request) {
            LEFT JOIN sale_lines sl ON sl.sale_id = s.id AND ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}
           WHERE s.organization_id = $1 AND s.status = 'validated'
             AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date ${storeSales}
+            -- L'historique importé (h_fill/h_add ci-dessous) n'a pas la
+            -- granularité client/paiement/catégorie : il n'est PAS filtré
+            -- par les exclusions, seules les vraies ventes le sont ici.
+            ${excludeSql}
           GROUP BY 1, 2
        ),
        h_fill AS (
@@ -273,6 +300,7 @@ export async function GET(req: Request) {
          FROM payments pay JOIN sales s ON s.id = pay.sale_id
         WHERE s.organization_id = $1 AND s.status = 'validated'
           AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date ${storeSql}
+          ${excludeSql}
         GROUP BY pay.method, pay.label
         ORDER BY 3 DESC`,
       argsCur,
@@ -289,6 +317,7 @@ export async function GET(req: Request) {
         WHERE s.organization_id = $1 AND s.status = 'validated'
           AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date ${storeSql}
           AND ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}
+          ${excludeSql}
         GROUP BY sl.tax_rate ORDER BY sl.tax_rate`,
       argsCur,
     ),
@@ -304,6 +333,7 @@ export async function GET(req: Request) {
         WHERE s.organization_id = $1 AND s.status = 'validated'
           AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date ${storeSql}
           AND ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}
+          ${excludeSql}
         GROUP BY sl.label ORDER BY SUM(sl.line_ttc) DESC`,
       argsCur,
     ),
@@ -321,6 +351,7 @@ export async function GET(req: Request) {
         WHERE s.organization_id = $1 AND s.status = 'validated'
           AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date ${storeSql}
           AND ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}
+          ${excludeSql}
         GROUP BY COALESCE(c.name, 'Sans catégorie') ORDER BY SUM(sl.line_ttc) DESC`,
       argsCur,
     ),

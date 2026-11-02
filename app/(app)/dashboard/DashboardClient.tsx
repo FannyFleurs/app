@@ -56,6 +56,10 @@ export default function DashboardClient({ stores, lockedStoreId }: { stores: Sto
   const [storeId, setStoreId] = useState(lockedStoreId ?? '');
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  // Retire du CA (et de tous les indicateurs) le chiffre d'affaires « hors
+  // boutique » configuré dans Réglages ▸ Exclusions du CA boutique (ex. OGF,
+  // Web, Chorus, Mariage). Désactivé par défaut : comportement inchangé.
+  const [excludeNonStore, setExcludeNonStore] = useState(false);
 
   const range = useMemo(() => periodRange(period, cf, ct), [period, cf, ct]);
   const ht = mode === 'ht';
@@ -65,11 +69,12 @@ export default function DashboardClient({ stores, lockedStoreId }: { stores: Sto
     setLoading(true);
     const qs = new URLSearchParams({ from: range.from, to: range.to });
     if (storeId) qs.set('store_id', storeId);
+    if (excludeNonStore) qs.set('exclude_non_store', '1');
     try {
       const r = await fetch(`/api/analytics/dashboard?${qs.toString()}`);
       if (r.ok) setData(await r.json());
     } finally { setLoading(false); }
-  }, [range.from, range.to, storeId]);
+  }, [range.from, range.to, storeId, excludeNonStore]);
 
   useEffect(() => { void reload(); }, [reload]);
 
@@ -124,6 +129,27 @@ export default function DashboardClient({ stores, lockedStoreId }: { stores: Sto
           {pill('year', 'Cette année')}
           {pill('custom', 'Perso')}
         </div>
+        <button
+          type="button"
+          onClick={() => setExcludeNonStore(!excludeNonStore)}
+          title="Retire le CA hors boutique (OGF, Web, Chorus, Mariage…) — configurable dans Réglages ▸ Exclusions du CA boutique"
+          className={`${!lockedStoreId && stores.length > 1 ? '' : 'ml-auto'} inline-flex items-center gap-2 rounded-full border h-9 px-3 text-sm font-medium transition-colors ${
+            excludeNonStore ? 'border-accent-deep bg-accent-soft/40 text-accent-deep' : 'border-border bg-white text-ink-soft hover:bg-gray-50'
+          }`}
+        >
+          <span
+            className={`relative h-4 w-7 rounded-full transition-colors shrink-0 ${
+              excludeNonStore ? 'bg-accent-deep' : 'bg-gray-300'
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-transform ${
+                excludeNonStore ? 'translate-x-3.5' : 'translate-x-0.5'
+              }`}
+            />
+          </span>
+          CA boutique uniquement
+        </button>
         {!lockedStoreId && stores.length > 1 && (
           <label className="ml-auto inline-flex items-center gap-2 rounded-full border border-border bg-white h-9 pl-3 pr-2 text-sm">
             <Icon name="pos" size={16} className="text-ink-soft shrink-0" />

@@ -102,6 +102,12 @@ export default function CADashboard({
     [period, customFrom, customTo],
   );
 
+  // Retire du CA le chiffre d'affaires « hors boutique » (clients, modes de
+  // règlement et catégories exclus configurés dans Réglages ▸ Exclusions du
+  // CA boutique — ex. OGF, Web, Chorus, Mariage). Désactivé par défaut : le
+  // CA affiché reste le CA total, comme avant ce réglage.
+  const [excludeNonStore, setExcludeNonStore] = useState(false);
+
   const [summary, setSummary] = useState<Summary | null>(null);
   const [storeSummaries, setStoreSummaries] = useState<StoreSummary[]>([]);
   const [hours, setHours] = useState<HourBucket[]>([]);
@@ -123,6 +129,7 @@ export default function CADashboard({
     setLoading(true);
     const qs = new URLSearchParams({ from: range.from, to: range.to });
     if (storeId) qs.set('store_id', storeId);
+    if (excludeNonStore) qs.set('exclude_non_store', '1');
     // CA par boutique : uniquement utile sur "Toutes les boutiques" (dès
     // qu'une boutique précise est choisie, la tuile disparaît, inutile
     // d'appeler l'API). Comparaison vs N-1 (même période, un an plus tôt).
@@ -130,6 +137,7 @@ export default function CADashboard({
     const qsByStore = new URLSearchParams({
       from: range.from, to: range.to, prev_from: prev.from, prev_to: prev.to,
     });
+    if (excludeNonStore) qsByStore.set('exclude_non_store', '1');
     // Détail (top ventes, vendeurs, TVA, remises, retours, CA par heure) :
     // seulement utile quand une boutique précise est choisie — la vue
     // "Toutes les boutiques" n'affiche plus que la tuile totale et les
@@ -159,7 +167,7 @@ export default function CADashboard({
     } finally {
       setLoading(false);
     }
-  }, [range.from, range.to, storeId]);
+  }, [range.from, range.to, storeId, excludeNonStore]);
 
   useEffect(() => { void reload(); }, [reload]);
 
@@ -233,6 +241,8 @@ export default function CADashboard({
         {tab === 'xz' && (
           <XzView
             summary={summary}
+            excludeNonStore={excludeNonStore}
+            setExcludeNonStore={setExcludeNonStore}
             storeId={storeId}
             storeSummaries={storeSummaries}
             onSelectStore={setStoreId}
@@ -252,7 +262,7 @@ export default function CADashboard({
             refreshedAt={refreshedAt}
           />
         )}
-        {tab === 'tickets' && <TicketsView storeId={storeId} range={range} />}
+        {tab === 'tickets' && <TicketsView storeId={storeId} range={range} excludeNonStore={excludeNonStore} />}
         {tab === 'account' && (
           <AccountView user={user} onLogout={logout} />
         )}
@@ -336,11 +346,13 @@ function TopBar({
 /* ------------------------------------------------------------------ */
 
 function XzView({
-  summary, storeId, storeSummaries, onSelectStore, hours, products, vendors, tva, discounts, returnsInfo,
+  summary, excludeNonStore, setExcludeNonStore, storeId, storeSummaries, onSelectStore, hours, products, vendors, tva, discounts, returnsInfo,
   period, setPeriod, customFrom, setCustomFrom, customTo, setCustomTo, today,
   showFullSales, setShowFullSales, refreshedAt,
 }: {
   summary: Summary | null;
+  excludeNonStore: boolean;
+  setExcludeNonStore: (v: boolean) => void;
   storeId: string;
   storeSummaries: StoreSummary[];
   onSelectStore: (id: string) => void;
@@ -388,6 +400,36 @@ function XzView({
           </div>
         )}
       </div>
+
+      {/* Toggle CA boutique uniquement : retire du CA (et de tous les
+          indicateurs ci-dessous) les ventes dont le client, le mode de
+          règlement ou la catégorie correspond à la liste configurée dans
+          Réglages ▸ Exclusions du CA boutique (OGF, Web, Chorus, Mariage…). */}
+      <button
+        type="button"
+        onClick={() => setExcludeNonStore(!excludeNonStore)}
+        className={`w-full flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 transition-colors ${
+          excludeNonStore ? 'border-accent-deep bg-accent-soft/30' : 'border-border bg-white'
+        }`}
+      >
+        <span className="text-sm font-medium text-left">
+          CA boutique uniquement
+          <span className="block text-xs text-ink-soft font-normal">
+            Retire le CA hors boutique (OGF, Web, Chorus, Mariage…)
+          </span>
+        </span>
+        <span
+          className={`shrink-0 relative h-6 w-11 rounded-full transition-colors ${
+            excludeNonStore ? 'bg-accent-deep' : 'bg-gray-300'
+          }`}
+        >
+          <span
+            className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+              excludeNonStore ? 'translate-x-5' : 'translate-x-0.5'
+            }`}
+          />
+        </span>
+      </button>
 
       {/* CA par boutique — visible d'un coup d'œil, sans avoir à sélectionner
           une boutique à la fois. Seulement sur "Toutes les boutiques" : dès
@@ -812,7 +854,9 @@ interface TicketRow {
   account_created_at_sale?: boolean;
 }
 
-function TicketsView({ storeId, range }: { storeId: string; range: { from: string; to: string } }) {
+function TicketsView({ storeId, range, excludeNonStore }: {
+  storeId: string; range: { from: string; to: string }; excludeNonStore: boolean;
+}) {
   const [items, setItems] = useState<TicketRow[]>([]);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
@@ -820,11 +864,12 @@ function TicketsView({ storeId, range }: { storeId: string; range: { from: strin
       setLoading(true);
       const qs = new URLSearchParams({ from: range.from, to: range.to });
       if (storeId) qs.set('store_id', storeId);
+      if (excludeNonStore) qs.set('exclude_non_store', '1');
       const r = await fetch(`/api/ca/tickets?${qs.toString()}`);
       if (r.ok) setItems((await r.json()).tickets);
       setLoading(false);
     })();
-  }, [storeId, range.from, range.to]);
+  }, [storeId, range.from, range.to, excludeNonStore]);
 
   // Détail d'une vente en modale (mêmes articles/récap/modes de règlement
   // que la modale du BO Ventes) — au clic sur une ligne de ticket.

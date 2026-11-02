@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { query } from '@/lib/db/client';
 import { requireSession } from '@/lib/auth/guards';
 import { jsonError } from '@/lib/validation/api';
+import { loadCaExclusions, excludeNonStoreSalesSql } from '@/lib/analytics/store-ca-exclusions';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,6 +33,9 @@ export async function GET(req: Request) {
   const storeFilter = store_id ? 'AND s.store_id = $4' : '';
   const args: unknown[] = [g.user.organizationId, from, to];
   if (store_id) args.push(store_id);
+  const excludeNonStore = url.searchParams.get('exclude_non_store') === '1';
+  const exclusions = excludeNonStore ? await loadCaExclusions(g.user.organizationId) : { customerIds: [], paymentLabels: [], categoryIds: [] };
+  const excludeSql = excludeNonStoreSalesSql(exclusions, args, { alias: 's' });
 
   const r = await query<{
     id: string; receipt_number: string; validated_at: string;
@@ -51,6 +55,7 @@ export async function GET(req: Request) {
         AND s.status = 'validated'
         AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date
         ${storeFilter}
+        ${excludeSql}
       ORDER BY s.validated_at DESC
       LIMIT 200`,
     args,

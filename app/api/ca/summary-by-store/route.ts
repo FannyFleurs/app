@@ -5,6 +5,7 @@ import { requireSession } from '@/lib/auth/guards';
 import { jsonError } from '@/lib/validation/api';
 import { importOnlyCaByStore } from '@/lib/analytics/revenue-blend';
 import { EXCLUDE_GIFT_CARD_ISSUANCE_SQL } from '@/lib/analytics/gift-card-ca';
+import { loadCaExclusions, excludeNonStoreSalesSql } from '@/lib/analytics/store-ca-exclusions';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,6 +35,8 @@ export async function GET(req: Request) {
   if (!parsed.success) return jsonError('INVALID_PARAMS', 400);
   const { from, to, prev_from, prev_to } = parsed.data;
   const orgId = g.user.organizationId;
+  const excludeNonStore = url.searchParams.get('exclude_non_store') === '1';
+  const exclusions = excludeNonStore ? await loadCaExclusions(orgId) : { customerIds: [], paymentLabels: [], categoryIds: [] };
 
   const stores = await query<{ id: string; name: string }>(
     `SELECT id, name FROM stores
@@ -41,6 +44,9 @@ export async function GET(req: Request) {
       ORDER BY name`,
     [orgId],
   );
+
+  const curArgs: unknown[] = [orgId, from, to];
+  const excludeSqlCur = excludeNonStoreSalesSql(exclusions, curArgs, { alias: 's' });
 
   // LEFT JOIN (pas INNER) : une vente 100% carte cadeau reste comptée dans
   // tickets_count même si l'exclusion lui laisse un CA nul — voir
@@ -54,8 +60,9 @@ export async function GET(req: Request) {
       WHERE s.organization_id = $1
         AND s.status = 'validated'
         AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date
+        ${excludeSqlCur}
       GROUP BY s.store_id`,
-    [orgId, from, to],
+    curArgs,
   );
 
   const margin = await query<{ store_id: string; revenue_ht: string; cost_ht: string; items_sold: string }>(
@@ -70,13 +77,16 @@ export async function GET(req: Request) {
         AND s.status = 'validated'
         AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date
         AND ${EXCLUDE_GIFT_CARD_ISSUANCE_SQL}
+        ${excludeSqlCur}
       GROUP BY s.store_id`,
-    [orgId, from, to],
+    curArgs,
   );
 
   let prevCaByStore = new Map<string, number>();
   let importedPrevByStore = new Map<string, { ca_ttc: number; ca_ht: number; tickets: number }>();
   if (prev_from && prev_to) {
+    const prevArgs: unknown[] = [orgId, prev_from, prev_to];
+    const excludeSqlPrev = excludeNonStoreSalesSql(exclusions, prevArgs, { alias: 's' });
     const prev = await query<{ store_id: string; ca_ttc: string }>(
       `SELECT s.store_id::text AS store_id, COALESCE(SUM(sl.line_ttc), 0)::text AS ca_ttc
          FROM sales s
@@ -84,8 +94,9 @@ export async function GET(req: Request) {
         WHERE s.organization_id = $1
           AND s.status = 'validated'
           AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date BETWEEN $2::date AND $3::date
+          ${excludeSqlPrev}
         GROUP BY s.store_id`,
-      [orgId, prev_from, prev_to],
+      prevArgs,
     );
     prevCaByStore = new Map(prev.rows.map((r) => [r.store_id, Number(r.ca_ttc)]));
     importedPrevByStore = await importOnlyCaByStore({ organizationId: orgId, from: prev_from, to: prev_to });
