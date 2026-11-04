@@ -169,15 +169,43 @@ function writeCatalogCache(storeId: string, v: { products: PosProduct[]; categor
  * Résout un article scanné par son code : code principal, SKU, ou l'un des
  * codes-barres supplémentaires (multi-EAN). Insensible à la casse.
  */
-function matchProductByCode(products: PosProduct[], code: string): PosProduct | undefined {
+export function matchProductByCode(products: PosProduct[], code: string): PosProduct | undefined {
   const c = code.trim();
   if (!c) return undefined;
   const up = c.toUpperCase();
-  return products.find((p) =>
+  const exact = products.find((p) =>
     p.barcode === c || p.barcode === up ||
     p.sku === c || p.sku === up ||
     (p.extra_barcodes?.some((b) => b === c || b.toUpperCase() === up) ?? false),
   );
+  if (exact) return exact;
+  // Repli « contient » (même comparaison que le filtre de recherche visible,
+  // voir visibleProducts) — UNIQUEMENT si elle désigne un seul article sans
+  // ambiguïté. Un code scanné qui ne correspond pas EXACTEMENT au
+  // barcode/SKU enregistré (espace superflu, caractère invisible, variante
+  // de format d'un même scanner/douchette...) échouait alors en silence au
+  // scan direct, alors que la recherche manuelle (qui utilise cette même
+  // comparaison « contient ») retrouvait toujours l'article — bug remonté
+  // en production : l'utilisateur devait systématiquement passer par la
+  // recherche et cliquer la tuile pour obtenir ce que le scan direct aurait
+  // dû faire lui-même. Restreint au SKU/code-barres (pas au nom) : un code
+  // scanné n'a pas de raison de se recouper avec un libellé produit.
+  // Comparaison dans LES DEUX sens : le champ stocké contient le code
+  // scanné (scan partiel — mêmes 5 derniers chiffres d'un EAN, comme la
+  // recherche visible) OU le code scanné contient le champ stocké (le
+  // scanner ajoute un caractère parasite en trop — espace, retour chariot
+  // mal filtré — autour du vrai code).
+  const lower = c.toLowerCase();
+  const contains = (field: string | null | undefined): boolean => {
+    if (!field) return false;
+    const f = field.toLowerCase();
+    return f.includes(lower) || lower.includes(f);
+  };
+  const loose = products.filter((p) =>
+    contains(p.sku) || contains(p.barcode) ||
+    (p.extra_barcodes?.some((b) => contains(b)) ?? false),
+  );
+  return loose.length === 1 ? loose[0] : undefined;
 }
 
 export default function CashRegister({
@@ -1690,8 +1718,20 @@ export default function CashRegister({
         return;
       }
 
-      // Caractères acceptés : alphanumériques + - . _ /
-      if (e.key.length === 1 && /^[0-9a-zA-Z\-._/]$/.test(e.key)) {
+      // Caractères acceptés : n'importe quel caractère simple imprimable
+      // (pas seulement alphanumériques + - . _ /) — un champ de saisie réel
+      // (la barre de recherche, qui capte un scan correctement même quand
+      // CE listener échoue) accepte nativement TOUT ce que le clavier/la
+      // douchette envoie ; restreindre ici à une liste blanche risquait de
+      // faire silencieusement disparaître un caractère réellement présent
+      // dans le code-barres/SKU scanné (accent, ponctuation hors liste,
+      // variante selon le modèle de douchette ou sa disposition clavier
+      // configurée) — le code reconstruit était alors incomplet et ne
+      // correspondait plus jamais à l'article, même si la recherche
+      // manuelle, elle, le retrouvait. `e.key.length === 1` exclut déjà les
+      // touches spéciales (Shift, Control, flèches, touches F…), qui ont
+      // toutes un e.key de plusieurs caractères.
+      if (e.key.length === 1) {
         buf.push({ key: e.key, t: now });
         // Empêche le bouton focused d'avaler la touche ou de scroller.
         e.preventDefault();
