@@ -64,6 +64,26 @@ describe('matchProductByCode — égalité exacte (comportement historique)', ()
   });
 });
 
+describe('matchProductByCode — EAN-13 / UPC-A (même code-barres, deux formats)', () => {
+  // Un UPC-A (12 chiffres) EST l'EAN-13 correspondant SANS son zéro de
+  // tête — même article. Scanner et fiche produit peuvent avoir été
+  // configurés/saisis dans des formats différents pour le MÊME code.
+  it("retrouve un EAN-13 stocké (13 chiffres, zéro de tête) en scannant son équivalent UPC-A (12 chiffres)", () => {
+    const p = product({ barcode: '0123456789012' });
+    expect(matchProductByCode([p], '123456789012')).toBe(p);
+  });
+
+  it("retrouve un UPC-A stocké (12 chiffres) en scannant son équivalent EAN-13 (zéro de tête ajouté)", () => {
+    const p = product({ barcode: '123456789012' });
+    expect(matchProductByCode([p], '0123456789012')).toBe(p);
+  });
+
+  it("ne confond pas un code 12 chiffres avec un autre article non lié (pas de faux positif hors zéro de tête)", () => {
+    const p = product({ barcode: '999999999999' });
+    expect(matchProductByCode([p], '123456789012')).toBeUndefined();
+  });
+});
+
 describe('matchProductByCode — repli « contient » (correctif du bug de production)', () => {
   it("retrouve l'article quand le code SCANNÉ contient le barcode enregistré (caractère parasite en trop)", () => {
     // Reproduit : le scanner ajoute un caractère que le barcode stocké n'a

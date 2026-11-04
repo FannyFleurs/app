@@ -169,14 +169,30 @@ function writeCatalogCache(storeId: string, v: { products: PosProduct[]; categor
  * Résout un article scanné par son code : code principal, SKU, ou l'un des
  * codes-barres supplémentaires (multi-EAN). Insensible à la casse.
  */
+/**
+ * Variantes EAN-13 / UPC-A d'un même code-barres : un UPC-A (12 chiffres)
+ * est l'EAN-13 (13 chiffres) correspondant SANS son zéro de tête — deux
+ * représentations du MÊME article. Scanner/caisse configurés différemment
+ * (l'un envoie/stocke en UPC-A, l'autre en EAN-13) ne matchaient alors
+ * jamais en égalité stricte alors qu'il s'agit bien du même code. Renvoie
+ * le code lui-même, plus sa variante zéro-de-tête ajouté/retiré si
+ * applicable (sinon juste [code]).
+ */
+function eanVariants(code: string): string[] {
+  if (/^\d{12}$/.test(code)) return [code, '0' + code];
+  if (/^0\d{12}$/.test(code)) return [code, code.slice(1)];
+  return [code];
+}
+
 export function matchProductByCode(products: PosProduct[], code: string): PosProduct | undefined {
   const c = code.trim();
   if (!c) return undefined;
   const up = c.toUpperCase();
+  const candidates = new Set([c, up, ...eanVariants(c), ...eanVariants(up)]);
   const exact = products.find((p) =>
-    p.barcode === c || p.barcode === up ||
-    p.sku === c || p.sku === up ||
-    (p.extra_barcodes?.some((b) => b === c || b.toUpperCase() === up) ?? false),
+    (p.barcode != null && candidates.has(p.barcode)) ||
+    (p.sku != null && candidates.has(p.sku)) ||
+    (p.extra_barcodes?.some((b) => candidates.has(b)) ?? false),
   );
   if (exact) return exact;
   // Repli « contient » (même comparaison que le filtre de recherche visible,
