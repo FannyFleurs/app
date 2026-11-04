@@ -422,6 +422,28 @@ export default function CashRegister({
     else if (intent === 'close' && dx > 60) setMobileCartOpen(false);
   }
 
+  // Retrait d'une ligne du panier en glissant son bloc vers la gauche — même
+  // seuil (≥ 60 px horizontaux, < 60 px vertical, < 600 ms) que le swipe
+  // catalogue/panier ci-dessus, sur une ref dédiée (un seul doigt à la fois
+  // sur l'écran de toute façon, mais on évite de mélanger les deux gestes).
+  const lineSwipeRef = useRef<{ x: number; y: number; t: number } | null>(null);
+  function onLineTouchStart(e: React.TouchEvent) {
+    const t = e.touches[0];
+    if (!t) return;
+    lineSwipeRef.current = { x: t.clientX, y: t.clientY, t: Date.now() };
+  }
+  function onLineTouchEnd(e: React.TouchEvent, key: string) {
+    const start = lineSwipeRef.current;
+    lineSwipeRef.current = null;
+    const end = e.changedTouches[0];
+    if (!start || !end) return;
+    const dx = end.clientX - start.x;
+    const dy = end.clientY - start.y;
+    if (Math.abs(dy) > 60) return;
+    if (Date.now() - start.t > 600) return;
+    if (dx < -60) removeLine(key);
+  }
+
   // Mac (app iOS « Conçue pour iPad » exécutée sur Mac) : on y agrandit
   // uniquement les éléments PÉRIPHÉRIQUES de la caisse (barre de recherche/
   // actions, panier ticket), jamais la zone centrale des tuiles. La détection
@@ -2343,51 +2365,63 @@ export default function CashRegister({
           ) : lines.map((l) => {
             const sub = Math.max(0, round2(l.unit_price_ttc * l.quantity - l.discount_amount));
             return (
-              <button
+              <div
                 key={l.key}
-                onClick={() => setDiscountLineKey(l.key)}
-                // Fond teinté de la couleur d'accent du poste : les articles
-                // encaissés se détachent du panneau blanc, et les commandes
-                // (croix, − / +) restent en blanc franc par-dessus, donc
-                // lisibles. La teinte vient de `--primary-soft`, donc elle
-                // suit le thème choisi dans les paramètres, mode sombre inclus.
-                //
-                // `text-ink` explicite plutôt qu'hérité. L'héritage suffirait
-                // désormais — <body> suit l'encre du mode sombre depuis la
-                // correction globale — mais l'affirmer ici coûte une classe et
-                // rend la tuile indépendante de cette mécanique.
-                className="w-full text-left rounded-lg border px-2 py-1 text-ink bg-accent-soft border-accent-soft-line hover:border-accent transition-colors"
-                title="Cliquer pour ajouter / modifier une remise"
+                // Glisser la ligne vers la gauche la retire aussi (mobile/tablette) —
+                // même geste et mêmes seuils que le swipe catalogue/panier.
+                onTouchStart={onLineTouchStart}
+                onTouchEnd={(e) => onLineTouchEnd(e, l.key)}
+                className="flex items-stretch rounded-lg border border-accent-soft-line overflow-hidden"
               >
-                <div className="flex justify-between items-center gap-2">
-                  <div className="text-sm font-medium flex-1 truncate leading-tight">{l.label}</div>
-                  <span className="font-semibold text-sm whitespace-nowrap">{formatEUR(sub)}</span>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); removeLine(l.key); }}
-                    className="h-6 w-6 grid place-items-center rounded-lg text-ink-soft hover:bg-danger/10 hover:text-danger text-xs shrink-0"
-                    aria-label="Retirer cet article"
-                  >✕</button>
-                </div>
-                <div className="mt-0 flex items-center justify-between text-xs text-ink-soft">
-                  <span className="leading-tight">
-                    {formatEUR(l.unit_price_ttc)}
-                    {l.discount_amount > 0 && <span className="text-warning ml-1">· -{formatEUR(l.discount_amount)}</span>}
-                  </span>
-                  <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                    <button
-                      className="h-7 w-7 rounded-lg border border-border bg-white text-sm font-medium active:scale-95"
-                      onClick={() => incLine(l.key, -1)}
-                      aria-label="Réduire la quantité"
-                    >−</button>
-                    <span className="w-7 text-center text-ink text-sm font-semibold tabular-nums">{l.quantity}</span>
-                    <button
-                      className="h-7 w-7 rounded-lg border border-border bg-white text-sm font-medium active:scale-95"
-                      onClick={() => incLine(l.key, +1)}
-                      aria-label="Augmenter la quantité"
-                    >+</button>
+                <button
+                  onClick={() => setDiscountLineKey(l.key)}
+                  // Fond teinté de la couleur d'accent du poste : les articles
+                  // encaissés se détachent du panneau blanc, et les commandes
+                  // (− / +) restent en blanc franc par-dessus, donc lisibles.
+                  // La teinte vient de `--primary-soft`, donc elle suit le
+                  // thème choisi dans les paramètres, mode sombre inclus.
+                  //
+                  // `text-ink` explicite plutôt qu'hérité. L'héritage suffirait
+                  // désormais — <body> suit l'encre du mode sombre depuis la
+                  // correction globale — mais l'affirmer ici coûte une classe et
+                  // rend la tuile indépendante de cette mécanique.
+                  className="min-w-0 flex-1 text-left px-2 py-1 text-ink bg-accent-soft hover:brightness-[0.98] transition-[filter]"
+                  title="Cliquer pour ajouter / modifier une remise"
+                >
+                  <div className="flex justify-between items-center gap-2">
+                    <div className="text-sm font-medium flex-1 truncate leading-tight">{l.label}</div>
+                    <span className="font-semibold text-sm whitespace-nowrap">{formatEUR(sub)}</span>
                   </div>
-                </div>
-              </button>
+                  <div className="mt-0 flex items-center justify-between text-xs text-ink-soft">
+                    <span className="leading-tight">
+                      {formatEUR(l.unit_price_ttc)}
+                      {l.discount_amount > 0 && <span className="text-warning ml-1">· -{formatEUR(l.discount_amount)}</span>}
+                    </span>
+                    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        className="h-7 w-7 rounded-lg border border-border bg-white text-sm font-medium active:scale-95"
+                        onClick={() => incLine(l.key, -1)}
+                        aria-label="Réduire la quantité"
+                      >−</button>
+                      <span className="w-7 text-center text-ink text-sm font-semibold tabular-nums">{l.quantity}</span>
+                      <button
+                        className="h-7 w-7 rounded-lg border border-border bg-white text-sm font-medium active:scale-95"
+                        onClick={() => incLine(l.key, +1)}
+                        aria-label="Augmenter la quantité"
+                      >+</button>
+                    </div>
+                  </div>
+                </button>
+                {/* Retrait : pleine hauteur de la ligne, rouge, à droite —
+                    au lieu d'une croix minuscule en coin de tuile. */}
+                <button
+                  onClick={() => removeLine(l.key)}
+                  className="w-11 shrink-0 grid place-items-center bg-danger text-white hover:bg-danger/90 active:bg-danger/80 transition-colors"
+                  aria-label="Retirer cet article"
+                >
+                  <span className="text-base leading-none" aria-hidden>✕</span>
+                </button>
+              </div>
             );
           })}
         </div>
