@@ -23,6 +23,7 @@ export const MODULE_TONES = {
   inventory: { bg: '#EFE9F6', fg: '#5B4A86' },
   settings:  { bg: '#FBEEE2', fg: '#96581B' },
   receiving: { bg: '#E6F4F1', fg: '#0E6B5C' },
+  destockage: { bg: '#FBE6E6', fg: '#9B2C2C' },
 } as const;
 export type ModuleTone = keyof typeof MODULE_TONES;
 
@@ -428,6 +429,10 @@ export function IconTrash() {
 }
 export function IconPrinter() {
   return <svg width="20" height="20" viewBox="0 0 24 24" {...S}><path d="M6 9V3h12v6" /><rect x="4" y="9" width="16" height="7" rx="1.5" /><path d="M7 16h10v5H7z" /></svg>;
+}
+/** Déstockage : boîte avec une flèche sortante (inverse de IconImport). */
+export function IconScanOut() {
+  return <svg width="24" height="24" viewBox="0 0 24 24" {...S}><path d="M12 13V3" /><path d="m8 7 4-4 4 4" /><path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4" /></svg>;
 }
 export function IconPlus() {
   return <svg width="20" height="20" viewBox="0 0 24 24" {...S}><path d="M12 5v14M5 12h14" /></svg>;

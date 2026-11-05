@@ -10,10 +10,11 @@ import PdaStock from './PdaStock';
 import PdaLabels from './PdaLabels';
 import PdaInventory from './PdaInventory';
 import PdaReceiving from './PdaReceiving';
+import PdaDestockage from './PdaDestockage';
 import PdaDiagnostic from './PdaDiagnostic';
 import {
   Screen, Header, MenuCard, Toast,
-  IconScanIn, IconTag, IconClipboard, IconGear, IconImport,
+  IconScanIn, IconTag, IconClipboard, IconGear, IconImport, IconScanOut,
 } from './ui';
 
 /* ------------------------------------------------------------------- types */
@@ -68,7 +69,7 @@ function toEditable(r: Record<string, unknown>): EditableProduct {
   };
 }
 
-type ScreenName = 'home' | 'stock' | 'labels' | 'inventory' | 'receiving' | 'settings' | 'diagnostic';
+type ScreenName = 'home' | 'stock' | 'labels' | 'inventory' | 'receiving' | 'destockage' | 'settings' | 'diagnostic';
 
 /* --------------------------------------------------------------------- app */
 
@@ -81,9 +82,10 @@ type ScreenName = 'home' | 'stock' | 'labels' | 'inventory' | 'receiving' | 'set
  * refait sa propre requête de recherche par code — c'est cette centralisation
  * qui garantit qu'un code donne toujours le même article, partout.
  */
-export default function PdaApp({ canWrite, canInventory }: {
+export default function PdaApp({ canWrite, canAdjustStock }: {
   canWrite: boolean;
-  canInventory: boolean;
+  /** Permission 'stock.adjust' — contrôle l'accès à l'Inventaire ET au Déstockage. */
+  canAdjustStock: boolean;
 }) {
   const rawBrand = useBrand();
   const brand = { ...rawBrand, logo_url: rawBrand.pda_logo_url || rawBrand.logo_url };
@@ -279,6 +281,17 @@ const onUnknownCode = useCallback((code: string) => {
   if (screen === 'inventory') {
     return <PdaInventory station={station} onHome={home} notify={notify} />;
   }
+  if (screen === 'destockage') {
+    return (
+      <PdaDestockage
+        station={station}
+        products={products}
+        onUnknownCode={onUnknownCode}
+        onHome={home}
+        notify={notify}
+      />
+    );
+  }
   if (screen === 'receiving') {
     return (
       <PdaReceiving
@@ -383,7 +396,15 @@ const onUnknownCode = useCallback((code: string) => {
           title="Inventaire"
           subtitle="Scanner pour réaliser un inventaire"
           onClick={() => setScreen('inventory')}
-          disabled={!canInventory}
+          disabled={!canAdjustStock}
+        />
+        <MenuCard
+          tone="destockage"
+          icon={<IconScanOut />}
+          title="Déstockage"
+          subtitle="Scanner à la chaîne pour sortir du stock (casse, perte…)"
+          onClick={() => setScreen('destockage')}
+          disabled={!canAdjustStock}
         />
         <MenuCard
           tone="settings"

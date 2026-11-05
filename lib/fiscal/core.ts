@@ -153,7 +153,7 @@ export class FiscalCore {
    */
   async nextDocumentNumber(args: {
     organizationId: string;
-    kind: 'receipt' | 'invoice' | 'credit_note' | 'order' | 'gift_card';
+    kind: 'receipt' | 'invoice' | 'credit_note' | 'order' | 'gift_card' | 'destockage';
     year: number;
     prefix: string;
     pad?: number;
