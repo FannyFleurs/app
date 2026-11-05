@@ -158,8 +158,8 @@ export default function PaymentMethodsForm({ canWrite, stores, lockedStoreId }: 
             Activer / désactiver et renommer les moyens de paiement disponibles en caisse.
             {' '}Cochez <strong>Tiroir</strong> pour ouvrir automatiquement le tiroir-caisse à l&apos;encaissement
             avec ce mode de règlement (ex. espèces oui, chèque non) — <strong>propre à la boutique
-            sélectionnée</strong>, chaque boutique gère son propre réglage.
-            {multiStore && ' Limitez un mode à certaines boutiques si besoin (ex. TPE).'}
+            {lockedStoreId ? '' : ' sélectionnée'}</strong>, chaque boutique gère son propre réglage.
+            {multiStore && !lockedStoreId && ' Limitez un mode à certaines boutiques si besoin (ex. TPE).'}
           </p>
         </div>
         {!lockedStoreId && multiStore && (
@@ -203,7 +203,7 @@ export default function PaymentMethodsForm({ canWrite, stores, lockedStoreId }: 
                     Actif
                   </label>
                 </div>
-                {multiStore && (
+                {multiStore && !lockedStoreId && (
                   <div className="flex flex-wrap items-center gap-1.5 pl-[calc(5rem+0.5rem)]">
                     <span className="text-[11px] text-ink-soft mr-0.5">Boutiques :</span>
                     <button
