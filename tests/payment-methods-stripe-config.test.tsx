@@ -73,6 +73,9 @@ beforeEach(() => {
         json: async () => ({ settings: { enabled: false, web_payment_method_id: null, ogf_payment_method_id: null } }),
       } as unknown as Response;
     }
+    if (url.startsWith('/api/settings/payment-method-drawer') && (!init || init.method === undefined)) {
+      return { ok: true, json: async () => ({ settings: {} }) } as unknown as Response;
+    }
     if (url === '/api/settings/stripe' && init?.method === 'PATCH') {
       const body = JSON.parse(String(init.body)) as Record<string, unknown>;
       patchCalls.push({ body });

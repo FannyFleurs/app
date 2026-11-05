@@ -7,6 +7,7 @@ import { resolveReceiptPrinter, enqueueJob } from './cloudprnt/queue';
 import { buildDrawerKickStarPrnt, STARPRNT_CONTENT_TYPE } from './cloudprnt/receipt-star';
 import { enqueueGiftCardPrint, NoReceiptPrinterError as GiftCardNoPrinter } from './cloudprnt/print-gift-card';
 import { notifyOrderPaidIfNeeded } from '@/lib/orders/notify-paid';
+import { loadPaymentMethodDrawerOverrides } from '@/lib/settings/payment-method-drawer-server';
 
 /**
  * Encaisse une vente ET déclenche tous les effets de bord de l'encaissement
@@ -68,14 +69,23 @@ export async function validateSaleAndNotify(args: {
     try {
       const kinds = Array.from(new Set(args.payments.map((p) => p.method)));
       if (kinds.length > 0) {
-        const dm = await query<{ n: number }>(
-          `SELECT COUNT(*)::int AS n FROM payment_methods
-            WHERE organization_id = $1 AND opens_drawer = TRUE AND kind = ANY($2::text[])`,
+        // L'ouverture du tiroir est un réglage PAR BOUTIQUE (voir
+        // lib/settings/payment-method-drawer.ts) : la boutique doit être
+        // connue AVANT de décider s'il faut ouvrir, pas seulement pour
+        // choisir l'imprimante ensuite.
+        const st = await query<{ store_id: string }>(`SELECT store_id FROM sales WHERE id = $1`, [args.saleId]);
+        const storeId = st.rows[0]?.store_id ?? null;
+        const dm = await query<{ code: string; opens_drawer: boolean }>(
+          `SELECT code, opens_drawer FROM payment_methods
+            WHERE organization_id = $1 AND kind = ANY($2::text[])`,
           [args.organizationId, kinds],
         );
-        if (dm.rows[0]?.n) {
-          const st = await query<{ store_id: string }>(`SELECT store_id FROM sales WHERE id = $1`, [args.saleId]);
-          const printer = await resolveReceiptPrinter(args.organizationId, st.rows[0]?.store_id ?? null);
+        const overrides = storeId
+          ? await loadPaymentMethodDrawerOverrides(args.organizationId, storeId)
+          : {};
+        const shouldOpenDrawer = dm.rows.some((r) => (overrides[r.code] ?? r.opens_drawer) === true);
+        if (shouldOpenDrawer) {
+          const printer = await resolveReceiptPrinter(args.organizationId, storeId);
           if (printer) {
             const payload = await buildDrawerKickStarPrnt();
             await enqueueJob({

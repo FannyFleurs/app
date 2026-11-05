@@ -68,7 +68,7 @@ beforeEach(() => {
       return { ok: true, json: async () => ({ id: 'batch-1', reference: 'D-2026-000001', item_count: 1, total_quantity: 2 }) };
     }
     return { ok: false, json: async () => ({}) };
-  });
+  }) as unknown as ReturnType<typeof vi.fn>;
   vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
 });
 afterEach(() => {

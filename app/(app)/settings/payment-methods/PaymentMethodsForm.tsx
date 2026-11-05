@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import StoreScopeSelect from '@/components/StoreScopeSelect';
 import OrderAutoCheckoutSection from './OrderAutoCheckoutSection';
 
 interface PaymentMethod {
@@ -36,8 +37,8 @@ const PM_KIND_OPTIONS = [
   { value: 'other', label: 'Autre' },
 ];
 
-export default function PaymentMethodsForm({ canWrite, stores }: {
-  canWrite: boolean; stores: { id: string; name: string }[];
+export default function PaymentMethodsForm({ canWrite, stores, lockedStoreId }: {
+  canWrite: boolean; stores: { id: string; name: string }[]; lockedStoreId?: string | null;
 }) {
   const [items, setItems] = useState<PaymentMethod[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,6 +47,14 @@ export default function PaymentMethodsForm({ canWrite, stores }: {
   const [addError, setAddError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const multiStore = stores.length > 1;
+
+  // Ouverture du tiroir : réglage PAR BOUTIQUE (voir
+  // lib/settings/payment-method-drawer.ts) — jamais partagé entre boutiques,
+  // contrairement à Actif/Libellé/Boutiques ci-dessous. La boutique choisie
+  // ici ne gouverne QUE la colonne « Tiroir ».
+  const [storeId, setStoreId] = useState<string>(lockedStoreId ?? stores[0]?.id ?? '');
+  const [drawerMap, setDrawerMap] = useState<Record<string, boolean>>({});
+  const [drawerLoading, setDrawerLoading] = useState(true);
 
   async function load() {
     setLoading(true);
@@ -58,6 +67,19 @@ export default function PaymentMethodsForm({ canWrite, stores }: {
   }
   useEffect(() => { void load(); }, []);
 
+  useEffect(() => {
+    if (!storeId) { setDrawerLoading(false); return; }
+    let cancelled = false;
+    setDrawerLoading(true);
+    void (async () => {
+      const r = await fetch(`/api/settings/payment-method-drawer?store_id=${encodeURIComponent(storeId)}`);
+      if (cancelled) return;
+      if (r.ok) setDrawerMap((await r.json()).settings as Record<string, boolean>);
+      setDrawerLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [storeId]);
+
   async function toggle(id: string, is_active: boolean) {
     await fetch(`/api/payment-methods/${id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
@@ -65,11 +87,12 @@ export default function PaymentMethodsForm({ canWrite, stores }: {
     });
     void load();
   }
-  async function toggleDrawer(id: string, opens_drawer: boolean) {
-    setItems((cur) => cur.map((x) => (x.id === id ? { ...x, opens_drawer } : x)));
-    await fetch(`/api/payment-methods/${id}`, {
+  async function toggleDrawer(code: string, opens_drawer: boolean) {
+    if (!storeId) return;
+    setDrawerMap((cur) => ({ ...cur, [code]: opens_drawer }));
+    await fetch('/api/settings/payment-method-drawer', {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ opens_drawer }),
+      body: JSON.stringify({ store_id: storeId, code, opens_drawer }),
     });
   }
 
@@ -128,14 +151,23 @@ export default function PaymentMethodsForm({ canWrite, stores }: {
 
   return (
     <div className="p-6 md:p-8 max-w-2xl space-y-5">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Modes de règlement</h1>
-        <p className="mt-1 text-sm text-ink-soft">
-          Activer / désactiver et renommer les moyens de paiement disponibles en caisse.
-          {' '}Cochez <strong>Tiroir</strong> pour ouvrir automatiquement le tiroir-caisse à l&apos;encaissement
-          avec ce mode de règlement (ex. espèces oui, chèque non).
-          {multiStore && ' Limitez un mode à certaines boutiques si besoin (ex. TPE).'}
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Modes de règlement</h1>
+          <p className="mt-1 text-sm text-ink-soft">
+            Activer / désactiver et renommer les moyens de paiement disponibles en caisse.
+            {' '}Cochez <strong>Tiroir</strong> pour ouvrir automatiquement le tiroir-caisse à l&apos;encaissement
+            avec ce mode de règlement (ex. espèces oui, chèque non) — <strong>propre à la boutique
+            sélectionnée</strong>, chaque boutique gère son propre réglage.
+            {multiStore && ' Limitez un mode à certaines boutiques si besoin (ex. TPE).'}
+          </p>
+        </div>
+        {!lockedStoreId && multiStore && (
+          <div className="text-sm">
+            <span className="block text-xs font-medium text-ink-soft mb-1">Tiroir pour la boutique</span>
+            <StoreScopeSelect stores={stores} value={storeId} onChange={setStoreId} hideLabel />
+          </div>
+        )}
       </div>
 
       <div className="card p-5 space-y-3">
@@ -154,11 +186,11 @@ export default function PaymentMethodsForm({ canWrite, stores }: {
                     onBlur={(e) => e.target.value !== m.label && void rename(m.id, e.target.value)}
                   />
                   <label className="flex items-center gap-1 text-xs whitespace-nowrap"
-                         title="Ouvre le tiroir-caisse à l'encaissement avec ce mode de règlement">
+                         title="Ouvre le tiroir-caisse à l'encaissement avec ce mode de règlement, pour la boutique sélectionnée ci-dessus">
                     <input
-                      type="checkbox" checked={!!m.opens_drawer}
-                      disabled={!canWrite}
-                      onChange={(e) => void toggleDrawer(m.id, e.target.checked)}
+                      type="checkbox" checked={!!drawerMap[m.code]}
+                      disabled={!canWrite || !storeId || drawerLoading}
+                      onChange={(e) => void toggleDrawer(m.code, e.target.checked)}
                     />
                     Tiroir
                   </label>

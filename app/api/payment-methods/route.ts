@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { query } from '@/lib/db/client';
 import { requirePermission } from '@/lib/auth/guards';
 import { parseJson } from '@/lib/validation/api';
+import { loadPaymentMethodDrawerOverrides } from '@/lib/settings/payment-method-drawer-server';
 
 const KINDS = ['cash','card','check','transfer','gift_card','credit_note','payment_link','deferred','other'] as const;
 
@@ -90,6 +91,16 @@ export async function GET(req: Request) {
       rows = (await query<{ id: string; code: string; kind: string; label: string; is_active: boolean; position: number; opens_drawer: boolean; store_ids: string[] }>(sql, params)).rows;
     } catch { /* fail-open */ }
   }
+
+  // Ouverture du tiroir : réglage PAR BOUTIQUE (voir
+  // lib/settings/payment-method-drawer.ts). La colonne opens_drawer
+  // ci-dessus reste la valeur de repli tant que la boutique n'a pas la
+  // sienne ; un override propre à `storeId` la remplace ici.
+  if (storeId) {
+    const overrides = await loadPaymentMethodDrawerOverrides(g.user.organizationId, storeId);
+    rows = rows.map((r) => (r.code in overrides ? { ...r, opens_drawer: overrides[r.code]! } : r));
+  }
+
   return NextResponse.json({ methods: rows });
 }
 

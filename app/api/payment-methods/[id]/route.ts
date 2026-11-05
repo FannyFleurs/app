@@ -8,7 +8,9 @@ const patch = z.object({
   label: z.string().min(1).max(80).optional(),
   is_active: z.boolean().optional(),
   position: z.number().int().min(0).optional(),
-  opens_drawer: z.boolean().optional(),
+  // L'ouverture du tiroir n'est plus modifiable ici : c'est désormais un
+  // réglage PAR BOUTIQUE (voir /api/settings/payment-method-drawer), pour
+  // qu'une modification depuis une boutique ne touche plus les autres.
   store_ids: z.array(z.string().uuid()).optional(),
 });
 
