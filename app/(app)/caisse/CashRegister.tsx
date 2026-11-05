@@ -1197,7 +1197,25 @@ export default function CashRegister({
 
   function incLine(key: string, delta: number) {
     setLines((cur) => cur
-      .map((l) => l.key === key ? { ...l, quantity: round2(l.quantity + delta) } : l)
+      .map((l) => {
+        if (l.key !== key) return l;
+        const quantity = round2(l.quantity + delta);
+        // Remise automatique (client et/ou produit) : proportionnelle à la
+        // quantité, donc recalculée ici — sinon elle reste figée sur le
+        // montant valable pour l'ancienne quantité quand on ajuste avec les
+        // boutons +/-. Les lignes avec une remise manuelle (motif de
+        // justification sur la ligne, ou part d'une remise globale panier)
+        // ne sont jamais recalculées : leur montant reste celui choisi par
+        // la caissière.
+        if (l.metadata?.manual_discount_reason || l.metadata?.cart_discount) {
+          return { ...l, quantity };
+        }
+        const autoPct = Number(l.metadata?.auto_discount_pct ?? 0);
+        const prodDiscUnit = Number(l.metadata?.product_disc_unit ?? 0);
+        if (autoPct <= 0 && prodDiscUnit <= 0) return { ...l, quantity };
+        const discount_amount = round2(round2((l.unit_price_ttc * quantity * autoPct) / 100) + round2(prodDiscUnit * quantity));
+        return { ...l, quantity, discount_amount };
+      })
       .filter((l) => l.quantity > 0));
   }
   function removeLine(key: string) { setLines((cur) => cur.filter((l) => l.key !== key)); }
