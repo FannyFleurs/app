@@ -6,6 +6,7 @@ import { PAYMENT_LABELS } from '@/components/labels';
 import Badge from '@/components/Badge';
 import EmptyState from '@/components/EmptyState';
 import BankDepositModal from './BankDepositModal';
+import PaymentDrilldownModal from './PaymentDrilldownModal';
 import { promptThemed, confirmThemed } from '@/lib/ui/dialog';
 import { readRoamingChoice } from '@/lib/caisse/roaming';
 
@@ -94,6 +95,19 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
   const [error, setError] = useState<string | null>(null);
   const [sealedResult, setSealedResult] = useState<{ id: string; fiscal_hash: string } | null>(null);
   const [showDeposit, setShowDeposit] = useState(false);
+  // Détail des paiements d'un mode (pointage 1 à 1) — voir
+  // PaymentDrilldownModal. Pointage volontairement NON persisté (même
+  // principe que la sélection de lignes dans ProductsList/StockAdmin) :
+  // conservé ici tant que l'écran reste ouvert, perdu au rechargement.
+  const [drillMethod, setDrillMethod] = useState<string | null>(null);
+  const [tickedByMethod, setTickedByMethod] = useState<Record<string, Set<string>>>({});
+  function toggleTicked(method: string, id: string) {
+    setTickedByMethod((cur) => {
+      const next = new Set(cur[method] ?? []);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return { ...cur, [method]: next };
+    });
+  }
   const [drawerToast, setDrawerToast] = useState<string | null>(null);
   const [zToast, setZToast] = useState<string | null>(null);
 
@@ -669,16 +683,28 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
                     const declaredNum = Number(declaredVal);
                     const hasDeclared = declaredVal !== '' && Number.isFinite(declaredNum);
                     const variance = hasDeclared ? Number((declaredNum - p.total).toFixed(2)) : null;
+                    const tickedForMethod = tickedByMethod[p.method]?.size ?? 0;
                     return (
                       <div key={p.method} className="rounded-xl border border-border p-3">
-                        <div className="flex items-center justify-between">
-                          <Badge tone="soft">{PAYMENT_LABELS[p.method] ?? p.method}</Badge>
+                        <button
+                          type="button"
+                          onClick={() => setDrillMethod(p.method)}
+                          className="flex w-full items-center justify-between gap-2 text-left rounded-lg -m-1 p-1 hover:bg-gray-50"
+                          title="Voir le détail des transactions, pour pointer 1 à 1"
+                        >
+                          <span className="flex items-center gap-2">
+                            <Badge tone="soft">{PAYMENT_LABELS[p.method] ?? p.method}</Badge>
+                            {tickedForMethod > 0 && (
+                              <span className="text-xs text-ink-soft">{tickedForMethod}/{p.count} pointé{tickedForMethod > 1 ? 's' : ''}</span>
+                            )}
+                          </span>
                           <span className="text-sm">
                             <span className="text-ink-soft">Système : </span>
                             <span className="font-medium">{formatEUR(p.total)}</span>
                             <span className="text-ink-soft"> ({p.count} transaction{p.count > 1 ? 's' : ''})</span>
+                            <span className="ml-1.5 text-ink-soft">›</span>
                           </span>
-                        </div>
+                        </button>
                         {p.method !== 'cash' && (
                           <>
                             <div className="mt-2 flex items-center gap-2">
@@ -879,6 +905,20 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
           onSaved={() => { setShowDeposit(false); void loadPreview(); }}
         />
       )}
+
+      {drillMethod && (() => {
+        const p = preview?.payments.find((x) => x.method === drillMethod);
+        if (!p) return null;
+        return (
+          <PaymentDrilldownModal
+            storeId={storeId} date={date} method={drillMethod}
+            methodTotal={p.total} methodCount={p.count}
+            ticked={tickedByMethod[drillMethod] ?? new Set()}
+            onToggleTicked={(id) => toggleTicked(drillMethod, id)}
+            onClose={() => setDrillMethod(null)}
+          />
+        );
+      })()}
     </div>
   );
 }

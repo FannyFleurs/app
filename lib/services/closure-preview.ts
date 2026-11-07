@@ -24,19 +24,18 @@ export interface ClosurePreview {
 }
 
 /**
- * Totaux d'une clôture pour une (boutique, date) — SANS rien sceller.
- * Partagé par l'API `/api/closures/daily/preview` ET la page de clôture
- * (rendu serveur : la page arrive déjà remplie, sans dépendre d'un fetch
- * client qui, dans certains contextes desktop/webview, ne se peignait qu'après
- * un clic). Toutes les requêtes sont filtrées par store_id (unique par org).
+ * Résout la BORNE EXACTE (store_id, date) d'une clôture — dernier scellé le
+ * cas échéant, « journée rouverte » si des ventes/sessions sont postérieures
+ * à ce scellé. Partagé par `computeClosurePreview` ET `listClosurePayments`
+ * (détail des paiements d'un mode, voir plus bas) : les deux DOIVENT utiliser
+ * exactement la même borne, sinon le détail affiché ne somme plus au total
+ * annoncé par la réconciliation.
  */
-export async function computeClosurePreview(storeId: string, date: string): Promise<ClosurePreview> {
-  const lastClose = await query<{
-    id: string; sealed_at: string; seq: number;
-    cash_counted: string | null; cash_variance: string | null; cash_expected: string | null;
-  }>(
-    `SELECT id, sealed_at, seq,
-            cash_counted::text, cash_variance::text, cash_expected::text
+export async function resolveClosurePeriod(
+  storeId: string, date: string,
+): Promise<{ periodStart: string | null; reopened: boolean }> {
+  const lastClose = await query<{ id: string; sealed_at: string; seq: number }>(
+    `SELECT id, sealed_at, seq
        FROM daily_closures
       WHERE store_id = $1 AND business_date = $2
       ORDER BY seq DESC LIMIT 1`,
@@ -56,7 +55,30 @@ export async function computeClosurePreview(storeId: string, date: string): Prom
     );
     reopened = Number(act.rows[0]?.n ?? 0) > 0;
   }
-  const periodStart: string | null = reopened && lastSeal ? lastSeal.sealed_at : null;
+  return { periodStart: reopened && lastSeal ? lastSeal.sealed_at : null, reopened };
+}
+
+/**
+ * Totaux d'une clôture pour une (boutique, date) — SANS rien sceller.
+ * Partagé par l'API `/api/closures/daily/preview` ET la page de clôture
+ * (rendu serveur : la page arrive déjà remplie, sans dépendre d'un fetch
+ * client qui, dans certains contextes desktop/webview, ne se peignait qu'après
+ * un clic). Toutes les requêtes sont filtrées par store_id (unique par org).
+ */
+export async function computeClosurePreview(storeId: string, date: string): Promise<ClosurePreview> {
+  const lastClose = await query<{
+    id: string; sealed_at: string; seq: number;
+    cash_counted: string | null; cash_variance: string | null; cash_expected: string | null;
+  }>(
+    `SELECT id, sealed_at, seq,
+            cash_counted::text, cash_variance::text, cash_expected::text
+       FROM daily_closures
+      WHERE store_id = $1 AND business_date = $2
+      ORDER BY seq DESC LIMIT 1`,
+    [storeId, date],
+  );
+  const lastSeal = lastClose.rows[0] ?? null;
+  const { periodStart, reopened } = await resolveClosurePeriod(storeId, date);
 
   // ht/tva/ttc/discount calculés depuis sale_lines (PAS sales.total_*), pour
   // EXCLURE les lignes d'émission de carte cadeau / bon d'achat — dette
@@ -225,4 +247,76 @@ export async function computeClosurePreview(storeId: string, date: string): Prom
     reopened,
     held_count: Number(held.rows[0]?.c ?? 0),
   };
+}
+
+export interface ClosurePaymentDetail {
+  id: string;
+  /** Vente normale (ticket) ou règlement de solde « en compte » (pas de ticket). */
+  kind: 'sale' | 'settlement';
+  amount: number;
+  created_at: string;
+  receipt_number: string | null;
+  customer_name: string | null;
+  cashier_name: string | null;
+  register_name: string | null;
+  reference: string | null;
+  label: string | null;
+}
+
+/**
+ * Détail, paiement par paiement, d'un mode de règlement pour une clôture
+ * (boutique, date) — pour pointer 1 à 1 les tickets lors d'un écart de
+ * caisse. MÊME périmètre exact que `payments` dans `computeClosurePreview`
+ * (via `resolveClosurePeriod`) : la somme de cette liste doit toujours
+ * correspondre au total affiché par la réconciliation, sans quoi le détail
+ * sèmerait plus de confusion qu'il n'en résout.
+ */
+export async function listClosurePayments(
+  storeId: string, date: string, method: string,
+): Promise<ClosurePaymentDetail[]> {
+  const { periodStart } = await resolveClosurePeriod(storeId, date);
+
+  const rows = await query<{
+    id: string; kind: 'sale' | 'settlement'; amount: string; created_at: string;
+    receipt_number: string | null; customer_name: string | null;
+    cashier_name: string | null; register_name: string | null;
+    reference: string | null; label: string | null;
+  }>(
+    `SELECT id, kind, amount::text AS amount, created_at, receipt_number,
+            customer_name, cashier_name, register_name, reference, label
+       FROM (
+         SELECT p.id, 'sale' AS kind, p.amount AS amount, s.validated_at AS created_at,
+                s.receipt_number AS receipt_number, NULL::text AS customer_name,
+                u.full_name AS cashier_name, r.name AS register_name,
+                p.reference AS reference, p.label AS label
+           FROM payments p
+           JOIN sales s ON s.id = p.sale_id
+           LEFT JOIN registers r ON r.id = s.register_id
+           LEFT JOIN users u ON u.id = s.user_id
+          WHERE s.store_id = $1 AND s.status = 'validated' AND p.method = $4
+            AND (s.validated_at AT TIME ZONE 'Europe/Paris')::date = $2::date
+            AND ($3::timestamptz IS NULL OR s.validated_at > $3)
+         UNION ALL
+         SELECT asp.id, 'settlement' AS kind, asp.amount AS amount, asp.created_at AS created_at,
+                NULL::text AS receipt_number,
+                COALESCE(c.company_name, NULLIF(TRIM(CONCAT(c.first_name,' ',c.last_name)), '')) AS customer_name,
+                u.full_name AS cashier_name, NULL::text AS register_name,
+                asp.reference AS reference, NULL::text AS label
+           FROM account_settlement_payments asp
+           LEFT JOIN users u ON u.id = asp.user_id
+           LEFT JOIN customers c ON c.id = asp.customer_id
+          WHERE asp.store_id = $1 AND asp.method = $4 AND asp.method <> 'cash'
+            AND (asp.created_at AT TIME ZONE 'Europe/Paris')::date = $2::date
+            AND ($3::timestamptz IS NULL OR asp.created_at > $3)
+       ) combined
+      ORDER BY created_at ASC`,
+    [storeId, date, periodStart, method],
+  );
+
+  return rows.rows.map((r) => ({
+    id: r.id, kind: r.kind, amount: Number(r.amount), created_at: r.created_at,
+    receipt_number: r.receipt_number, customer_name: r.customer_name,
+    cashier_name: r.cashier_name, register_name: r.register_name,
+    reference: r.reference, label: r.label,
+  }));
 }
