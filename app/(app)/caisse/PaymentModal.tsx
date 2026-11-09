@@ -4,6 +4,7 @@ import { alertThemed } from '@/lib/ui/dialog';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { formatEUR, round2 } from '@/lib/services/money';
 import { splitPaymentsForAccountSettlement } from '@/lib/pos/split-combined-payment';
+import { submitSaleValidation } from '@/lib/pos/sale-checkout';
 
 type Method = 'cash' | 'card' | 'check' | 'transfer' | 'gift_card' | 'credit_note' | 'payment_link' | 'other' | 'deferred' | 'loyalty';
 
@@ -78,6 +79,11 @@ export default function PaymentModal({ saleId, totalTtc, lines = [], storeId, ha
   const [lookupLabel, setLookupLabel] = useState('');
   const [lookupAmountSeed, setLookupAmountSeed] = useState(0);
   const loyaltyAddedRef = useRef(false);
+  // Dernier tableau de paiements pour lequel une validation automatique a
+  // déjà été tentée (voir l'effet plus bas) — évite de redéclencher en
+  // boucle après un échec (le tableau de paiements n'a pas changé) tout en
+  // retentant naturellement si l'utilisateur modifie sa saisie.
+  const autoValidateAttemptedRef = useRef<RegisteredPayment[] | null>(null);
 
   // Saisie clavier physique
   useEffect(() => {
@@ -349,61 +355,13 @@ export default function PaymentModal({ saleId, totalTtc, lines = [], storeId, ha
     }
     setLoading(true); setError(null);
     try {
-      const res = await fetch(`/api/sales/${saleId}/validate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          payments: payments.map((p) => ({
-            method: p.method,
-            amount: p.amount,
-            given_amount: p.given_amount,
-            reference: p.reference,
-            label: p.label,
-          })),
-          // La fidélité est désormais un paiement (méthode « loyalty ») inclus
-          // dans `payments` : le débit du compte est piloté par ce montant côté
-          // serveur. Plus de champ séparé (qui débitait même tender retiré).
-        }),
-      });
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}));
-        const code = j.error ?? j.message;
-        setError(
-          code === 'CASH_SESSION_CLOSED' || code === 'NO_OPEN_CASH_SESSION'
-            ? 'Journée clôturée : rouvrez la caisse (fonds de caisse) avant d\'encaisser.'
-            : code ?? 'Erreur d\'encaissement',
-        );
+      // La fidélité est un paiement (méthode « loyalty ») inclus dans
+      // `payments` : le débit du compte est piloté par ce montant côté
+      // serveur, pas par un champ séparé.
+      const result = await submitSaleValidation({ saleId, payments, storeId, methods });
+      if (!result.ok) {
+        setError(result.error);
         return;
-      }
-      const j = await res.json();
-
-      // Sur la caisse native, l'ouverture physique du tiroir est pilotée par
-      // le même endpoint que le bouton « ouvrir le tiroir ». Le serveur de
-      // validation conserve son comportement CloudPRNT ; cet appel permet à
-      // la coque native d'intercepter la demande et d'envoyer l'impulsion IP.
-      // On ne le déclenche que si au moins un mode réellement utilisé est
-      // configuré avec « Tiroir » dans les réglages.
-      const shouldOpenDrawer = payments.some((p) =>
-        methods.some((m) => m.kind === p.method && m.opens_drawer === true),
-      );
-      const isNativeApp =
-        typeof window !== 'undefined' &&
-        Boolean((window as unknown as { Capacitor?: unknown }).Capacitor);
-
-      if (shouldOpenDrawer && isNativeApp) {
-        try {
-          await fetch('/api/cash-sessions/open-drawer', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              store_id: storeId || undefined,
-              reason: 'Encaissement',
-            }),
-          });
-        } catch {
-          // Une panne d'ouverture du tiroir ne doit jamais annuler une vente
-          // déjà validée fiscalement.
-        }
       }
 
       // Si l'utilisateur a inclus un règlement "payment_link", on déclenche
@@ -442,11 +400,25 @@ export default function PaymentModal({ saleId, totalTtc, lines = [], storeId, ha
         }
       }
 
-      onValidated(j.receipt_id, j.receipt_number, j.loyalty, j.gift_cards_issued, change);
+      onValidated(result.receipt_id, result.receipt_number, result.loyalty, result.gift_cards_issued, change);
     } finally { setLoading(false); }
   }
 
   const canValidate = Math.abs(paidAllocated - totalTtc) < 0.005;
+
+  // Valide automatiquement dès que le montant saisi couvre exactement le
+  // total dû — supprime l'étape « Valider » : le dernier mode de règlement
+  // tapé (ou le dernier avoir/carte cadeau confirmé) déclenche directement
+  // l'encaissement. Se redéclenche si l'utilisateur modifie sa saisie après
+  // un échec (nouvelle référence de tableau), mais jamais deux fois pour le
+  // même état de `payments`.
+  useEffect(() => {
+    if (loading || totalTtc <= 0 || payments.length === 0 || !canValidate) return;
+    if (autoValidateAttemptedRef.current === payments) return;
+    autoValidateAttemptedRef.current = payments;
+    void validate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [payments, canValidate, loading, totalTtc]);
 
   return (
     // Page de règlement PLEIN ÉCRAN (et non plus une modale) : fond opaque
@@ -592,20 +564,29 @@ export default function PaymentModal({ saleId, totalTtc, lines = [], storeId, ha
           </div>
         </div>
 
-        {/* Footer Valider — barre pleine largeur. padding bas garanti (≥1rem)
-            EN PLUS de la safe-area iOS : sinon le bouton colle au bord de
-            l'écran sur desktop (où env(safe-area)=0). */}
+        {/* Pied de page : plus de bouton « Valider » à cliquer — l'encaissement
+            se déclenche automatiquement dès que le montant saisi couvre le
+            total (voir l'effet d'auto-validation ci-dessus). Seul un échec
+            affiche une action : réessayer avec les mêmes règlements. Padding
+            bas garanti (≥1rem) EN PLUS de la safe-area iOS : sinon la barre
+            colle au bord de l'écran sur desktop (où env(safe-area)=0). */}
         <div
           className="border-t border-border px-4 lg:px-8 pt-3 bg-white shrink-0"
           style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 0px))' }}
         >
-          <button
-            disabled={loading || !canValidate}
-            onClick={() => void validate()}
-            className="btn-primary w-full h-14 lg:h-16 text-lg lg:text-xl font-semibold"
-          >
-            {loading ? 'Validation…' : canValidate ? `✓ Valider · ${formatEUR(totalTtc)}` : `Reste à régler ${formatEUR(remaining)}`}
-          </button>
+          {error ? (
+            <button
+              disabled={loading}
+              onClick={() => void validate()}
+              className="btn-primary w-full h-14 lg:h-16 text-lg lg:text-xl font-semibold"
+            >
+              {loading ? 'Validation…' : `↻ Réessayer · ${formatEUR(totalTtc)}`}
+            </button>
+          ) : (
+            <div className="w-full h-14 lg:h-16 rounded-xl bg-gray-50 grid place-items-center text-lg lg:text-xl font-semibold text-ink-soft">
+              {loading || canValidate ? 'Validation…' : `Reste à régler ${formatEUR(remaining)}`}
+            </div>
+          )}
         </div>
       </div>
 

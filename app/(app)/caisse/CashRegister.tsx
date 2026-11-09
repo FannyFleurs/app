@@ -17,6 +17,8 @@ import { tileMetrics, type PosUiSettings, type PosTileSize } from '@/lib/setting
 import { type DiscountReasonsSettings } from '@/lib/settings/discount-reasons';
 import { confirmThemed } from '@/lib/ui/dialog';
 import { readRoamingChoice, writeRoamingChoice, clearRoamingChoice } from '@/lib/caisse/roaming';
+import { submitSaleValidation, type CheckoutMethod, type CheckoutPayment } from '@/lib/pos/sale-checkout';
+import { splitPaymentsForAccountSettlement } from '@/lib/pos/split-combined-payment';
 
 // Modales chargées à la demande : aucune ne s'affiche au premier rendu, donc
 // on les sort du bundle initial de la caisse (temps d'affichage plus court).
@@ -347,6 +349,23 @@ export default function CashRegister({
     change?: number;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Modes de règlement actifs de la boutique (ouverture du tiroir par mode,
+  // voir lib/settings/payment-method-drawer.ts) — chargés une fois la
+  // boutique résolue, réutilisés par le raccourci "CB" (quickPayCard) sans
+  // requête supplémentaire à chaque tap.
+  const [paymentMethods, setPaymentMethods] = useState<Array<{ kind: CheckoutMethod; opens_drawer?: boolean }>>([]);
+  const [cbBusy, setCbBusy] = useState(false);
+  useEffect(() => {
+    if (!storeId) return;
+    let cancelled = false;
+    void (async () => {
+      const r = await fetch(`/api/payment-methods?store_id=${encodeURIComponent(storeId)}`);
+      if (cancelled || !r.ok) return;
+      const j = await r.json();
+      setPaymentMethods((j.methods as Array<{ kind: CheckoutMethod; opens_drawer?: boolean }>) ?? []);
+    })();
+    return () => { cancelled = true; };
+  }, [storeId]);
   const [showHeld, setShowHeld] = useState(false);
   const [showFreePrice, setShowFreePrice] = useState<{
     label?: string;
@@ -1489,6 +1508,81 @@ export default function CashRegister({
     }
   }
 
+  /**
+   * Encaissement direct par carte bancaire, sans ouvrir la page de
+   * règlement : raccourci "CB" du panier pour le cas le plus courant (un
+   * seul règlement, carte, montant plein). La fidélité pré-sélectionnée au
+   * comptoir reste appliquée comme avec « Autres » (PaymentModal). Un solde
+   * dû combiné (includeAccountDue) est réparti comme PaymentModal le ferait
+   * (voir splitPaymentsForAccountSettlement) — même logique, dupliquée ici
+   * volontairement pour éviter d'ouvrir une page le temps d'un appel réseau.
+   * Pour tout autre cas (plusieurs modes, avoir, carte cadeau, lien de
+   * paiement, montant partiel…), le bouton "Autres" reste nécessaire.
+   */
+  async function quickPayCard() {
+    if (lines.length === 0 || payableWithDue <= 0 || cbBusy) return;
+    setError(null);
+    const cardAmount = round2(payableWithDue - loyaltyApplied);
+    const payments: CheckoutPayment[] = [];
+    if (loyaltyApplied > 0) payments.push({ method: 'loyalty', amount: loyaltyApplied, label: 'Fidélité' });
+    if (cardAmount > 0) payments.push({ method: 'card', amount: cardAmount, label: 'Carte bancaire' });
+    if (payments.length === 0) return;
+
+    setCbBusy(true);
+    try {
+      if (shouldGoOffline()) {
+        await finalizeOffline(payments as Array<{ method: 'cash'|'card'|'check'|'transfer'|'gift_card'|'credit_note'|'deferred'|'other'|'loyalty'; amount: number; given_amount?: number; reference?: string; label?: string }>, loyalty.used);
+        return;
+      }
+      const id = await ensureSale();
+      if (!id) return;
+      await syncLines();
+      if (schoolMode) {
+        const fakeId = `school-receipt-${Date.now()}`;
+        const fakeNumber = `ECOLE-${new Date().toISOString().slice(11, 19).replace(/:/g, '')}`;
+        await onValidated(fakeId, fakeNumber, null);
+        return;
+      }
+
+      if (includeAccountDue && customer && accountDueAmount > 0) {
+        const { salePayments, settlementPayments } = splitPaymentsForAccountSettlement(payments, totals.ttc);
+        const saleResult = await submitSaleValidation({ saleId: id, payments: salePayments, storeId, methods: paymentMethods });
+        if (!saleResult.ok) { setError(saleResult.error); return; }
+        if (settlementPayments.length > 0) {
+          const settleRes = await fetch(`/api/customers/${customer.id}/settle-payment`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              payments: settlementPayments.map((p) => ({
+                method: p.method, amount: p.amount, given_amount: p.given_amount, reference: p.reference, label: p.label,
+              })),
+              store_id: storeId,
+            }),
+          });
+          if (!settleRes.ok) {
+            const j = await settleRes.json().catch(() => ({}));
+            setError(
+              `Vente validée (ticket ${saleResult.receipt_number}), mais le règlement du solde dû `
+              + `(${formatEUR(accountDueAmount)}) a échoué : ${j.message ?? j.error ?? 'erreur'}. `
+              + `Réglez-le séparément depuis la fiche client.`,
+            );
+            await onValidated(saleResult.receipt_id, saleResult.receipt_number, saleResult.loyalty, saleResult.gift_cards_issued);
+            return;
+          }
+        }
+        await onValidated(saleResult.receipt_id, saleResult.receipt_number, saleResult.loyalty, saleResult.gift_cards_issued);
+        return;
+      }
+
+      const result = await submitSaleValidation({ saleId: id, payments, storeId, methods: paymentMethods });
+      if (!result.ok) { setError(result.error); return; }
+      await onValidated(result.receipt_id, result.receipt_number, result.loyalty, result.gift_cards_issued);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setCbBusy(false);
+    }
+  }
+
   async function onValidated(
     receiptId: string,
     receiptNumber: string,
@@ -2489,12 +2583,17 @@ export default function CashRegister({
             </button>
           )}
 
-          {/* Un seul bouton « Paiement » : il ouvre la page de règlement plein
-              écran (choix du mode : espèces, carte, chèque, multiple, lien
-              Stripe, avoir, carte cadeau…). Cas particulier : vente à 0 €
-              (offerte / entièrement remisée) → bouton « Valider » direct car
-              aucun règlement n'est nécessaire — SAUF si un solde dû est
-              ajouté au règlement, qui reste bien à encaisser. */}
+          {/* Deux boutons remplacent l'ancien bouton unique « Paiement » :
+              "CB" encaisse directement par carte, montant plein, sans ouvrir
+              la page de règlement (quickPayCard) ; "Autres" ouvre cette page
+              pleine écran pour tout le reste (espèces, chèque, plusieurs
+              modes, lien Stripe, avoir, carte cadeau, montant partiel…), où
+              l'étape « Valider » a elle aussi été supprimée (voir
+              PaymentModal : encaissement automatique dès que le montant
+              saisi couvre le total). Cas particulier : vente à 0 € (offerte
+              / entièrement remisée) → bouton « Valider » direct car aucun
+              règlement n'est nécessaire — SAUF si un solde dû est ajouté au
+              règlement, qui reste bien à encaisser. */}
           {lines.length > 0 && totals.ttc === 0 && !(includeAccountDue && accountDueAmount > 0) ? (
             <button
               onClick={() => void validateZeroSale()}
@@ -2504,17 +2603,27 @@ export default function CashRegister({
               <span>Valider · 0 €</span>
             </button>
           ) : (
-            <button
-              disabled={lines.length === 0 || payableWithDue <= 0}
-              onClick={async () => {
-                if (shouldGoOffline()) { setShowPayment(true); return; }
-                const id = await ensureSale(); if (id) { await syncLines(); setShowPayment(true); }
-              }}
-              className="btn-primary h-16 w-full text-xl font-semibold rounded-xl flex items-center justify-center gap-3 disabled:opacity-40"
-              title="Ouvrir le règlement"
-            >
-              <span>Paiement</span>
-            </button>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                disabled={lines.length === 0 || payableWithDue <= 0 || cbBusy}
+                onClick={() => void quickPayCard()}
+                className="btn-primary h-16 w-full text-xl font-semibold rounded-xl flex items-center justify-center gap-2 disabled:opacity-40"
+                title="Encaisser directement par carte bancaire, montant plein"
+              >
+                <span>{cbBusy ? '…' : 'CB'}</span>
+              </button>
+              <button
+                disabled={lines.length === 0 || payableWithDue <= 0}
+                onClick={async () => {
+                  if (shouldGoOffline()) { setShowPayment(true); return; }
+                  const id = await ensureSale(); if (id) { await syncLines(); setShowPayment(true); }
+                }}
+                className="btn-soft h-16 w-full text-xl font-semibold rounded-xl flex items-center justify-center gap-2 disabled:opacity-40"
+                title="Espèces, chèque, plusieurs modes, avoir, carte cadeau…"
+              >
+                <span>Autres</span>
+              </button>
+            </div>
           )}
         </div>
 
