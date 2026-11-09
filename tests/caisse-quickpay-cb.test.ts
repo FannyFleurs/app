@@ -3,10 +3,10 @@ import { readFileSync } from 'node:fs';
 
 /**
  * Panier caisse : le bouton unique « Paiement » est remplacé par deux
- * boutons — "CB" encaisse directement par carte (montant plein, sans ouvrir
- * la page de règlement) et "Autres" ouvre la page de règlement habituelle
- * (PaymentModal, où l'étape « Valider » a elle aussi été supprimée — voir
- * payment-modal-auto-validate.test.tsx).
+ * boutons — "CB" (2/3 de la largeur) encaisse directement par carte
+ * (montant plein, sans ouvrir la page de règlement) et "Autres" (1/3) ouvre
+ * la page de règlement habituelle (PaymentModal, où l'étape « Valider » a
+ * elle aussi été supprimée — voir payment-modal-auto-validate.test.tsx).
  *
  * CashRegister.tsx est un très gros composant client, sans rendu complet en
  * test (même choix que pour les autres gros composants de ce projet, voir
@@ -16,8 +16,9 @@ import { readFileSync } from 'node:fs';
 describe('Panier — boutons "CB" / "Autres" remplacent "Paiement"', () => {
   const src = readFileSync('app/(app)/caisse/CashRegister.tsx', 'utf8');
 
-  it('affiche deux boutons côte à côte, "CB" appelle quickPayCard, "Autres" ouvre PaymentModal comme avant', () => {
-    expect(src).toMatch(/className="grid grid-cols-2 gap-2"/);
+  it('affiche deux boutons côte à côte en 2/3 (CB) · 1/3 (Autres), "CB" appelle quickPayCard, "Autres" ouvre PaymentModal comme avant', () => {
+    expect(src).toMatch(/className="grid grid-cols-3 gap-2"/);
+    expect(src).toMatch(/className="col-span-2 btn-primary[^"]*"[\s\S]{0,40}title="Encaisser directement par carte bancaire/);
     expect(src).toMatch(/onClick=\{\(\) => void quickPayCard\(\)\}/);
     expect(src).toMatch(/<span>\{cbBusy \? '…' : 'CB'\}<\/span>/);
     expect(src).toMatch(/if \(shouldGoOffline\(\)\) \{ setShowPayment\(true\); return; \}\s*\n\s*const id = await ensureSale\(\); if \(id\) \{ await syncLines\(\); setShowPayment\(true\); \}/);

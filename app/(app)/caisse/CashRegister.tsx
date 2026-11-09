@@ -2603,11 +2603,11 @@ export default function CashRegister({
               <span>Valider · 0 €</span>
             </button>
           ) : (
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <button
                 disabled={lines.length === 0 || payableWithDue <= 0 || cbBusy}
                 onClick={() => void quickPayCard()}
-                className="btn-primary h-16 w-full text-xl font-semibold rounded-xl flex items-center justify-center gap-2 disabled:opacity-40"
+                className="col-span-2 btn-primary h-16 w-full text-xl font-semibold rounded-xl flex items-center justify-center gap-2 disabled:opacity-40"
                 title="Encaisser directement par carte bancaire, montant plein"
               >
                 <span>{cbBusy ? '…' : 'CB'}</span>
