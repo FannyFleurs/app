@@ -2597,7 +2597,7 @@ export default function CashRegister({
           {lines.length > 0 && totals.ttc === 0 && !(includeAccountDue && accountDueAmount > 0) ? (
             <button
               onClick={() => void validateZeroSale()}
-              className="btn-primary h-16 w-full text-xl font-semibold rounded-xl flex items-center justify-center gap-3"
+              className="btn-primary h-[4.8rem] w-full text-xl font-semibold rounded-xl flex items-center justify-center gap-3"
               title="Valider la vente offerte (0 €)"
             >
               <span>Valider · 0 €</span>
@@ -2607,7 +2607,7 @@ export default function CashRegister({
               <button
                 disabled={lines.length === 0 || payableWithDue <= 0 || cbBusy}
                 onClick={() => void quickPayCard()}
-                className="col-span-2 btn-primary h-16 w-full text-xl font-semibold rounded-xl flex items-center justify-center gap-2 disabled:opacity-40"
+                className="col-span-2 btn-primary h-[4.8rem] w-full text-xl font-semibold rounded-xl flex items-center justify-center gap-2 disabled:opacity-40"
                 title="Encaisser directement par carte bancaire, montant plein"
               >
                 <span>{cbBusy ? '…' : 'CB'}</span>
@@ -2618,7 +2618,7 @@ export default function CashRegister({
                   if (shouldGoOffline()) { setShowPayment(true); return; }
                   const id = await ensureSale(); if (id) { await syncLines(); setShowPayment(true); }
                 }}
-                className="btn-soft h-16 w-full text-xl font-semibold rounded-xl flex items-center justify-center gap-2 disabled:opacity-40"
+                className="btn-soft h-[4.8rem] w-full text-xl font-semibold rounded-xl flex items-center justify-center gap-2 disabled:opacity-40"
                 title="Espèces, chèque, plusieurs modes, avoir, carte cadeau…"
               >
                 <span>Autres</span>
