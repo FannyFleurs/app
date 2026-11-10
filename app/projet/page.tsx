@@ -1,16 +1,31 @@
 import type { Metadata } from 'next';
 import { headers } from 'next/headers';
+import { redirect } from 'next/navigation';
 import { spaceUrls } from '@/lib/site/spaces';
 import { loadPlatform } from '@/lib/site/platform';
+import { isSitePublic, HOLDING_PATH } from '@/lib/site/publication';
 
 /** Tarifs affichés, calqués sur la config admin (Facturation). */
 interface Prices { essentiel: string; croissance: string; reseau: string; addon: string }
 
 /**
- * Page de présentation autonome (hellopos.fr/projet).
+ * Page de présentation autonome (hellopos.fr/projet), servie comme accueil
+ * de l'apex (voir middleware.ts : `/` est réécrit vers `/projet`).
  *
- * - Publique, hors du site vitrine (`/site`) : elle n'est PAS soumise au réglage
- *   « site public » ni à la page d'attente, et n'apparaît dans aucun menu.
+ * - Hors du site vitrine (`/site`), mais SOUMISE au même réglage « site
+ *   public » (Configuration → Site public) : tant qu'il n'est pas activé,
+ *   on redirige vers la page d'attente (`/indisponible`), exactement comme
+ *   `/site/*`. Sans ce garde-fou, dépublier le site laissait quand même
+ *   l'accueil (hellopos.fr/) visible — le réglage ne touchait que les pages
+ *   secondaires (tarifs, fonctions…).
+ * - Redirection plutôt qu'un rendu inline (contrairement à `app/site/
+ *   layout.tsx`) : cette page a son PROPRE système `.hp` (CSS inline
+ *   ci-dessous, volontairement isolé des styles globaux de l'app) —
+ *   importer `site.css` ici pour afficher HoldingScreen sur place ferait
+ *   cohabiter deux jeux de variables `.hp` concurrents dans le même bundle.
+ *   `/indisponible` reste une page à part, déjà conçue pour ça.
+ * - `/setup` (créer ma caisse) reste volontairement accessible même site
+ *   dépublié — un lien direct déjà en main continue de fonctionner.
  * - Rendu isolé : tout le CSS est préfixé `.hp` pour ne pas entrer en conflit
  *   avec les styles globaux de l'app. Les visuels sont des EMPLACEMENTS vides,
  *   prêts à recevoir des captures/mockups (voir commentaires « Remplacez … »).
@@ -652,6 +667,7 @@ const JS = `(function(){
 })();`;
 
 export default async function ProjetPage() {
+  if (!(await isSitePublic())) redirect(HOLDING_PATH);
   const urls = spaceUrls(headers().get('host'));
   // Tarifs calqués sur la config admin (Facturation) — table platform_settings.
   const platform = await loadPlatform();
