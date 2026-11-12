@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatEUR } from '@/lib/services/money';
 import SaleDetailModal, { type SaleDetail } from '@/components/SaleDetailModal';
+import { storeDotColor } from '@/lib/ui/store-colors';
 
 interface Store { id: string; name: string }
 interface StoreSummary {
@@ -640,15 +641,10 @@ function XzView({
   );
 }
 
-// Palette de puces couleur par boutique : reprend des teintes des thèmes de
-// marque existants, pour rester dans l'identité HelloPos plutôt que des
-// couleurs arbitraires. Cycle si plus de boutiques que de couleurs.
-const STORE_DOT_COLORS = ['#013E37', '#B7791F', '#5C6F5D', '#1F3A5F', '#B5683E', '#7A3C6E'];
-
 function StoreTile({ store, colorIndex, onSelect }: {
   store: StoreSummary; colorIndex: number; onSelect: (id: string) => void;
 }) {
-  const dot = STORE_DOT_COLORS[colorIndex % STORE_DOT_COLORS.length];
+  const dot = storeDotColor(colorIndex);
   const growth = store.growth_pct;
   return (
     <button

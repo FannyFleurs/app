@@ -69,14 +69,14 @@ function classes(el: HTMLElement): string[] {
 
 describe('Clients — bascule liste/fiche sur mobile', () => {
   it("avant sélection : la liste est visible sur mobile, la fiche porte la classe 'hidden' (hors md)", () => {
-    const { container } = render(<CustomersList customers={CLIENTS} total={2} canWrite />);
+    const { container } = render(<CustomersList customers={CLIENTS} total={2} stores={[]} canWrite />);
     expect(classes(asideEl(container))).not.toContain('hidden');
     expect(classes(mainEl(container))).toContain('hidden');
     expect(classes(mainEl(container))).toContain('md:block');
   });
 
   it("après sélection d'un client : la liste passe en 'hidden md:flex', la fiche devient visible", async () => {
-    const { container } = render(<CustomersList customers={CLIENTS} total={2} canWrite />);
+    const { container } = render(<CustomersList customers={CLIENTS} total={2} stores={[]} canWrite />);
     fireEvent.click(screen.getByText('Guillaume Bode'));
     await waitFor(() => screen.getByLabelText('Retour à la liste des clients'));
 
@@ -86,7 +86,7 @@ describe('Clients — bascule liste/fiche sur mobile', () => {
   });
 
   it("le bouton Retour ramène à la liste (la fiche redevient cachée sur mobile, la liste redevient visible)", async () => {
-    const { container } = render(<CustomersList customers={CLIENTS} total={2} canWrite />);
+    const { container } = render(<CustomersList customers={CLIENTS} total={2} stores={[]} canWrite />);
     fireEvent.click(screen.getByText('Guillaume Bode'));
     const backBtn = await waitFor(() => screen.getByLabelText('Retour à la liste des clients'));
     fireEvent.click(backBtn);

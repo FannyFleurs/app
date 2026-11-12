@@ -19,6 +19,15 @@ export default async function CustomersPage() {
   );
   const total = Number(totalRes.rows[0]?.n ?? 0);
 
+  // Boutiques de l'organisation, triées par nom : sert à attribuer une
+  // couleur stable aux puces « boutique(s) d'achat » de la fiche client
+  // (voir lib/ui/store-colors.ts) — jamais affiché si l'organisation n'a
+  // qu'une seule boutique (l'info serait toujours la même, sans intérêt).
+  const stores = await query<{ id: string; name: string }>(
+    `SELECT id, name FROM stores WHERE organization_id = $1 AND is_active = TRUE ORDER BY name`,
+    [user.organizationId],
+  );
+
   const customers = await query<{
     id: string;
     type: string;
@@ -55,6 +64,7 @@ export default async function CustomersPage() {
     <CustomersList
       customers={customers.rows}
       total={total}
+      stores={stores.rows}
       canWrite={(await userCan(user, 'customers.write'))}
     />
   );

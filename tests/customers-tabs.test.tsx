@@ -61,7 +61,7 @@ async function ouvrir(nom: string) {
 
 describe('Fiche client — onglets', () => {
   it('présente la navigation en onglets, un seul actif', async () => {
-    render(<CustomersList customers={CLIENTS} total={2} canWrite />);
+    render(<CustomersList customers={CLIENTS} total={2} stores={[]} canWrite />);
     await ouvrir('Marie Lefèvre');
 
     expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual([
@@ -73,7 +73,7 @@ describe('Fiche client — onglets', () => {
   });
 
   it('ouvre sur le Dashboard au clic sur un client', async () => {
-    render(<CustomersList customers={CLIENTS} total={2} canWrite />);
+    render(<CustomersList customers={CLIENTS} total={2} stores={[]} canWrite />);
     await ouvrir('Marie Lefèvre');
     expect(actif()).toBe('Dashboard');
     expect(screen.getByText('Total des achats')).toBeTruthy();
@@ -82,7 +82,7 @@ describe('Fiche client — onglets', () => {
   it('revient au Dashboard quand on passe à un autre client', async () => {
     // Le cas qui trompe : rester sur « Informations » d'un client à l'autre
     // donne à lire une fiche pour une autre.
-    render(<CustomersList customers={CLIENTS} total={2} canWrite />);
+    render(<CustomersList customers={CLIENTS} total={2} stores={[]} canWrite />);
     await ouvrir('Marie Lefèvre');
     fireEvent.click(screen.getByRole('tab', { name: 'Informations' }));
     expect(actif()).toBe('Informations');

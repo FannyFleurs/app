@@ -34,10 +34,26 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     [params.id],
   );
 
+  // Boutique(s) où ce client a déjà acheté — un client est global à
+  // l'organisation (aucune colonne store_id sur `customers`), c'est donc
+  // purement constaté depuis son historique de ventes. Requête dédiée (pas
+  // de LIMIT, contrairement à `sales` ci-dessus) : un client avec plus de 50
+  // ventes au total ne doit jamais faire disparaître une boutique plus
+  // ancienne de la liste.
+  const stores = await query<{ id: string; name: string }>(
+    `SELECT DISTINCT st.id, st.name
+       FROM sales s
+       JOIN stores st ON st.id = s.store_id
+      WHERE s.customer_id = $1 AND s.status = 'validated'
+      ORDER BY st.name`,
+    [params.id],
+  );
+
   return NextResponse.json({
     customer: cust.rows[0],
     sales: sales.rows,
     loyalty_points: loyalty.rows[0]?.total != null ? Number(loyalty.rows[0].total) : null,
+    stores: stores.rows,
   });
 }
 

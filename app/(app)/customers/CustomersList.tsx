@@ -12,6 +12,7 @@ import CustomerImportModal from './CustomerImportModal';
 import CustomerLoyaltyRevertModal from './CustomerLoyaltyRevertModal';
 import PageHeader from '@/components/PageHeader';
 import { formatEUR } from '@/lib/services/money';
+import { storeDotColor } from '@/lib/ui/store-colors';
 import WalletActions from './[id]/WalletActions';
 import LoyaltyPanel from './[id]/LoyaltyPanel';
 import { normSearch } from '@/lib/text/normalize';
@@ -66,6 +67,9 @@ interface CustomerDetail {
   };
   sales: { id: string; receipt_number: string; total_ttc: string; validated_at: string }[];
   loyalty_points: number | null;
+  /** Boutique(s) où ce client a déjà acheté — constaté, pas un champ propre
+   *  au client (voir GET /api/customers/[id]). */
+  stores: { id: string; name: string }[];
 }
 
 type Tab =
@@ -91,7 +95,14 @@ const TABS: Array<{ key: Tab; label: string }> = [
   { key: 'bons-achats',  label: 'Bons d\'achats' },
 ];
 
-export default function CustomersList({ customers: initialCustomers, total, canWrite }: { customers: Customer[]; total: number; canWrite: boolean }) {
+export default function CustomersList({ customers: initialCustomers, total, stores, canWrite }: {
+  customers: Customer[]; total: number;
+  /** Boutiques actives de l'organisation, triées par nom — sert uniquement
+   *  à attribuer une couleur stable aux puces boutique(s) de la fiche
+   *  client (voir lib/ui/store-colors.ts). */
+  stores: { id: string; name: string }[];
+  canWrite: boolean;
+}) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [customers, setCustomers] = useState(initialCustomers);
@@ -340,6 +351,7 @@ export default function CustomersList({ customers: initialCustomers, total, canW
               tab={tab}
               onTabChange={setTab}
               detail={detail}
+              allStores={stores}
               canWrite={canWrite}
               onEdit={() => setEditing(detail.customer as unknown as CustomerLike)}
               onReload={() => void selectCustomer(detail.customer.id)}
@@ -384,14 +396,30 @@ export default function CustomersList({ customers: initialCustomers, total, canW
   );
 }
 
-function CustomerDetailContent({ tab, onTabChange, detail, canWrite, onEdit, onReload, onBack, onArchived }: {
+function CustomerDetailContent({ tab, onTabChange, detail, allStores, canWrite, onEdit, onReload, onBack, onArchived }: {
   tab: Tab; onTabChange: (t: Tab) => void;
-  detail: CustomerDetail; canWrite: boolean;
+  detail: CustomerDetail;
+  /** Boutiques de l'organisation (triées par nom) — pour la couleur des puces. */
+  allStores: { id: string; name: string }[];
+  canWrite: boolean;
   onEdit: () => void; onReload: () => void; onBack: () => void; onArchived: () => void;
 }) {
   const c = detail.customer;
   const archived = !!c.archived_at;
   const [archiving, setArchiving] = useState(false);
+
+  // Puces « boutique(s) d'achat » : masquées pour une organisation
+  // mono-boutique (toujours la même boutique, sans intérêt à l'afficher).
+  // La couleur est indexée sur la position de CHAQUE boutique dans la liste
+  // complète de l'organisation (triée par nom) — pas dans la sous-liste des
+  // boutiques de ce client — pour qu'une boutique garde toujours la même
+  // couleur d'une fiche client à l'autre.
+  const storeChips = allStores.length > 1
+    ? detail.stores.map((s) => ({
+        ...s,
+        color: storeDotColor(allStores.findIndex((a) => a.id === s.id)),
+      }))
+    : [];
 
   /**
    * Range la fiche (ou la remet en service). Rien n'est supprimé : les
@@ -483,6 +511,20 @@ function CustomerDetailContent({ tab, onTabChange, detail, canWrite, onEdit, onR
                   : <>Client depuis le {new Date(c.created_at).toLocaleDateString('fr-FR')}</>
                 }
               </div>
+              {storeChips.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5 mt-1.5" title="Boutique(s) où ce client a déjà acheté">
+                  {storeChips.map((s) => (
+                    <span
+                      key={s.id}
+                      className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium"
+                      style={{ backgroundColor: `${s.color}1a`, color: s.color }}
+                    >
+                      <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
+                      {s.name}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2 sm:shrink-0">
