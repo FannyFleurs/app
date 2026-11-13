@@ -9,6 +9,7 @@ import BankDepositModal from './BankDepositModal';
 import PaymentDrilldownModal from './PaymentDrilldownModal';
 import { promptThemed, confirmThemed } from '@/lib/ui/dialog';
 import { readRoamingChoice } from '@/lib/caisse/roaming';
+import { downloadFile } from '@/lib/ui/download-file';
 
 // Seuls ces modes se réconcilient à la clôture : espèces (comptées au tiroir),
 // CB et chèques. Les autres (carte cadeau, différé, virement, avoir…) ne se
@@ -121,7 +122,12 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
         setTimeout(() => setZToast(null), 4000);
         return;
       }
-      if (r.status === 409) { window.open(`/api/closures/${closureId}/z-pdf`, '_blank'); return; }
+      if (r.status === 409) {
+        // Téléchargement, pas `target="_blank"` : voir lib/ui/download-file.ts
+        // (app native Capacitor → Safari sans la session → page blanche).
+        await downloadFile(`/api/closures/${closureId}/z-pdf`, `Z-${closureId.slice(0, 8)}.pdf`);
+        return;
+      }
       setError('Impression du Z impossible.');
     } catch {
       setError('Impression du Z impossible.');
@@ -414,27 +420,22 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
         const recv = (await rR.json()).settings;
         const printer = (await rP.json()).settings;
         if (recv?.auto_print_z && printer?.enabled) {
-          const url = `/api/closures/daily/${j.daily_closure_id}/pdf`;
-          const w = window.open(url, '_blank');
-          if (w) {
-            w.addEventListener('load', () => {
-              try { w.print(); } catch { /* iOS bloque souvent print() */ }
-            });
-          }
+          // Téléchargement (fetch + blob), pas un lien `target="_blank"` : dans
+          // l'app native (Capacitor), une navigation vers une route authentifiée
+          // bascule sur Safari, qui n'a pas la session de la WebView embarquée
+          // (page blanche) — voir lib/ui/download-file.ts.
+          await downloadFile(`/api/closures/daily/${j.daily_closure_id}/pdf`, `Z-${j.daily_closure_id.slice(0, 8)}.pdf`);
         }
       } catch { /* ignore */ }
     })();
-    // Repli PDF + impression navigateur pour le ticket de prélèvement
-    // automatique quand la boutique n'a pas d'imprimante CloudPRNT (sinon
-    // déjà imprimé côté serveur — voir /api/closures/daily, withdrawal_printed).
+    // Repli PDF pour le ticket de prélèvement automatique quand la boutique
+    // n'a pas d'imprimante CloudPRNT (sinon déjà imprimé côté serveur — voir
+    // /api/closures/daily, withdrawal_printed). Même raison que ci-dessus.
     if (j.withdrawal_needs_fallback) {
-      const url = `/api/closures/${j.daily_closure_id}/withdrawal-pdf`;
-      const w = window.open(url, '_blank');
-      if (w) {
-        w.addEventListener('load', () => {
-          try { w.print(); } catch { /* iOS bloque souvent print() */ }
-        });
-      }
+      await downloadFile(
+        `/api/closures/${j.daily_closure_id}/withdrawal-pdf`,
+        `Prelevement-${j.daily_closure_id.slice(0, 8)}.pdf`,
+      );
     }
     await loadPreview();
   }
