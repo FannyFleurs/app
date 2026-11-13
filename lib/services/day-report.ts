@@ -66,6 +66,12 @@ export interface DayReport {
      *  défaut et pour une boutique au fond de caisse FIXE, estimation
      *  automatique du surplus à prélever (espèces au-delà du fond fixe). */
     remise_banque: number;
+    /** true si `remise_banque` est une remise RÉELLEMENT enregistrée ce jour
+     *  (BankDepositModal, déjà reçue à l'écran) ; false si c'est l'estimation
+     *  automatique (fond de caisse fixe, aucune remise réelle ce jour) — ce
+     *  second cas est celui qui déclenche le ticket de prélèvement
+     *  automatique à la clôture (voir cloudprnt/print-report.ts). */
+    remise_banque_recorded: boolean;
     total_espece_fermeture: number;
     tiroir_sans_ticket: number;
     counted: number | null;
@@ -329,6 +335,7 @@ export async function computeDayReport(opts: {
       entrees_argent: cashIns,
       remboursements_especes: Number(floatsR.rows[0]?.refunds ?? 0),
       remise_banque: remiseBanque,
+      remise_banque_recorded: recordedDeposits > 0,
       total_espece_fermeture: espacesFermeture,
       tiroir_sans_ticket: 0,
       counted: opts.sealed?.cash_counted ?? null,

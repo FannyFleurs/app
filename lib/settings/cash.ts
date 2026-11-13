@@ -17,6 +17,14 @@ export interface CashSettings {
   bank_deposit_required: boolean;
   /** Imprime un reçu lors de chaque remise en banque. */
   print_bank_deposit_receipt: boolean;
+  /**
+   * Imprime systématiquement un ticket de prélèvement à la clôture quand le
+   * fond de caisse de la boutique est en Montant fixe (réglage Fond de
+   * caisse) et qu'aucune remise manuelle n'a déjà été enregistrée ce jour —
+   * seulement si le Z, lui, ne s'imprime pas automatiquement (sinon le
+   * surplus à prélever y figure déjà, voir receipt.auto_print_z).
+   */
+  print_auto_withdrawal_receipt: boolean;
   /** Fonds de caisse minimum à laisser après remise. */
   minimum_float: number;
   /**
@@ -38,6 +46,7 @@ export const CASH_DEFAULTS: CashSettings = {
   allow_bank_deposit: true,
   bank_deposit_required: false,
   print_bank_deposit_receipt: true,
+  print_auto_withdrawal_receipt: false,
   minimum_float: 0,
   shared_float: true,
 };

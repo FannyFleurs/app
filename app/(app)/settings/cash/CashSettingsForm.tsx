@@ -135,6 +135,23 @@ export default function CashSettingsForm({ canEdit, stores, lockedStoreId }: {
             onChange={(v) => setForm({ ...form, print_bank_deposit_receipt: v })}
           />
         </div>
+
+        <div className="space-y-2 pt-2 border-t border-border">
+          <Check
+            label="Imprimer un ticket de prélèvement automatique à la clôture"
+            checked={form.print_auto_withdrawal_receipt}
+            disabled={!canEdit}
+            onChange={(v) => setForm({ ...form, print_auto_withdrawal_receipt: v })}
+          />
+          <p className="text-xs text-ink-soft pl-6">
+            Quand le fond de caisse de la boutique est en Montant fixe
+            (réglage « Fond de caisse ») et qu&apos;aucune remise n&apos;a été
+            enregistrée dans la journée, un ticket récapitule le surplus à
+            prélever pour revenir au fond fixe. Imprimé seulement si le Z ne
+            s&apos;imprime pas lui-même automatiquement à la clôture (réglage
+            « Gestion ticket ») — il le montre déjà.
+          </p>
+        </div>
       </div>
 
       {error && <div className="rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}

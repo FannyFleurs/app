@@ -794,3 +794,63 @@ export async function buildBankDepositStarPrnt(
   feedAndCut(enc);
   return Buffer.from(enc.encode());
 }
+
+export interface AutoWithdrawalData {
+  closure_id: string;
+  store_name: string;
+  closed_by: string | null;
+  closed_at: string | null;
+  /** Espèces dans le tiroir avant prélèvement (fond de caisse cible + montant). */
+  cash_before: number;
+  /** Fond de caisse cible (Montant fixe) à retrouver après prélèvement. */
+  target_float: number;
+  /** Montant à prélever = cash_before - target_float. */
+  amount: number;
+  org_name: string;
+}
+
+/**
+ * Ticket de prélèvement AUTOMATIQUE — émis à la clôture quand le fond de
+ * caisse de la boutique est fixe et qu'aucune remise n'a été enregistrée
+ * manuellement ce jour (le Z calcule déjà ce surplus, voir
+ * DayReport.cash.remise_banque ; ce ticket l'imprime isolément pour qu'il ne
+ * soit jamais manqué quand le Z lui-même ne s'imprime pas automatiquement).
+ * En-tête volontairement réduit au seul nom de la boutique : ce n'est pas un
+ * justificatif fiscal, juste un aide-mémoire de comptage à joindre au
+ * bordereau de remise.
+ */
+export async function buildAutoWithdrawalStarPrnt(
+  m: AutoWithdrawalData,
+  settings: ReceiptSettings | null,
+  paperWidthMm?: number,
+  widthDots?: number | null,
+): Promise<Buffer> {
+  const W = columns(paperWidthMm, widthDots);
+  const enc = await newEncoder(W);
+  const { center, left, rule, row } = layout(enc, W);
+
+  await printShopName(enc, settings?.shop_name?.trim() || m.org_name || m.store_name, paperWidthMm, widthDots);
+
+  rule();
+  center('PRELEVEMENT AUTOMATIQUE', true);
+  rule();
+  const d = m.closed_at ? new Date(m.closed_at) : new Date();
+  row('Date', d.toLocaleDateString('fr-FR', { timeZone: 'Europe/Paris' }));
+  row('Heure', d.toLocaleTimeString('fr-FR', { timeZone: 'Europe/Paris' }));
+  row('Boutique', m.store_name);
+  if (m.closed_by) row('Cloture par', m.closed_by);
+  row('Motif', 'Cloture - fonds fixe');
+  rule();
+  row('Especes comptees', eur2(m.cash_before));
+  row('Fonds de caisse cible', eur2(m.target_float));
+  rule();
+  row('MONTANT PRELEVE', `-${eur2(m.amount)}`, true);
+
+  enc.newline();
+  center('Conserver ce recu avec le bordereau de remise.');
+  left('Signature : ______________________');
+  enc.newline();
+  center(`Reference ${m.closure_id.slice(0, 8)}`);
+  feedAndCut(enc);
+  return Buffer.from(enc.encode());
+}

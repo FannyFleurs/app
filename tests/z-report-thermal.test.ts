@@ -27,6 +27,7 @@ const report: DayReport = {
   settlements: [],
   cash: {
     fonds_de_caisse: 100, entrees_argent: 0, remboursements_especes: 0, remise_banque: 0,
+    remise_banque_recorded: false,
     total_espece_fermeture: 534.5, tiroir_sans_ticket: 1, counted: 534.5, variance: 0,
   },
   by_vendor: [{ name: 'Julie', ca_ttc: 700 }, { name: 'Marc', ca_ttc: 534.5 }],

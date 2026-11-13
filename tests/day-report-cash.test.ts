@@ -125,6 +125,9 @@ describe.skipIf(!hasDb)('Rapport de journée — espèces/CB scindées et remise
     expect(report.cash.fonds_de_caisse).toBe(100);
     expect(report.cash.remise_banque).toBeCloseTo(70, 2); // surplus au-delà du fond fixe
     expect(report.cash.total_espece_fermeture).toBeCloseTo(100, 2); // revient au fond fixe
+    // Estimation automatique (aucun prélèvement réel ce jour) : c'est ce cas
+    // précis qui déclenche le ticket de prélèvement automatique à la clôture.
+    expect(report.cash.remise_banque_recorded).toBe(false);
   });
 
   it("fond de caisse MANUEL (par défaut) : aucune remise banque automatique", async () => {
@@ -162,5 +165,8 @@ describe.skipIf(!hasDb)('Rapport de journée — espèces/CB scindées et remise
 
     expect(report.cash.remise_banque).toBeCloseTo(50, 2);
     expect(report.cash.total_espece_fermeture).toBeCloseTo(100 + 70 - 50, 2);
+    // Prélèvement réel déjà enregistré (et déjà reçu à l'écran) : le ticket
+    // de prélèvement automatique ne doit pas se déclencher une seconde fois.
+    expect(report.cash.remise_banque_recorded).toBe(true);
   });
 });

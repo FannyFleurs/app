@@ -424,6 +424,18 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
         }
       } catch { /* ignore */ }
     })();
+    // Repli PDF + impression navigateur pour le ticket de prélèvement
+    // automatique quand la boutique n'a pas d'imprimante CloudPRNT (sinon
+    // déjà imprimé côté serveur — voir /api/closures/daily, withdrawal_printed).
+    if (j.withdrawal_needs_fallback) {
+      const url = `/api/closures/${j.daily_closure_id}/withdrawal-pdf`;
+      const w = window.open(url, '_blank');
+      if (w) {
+        w.addEventListener('load', () => {
+          try { w.print(); } catch { /* iOS bloque souvent print() */ }
+        });
+      }
+    }
     await loadPreview();
   }
 

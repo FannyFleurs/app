@@ -5,7 +5,7 @@ import { parseJson, jsonError } from '@/lib/validation/api';
 import { ClosingService } from '@/lib/services/closing-service';
 import { audit } from '@/lib/audit/log';
 import { query } from '@/lib/db/client';
-import { enqueueZReportPrint } from '@/lib/services/cloudprnt/print-report';
+import { enqueueZReportPrint, enqueueAutoWithdrawalPrint } from '@/lib/services/cloudprnt/print-report';
 
 const schema = z.object({
   store_id: z.string().uuid(),
@@ -55,7 +55,29 @@ export async function POST(req: Request) {
       console.error('[closure.z_print]', err);
     }
 
-    return NextResponse.json({ ...out, z_printed: zPrinted }, { status: 201 });
+    // Idem pour le ticket de prélèvement automatique (voir CashSettings
+    // .print_auto_withdrawal_receipt). NO_PRINTER (pas de CloudPRNT) est
+    // signalé au client : il tente alors le repli PDF + impression navigateur,
+    // comme pour le Z (ClosuresAdmin.tsx).
+    let withdrawalPrinted = false;
+    let withdrawalNeedsFallback = false;
+    try {
+      const r = await enqueueAutoWithdrawalPrint({
+        organizationId: g.user.organizationId,
+        userId: g.user.id,
+        closureId: out.daily_closure_id,
+      });
+      withdrawalPrinted = r.printed;
+      withdrawalNeedsFallback = !r.printed && r.reason === 'NO_PRINTER';
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[closure.withdrawal_print]', err);
+    }
+
+    return NextResponse.json({
+      ...out, z_printed: zPrinted,
+      withdrawal_printed: withdrawalPrinted, withdrawal_needs_fallback: withdrawalNeedsFallback,
+    }, { status: 201 });
   } catch (e) {
     const msg = (e as Error).message;
     const status =
