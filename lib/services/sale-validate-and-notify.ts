@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { query } from '@/lib/db/client';
 import { SaleService, type SalePaymentInput } from './sale-service';
 import { audit } from '@/lib/audit/log';
@@ -8,6 +9,25 @@ import { buildDrawerKickStarPrnt, STARPRNT_CONTENT_TYPE } from './cloudprnt/rece
 import { enqueueGiftCardPrint, NoReceiptPrinterError as GiftCardNoPrinter } from './cloudprnt/print-gift-card';
 import { notifyOrderPaidIfNeeded } from '@/lib/orders/notify-paid';
 import { loadPaymentMethodDrawerOverrides } from '@/lib/settings/payment-method-drawer-server';
+import { loadIpPrinterSettings } from '@/lib/settings/ip-printer-server';
+
+/**
+ * Transport attendu par l'app Android native pour l'ouverture tiroir en IP
+ * direct — voir pos-capacitor/android/app/src/main/assets/hellopos-drawer.js
+ * et pos-capacitor/android/DRAWER_VALIDATION.md. L'`operation_id` est stable
+ * par organisation/vente (dérivé, pas aléatoire) : le plugin natif Android
+ * (StarPrinterBridge.kt) l'utilise comme clé anti-doublon pour ne jamais
+ * renvoyer une impulsion physique sur une revalidation ou un rejeu de cette
+ * même réponse.
+ */
+export const NATIVE_DRAWER_TRANSPORT = 'android-star-ip-v1';
+
+export interface NativeDrawerResult {
+  transport: typeof NATIVE_DRAWER_TRANSPORT;
+  requested: boolean;
+  operation_id?: string;
+  printer?: { host: string; port: number };
+}
 
 /**
  * Encaisse une vente ET déclenche tous les effets de bord de l'encaissement
@@ -21,6 +41,11 @@ import { loadPaymentMethodDrawerOverrides } from '@/lib/settings/payment-method-
  * virtual-register.ts) n'a pas de tiroir physique — l'ouvrir serait un
  * déclenchement fantôme sur l'imprimante réelle de la boutique, boutique
  * potentiellement fermée.
+ *
+ * `nativeDrawerTransport` : requête posée par l'app Android native (en-tête
+ * `x-hellopos-drawer-transport: android-star-ip-v1` sur la route HTTP) —
+ * l'ouverture est alors pilotée par le plugin IP natif plutôt que par
+ * CloudPRNT ; voir NativeDrawerResult ci-dessus.
  */
 export async function validateSaleAndNotify(args: {
   saleId: string;
@@ -29,7 +54,13 @@ export async function validateSaleAndNotify(args: {
   payments: SalePaymentInput[];
   loyaltyRedemptionAmount?: number;
   skipDrawerKick?: boolean;
-}): Promise<Awaited<ReturnType<typeof SaleService.validate>> & { printedGiftCardIds: string[] }> {
+  nativeDrawerTransport?: boolean;
+}): Promise<
+  Awaited<ReturnType<typeof SaleService.validate>> & {
+    printedGiftCardIds: string[];
+    drawer?: NativeDrawerResult;
+  }
+> {
   const out = await SaleService.validate({
     saleId: args.saleId,
     organizationId: args.organizationId,
@@ -65,6 +96,8 @@ export async function validateSaleAndNotify(args: {
 
   if (out.receiptId) void autoSendReceiptIfEnabled(out.receiptId, args.organizationId);
 
+  let drawer: NativeDrawerResult | undefined;
+
   if (!args.skipDrawerKick) {
     try {
       const kinds = Array.from(new Set(args.payments.map((p) => p.method)));
@@ -84,7 +117,26 @@ export async function validateSaleAndNotify(args: {
           ? await loadPaymentMethodDrawerOverrides(args.organizationId, storeId)
           : {};
         const shouldOpenDrawer = dm.rows.some((r) => (overrides[r.code] ?? r.opens_drawer) === true);
-        if (shouldOpenDrawer) {
+
+        if (args.nativeDrawerTransport) {
+          // Caisse native Android : jamais de commande CloudPRNT pour ce
+          // transport, même si l'imprimante IP n'est pas configurée — le
+          // client n'a alors simplement rien à faire (`requested: false`).
+          drawer = { transport: NATIVE_DRAWER_TRANSPORT, requested: false };
+          if (shouldOpenDrawer) {
+            const ip = await loadIpPrinterSettings(args.organizationId, storeId);
+            // Le plugin StarXpand natif (port fixe 9100) ne gère qu'un seul
+            // protocole : une boutique configurée sur un autre port n'a pas
+            // de voie native, exactement comme une boutique sans imprimante.
+            if (ip.enabled && ip.host.trim() !== '' && ip.port === 9100) {
+              drawer.requested = true;
+              drawer.operation_id = createHash('sha256')
+                .update(`${args.organizationId}:${args.saleId}`)
+                .digest('hex');
+              drawer.printer = { host: ip.host, port: ip.port };
+            }
+          }
+        } else if (shouldOpenDrawer) {
           const printer = await resolveReceiptPrinter(args.organizationId, storeId);
           if (printer) {
             const payload = await buildDrawerKickStarPrnt();
@@ -95,6 +147,8 @@ export async function validateSaleAndNotify(args: {
             });
           }
         }
+      } else if (args.nativeDrawerTransport) {
+        drawer = { transport: NATIVE_DRAWER_TRANSPORT, requested: false };
       }
     } catch (err) {
       // eslint-disable-next-line no-console
@@ -122,5 +176,5 @@ export async function validateSaleAndNotify(args: {
     totalTtc: Number((out.snapshot as { totals?: { total_ttc?: number } })?.totals?.total_ttc ?? 0),
   });
 
-  return { ...out, printedGiftCardIds: Array.from(printedIds) };
+  return { ...out, printedGiftCardIds: Array.from(printedIds), drawer };
 }

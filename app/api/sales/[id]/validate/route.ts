@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requirePermission } from '@/lib/auth/guards';
 import { parseJson, jsonError } from '@/lib/validation/api';
-import { validateSaleAndNotify } from '@/lib/services/sale-validate-and-notify';
+import { validateSaleAndNotify, NATIVE_DRAWER_TRANSPORT } from '@/lib/services/sale-validate-and-notify';
 
 const paymentSchema = z.object({
   method: z.enum(['cash','card','check','transfer','gift_card','credit_note','deferred','other','payment_link','loyalty']),
@@ -28,12 +28,14 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const parsed = await parseJson(req, schema);
   if ('response' in parsed) return parsed.response;
   try {
+    const nativeDrawerTransport = req.headers.get('x-hellopos-drawer-transport') === NATIVE_DRAWER_TRANSPORT;
     const out = await validateSaleAndNotify({
       saleId: params.id,
       organizationId: g.user.organizationId,
       userId: g.user.id,
       payments: parsed.data.payments,
       loyaltyRedemptionAmount: parsed.data.loyalty_redemption_amount,
+      nativeDrawerTransport,
     });
 
     return NextResponse.json({
@@ -48,6 +50,9 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       gift_cards_issued: (out.gift_cards_issued ?? []).map((gc) => ({
         id: gc.id, code: gc.code, amount: gc.amount, printed: out.printedGiftCardIds.includes(gc.id),
       })),
+      // Présent uniquement pour la caisse native Android (en-tête
+      // x-hellopos-drawer-transport) — voir hellopos-drawer.js côté client.
+      drawer: out.drawer,
     });
   } catch (e) {
     const msg = (e as Error).message;
