@@ -7,9 +7,9 @@ import Badge from '@/components/Badge';
 import EmptyState from '@/components/EmptyState';
 import BankDepositModal from './BankDepositModal';
 import PaymentDrilldownModal from './PaymentDrilldownModal';
+import PdfPreviewModal from '@/components/PdfPreviewModal';
 import { promptThemed, confirmThemed } from '@/lib/ui/dialog';
 import { readRoamingChoice } from '@/lib/caisse/roaming';
-import { downloadFile } from '@/lib/ui/download-file';
 
 // Seuls ces modes se réconcilient à la clôture : espèces (comptées au tiroir),
 // CB et chèques. Les autres (carte cadeau, différé, virement, avoir…) ne se
@@ -111,6 +111,13 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
   }
   const [drawerToast, setDrawerToast] = useState<string | null>(null);
   const [zToast, setZToast] = useState<string | null>(null);
+  // Aperçu PDF (Z ou prélèvement automatique) quand aucune imprimante ticket
+  // n'est configurée : PdfPreviewModal récupère le PDF par fetch (avec la
+  // session), jamais par navigation directe vers la route — voir son
+  // commentaire. Sur l'app native, son bouton « Imprimer » passe par le menu
+  // de partage du système (AirPrint) : c'est ce qui imprime réellement, un
+  // simple téléchargement ne le ferait pas.
+  const [pdfPreview, setPdfPreview] = useState<{ url: string; title: string; filename: string } | null>(null);
 
   // Impression du Z sur l'imprimante ticket ; repli PDF si aucune imprimante.
   async function printZ(closureId: string) {
@@ -123,9 +130,10 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
         return;
       }
       if (r.status === 409) {
-        // Téléchargement, pas `target="_blank"` : voir lib/ui/download-file.ts
-        // (app native Capacitor → Safari sans la session → page blanche).
-        await downloadFile(`/api/closures/${closureId}/z-pdf`, `Z-${closureId.slice(0, 8)}.pdf`);
+        setPdfPreview({
+          url: `/api/closures/${closureId}/z-pdf`, title: 'Rapport Z',
+          filename: `Z-${closureId.slice(0, 8)}.pdf`,
+        });
         return;
       }
       setError('Impression du Z impossible.');
@@ -420,22 +428,23 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
         const recv = (await rR.json()).settings;
         const printer = (await rP.json()).settings;
         if (recv?.auto_print_z && printer?.enabled) {
-          // Téléchargement (fetch + blob), pas un lien `target="_blank"` : dans
-          // l'app native (Capacitor), une navigation vers une route authentifiée
-          // bascule sur Safari, qui n'a pas la session de la WebView embarquée
-          // (page blanche) — voir lib/ui/download-file.ts.
-          await downloadFile(`/api/closures/daily/${j.daily_closure_id}/pdf`, `Z-${j.daily_closure_id.slice(0, 8)}.pdf`);
+          setPdfPreview({
+            url: `/api/closures/daily/${j.daily_closure_id}/pdf`, title: 'Rapport Z',
+            filename: `Z-${j.daily_closure_id.slice(0, 8)}.pdf`,
+          });
         }
       } catch { /* ignore */ }
     })();
-    // Repli PDF pour le ticket de prélèvement automatique quand la boutique
-    // n'a pas d'imprimante CloudPRNT (sinon déjà imprimé côté serveur — voir
-    // /api/closures/daily, withdrawal_printed). Même raison que ci-dessus.
+    // Aperçu du ticket de prélèvement automatique quand la boutique n'a pas
+    // d'imprimante CloudPRNT (sinon déjà imprimé côté serveur — voir
+    // /api/closures/daily, withdrawal_printed). Exclusif du Z ci-dessus par
+    // construction (enqueueAutoWithdrawalPrint n'imprime jamais si le Z
+    // s'imprime déjà automatiquement).
     if (j.withdrawal_needs_fallback) {
-      await downloadFile(
-        `/api/closures/${j.daily_closure_id}/withdrawal-pdf`,
-        `Prelevement-${j.daily_closure_id.slice(0, 8)}.pdf`,
-      );
+      setPdfPreview({
+        url: `/api/closures/${j.daily_closure_id}/withdrawal-pdf`, title: 'Prélèvement automatique',
+        filename: `Prelevement-${j.daily_closure_id.slice(0, 8)}.pdf`,
+      });
     }
     await loadPreview();
   }
@@ -932,6 +941,15 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
           />
         );
       })()}
+
+      {pdfPreview && (
+        <PdfPreviewModal
+          url={pdfPreview.url}
+          title={pdfPreview.title}
+          filename={pdfPreview.filename}
+          onClose={() => setPdfPreview(null)}
+        />
+      )}
     </div>
   );
 }
