@@ -193,7 +193,7 @@ export const POS_UI_DEFAULTS: PosUiSettings = {
 export const POS_THEME_COLOR_VALUES: Record<PosThemeColor, { label: string; main: string; deep: string; soft: string }> = {
   // Couleurs de la marque : c'est le thème par défaut, les autres restent
   // proposés à qui veut habiller sa caisse autrement.
-  hellopos:   { label: 'HelloPos',   main: '#013E37', deep: '#012B26', soft: '#FFEFB3' },
+  hellopos:   { label: 'HelloPos',   main: '#335355', deep: '#335355', soft: '#F9E3B0' },
   sage:       { label: 'Sauge',      main: '#5C6F5D', deep: '#45543F', soft: '#EDF1ED' },
   charcoal:   { label: 'Anthracite', main: '#2A2F33', deep: '#15191C', soft: '#EEEEF0' },
   navy:       { label: 'Bleu nuit',  main: '#1F3A5F', deep: '#15294A', soft: '#E6EDF6' },

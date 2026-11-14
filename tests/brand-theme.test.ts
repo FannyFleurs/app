@@ -5,7 +5,10 @@ import {
 } from '@/lib/settings/pos-ui';
 
 /**
- * Couleurs de la marque HelloPos : vert profond #013E37, jaune doux #FFEFB3.
+ * Couleurs de la marque HelloPos : vert #335355, jaune doux #F9E3B0 — sauf la
+ * barre de navigation supérieure, restée au vert profond d'origine #013E37
+ * (surface pleine, pas de texte dessus : le contraste n'imposait pas de
+ * l'éclaircir).
  *
  * Elles vivent à trois endroits qui doivent rester d'accord — les variables
  * CSS de `:root`, le thème sélectionnable, et les neutres de Tailwind. Une
@@ -13,8 +16,9 @@ import {
  * différents côte à côte.
  */
 
-const VERT = '#013E37';
-const JAUNE = '#FFEFB3';
+const PRIMARY = '#335355';
+const SOFT = '#F9E3B0';
+const TOPBAR = '#013E37';
 
 const css = readFileSync('app/globals.css', 'utf8');
 const tw = readFileSync('tailwind.config.ts', 'utf8');
@@ -27,16 +31,16 @@ describe('Palette de marque', () => {
 
   it('porte les deux couleurs demandées', () => {
     const t = POS_THEME_COLOR_VALUES.hellopos;
-    expect(t.main.toUpperCase()).toBe(VERT);
-    expect(t.soft.toUpperCase()).toBe(JAUNE);
+    expect(t.main.toUpperCase()).toBe(PRIMARY);
+    expect(t.soft.toUpperCase()).toBe(SOFT);
   });
 
   it('donne les mêmes valeurs aux variables CSS de base', () => {
     // `:root` sert quand aucun thème n'est encore appliqué (premier rendu,
     // pages hors application). Il ne doit pas montrer une autre couleur.
     const root = css.slice(css.indexOf(':root {'), css.indexOf('@keyframes fadeIn'));
-    expect(root).toMatch(/--primary:\s*#013E37/i);
-    expect(root).toMatch(/--primary-soft:\s*#FFEFB3/i);
+    expect(root).toMatch(/--primary:\s*#335355/i);
+    expect(root).toMatch(/--primary-soft:\s*#F9E3B0/i);
     expect(root).toMatch(/--topbar-bg:\s*#013E37/i);
   });
 
