@@ -6,6 +6,7 @@ import { PAYMENT_LABELS } from '@/components/labels';
 import StoreScopeSelect from '@/components/StoreScopeSelect';
 import PageHeader from '@/components/PageHeader';
 import Icon from '@/components/Icon';
+import Badge from '@/components/Badge';
 
 /**
  * Rapports du back-office : six lectures d'une même période.
@@ -20,7 +21,7 @@ import Icon from '@/components/Icon';
  * intervention.
  */
 
-type Report = 'sales' | 'lines' | 'debts' | 'refunds' | 'cancellations' | 'vouchers' | 'shrinkage';
+type Report = 'sales' | 'lines' | 'by_category' | 'by_supplier' | 'debts' | 'refunds' | 'cancellations' | 'vouchers' | 'shrinkage';
 
 interface SalesDay {
   day: string; tickets: number;
@@ -48,6 +49,24 @@ interface LineRow {
 }
 interface LinesData {
   lines: LineRow[];
+  totals: { quantity: number; ht: number; tva: number; ttc: number; discount: number; margin: number };
+}
+
+interface CategoryRow {
+  category: string; quantity: number; ht: number; tva: number; ttc: number; discount: number;
+  margin: number | null; marge_pct: number | null;
+}
+interface CategoryData {
+  lines: CategoryRow[];
+  totals: { quantity: number; ht: number; tva: number; ttc: number; discount: number; margin: number };
+}
+
+interface SupplierRow {
+  supplier: string; quantity: number; ht: number; tva: number; ttc: number; discount: number;
+  margin: number | null; marge_pct: number | null;
+}
+interface SupplierData {
+  lines: SupplierRow[];
   totals: { quantity: number; ht: number; tva: number; ttc: number; discount: number; margin: number };
 }
 
@@ -98,7 +117,7 @@ const VOUCHER_LABELS: Record<VoucherRow['type'], string> = {
 };
 
 const REPORTS: Array<{
-  key: Report; label: string; icon: 'dashboard' | 'products' | 'customers' | 'loyalty' | 'invoices';
+  key: Report; label: string; icon: 'dashboard' | 'products' | 'customers' | 'loyalty' | 'invoices' | 'categories' | 'truck';
   endpoint: string; help: string;
 }> = [
   {
@@ -108,6 +127,14 @@ const REPORTS: Array<{
   {
     key: 'lines', label: 'Lignes de vente', icon: 'products', endpoint: 'sale-lines',
     help: "Ce qui s'est vendu sur la période, article par article : quantités, chiffre d'affaires et marge.",
+  },
+  {
+    key: 'by_category', label: 'Par catégorie', icon: 'categories', endpoint: 'by-category',
+    help: "Le chiffre d'affaires et la marge par catégorie (famille) sur la période, classés du plus fort au plus faible chiffre d'affaires.",
+  },
+  {
+    key: 'by_supplier', label: 'Par fournisseur', icon: 'truck', endpoint: 'by-supplier',
+    help: "Le chiffre d'affaires et la marge par fournisseur sur la période, classés du plus fort au plus faible chiffre d'affaires. « Sans fournisseur » regroupe les articles dont la fiche n'en indique pas.",
   },
   {
     key: 'debts', label: 'Dettes clients', icon: 'customers', endpoint: 'customer-debts',
@@ -395,7 +422,11 @@ export default function ReportsClient({ stores }: { stores: { id: string; name: 
           <div className="rounded-xl border border-border bg-accent-soft/60 px-4 py-3 flex gap-3">
             <span className="text-accent-deep shrink-0 mt-0.5"><Icon name="dashboard" size={18} /></span>
             <div>
-              <div className="text-sm font-semibold">Rapport des {meta.label.toLowerCase()}</div>
+              <div className="text-sm font-semibold">
+                {report === 'by_category' || report === 'by_supplier'
+                  ? `Rapport ${meta.label.toLowerCase()}`
+                  : `Rapport des ${meta.label.toLowerCase()}`}
+              </div>
               <p className="text-sm text-ink-soft mt-0.5 max-w-4xl">{meta.help}</p>
             </div>
           </div>
@@ -422,6 +453,8 @@ export default function ReportsClient({ stores }: { stores: { id: string; name: 
               <>
                 {report === 'sales' && <SalesTable data={data as unknown as SalesData} />}
                 {report === 'lines' && <LinesTable data={data as unknown as LinesData} />}
+                {report === 'by_category' && <CategoryTable data={data as unknown as CategoryData} />}
+                {report === 'by_supplier' && <SupplierTable data={data as unknown as SupplierData} />}
                 {report === 'debts' && <DebtsTable data={data as unknown as DebtsData} />}
                 {report === 'refunds' && <RefundsTable data={data as unknown as RefundsData} />}
                 {report === 'cancellations' && <CancelTable data={data as unknown as CancelData} />}
@@ -575,6 +608,118 @@ function LinesTable({ data }: { data: LinesData }) {
 /** Rien à afficher : même message partout, pour ne pas surprendre. */
 function Empty() {
   return <p className="py-10 text-center text-sm text-ink-soft">Rien à afficher sur cette période.</p>;
+}
+
+function CategoryTable({ data }: { data: CategoryData }) {
+  if (data.lines.length === 0) return <Empty />;
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm border-collapse">
+        <thead>
+          <tr className="text-[11px] uppercase tracking-wider text-ink-soft">
+            <Th sticky>Catégorie</Th>
+            <Th right>Quantité</Th>
+            <Th right>Total HT</Th>
+            <Th right>Total TVA</Th>
+            <Th right>Total TTC</Th>
+            <Th right>Réductions</Th>
+            <Th right>Marge brute</Th>
+            <Th right>Marge %</Th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.lines.map((l, i) => (
+            <tr key={`${l.category}-${i}`} className="border-t border-border hover:bg-gray-50/60">
+              <Td sticky>
+                <span className="font-medium">{l.category}</span>
+                {i === 0 && <span className="ml-2"><Badge tone="success">Top</Badge></span>}
+                {i === data.lines.length - 1 && data.lines.length > 1 && (
+                  <span className="ml-2"><Badge tone="warning">Flop</Badge></span>
+                )}
+              </Td>
+              <Td right>{l.quantity}</Td>
+              <Td right>{formatEUR(l.ht)}</Td>
+              <Td right>{formatEUR(l.tva)}</Td>
+              <Td right strong>{formatEUR(l.ttc)}</Td>
+              <Td right tone={l.discount > 0 ? 'warning' : undefined}>
+                {l.discount > 0 ? `−${formatEUR(l.discount)}` : '—'}
+              </Td>
+              <Td right>{l.margin == null ? '—' : formatEUR(l.margin)}</Td>
+              <Td right>{l.marge_pct == null ? '—' : `${l.marge_pct} %`}</Td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr className="border-t-2 border-ink/20 font-semibold bg-gray-50">
+            <Td sticky>Total</Td>
+            <Td right>{data.totals.quantity}</Td>
+            <Td right>{formatEUR(data.totals.ht)}</Td>
+            <Td right>{formatEUR(data.totals.tva)}</Td>
+            <Td right>{formatEUR(data.totals.ttc)}</Td>
+            <Td right>{data.totals.discount > 0 ? `−${formatEUR(data.totals.discount)}` : '—'}</Td>
+            <Td right>{formatEUR(data.totals.margin)}</Td>
+            <Td right>{data.totals.ht > 0 ? `${Number(((data.totals.margin / data.totals.ht) * 100).toFixed(1))} %` : '—'}</Td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  );
+}
+
+function SupplierTable({ data }: { data: SupplierData }) {
+  if (data.lines.length === 0) return <Empty />;
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm border-collapse">
+        <thead>
+          <tr className="text-[11px] uppercase tracking-wider text-ink-soft">
+            <Th sticky>Fournisseur</Th>
+            <Th right>Quantité</Th>
+            <Th right>Total HT</Th>
+            <Th right>Total TVA</Th>
+            <Th right>Total TTC</Th>
+            <Th right>Réductions</Th>
+            <Th right>Marge brute</Th>
+            <Th right>Marge %</Th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.lines.map((l, i) => (
+            <tr key={`${l.supplier}-${i}`} className="border-t border-border hover:bg-gray-50/60">
+              <Td sticky>
+                <span className="font-medium">{l.supplier}</span>
+                {i === 0 && <span className="ml-2"><Badge tone="success">Top</Badge></span>}
+                {i === data.lines.length - 1 && data.lines.length > 1 && (
+                  <span className="ml-2"><Badge tone="warning">Flop</Badge></span>
+                )}
+              </Td>
+              <Td right>{l.quantity}</Td>
+              <Td right>{formatEUR(l.ht)}</Td>
+              <Td right>{formatEUR(l.tva)}</Td>
+              <Td right strong>{formatEUR(l.ttc)}</Td>
+              <Td right tone={l.discount > 0 ? 'warning' : undefined}>
+                {l.discount > 0 ? `−${formatEUR(l.discount)}` : '—'}
+              </Td>
+              <Td right>{l.margin == null ? '—' : formatEUR(l.margin)}</Td>
+              <Td right>{l.marge_pct == null ? '—' : `${l.marge_pct} %`}</Td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr className="border-t-2 border-ink/20 font-semibold bg-gray-50">
+            <Td sticky>Total</Td>
+            <Td right>{data.totals.quantity}</Td>
+            <Td right>{formatEUR(data.totals.ht)}</Td>
+            <Td right>{formatEUR(data.totals.tva)}</Td>
+            <Td right>{formatEUR(data.totals.ttc)}</Td>
+            <Td right>{data.totals.discount > 0 ? `−${formatEUR(data.totals.discount)}` : '—'}</Td>
+            <Td right>{formatEUR(data.totals.margin)}</Td>
+            <Td right>{data.totals.ht > 0 ? `${Number(((data.totals.margin / data.totals.ht) * 100).toFixed(1))} %` : '—'}</Td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  );
 }
 
 function DebtsTable({ data }: { data: DebtsData }) {
@@ -913,6 +1058,30 @@ function csvRows(report: Report, data: Record<string, unknown>): string[][] {
       rows.push([
         l.label, l.sku ?? l.barcode ?? '', l.category ?? '', String(l.quantity),
         n(l.ht), n(l.tva), n(l.ttc), n(l.discount), l.margin == null ? '' : n(l.margin),
+      ]);
+    }
+    return rows;
+  }
+
+  if (report === 'by_category') {
+    const d = data as unknown as CategoryData;
+    rows.push(['Catégorie', 'Quantité', 'Total HT', 'Total TVA', 'Total TTC', 'Réductions', 'Marge brute', 'Marge %']);
+    for (const l of d.lines) {
+      rows.push([
+        l.category, String(l.quantity), n(l.ht), n(l.tva), n(l.ttc), n(l.discount),
+        l.margin == null ? '' : n(l.margin), l.marge_pct == null ? '' : n(l.marge_pct),
+      ]);
+    }
+    return rows;
+  }
+
+  if (report === 'by_supplier') {
+    const d = data as unknown as SupplierData;
+    rows.push(['Fournisseur', 'Quantité', 'Total HT', 'Total TVA', 'Total TTC', 'Réductions', 'Marge brute', 'Marge %']);
+    for (const l of d.lines) {
+      rows.push([
+        l.supplier, String(l.quantity), n(l.ht), n(l.tva), n(l.ttc), n(l.discount),
+        l.margin == null ? '' : n(l.margin), l.marge_pct == null ? '' : n(l.marge_pct),
       ]);
     }
     return rows;
