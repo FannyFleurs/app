@@ -409,29 +409,17 @@ export default function ClosuresAdmin({ stores, registers, defaultStoreId, initi
     if (storageKey && typeof window !== 'undefined') {
       try { localStorage.removeItem(storageKey); } catch { /* ignore */ }
     }
-    // Auto-impression du Z si configurée.
-    void (async () => {
-      try {
-        const [rR, rP] = await Promise.all([
-          fetch(`/api/settings/receipt${storeId ? `?store_id=${encodeURIComponent(storeId)}` : ''}`),
-          fetch(`/api/settings/printer${storeId ? `?store_id=${encodeURIComponent(storeId)}` : ''}`),
-        ]);
-        if (!rR.ok || !rP.ok) return;
-        const recv = (await rR.json()).settings;
-        const printer = (await rP.json()).settings;
-        if (recv?.auto_print_z && printer?.enabled) {
-          try { window.open(`/api/closures/daily/${j.daily_closure_id}/pdf`, '_blank'); } catch { /* ignore */ }
-        }
-      } catch { /* ignore */ }
-    })();
-    // Ouverture directe du ticket de prélèvement automatique quand la
-    // boutique n'a pas d'imprimante CloudPRNT (sinon déjà imprimé côté
-    // serveur — voir /api/closures/daily, withdrawal_printed). Exclusif du Z
-    // ci-dessus par construction (enqueueAutoWithdrawalPrint n'imprime
-    // jamais si le Z s'imprime déjà automatiquement).
-    if (j.withdrawal_needs_fallback) {
-      try { window.open(`/api/closures/${j.daily_closure_id}/withdrawal-pdf`, '_blank'); } catch { /* ignore */ }
-    }
+    // DÉSACTIVÉ TEMPORAIREMENT (voir pos-capacitor commit 6721002 / 9f4ab3a) :
+    // ces deux replis ouvraient le PDF du Z / du prélèvement automatique
+    // via window.open() en comptant sur l'interception native ajoutée côté
+    // app (HelloPosNativePrintScript.swift / hellopos-print.js) — mais cette
+    // interception n'existe que dans un build pas encore recompilé/réinstallé
+    // sur les appareils. En attendant ce déploiement natif, window.open()
+    // bascule sur Safari externe sans la session de la WebView : page blanche
+    // au lieu d'imprimer. On n'ouvre donc plus rien ici tant que le natif
+    // n'a pas rattrapé le web — CloudPRNT reste tenté normalement côté
+    // serveur (enqueueZReportPrint / enqueueAutoWithdrawalPrint), seul ce
+    // repli client est coupé. À réactiver une fois le natif confirmé à jour.
     await loadPreview();
   }
 
