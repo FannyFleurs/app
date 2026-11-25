@@ -27,10 +27,19 @@ interface InvoiceRow {
   total_ttc: number;
   status: string;
 }
+interface SettledInvoiceRow {
+  id: string;
+  number: string | null;
+  issue_date: string | null;
+  total_ttc: number;
+  paid_at: string | null;
+  payment_method: string | null;
+}
 interface Detail {
   customer: { id: string; name: string; account_balance: number; email: string | null };
   sales: SaleRow[];
   invoices: InvoiceRow[];
+  settled_invoices: SettledInvoiceRow[];
 }
 
 const eur = (n: number) => n.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
@@ -39,6 +48,10 @@ const dateFr = (iso: string | null) =>
 
 const INVOICE_STATUS: Record<string, string> = {
   validated: 'Validée', sent: 'Envoyée', partially_paid: 'Part. payée', overdue: 'En retard',
+};
+
+const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  cash: 'Espèces', card: 'Carte bancaire', check: 'Chèque', transfer: 'Virement', other: 'Autre',
 };
 
 const iso = (d: Date) =>
@@ -448,6 +461,48 @@ export default function BillingManager({ canInvoice }: { canInvoice: boolean }) 
                                   Solder
                                 </button>
                               )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {/* Factures soldées : disparaissaient entièrement de la page une
+                  fois payées, sans moyen de les retrouver pour les réimprimer
+                  ou contrôler un règlement. */}
+              <div className="card p-4 space-y-3">
+                <h3 className="font-semibold">Factures soldées</h3>
+                {detail.settled_invoices.length === 0 ? (
+                  <p className="text-sm text-ink-soft">Aucune facture soldée.</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-xs uppercase tracking-wider text-ink-soft border-b border-border">
+                          <th className="py-2 pr-2">N°</th>
+                          <th className="py-2 pr-2">Émise</th>
+                          <th className="py-2 pr-2">Réglée le</th>
+                          <th className="py-2 pr-2">Moyen</th>
+                          <th className="py-2 pr-2 text-right">TTC</th>
+                          <th className="py-2 pl-2"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {detail.settled_invoices.map((i) => (
+                          <tr key={i.id} className="border-b border-border/60">
+                            <td className="py-2 pr-2 font-mono text-xs">{i.number ?? '—'}</td>
+                            <td className="py-2 pr-2 text-ink-soft">{dateFr(i.issue_date)}</td>
+                            <td className="py-2 pr-2 text-ink-soft">{dateFr(i.paid_at)}</td>
+                            <td className="py-2 pr-2 text-ink-soft">
+                              {i.payment_method ? (PAYMENT_METHOD_LABELS[i.payment_method] ?? i.payment_method) : '—'}
+                            </td>
+                            <td className="py-2 pr-2 text-right tabular-nums font-medium">{eur(i.total_ttc)}</td>
+                            <td className="py-2 pl-2 text-right whitespace-nowrap">
+                              <a href={`/api/invoices/${i.id}/pdf`} target="_blank" rel="noreferrer"
+                                 className="text-accent-deep text-xs hover:underline">PDF</a>
                             </td>
                           </tr>
                         ))}

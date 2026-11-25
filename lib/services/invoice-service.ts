@@ -439,8 +439,8 @@ export class InvoiceService {
       }
 
       await client.query(
-        `UPDATE invoices SET status = 'paid', paid_at = now(), updated_at = now() WHERE id = $1`,
-        [inv.id],
+        `UPDATE invoices SET status = 'paid', paid_at = now(), payment_method = $2, updated_at = now() WHERE id = $1`,
+        [inv.id, args.method],
       );
 
       // Crédite le solde en compte (le règlement réduit la dette du client).

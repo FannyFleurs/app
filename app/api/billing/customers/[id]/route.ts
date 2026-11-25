@@ -65,6 +65,22 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     [params.id, g.user.organizationId],
   );
 
+  // Factures soldées : disparaissaient entièrement de la page une fois payées
+  // (exclues de la requête ci-dessus), sans moyen de les retrouver pour les
+  // réimprimer ou les contrôler. Liste séparée, triée par date de règlement.
+  const settledInvoices = await query<{
+    id: string; number: string | null; issue_date: string | null;
+    total_ttc: string; paid_at: string | null; payment_method: string | null;
+  }>(
+    `SELECT id, number, issue_date, total_ttc::text, paid_at, payment_method
+       FROM invoices
+      WHERE customer_id = $1
+        AND organization_id = $2
+        AND status = 'paid'
+      ORDER BY COALESCE(paid_at, updated_at) DESC`,
+    [params.id, g.user.organizationId],
+  );
+
   return NextResponse.json({
     customer: {
       id: customer.rows[0]!.id,
@@ -86,6 +102,14 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
       due_date: i.due_date,
       total_ttc: Number(i.total_ttc),
       status: i.status,
+    })),
+    settled_invoices: settledInvoices.rows.map((i) => ({
+      id: i.id,
+      number: i.number,
+      issue_date: i.issue_date,
+      total_ttc: Number(i.total_ttc),
+      paid_at: i.paid_at,
+      payment_method: i.payment_method,
     })),
   });
 }
