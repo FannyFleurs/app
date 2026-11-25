@@ -11,8 +11,8 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   const g = await requirePermission('products.read');
   if ('response' in g) return g.response;
 
-  const reception = await query<{ filename: string | null }>(
-    `SELECT filename FROM receptions WHERE id = $1 AND organization_id = $2`,
+  const reception = await query<{ filename: string | null; name: string | null }>(
+    `SELECT filename, name FROM receptions WHERE id = $1 AND organization_id = $2`,
     [params.id, g.user.organizationId],
   );
   if (reception.rowCount === 0) return jsonError('NOT_FOUND', 404);
@@ -33,6 +33,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 
   return NextResponse.json({
     filename: reception.rows[0]!.filename,
+    name: reception.rows[0]!.name,
     items: rows.map((r) => ({
       product_id: r.product_id,
       name: r.name,

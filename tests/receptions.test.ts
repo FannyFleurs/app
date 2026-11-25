@@ -175,6 +175,68 @@ describe('Réceptions (PDA)', () => {
     expect(idsAfterAll).not.toContain(receptionId);
   });
 
+  it("nom choisi à l'import : prime sur le nom de fichier partout où la réception apparaît (BO, PDA, détail article)", async () => {
+    const res = await commitReq({
+      rows: [{ name: `Houx nommé ${randomUUID()}`, sale_price_ttc: 12, tax_rate_code: taxRateCode }],
+      store_ids: [storeAId],
+      filename: 'export_du_23_11.xlsx',
+      name: 'Livraison fleurs — semaine 47',
+    });
+    const { reception_id: receptionId } = await res.json();
+    await patchReception(
+      new Request('https://x.test', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sent_to_pda: true }) }),
+      { params: { id: receptionId } },
+    );
+
+    const stored = await query<{ name: string | null; filename: string | null }>(
+      `SELECT name, filename FROM receptions WHERE id = $1`,
+      [receptionId],
+    );
+    expect(stored.rows[0]).toEqual({ name: 'Livraison fleurs — semaine 47', filename: 'export_du_23_11.xlsx' });
+
+    const boList = await listReceptionsBo();
+    const boRow = (await boList.json()).receptions.find((r: { id: string }) => r.id === receptionId);
+    expect(boRow.name).toBe('Livraison fleurs — semaine 47');
+
+    const pdaList = await listReceptionsPda(new Request(`https://x.test?store_id=${storeAId}`));
+    const pdaRow = (await pdaList.json()).receptions.find((r: { id: string }) => r.id === receptionId);
+    expect(pdaRow).toMatchObject({ name: 'Livraison fleurs — semaine 47', filename: 'export_du_23_11.xlsx' });
+
+    const itemsRes = await listItems(new Request('https://x.test'), { params: { id: receptionId } });
+    const itemsBody = await itemsRes.json();
+    expect(itemsBody.name).toBe('Livraison fleurs — semaine 47');
+  });
+
+  it('renommage après coup via PATCH, y compris une fois la réception commencée', async () => {
+    const p1 = await insertProduct(`Anémone ${randomUUID()}`);
+    const res = await createReception(new Request('https://x.test', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ product_ids: [p1] }),
+    }));
+    const { id: receptionId } = await res.json();
+
+    const rename1 = await patchReception(
+      new Request('https://x.test', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Premier nom' }) }),
+      { params: { id: receptionId } },
+    );
+    expect(rename1.status).toBe(200);
+    let detail = await (await getReception(new Request('https://x.test'), { params: { id: receptionId } })).json();
+    expect(detail.name).toBe('Premier nom');
+
+    // La réception commence : la liste des références se verrouille, pas le nom.
+    await receiveItem(
+      new Request('https://x.test', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ product_id: p1, received_qty: 1 }) }),
+      { params: { id: receptionId } },
+    );
+    const rename2 = await patchReception(
+      new Request('https://x.test', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Nom renommé après réception' }) }),
+      { params: { id: receptionId } },
+    );
+    expect(rename2.status).toBe(200);
+    detail = await (await getReception(new Request('https://x.test'), { params: { id: receptionId } })).json();
+    expect(detail.name).toBe('Nom renommé après réception');
+  });
+
   it('une réception inconnue est refusée (404)', async () => {
     const res = await patchReception(
       new Request('https://x.test', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sent_to_pda: true }) }),

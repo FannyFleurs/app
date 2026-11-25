@@ -28,6 +28,10 @@ const bodySchema = z.object({
   // Nom du fichier source (affiché tel quel dans « Réception d'import » PDA
   // si l'import est envoyé au PDA — voir /pda route PATCH).
   filename: z.string().max(200).nullable().optional(),
+  // Nom choisi par l'utilisateur pour retrouver cet import plus facilement
+  // sur le PDA — prime sur filename à l'affichage partout où la réception
+  // apparaît (voir receptions.name).
+  name: z.string().max(200).nullable().optional(),
 });
 
 /**
@@ -216,9 +220,9 @@ export async function POST(req: Request) {
   if (insertedProductIds.length > 0) {
     try {
       const reception = await query<{ id: string }>(
-        `INSERT INTO receptions (organization_id, filename, store_ids, product_count, created_by)
-         VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-        [g.user.organizationId, parsed.data.filename ?? null, targetStores, insertedProductIds.length, g.user.id],
+        `INSERT INTO receptions (organization_id, filename, name, store_ids, product_count, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+        [g.user.organizationId, parsed.data.filename ?? null, parsed.data.name ?? null, targetStores, insertedProductIds.length, g.user.id],
       );
       receptionId = reception.rows[0]!.id;
       const values2: string[] = [];

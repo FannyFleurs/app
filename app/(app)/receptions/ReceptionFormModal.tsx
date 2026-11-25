@@ -25,6 +25,7 @@ export default function ReceptionFormModal({
   const [error, setError] = useState<string | null>(null);
 
   const [filename, setFilename] = useState<string | null>(null);
+  const [name, setName] = useState('');
   const [storeIds, setStoreIds] = useState<string[]>([]);
   const [started, setStarted] = useState(false);
   const [items, setItems] = useState<SelectedItem[]>([]);
@@ -43,6 +44,7 @@ export default function ReceptionFormModal({
         if (r.ok) {
           const j = await r.json();
           setFilename(j.filename ?? null);
+          setName(j.name ?? '');
           setStoreIds(j.store_ids ?? []);
           setStarted(!!j.started);
           setItems((j.items ?? []).map((i: { product_id: string; name: string; sku: string | null; received_qty: number | null }) => ({
@@ -86,12 +88,17 @@ export default function ReceptionFormModal({
 
   async function save() {
     setError(null);
-    if (items.length === 0) { setError('Ajoutez au moins une référence.'); return; }
+    // Le renommage reste permis même réception commencée (readOnly) : seule
+    // la liste des références est alors verrouillée.
+    if (!readOnly && items.length === 0) { setError('Ajoutez au moins une référence.'); return; }
     setSaving(true);
-    const body = {
-      product_ids: items.map((i) => i.product_id),
-      ...(receptionId ? {} : { store_ids: storeIds }),
+    const body: { name: string | null; product_ids?: string[]; store_ids?: string[] } = {
+      name: name.trim() || null,
     };
+    if (!readOnly) {
+      body.product_ids = items.map((i) => i.product_id);
+      if (!receptionId) body.store_ids = storeIds;
+    }
     const r = await fetch(receptionId ? `/api/receptions/${receptionId}` : '/api/receptions', {
       method: receptionId ? 'PATCH' : 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -113,7 +120,7 @@ export default function ReceptionFormModal({
       <div className="card w-full max-w-xl max-h-[95vh] flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-5 py-3 border-b border-border shrink-0">
           <h2 className="text-lg font-semibold">
-            {receptionId ? (filename ?? 'Réception manuelle') : 'Créer une réception'}
+            {receptionId ? (name || filename || 'Réception manuelle') : 'Créer une réception'}
           </h2>
           <button onClick={onClose} aria-label="Fermer"
                   className="grid h-9 w-9 place-items-center rounded-full border border-border text-ink-soft hover:bg-gray-50">✕</button>
@@ -127,6 +134,20 @@ export default function ReceptionFormModal({
               <div className="rounded-xl bg-accent-soft px-4 py-3 text-sm text-accent-deep">
                 Réception commencée sur le PDA : la liste des références ne peut plus être modifiée.
               </div>
+            )}
+
+            {canWrite && (
+              <label className="block">
+                <span className="text-sm text-ink-soft">Nom — pour la retrouver plus facilement sur le PDA</span>
+                <input
+                  type="text"
+                  className="input mt-1 w-full"
+                  maxLength={200}
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder={filename ?? 'Réception manuelle'}
+                />
+              </label>
             )}
 
             {!receptionId && stores.length > 1 && (
@@ -196,8 +217,11 @@ export default function ReceptionFormModal({
         )}
 
         <div className="border-t border-border px-5 py-3 flex items-center justify-end gap-2 shrink-0">
-          <button className="btn-ghost" onClick={onClose}>{readOnly ? 'Fermer' : 'Annuler'}</button>
-          {!readOnly && (
+          <button className="btn-ghost" onClick={onClose}>{canWrite ? 'Annuler' : 'Fermer'}</button>
+          {/* Le renommage reste permis réception commencée : le bouton
+              Enregistrer n'est donc plus conditionné à readOnly, seulement
+              aux droits d'écriture. */}
+          {canWrite && (
             <button className="btn-primary" disabled={saving || loading} onClick={() => void save()}>
               {saving ? 'Enregistrement…' : receptionId ? 'Enregistrer' : 'Créer la réception'}
             </button>

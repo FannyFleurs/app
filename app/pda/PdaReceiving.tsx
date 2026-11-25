@@ -10,7 +10,9 @@ import {
   IconChevron, IconPrinter,
 } from './ui';
 
-interface ReceptionSummary { id: string; filename: string | null; created_at: string; total: number; received: number }
+interface ReceptionSummary { id: string; filename: string | null; name: string | null; created_at: string; total: number; received: number }
+/** Nom affiché : le nom choisi prime sur le fichier d'import, lui-même sur le repli générique. */
+const receptionTitle = (r: { name: string | null; filename: string | null }) => r.name ?? r.filename ?? 'Réception manuelle';
 interface ReceptionItem {
   product_id: string; name: string; sku: string | null; barcode: string | null;
   category_name: string | null; received_qty: number | null;
@@ -89,7 +91,7 @@ export default function PdaReceiving({
           body: JSON.stringify({
             store_id: station.store_id, product_id: item.product_id,
             movement_type: 'purchase', quantity_delta: qty,
-            reason: `Réception${reception.filename ? ` · ${reception.filename}` : ''}`,
+            reason: `Réception${reception.name || reception.filename ? ` · ${reception.name ?? reception.filename}` : ''}`,
           }),
         });
         if (!r.ok) {
@@ -184,7 +186,7 @@ export default function PdaReceiving({
                 className="card w-full p-3.5 text-left active:scale-[0.99] transition-transform">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
-                    <div className="font-semibold leading-tight truncate">{r.filename ?? 'Réception manuelle'}</div>
+                    <div className="font-semibold leading-tight truncate">{receptionTitle(r)}</div>
                     <div className="text-xs text-ink-soft mt-0.5">{new Date(r.created_at).toLocaleDateString('fr-FR')}</div>
                   </div>
                   <span className="shrink-0 text-ink-soft"><IconChevron /></span>
@@ -211,7 +213,7 @@ export default function PdaReceiving({
     const done = items.filter((x) => x.received_qty !== null);
     return (
       <Screen>
-        <Header title={reception.filename ?? 'Réception'} onBack={() => { setView('receptions'); void loadReceptions(); }} onHome={onHome} />
+        <Header title={receptionTitle(reception)} onBack={() => { setView('receptions'); void loadReceptions(); }} onHome={onHome} />
         <div className="shrink-0 px-3.5 py-3 bg-surface border-b border-border">
           <div className="flex items-baseline justify-between text-sm">
             <span className="font-semibold">{done.length} / {items.length} articles réceptionnés</span>

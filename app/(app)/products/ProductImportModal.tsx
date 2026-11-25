@@ -47,11 +47,16 @@ export default function ProductImportModal({
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ inserted: number; failures: Array<{ name: string; reason: string }>; receptionId: string | null } | null>(null);
   const [filename, setFilename] = useState<string | null>(null);
+  // Nom de la réception associée, pour la retrouver plus facilement sur le
+  // PDA — pré-rempli à partir du fichier, modifiable avant import.
+  const [receptionName, setReceptionName] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
   async function onFile(f: File) {
     setLoading(true); setError(null);
     setFilename(f.name);
+    // Pré-remplissage : nom du fichier sans extension.
+    setReceptionName(f.name.replace(/\.[^./]+$/, ''));
     try {
       // Envoi en binaire : Excel (.xlsx) ou CSV, détecté côté serveur.
       const bytes = await f.arrayBuffer();
@@ -99,6 +104,7 @@ export default function ProductImportModal({
         })),
         store_ids: targetStores,
         filename,
+        name: receptionName.trim() || null,
       }),
     });
     setLoading(false);
@@ -142,11 +148,14 @@ export default function ProductImportModal({
           )}
 
           {step === 'preview' && preview && (
-            <PreviewStep preview={preview} error={error} />
+            <PreviewStep
+              preview={preview} error={error}
+              receptionName={receptionName} onReceptionNameChange={setReceptionName}
+            />
           )}
 
           {step === 'done' && result && (
-            <DoneStep result={result} />
+            <DoneStep result={result} receptionName={receptionName} />
           )}
         </div>
 
@@ -272,10 +281,27 @@ function PickStep({
   );
 }
 
-function PreviewStep({ preview, error }: { preview: PreviewResp; error: string | null }) {
+function PreviewStep({ preview, error, receptionName, onReceptionNameChange }: {
+  preview: PreviewResp; error: string | null;
+  receptionName: string; onReceptionNameChange: (v: string) => void;
+}) {
   const validCount = preview.rows.filter((r) => r.errors.length === 0).length;
   return (
     <div className="space-y-3">
+      <label className="block">
+        <span className="text-xs font-medium text-ink-soft">
+          Nom de cet import — pour le retrouver plus facilement sur le PDA
+        </span>
+        <input
+          type="text"
+          className="input mt-1 h-11 w-full"
+          maxLength={200}
+          value={receptionName}
+          onChange={(e) => onReceptionNameChange(e.target.value)}
+          placeholder="ex. Livraison fleurs — semaine 47"
+        />
+      </label>
+
       <div className="grid grid-cols-3 gap-2">
         <div className="rounded-xl border border-border p-2 text-center">
           <div className="text-2xl font-semibold">{preview.total}</div>
@@ -372,9 +398,10 @@ function PreviewStep({ preview, error }: { preview: PreviewResp; error: string |
 }
 
 function DoneStep({
-  result,
+  result, receptionName,
 }: {
   result: { inserted: number; failures: Array<{ name: string; reason: string }>; receptionId: string | null };
+  receptionName: string;
 }) {
   return (
     <div className="space-y-4 py-4">
@@ -396,12 +423,14 @@ function DoneStep({
           </ul>
         </div>
       )}
-      {result.receptionId && <SendToPdaToggle receptionId={result.receptionId} count={result.inserted} />}
+      {result.receptionId && (
+        <SendToPdaToggle receptionId={result.receptionId} count={result.inserted} name={receptionName} />
+      )}
     </div>
   );
 }
 
-function SendToPdaToggle({ receptionId, count }: { receptionId: string; count: number }) {
+function SendToPdaToggle({ receptionId, count, name }: { receptionId: string; count: number; name: string }) {
   const [on, setOn] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -429,7 +458,7 @@ function SendToPdaToggle({ receptionId, count }: { receptionId: string; count: n
         </p>
         {on && (
           <p className="mt-1.5 text-xs font-semibold text-accent-deep">
-            ✓ Visible sur le PDA, dans « Nouvelle réception ».
+            ✓ Visible sur le PDA, dans « Nouvelle réception »{name.trim() ? ` sous le nom « ${name.trim()} »` : ''}.
           </p>
         )}
       </div>

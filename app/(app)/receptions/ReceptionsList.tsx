@@ -9,6 +9,7 @@ import ReceptionFormModal from './ReceptionFormModal';
 interface Reception {
   id: string;
   filename: string | null;
+  name: string | null;
   store_ids: string[];
   sent_to_pda: boolean;
   created_at: string;
@@ -82,7 +83,7 @@ export default function ReceptionsList({ stores, canWrite }: {
                 const s = statusOf(r);
                 return (
                   <tr key={r.id} className="border-t border-border">
-                    <td className="px-4 py-3 font-medium">{r.filename ?? 'Réception manuelle'}</td>
+                    <td className="px-4 py-3 font-medium">{r.name ?? r.filename ?? 'Réception manuelle'}</td>
                     <td className="px-4 py-3 text-ink-soft">{storeNames(r.store_ids)}</td>
                     <td className="px-4 py-3 text-right tabular-nums">{r.total}</td>
                     <td className="px-4 py-3 text-right tabular-nums">{r.received}</td>

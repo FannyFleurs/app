@@ -17,10 +17,10 @@ export async function GET() {
   if ('response' in g) return g.response;
 
   const { rows } = await query<{
-    id: string; filename: string | null; store_ids: string[]; sent_to_pda: boolean;
+    id: string; filename: string | null; name: string | null; store_ids: string[]; sent_to_pda: boolean;
     created_at: string; total: string; received: string;
   }>(
-    `SELECT r.id, r.filename, r.store_ids, r.sent_to_pda, r.created_at::text,
+    `SELECT r.id, r.filename, r.name, r.store_ids, r.sent_to_pda, r.created_at::text,
             COUNT(ri.id)::text AS total,
             COUNT(ri.id) FILTER (WHERE ri.received_qty IS NOT NULL)::text AS received
        FROM receptions r
@@ -36,6 +36,7 @@ export async function GET() {
     receptions: rows.map((r) => ({
       id: r.id,
       filename: r.filename,
+      name: r.name,
       store_ids: r.store_ids,
       sent_to_pda: r.sent_to_pda,
       created_at: r.created_at,
@@ -49,6 +50,7 @@ export async function GET() {
 const createSchema = z.object({
   store_ids: z.array(z.string().uuid()).optional(),
   product_ids: z.array(z.string().uuid()).min(1).max(5000),
+  name: z.string().max(200).nullable().optional(),
 });
 
 /**
@@ -74,9 +76,9 @@ export async function POST(req: Request) {
   if (productIds.length === 0) return jsonError('NO_VALID_PRODUCTS', 422);
 
   const reception = await query<{ id: string; created_at: string }>(
-    `INSERT INTO receptions (organization_id, filename, store_ids, sent_to_pda, product_count, created_by)
-     VALUES ($1, NULL, $2, TRUE, $3, $4) RETURNING id, created_at::text`,
-    [g.user.organizationId, storeIds, productIds.length, g.user.id],
+    `INSERT INTO receptions (organization_id, filename, name, store_ids, sent_to_pda, product_count, created_by)
+     VALUES ($1, NULL, $2, $3, TRUE, $4, $5) RETURNING id, created_at::text`,
+    [g.user.organizationId, parsed.data.name ?? null, storeIds, productIds.length, g.user.id],
   );
   const receptionId = reception.rows[0]!.id;
 

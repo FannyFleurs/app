@@ -13,9 +13,9 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   if ('response' in g) return g.response;
 
   const reception = await query<{
-    id: string; filename: string | null; store_ids: string[]; sent_to_pda: boolean; created_at: string;
+    id: string; filename: string | null; name: string | null; store_ids: string[]; sent_to_pda: boolean; created_at: string;
   }>(
-    `SELECT id, filename, store_ids, sent_to_pda, created_at::text
+    `SELECT id, filename, name, store_ids, sent_to_pda, created_at::text
        FROM receptions WHERE id = $1 AND organization_id = $2`,
     [params.id, g.user.organizationId],
   );
@@ -46,6 +46,9 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 const patchSchema = z.object({
   sent_to_pda: z.boolean().optional(),
   product_ids: z.array(z.string().uuid()).min(1).max(5000).optional(),
+  // Renommage : toujours permis, même réception déjà commencée sur le PDA —
+  // ça n'affecte en rien la réception en cours, seulement son affichage.
+  name: z.string().max(200).nullable().optional(),
 });
 
 /**
@@ -99,10 +102,14 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     await query(`UPDATE receptions SET sent_to_pda = $1 WHERE id = $2`, [parsed.data.sent_to_pda, params.id]);
   }
 
+  if (parsed.data.name !== undefined) {
+    await query(`UPDATE receptions SET name = $1 WHERE id = $2`, [parsed.data.name, params.id]);
+  }
+
   await audit({
     organizationId: g.user.organizationId, userId: g.user.id,
     action: 'receptions.update', entityType: 'reception', entityId: params.id,
-    payload: { sent_to_pda: parsed.data.sent_to_pda, product_count: parsed.data.product_ids?.length },
+    payload: { sent_to_pda: parsed.data.sent_to_pda, product_count: parsed.data.product_ids?.length, name: parsed.data.name },
   });
 
   return NextResponse.json({ ok: true });

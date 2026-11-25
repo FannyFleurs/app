@@ -18,10 +18,10 @@ export async function GET(req: Request) {
   if (!storeId) return jsonError('STORE_ID_REQUIRED', 400);
 
   const { rows } = await query<{
-    id: string; filename: string | null; created_at: string;
+    id: string; filename: string | null; name: string | null; created_at: string;
     total: string; received: string;
   }>(
-    `SELECT r.id, r.filename, r.created_at::text,
+    `SELECT r.id, r.filename, r.name, r.created_at::text,
             COUNT(ri.id)::text AS total,
             COUNT(ri.id) FILTER (WHERE ri.received_qty IS NOT NULL)::text AS received
        FROM receptions r
@@ -40,6 +40,7 @@ export async function GET(req: Request) {
     receptions: rows.map((r) => ({
       id: r.id,
       filename: r.filename,
+      name: r.name,
       created_at: r.created_at,
       total: Number(r.total),
       received: Number(r.received),
