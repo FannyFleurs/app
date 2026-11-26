@@ -21,7 +21,7 @@ import Badge from '@/components/Badge';
  * intervention.
  */
 
-type Report = 'sales' | 'lines' | 'by_category' | 'by_supplier' | 'debts' | 'refunds' | 'cancellations' | 'vouchers' | 'shrinkage';
+type Report = 'sales' | 'lines' | 'by_category' | 'by_supplier' | 'debts' | 'settlements' | 'refunds' | 'cancellations' | 'vouchers' | 'shrinkage';
 
 interface SalesDay {
   day: string; tickets: number;
@@ -80,6 +80,16 @@ interface DebtsData {
   totals: { count: number; ht: number; ttc: number; deferred: number };
 }
 
+interface SettlementRow {
+  id: string; date: string; cashier: string | null;
+  customer: string | null; store: string | null;
+  method: string; amount: number; reference: string | null;
+}
+interface SettlementsData {
+  lines: SettlementRow[];
+  totals: { count: number; amount: number; by_method: Record<string, number> };
+}
+
 interface RefundRow {
   id: string; date: string; number: string; receipt: string | null;
   seller: string | null; customer: string | null; store: string | null;
@@ -117,7 +127,7 @@ const VOUCHER_LABELS: Record<VoucherRow['type'], string> = {
 };
 
 const REPORTS: Array<{
-  key: Report; label: string; icon: 'dashboard' | 'products' | 'customers' | 'loyalty' | 'invoices' | 'categories' | 'truck';
+  key: Report; label: string; icon: 'dashboard' | 'products' | 'customers' | 'loyalty' | 'invoices' | 'categories' | 'truck' | 'card';
   endpoint: string; help: string;
 }> = [
   {
@@ -139,6 +149,10 @@ const REPORTS: Array<{
   {
     key: 'debts', label: 'Dettes clients', icon: 'customers', endpoint: 'customer-debts',
     help: "Les ventes réglées « en compte ». Le montant du ticket dit d'où vient la dette ; le solde du client dit ce qui reste dû aujourd'hui.",
+  },
+  {
+    key: 'settlements', label: 'Règlements de comptes', icon: 'card', endpoint: 'account-settlements',
+    help: "Chaque règlement d'un solde client « en compte » sur la période : qui l'a saisi, pour quel client, combien et par quel moyen — facture soldée ou règlement direct depuis la fiche client.",
   },
   {
     key: 'refunds', label: 'Remboursements', icon: 'invoices', endpoint: 'refunds',
@@ -456,6 +470,7 @@ export default function ReportsClient({ stores }: { stores: { id: string; name: 
                 {report === 'by_category' && <CategoryTable data={data as unknown as CategoryData} />}
                 {report === 'by_supplier' && <SupplierTable data={data as unknown as SupplierData} />}
                 {report === 'debts' && <DebtsTable data={data as unknown as DebtsData} />}
+                {report === 'settlements' && <SettlementsTable data={data as unknown as SettlementsData} />}
                 {report === 'refunds' && <RefundsTable data={data as unknown as RefundsData} />}
                 {report === 'cancellations' && <CancelTable data={data as unknown as CancelData} />}
                 {report === 'vouchers' && <VouchersTable data={data as unknown as VouchersData} />}
@@ -761,6 +776,54 @@ function DebtsTable({ data }: { data: DebtsData }) {
           </tr>
         </tfoot>
       </table>
+    </div>
+  );
+}
+
+function SettlementsTable({ data }: { data: SettlementsData }) {
+  if (data.lines.length === 0) return <Empty />;
+  const methods = Object.keys(data.totals.by_method);
+  return (
+    <div className="space-y-3">
+      {methods.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {methods.map((m) => (
+            <span key={m} className="rounded-xl border border-border bg-gray-50 px-3 py-1.5 text-xs">
+              <span className="text-ink-soft">{PAYMENT_LABELS[m] ?? m}</span>{' '}
+              <span className="font-semibold tabular-nums">{formatEUR(data.totals.by_method[m]!)}</span>
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm border-collapse">
+          <thead>
+            <tr className="text-[11px] uppercase tracking-wider text-ink-soft">
+              <Th sticky>Date</Th><Th>Saisi par</Th><Th>Client</Th><Th>Boutique</Th>
+              <Th>Moyen</Th><Th>Référence</Th><Th right>Montant</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.lines.map((l) => (
+              <tr key={l.id} className="border-t border-border hover:bg-gray-50/60">
+                <Td sticky>{frDateTime(l.date)}</Td>
+                <Td>{l.cashier ?? '—'}</Td>
+                <Td>{l.customer ?? <span className="text-ink-soft">Client anonyme</span>}</Td>
+                <Td>{l.store ?? '—'}</Td>
+                <Td>{PAYMENT_LABELS[l.method] ?? l.method}</Td>
+                <Td><span className="text-ink-soft">{l.reference ?? '—'}</span></Td>
+                <Td right strong>{formatEUR(l.amount)}</Td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="border-t-2 border-ink/20 font-semibold bg-gray-50">
+              <Td sticky>Total</Td><Td>{data.totals.count} règlement(s)</Td><Td /><Td /><Td /><Td />
+              <Td right>{formatEUR(data.totals.amount)}</Td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
     </div>
   );
 }
@@ -1094,6 +1157,18 @@ function csvRows(report: Report, data: Record<string, unknown>): string[][] {
       rows.push([
         frDateTime(l.date), l.receipt ?? '', l.seller ?? '', l.customer ?? '', l.store ?? '',
         n(l.ht), n(l.ttc), n(l.deferred), l.balance == null ? '' : n(l.balance),
+      ]);
+    }
+    return rows;
+  }
+
+  if (report === 'settlements') {
+    const d = data as unknown as SettlementsData;
+    rows.push(['Date', 'Saisi par', 'Client', 'Boutique', 'Moyen', 'Référence', 'Montant']);
+    for (const l of d.lines) {
+      rows.push([
+        frDateTime(l.date), l.cashier ?? '', l.customer ?? '', l.store ?? '',
+        PAYMENT_LABELS[l.method] ?? l.method, l.reference ?? '', n(l.amount),
       ]);
     }
     return rows;

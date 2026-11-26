@@ -4,10 +4,10 @@ import { render, screen, act, cleanup, fireEvent } from '@testing-library/react'
 import ReportsClient from '@/app/(app)/reports/ReportsClient';
 
 /**
- * Navigation entre les huit rapports du back-office.
+ * Navigation entre les neuf rapports du back-office.
  *
  * Chaque rapport a ses propres colonnes et donc sa propre forme de données :
- * « Ventes » renvoie des jours, les sept autres des lignes. Le piège est le
+ * « Ventes » renvoie des jours, les huit autres des lignes. Le piège est le
  * changement d'onglet — l'onglet bascule immédiatement, la requête non. Si le
  * jeu de données précédent restait affiché pendant ce laps de temps, le
  * tableau du nouveau rapport lirait des colonnes absentes et l'écran entier
@@ -42,6 +42,13 @@ const PAYLOADS: Record<string, unknown> = {
       customer: 'Mairie', store: 'Plante Verte', ht: 80, ttc: 96, deferred: 96, balance: 96,
     }],
     totals: { count: 1, ht: 80, ttc: 96, deferred: 96 },
+  },
+  'account-settlements': {
+    lines: [{
+      id: 's1', date: '2026-08-05T10:30:00Z', cashier: 'Fanny', customer: 'Mairie',
+      store: 'Plante Verte', method: 'cash', amount: 50, reference: 'F-0001',
+    }],
+    totals: { count: 1, amount: 50, by_method: { cash: 50 } },
   },
   refunds: {
     lines: [{
@@ -82,7 +89,7 @@ const PAYLOADS: Record<string, unknown> = {
 
 const TABS = [
   'Ventes', 'Lignes de vente', 'Par catégorie', 'Par fournisseur', 'Dettes clients',
-  'Remboursements', 'Annulations', 'Avoirs / Bons cadeaux',
+  'Règlements de comptes', 'Remboursements', 'Annulations', 'Avoirs / Bons cadeaux',
 ] as const;
 
 let calls: string[] = [];
@@ -205,7 +212,7 @@ describe('Rapports du back-office', () => {
     expect(screen.getByText('Tickets')).toBeTruthy();
   });
 
-  it('ouvre chacun des sept autres rapports depuis les ventes', async () => {
+  it('ouvre chacun des huit autres rapports depuis les ventes', async () => {
     // Le chemin exact du bug signalé : on part toujours des ventes, dont la
     // forme (des jours) n'a aucune colonne en commun avec les autres.
     for (const tab of TABS.slice(1)) {
@@ -217,7 +224,7 @@ describe('Rapports du back-office', () => {
     }
   });
 
-  it('enchaîne les huit rapports dans les deux sens sans planter', async () => {
+  it('enchaîne les neuf rapports dans les deux sens sans planter', async () => {
     await mount();
     for (const tab of [...TABS.slice(1), ...[...TABS].reverse()]) {
       await openTab(tab);
