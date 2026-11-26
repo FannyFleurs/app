@@ -151,24 +151,37 @@ export class ClosingService {
         paymentsBreakdown.find((p) => p.method === 'cash')?.total ?? 0,
       );
 
-      // Fonds + mouvements caisse pour les sessions ouvertes ce jour-là sur cette boutique
+      // Fonds (sessions OUVERTES ce jour-là, cohérent : un fonds déjà compté
+      // le jour de son ouverture ne doit pas être recompté un autre jour) +
+      // mouvements de caisse DU JOUR (filtrés sur la date du MOUVEMENT
+      // lui-même, pas sur la date d'ouverture de sa session) — même
+      // convention que lib/services/closure-preview.ts (computeClosurePreview,
+      // utilisé pour l'aperçu live pendant le comptage). Sans ça, une caisse
+      // à fonds commun qu'on ne réouvre pas chaque jour (session ouverte un
+      // jour précédent, toujours 'open') perdait TOUS ses mouvements du jour
+      // au scellement — dont un règlement de solde client en espèces — alors
+      // que l'aperçu live les comptait bien : écart "+" fictif au comptage.
       const floatsRes = await client.query<{
         opening_floats: string; ins: string; outs: string;
       }>(
         `SELECT
             COALESCE(SUM(cs.opening_float), 0)::text AS opening_floats,
-            COALESCE((SELECT SUM(cm.amount) FROM cash_movements cm
-                       WHERE cm.cash_session_id IN (
-                         SELECT id FROM cash_sessions
-                          WHERE store_id = $1 AND (opened_at AT TIME ZONE 'Europe/Paris')::date = $2::date
-                            AND ($3::timestamptz IS NULL OR opened_at > $3)
-                       ) AND cm.movement_type = 'in'), 0)::text AS ins,
-            COALESCE((SELECT SUM(cm.amount) FROM cash_movements cm
-                       WHERE cm.cash_session_id IN (
-                         SELECT id FROM cash_sessions
-                          WHERE store_id = $1 AND (opened_at AT TIME ZONE 'Europe/Paris')::date = $2::date
-                            AND ($3::timestamptz IS NULL OR opened_at > $3)
-                       ) AND cm.movement_type = 'out'), 0)::text AS outs
+            COALESCE((
+              SELECT SUM(cm.amount) FROM cash_movements cm
+                JOIN cash_sessions cs2 ON cs2.id = cm.cash_session_id
+               WHERE cs2.store_id = $1
+                 AND (cm.created_at AT TIME ZONE 'Europe/Paris')::date = $2::date
+                 AND ($3::timestamptz IS NULL OR cm.created_at > $3)
+                 AND cm.movement_type = 'in'
+            ), 0)::text AS ins,
+            COALESCE((
+              SELECT SUM(cm.amount) FROM cash_movements cm
+                JOIN cash_sessions cs2 ON cs2.id = cm.cash_session_id
+               WHERE cs2.store_id = $1
+                 AND (cm.created_at AT TIME ZONE 'Europe/Paris')::date = $2::date
+                 AND ($3::timestamptz IS NULL OR cm.created_at > $3)
+                 AND cm.movement_type = 'out'
+            ), 0)::text AS outs
            FROM cash_sessions cs
           WHERE cs.store_id = $1 AND (cs.opened_at AT TIME ZONE 'Europe/Paris')::date = $2::date
             AND ($3::timestamptz IS NULL OR cs.opened_at > $3)`,

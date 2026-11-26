@@ -149,7 +149,84 @@ describe.skipIf(!hasDb)('Solder une facture : réconciliation de clôture, CA in
     // désunion exclut explicitement method='cash'.
     const cashLine = preview.payments.find((p) => p.method === 'cash');
     expect(cashLine).toBeUndefined();
+
+    // Le SCELLEMENT doit refléter exactement le même montant attendu que
+    // l'aperçu live juste avant — sinon le comptage (basé sur le preview)
+    // et la clôture scellée (basée sur sealDaily) divergent, et l'écart
+    // affiché à l'utilisateur ne correspond à rien de réel.
+    const sealed = await ClosingService.sealDaily({ organizationId, storeId, userId, businessDate: DAY });
+    expect(sealed.totals.cash_expected).toBe(preview.cash_breakdown.expected);
   });
+
+  it(
+    "solde en ESPÈCES sur une caisse ouverte un jour PRÉCÉDENT (fonds commun jamais rouvert) : " +
+    'le scellement doit compter le règlement comme le fait l\'aperçu live',
+    async () => {
+      // Caisse à fonds commun qu'on ne referme/réouvre pas chaque jour :
+      // la session a été ouverte hier et reste 'open' aujourd'hui. Avant
+      // correction, ClosingService.sealDaily exigeait qu'une session ait été
+      // OUVERTE le jour même pour compter ses mouvements de caisse — une
+      // session plus ancienne faisait disparaître tout règlement du jour de
+      // l'espèces attendue au scellement (cash_expected = 0), alors que
+      // l'aperçu live (computeClosurePreview, filtré sur la date du
+      // MOUVEMENT) le comptait bien : écart "+" fictif au comptage.
+      const org2 = await query<{ id: string }>(
+        `INSERT INTO organizations (name, legal_name) VALUES ($1, $1) RETURNING id`,
+        [`Test Settle Invoice Fonds Commun ${randomUUID()}`],
+      );
+      const organizationId2 = org2.rows[0]!.id;
+      const store2 = await query<{ id: string }>(
+        `INSERT INTO stores (organization_id, code, name) VALUES ($1, 'A', 'Boutique A') RETURNING id`,
+        [organizationId2],
+      );
+      const storeId2 = store2.rows[0]!.id;
+      const register2 = await query<{ id: string }>(
+        `INSERT INTO registers (organization_id, store_id, code, name) VALUES ($1,$2,'R1','Caisse') RETURNING id`,
+        [organizationId2, storeId2],
+      );
+      const registerId2 = register2.rows[0]!.id;
+      const user2 = await query<{ id: string }>(
+        `INSERT INTO users (organization_id, email, password_hash, full_name, role)
+         VALUES ($1, $2, 'x', 'Testeur', 'owner') RETURNING id`,
+        [organizationId2, `settle-fc-${randomUUID()}@example.test`],
+      );
+      const userId2 = user2.rows[0]!.id;
+      const customer2 = await query<{ id: string }>(
+        `INSERT INTO customers (organization_id, first_name, last_name) VALUES ($1,'Marie','Petit') RETURNING id`,
+        [organizationId2],
+      );
+      const customerId2 = customer2.rows[0]!.id;
+      await query(
+        `INSERT INTO cash_sessions (organization_id, store_id, register_id, opened_by, opening_float, status, opened_at)
+         VALUES ($1,$2,$3,$4,100,'open', now() - interval '1 day')`,
+        [organizationId2, storeId2, registerId2, userId2],
+      );
+
+      const invR = await query<{ id: string }>(
+        `INSERT INTO invoices
+           (organization_id, store_id, customer_id, invoice_type, number, sequence_value, status,
+            issue_date, due_date, total_ht, total_tva, total_ttc, tva_breakdown,
+            payment_terms, created_at)
+         VALUES ($1,$2,$3,'standard',$4,1,'sent',$5::date,$5::date,80,0,80,'[]'::jsonb,'À réception', $5::date)
+         RETURNING id`,
+        [organizationId2, storeId2, customerId2, `F-TEST-FC-${randomUUID()}`, DAY],
+      );
+      await InvoiceService.settleInvoice({
+        organizationId: organizationId2, userId: userId2, invoiceId: invR.rows[0]!.id, amount: 80, method: 'cash',
+      });
+
+      // Le fonds (100) ne compte que le jour où la session a été ouverte
+      // (hier) — cohérent entre preview et scellement. Seul le règlement du
+      // jour (80) doit apparaître dans l'espèces attendue aujourd'hui.
+      const preview = await computeClosurePreview(storeId2, DAY);
+      expect(preview.cash_breakdown.expected).toBe(80);
+
+      const sealed = await ClosingService.sealDaily({
+        organizationId: organizationId2, storeId: storeId2, userId: userId2, businessDate: DAY,
+      });
+      expect(sealed.totals.cash_expected).toBe(preview.cash_breakdown.expected);
+    },
+  );
 
   it('la route /settle exige un mode de règlement (schéma désormais obligatoire)', async () => {
     const inv = await makeInvoice(20);
