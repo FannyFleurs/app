@@ -24,6 +24,15 @@ interface Category {
 
 interface TaxRate { id: string; rate: number; label: string }
 
+interface CategoryDiscount {
+  store_id: string;
+  discount_type: 'percent' | 'amount';
+  discount_value: number;
+  always_active: boolean;
+  start_date: string | null;
+  end_date: string | null;
+}
+
 const COLOR_PRESETS = ['#FFFFFF', '#F5F5F5', '#E8EFE2', '#EFE6D6', '#D8E8D8', '#F0E4D7', '#F3E8E0', '#E6E2D8'];
 
 export default function CategoriesAdmin({ canEdit, backOffice = false, stores = [] }: {
@@ -224,6 +233,59 @@ function CategoryFormModal({ category, backOffice, stores, taxRates, posteStoreI
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Remise automatique, par boutique (page Catégories) — chargée seulement
+  // pour une catégorie existante (il faut un id pour l'enregistrer). Une
+  // entrée par boutique, par défaut inactive tant qu'aucune remise n'existe.
+  type DiscountRow = {
+    active: boolean; discount_type: 'percent' | 'amount'; discount_value: string;
+    always_active: boolean; start_date: string; end_date: string;
+  };
+  const blankRow: DiscountRow = {
+    active: false, discount_type: 'percent', discount_value: '',
+    always_active: true, start_date: '', end_date: '',
+  };
+  const [discounts, setDiscounts] = useState<Record<string, DiscountRow>>({});
+  const [discountsLoaded, setDiscountsLoaded] = useState(!category);
+  useEffect(() => {
+    if (!category) return;
+    void (async () => {
+      const r = await fetch(`/api/categories/${category.id}/discounts`);
+      const existing = r.ok ? ((await r.json()).discounts as CategoryDiscount[]) : [];
+      const byStore: Record<string, DiscountRow> = {};
+      for (const d of existing) {
+        byStore[d.store_id] = {
+          active: true, discount_type: d.discount_type, discount_value: String(d.discount_value),
+          always_active: d.always_active, start_date: d.start_date ?? '', end_date: d.end_date ?? '',
+        };
+      }
+      setDiscounts(byStore);
+      setDiscountsLoaded(true);
+    })();
+  }, [category]);
+  function setDiscountRow(storeId: string, patch: Partial<DiscountRow>) {
+    setDiscounts((cur) => ({ ...cur, [storeId]: { ...(cur[storeId] ?? blankRow), ...patch } }));
+  }
+  /** Lignes prêtes pour l'API : uniquement les boutiques actives, avec un
+   *  montant renseigné et (hors « toujours active ») les deux dates. */
+  function discountsPayload(): { valid: boolean; discounts: Array<Record<string, unknown>> } {
+    const out: Array<Record<string, unknown>> = [];
+    for (const [storeId, row] of Object.entries(discounts)) {
+      if (!row.active) continue;
+      const value = Number(row.discount_value.replace(',', '.'));
+      if (!(value > 0)) return { valid: false, discounts: [] };
+      if (!row.always_active && (!row.start_date || !row.end_date || row.start_date > row.end_date)) {
+        return { valid: false, discounts: [] };
+      }
+      out.push({
+        store_id: storeId, discount_type: row.discount_type, discount_value: value,
+        always_active: row.always_active,
+        start_date: row.always_active ? null : row.start_date,
+        end_date: row.always_active ? null : row.end_date,
+      });
+    }
+    return { valid: true, discounts: out };
+  }
+
   async function remove() {
     if (!category) return;
     // Boutique cible connue (mono-boutique ou filtre) : retrait de cette
@@ -247,6 +309,11 @@ function CategoryFormModal({ category, backOffice, stores, taxRates, posteStoreI
   }
 
   async function submit() {
+    const { valid, discounts: discountsBody } = discountsPayload();
+    if (!valid) {
+      setError('Remise automatique : renseignez un montant valide, et les deux dates si la remise n\'est pas « toujours active ».');
+      return;
+    }
     setSaving(true); setError(null);
     const payload: Record<string, unknown> = {
       name: form.name.trim(),
@@ -278,11 +345,28 @@ function CategoryFormModal({ category, backOffice, stores, taxRates, posteStoreI
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...payload, position: 0 }),
         });
-    setSaving(false);
     if (!res.ok) {
+      setSaving(false);
       const j = await res.json().catch(() => ({}));
       setError(j.message ?? j.error ?? 'Erreur');
       return;
+    }
+    // Remise automatique : seulement pour une catégorie déjà existante — une
+    // catégorie en cours de création n'a pas encore d'id à cet endroit du
+    // formulaire (on réouvrira la fiche après création pour en ajouter une).
+    if (category) {
+      const dRes = await fetch(`/api/categories/${category.id}/discounts`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ discounts: discountsBody }),
+      });
+      setSaving(false);
+      if (!dRes.ok) {
+        const j = await dRes.json().catch(() => ({}));
+        setError(j.message ?? j.error ?? 'Remise automatique : échec de l\'enregistrement.');
+        return;
+      }
+    } else {
+      setSaving(false);
     }
     onSaved();
   }
@@ -444,6 +528,78 @@ function CategoryFormModal({ category, backOffice, stores, taxRates, posteStoreI
               </p>
             </div>
           )}
+
+          <div>
+            <label className="text-sm font-medium text-ink-soft">Remise automatique</label>
+            <p className="mt-0.5 text-xs text-ink-soft">
+              Appliquée automatiquement en caisse à chaque article de cette catégorie, par boutique —
+              cumulable avec les remises client et article.
+            </p>
+            {!category ? (
+              <p className="mt-2 text-xs text-ink-soft italic">
+                Enregistrez d&apos;abord la catégorie, puis rouvrez-la pour configurer une remise automatique.
+              </p>
+            ) : !discountsLoaded ? (
+              <p className="mt-2 text-xs text-ink-soft">Chargement…</p>
+            ) : (
+              <div className="mt-2 space-y-2">
+                {stores.map((s) => {
+                  const row = discounts[s.id] ?? blankRow;
+                  return (
+                    <div key={s.id} className="rounded-xl border border-border p-3 space-y-2">
+                      <label className="flex items-center justify-between gap-3 cursor-pointer">
+                        <span className="text-sm font-medium">
+                          {stores.length > 1 ? s.name : 'Remise active'}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setDiscountRow(s.id, { active: !row.active })}
+                          className={`relative h-6 w-11 rounded-full transition-colors shrink-0 ${
+                            row.active ? 'bg-sage' : 'bg-border'
+                          }`}
+                          aria-pressed={row.active}
+                          aria-label={`Remise automatique active — ${s.name}`}
+                        >
+                          <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
+                            row.active ? 'translate-x-5' : ''
+                          }`} />
+                        </button>
+                      </label>
+                      {row.active && (
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <select className="input h-9 text-sm w-28" value={row.discount_type}
+                                    onChange={(e) => setDiscountRow(s.id, { discount_type: e.target.value as 'percent' | 'amount' })}>
+                              <option value="percent">%</option>
+                              <option value="amount">€</option>
+                            </select>
+                            <input className="input h-9 text-sm flex-1" inputMode="decimal"
+                                   placeholder={row.discount_type === 'percent' ? 'ex : 10' : 'ex : 2.50'}
+                                   value={row.discount_value}
+                                   onChange={(e) => setDiscountRow(s.id, { discount_value: e.target.value })} />
+                          </div>
+                          <label className="flex items-center gap-2 text-sm">
+                            <input type="checkbox" checked={row.always_active}
+                                   onChange={(e) => setDiscountRow(s.id, { always_active: e.target.checked })} />
+                            Toujours active
+                          </label>
+                          {!row.always_active && (
+                            <div className="flex items-center gap-2">
+                              <input type="date" className="input h-9 text-sm flex-1" value={row.start_date}
+                                     onChange={(e) => setDiscountRow(s.id, { start_date: e.target.value })} />
+                              <span className="text-xs text-ink-soft">au</span>
+                              <input type="date" className="input h-9 text-sm flex-1" value={row.end_date}
+                                     onChange={(e) => setDiscountRow(s.id, { end_date: e.target.value })} />
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
 
         {error && <div className="mt-3 rounded-xl bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}

@@ -17,23 +17,24 @@ import { readFileSync } from 'node:fs';
 describe('Caisse — la remise automatique suit la quantité ajustée via +/- (incLine)', () => {
   const src = readFileSync('app/(app)/caisse/CashRegister.tsx', 'utf8');
   const idx = src.indexOf('function incLine');
-  const block = src.slice(idx, idx + 1200);
+  const block = src.slice(idx, idx + 1600);
 
   it('incLine existe et traite la ligne concernée', () => {
     expect(idx).toBeGreaterThan(-1);
   });
 
-  it('recalcule discount_amount à partir de la remise client (auto_discount_pct) et de la remise produit (product_disc_unit) à la nouvelle quantité', () => {
+  it('recalcule discount_amount à partir de la remise client (auto_discount_pct), de la remise produit (product_disc_unit) et de la remise catégorie (category_disc_unit) à la nouvelle quantité', () => {
     expect(block).toMatch(/const autoPct = Number\(l\.metadata\?\.auto_discount_pct \?\? 0\);/);
     expect(block).toMatch(/const prodDiscUnit = Number\(l\.metadata\?\.product_disc_unit \?\? 0\);/);
-    expect(block).toMatch(/round2\(round2\(\(l\.unit_price_ttc \* quantity \* autoPct\) \/ 100\) \+ round2\(prodDiscUnit \* quantity\)\)/);
+    expect(block).toMatch(/const catDiscUnit = Number\(l\.metadata\?\.category_disc_unit \?\? 0\);/);
+    expect(block).toMatch(/round2\(round2\(\(l\.unit_price_ttc \* quantity \* autoPct\) \/ 100\) \+ round2\(\(prodDiscUnit \+ catDiscUnit\) \* quantity\)\)/);
   });
 
   it('ne recalcule jamais une remise manuelle (ligne justifiée ou part d\'une remise globale panier) : son montant reste celui choisi par la caissière', () => {
     expect(block).toMatch(/if \(l\.metadata\?\.manual_discount_reason \|\| l\.metadata\?\.cart_discount\) \{\s*return \{ \.\.\.l, quantity \};\s*\}/);
   });
 
-  it('une ligne sans remise automatique garde son discount_amount inchangé (pas de remise à inventer)', () => {
-    expect(block).toMatch(/if \(autoPct <= 0 && prodDiscUnit <= 0\) return \{ \.\.\.l, quantity \};/);
+  it('une ligne sans remise automatique (client, produit ou catégorie) garde son discount_amount inchangé (pas de remise à inventer)', () => {
+    expect(block).toMatch(/if \(autoPct <= 0 && prodDiscUnit <= 0 && catDiscUnit <= 0\) return \{ \.\.\.l, quantity \};/);
   });
 });

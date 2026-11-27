@@ -60,6 +60,10 @@ export interface PosProduct {
   /** Remise propre à l'article (fiche produit) — appliquée au scan/à l'ajout. */
   discount_type?: 'percent' | 'amount' | null;
   discount_value?: number | null;
+  /** Remise automatique de la catégorie, active aujourd'hui pour cette
+   *  boutique (page Catégories) — cumulable avec les remises ci-dessus. */
+  category_discount_type?: 'percent' | 'amount' | null;
+  category_discount_value?: number | null;
   /** Couleur de fond #RRGGBB pour la tuile caisse (migration 0018). */
   color?: string | null;
   tags: string[];
@@ -579,6 +583,7 @@ export default function CashRegister({
         sale_price_ttc: Number(p.sale_price_ttc),
         tax_rate: Number(p.tax_rate),
         discount_value: p.discount_value != null ? Number(p.discount_value) : null,
+        category_discount_value: p.category_discount_value != null ? Number(p.category_discount_value) : null,
       })) as PosProduct[];
       setProducts(freshProducts);
     }
@@ -1092,15 +1097,26 @@ export default function CashRegister({
         : p.sale_price_ttc - p.discount_value;
       prodDiscUnit = round2(Math.max(0, p.sale_price_ttc - Math.max(0, reduced)));
     }
+    // Remise automatique de la catégorie (page Catégories, par boutique) :
+    // déjà résolue "active aujourd'hui" côté serveur (voir /api/products).
+    // Cumulable avec les deux remises ci-dessus.
+    let catDiscUnit = 0;
+    if (p.category_discount_type && p.category_discount_value && p.category_discount_value > 0) {
+      const reduced = p.category_discount_type === 'percent'
+        ? p.sale_price_ttc * (1 - p.category_discount_value / 100)
+        : p.sale_price_ttc - p.category_discount_value;
+      catDiscUnit = round2(Math.max(0, p.sale_price_ttc - Math.max(0, reduced)));
+    }
     const lineDiscount = (qty: number) =>
-      round2(round2((p.sale_price_ttc * qty * autoPct) / 100) + round2(prodDiscUnit * qty));
+      round2(round2((p.sale_price_ttc * qty * autoPct) / 100) + round2((prodDiscUnit + catDiscUnit) * qty));
     setLines((cur) => {
       const existing = cur.find(
         (l) => l.product_id === p.id
             && l.unit_price_ttc === p.sale_price_ttc
             && !l.metadata?.cart_discount
             && (l.metadata?.auto_discount_pct ?? 0) === autoPct
-            && (l.metadata?.product_disc_unit ?? 0) === prodDiscUnit,
+            && (l.metadata?.product_disc_unit ?? 0) === prodDiscUnit
+            && (l.metadata?.category_disc_unit ?? 0) === catDiscUnit,
       );
       if (existing) {
         return cur.map((l) => (l === existing
@@ -1116,6 +1132,7 @@ export default function CashRegister({
         metadata: {
           ...(autoPct > 0 ? { auto_discount_pct: autoPct } : {}),
           ...(prodDiscUnit > 0 ? { product_disc_unit: prodDiscUnit } : {}),
+          ...(catDiscUnit > 0 ? { category_disc_unit: catDiscUnit } : {}),
         },
       }];
     });
@@ -1231,8 +1248,9 @@ export default function CashRegister({
         }
         const autoPct = Number(l.metadata?.auto_discount_pct ?? 0);
         const prodDiscUnit = Number(l.metadata?.product_disc_unit ?? 0);
-        if (autoPct <= 0 && prodDiscUnit <= 0) return { ...l, quantity };
-        const discount_amount = round2(round2((l.unit_price_ttc * quantity * autoPct) / 100) + round2(prodDiscUnit * quantity));
+        const catDiscUnit = Number(l.metadata?.category_disc_unit ?? 0);
+        if (autoPct <= 0 && prodDiscUnit <= 0 && catDiscUnit <= 0) return { ...l, quantity };
+        const discount_amount = round2(round2((l.unit_price_ttc * quantity * autoPct) / 100) + round2((prodDiscUnit + catDiscUnit) * quantity));
         return { ...l, quantity, discount_amount };
       })
       .filter((l) => l.quantity > 0));

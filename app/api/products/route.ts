@@ -5,6 +5,12 @@ import { requirePermission } from '@/lib/auth/guards';
 import { parseJson, jsonError } from '@/lib/validation/api';
 import { audit } from '@/lib/audit/log';
 import { photoRefForPos } from '@/lib/products/photo-url';
+import { hasCategoryDiscountsTable } from '@/lib/settings/category-discounts-server';
+
+/** Date du jour en fuseau Paris (aaaa-mm-jj) — bornes de remise automatique. */
+function todayParis(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Paris' });
+}
 
 const productSchema = z.object({
   name: z.string().min(1).max(200),
@@ -277,6 +283,23 @@ export async function GET(req: Request) {
                   WHERE sl.store_id = $${stockParamIdx} AND sl.product_id = p.id) AS stock_qty`;
   }
 
+  // Remise automatique de la catégorie (migration 0102), pour LA boutique
+  // demandée uniquement — une remise n'a de sens qu'au regard d'une caisse
+  // précise (dates/portée réglées par boutique, voir page Catégories).
+  // Appliquée automatiquement en caisse (CashRegister.tsx addProduct), comme
+  // la remise propre à l'article ci-dessus.
+  let catDiscountCols = 'NULL AS category_discount_type, NULL::numeric AS category_discount_value';
+  let catDiscountJoin = '';
+  if (storeId && (await hasCategoryDiscountsTable())) {
+    params.push(storeId, todayParis());
+    const storeIdx = params.length - 1;
+    const dateIdx = params.length;
+    catDiscountCols = 'cd.discount_type AS category_discount_type, cd.discount_value AS category_discount_value';
+    catDiscountJoin = `LEFT JOIN category_discounts cd ON cd.category_id = p.category_id
+                          AND cd.store_id = $${storeIdx}
+                          AND (cd.always_active OR $${dateIdx}::date BETWEEN cd.start_date AND cd.end_date)`;
+  }
+
   const { rows } = await query<{ id: string; image_url: string | null; updated_at: string; stock_qty: string | null }>(
     `SELECT p.id, p.name, p.short_description, p.sku, p.barcode, ${extraBarcodesCol}, p.image_url, p.unit,
             p.sale_price_ttc, p.purchase_price_ht, p.price_is_free,
@@ -291,6 +314,7 @@ export async function GET(req: Request) {
             ${storeIdsCol},
             ${supplierCols},
             ${discountCols},
+            ${catDiscountCols},
             p.tags, p.is_seasonal, p.is_customizable,
             t.rate AS tax_rate, t.id AS tax_rate_id, t.code AS tax_rate_code, t.label AS tax_rate_label,
             c.name AS category_name, c.color AS category_color,
@@ -299,6 +323,7 @@ export async function GET(req: Request) {
        JOIN tax_rates t ON t.id = p.tax_rate_id
        LEFT JOIN product_categories c ON c.id = p.category_id
        ${supplierJoin}
+       ${catDiscountJoin}
       WHERE ${where}
       ORDER BY ${url.searchParams.get('order') === 'recent' ? 'p.created_at DESC' : 'p.name ASC'}
       LIMIT 20000`,
